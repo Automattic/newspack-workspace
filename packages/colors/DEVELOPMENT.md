@@ -245,12 +245,12 @@ Grayscale palette for text, borders, and backgrounds:
 - **RGB variants:** All success colors have `--rgb` variants (e.g., `success-500--rgb`)
 
 #### Error Colors
-- `error-000`, `error-050`, `error-500`, `error-600`
+- `error-000`, `error-050`, `error-500`, `error-600`, `error-700`, `error-800`
 - Usage: Error messages, destructive actions
 - **RGB variants:** All error colors have `--rgb` variants (e.g., `error-500--rgb`)
 
 #### Warning Colors
-- `warning-000`, `warning-050`, `warning-300`, `warning-400`
+- `warning-000`, `warning-050`, `warning-300`, `warning-400`, `warning-500`, `warning-600`
 - Usage: Warning messages, caution states
 - **RGB variants:** All warning colors have `--rgb` variants (e.g., `warning-300--rgb`)
 

@@ -62,7 +62,7 @@ final class Blocks {
 			'newspack-listings-editor',
 			NEWSPACK_LISTINGS_URL . 'dist/editor.js',
 			[],
-			NEWSPACK_LISTINGS_VERSION,
+			Core::asset_version( 'editor' ),
 			true
 		);
 
@@ -117,7 +117,7 @@ final class Blocks {
 			'newspack-listings-editor',
 			plugins_url( '../dist/editor.css', __FILE__ ),
 			[],
-			NEWSPACK_LISTINGS_VERSION
+			Core::asset_version( 'editor' )
 		);
 		wp_style_add_data( 'newspack-listings-editor', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-listings-editor' );
@@ -186,7 +186,7 @@ final class Blocks {
 				'newspack-listings-curated-list',
 				NEWSPACK_LISTINGS_URL . 'dist/curated-list.js',
 				[ 'mediaelement-core' ],
-				NEWSPACK_LISTINGS_VERSION,
+				Core::asset_version( 'curated-list' ),
 				[
 					'in_footer' => true,
 					'strategy'  => 'defer',
@@ -211,7 +211,7 @@ final class Blocks {
 				'newspack-listings-archives',
 				NEWSPACK_LISTINGS_URL . 'dist/archives.css',
 				[],
-				NEWSPACK_LISTINGS_VERSION
+				Core::asset_version( 'archives' )
 			);
 		}
 
@@ -220,7 +220,7 @@ final class Blocks {
 			'newspack-listings-curated-list',
 			NEWSPACK_LISTINGS_URL . 'dist/curated-list.css',
 			[],
-			NEWSPACK_LISTINGS_VERSION
+			Core::asset_version( 'curated-list' )
 		);
 
 		// Styles for any singular listing type.
@@ -229,7 +229,7 @@ final class Blocks {
 				'newspack-listings-patterns',
 				NEWSPACK_LISTINGS_URL . 'dist/patterns.css',
 				[],
-				NEWSPACK_LISTINGS_VERSION
+				Core::asset_version( 'patterns' )
 			);
 		}
 
@@ -239,7 +239,7 @@ final class Blocks {
 				'newspack-listings-event',
 				NEWSPACK_LISTINGS_URL . 'dist/event.css',
 				[],
-				NEWSPACK_LISTINGS_VERSION
+				Core::asset_version( 'event' )
 			);
 		}
 
@@ -252,7 +252,7 @@ final class Blocks {
 				'newspack-listings-self-serve-listings',
 				NEWSPACK_LISTINGS_URL . 'dist/self-serve-listings.css',
 				[],
-				NEWSPACK_LISTINGS_VERSION
+				Core::asset_version( 'self-serve-listings' )
 			);
 		}
 	}

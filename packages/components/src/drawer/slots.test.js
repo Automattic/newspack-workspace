@@ -83,65 +83,23 @@ describe( 'Drawer.Content', () => {
 		expect( sectionOf( container ).style.getPropertyValue( '--newspack-drawer-content-padding' ) ).toBe( '0px' );
 	} );
 
-	it( 'renders each section as a VStack', () => {
-		const { container } = render( <Content>stacked</Content> );
-		expect( sectionOf( container ) ).toHaveClass( 'newspack-drawer__content', 'components-v-stack' );
-	} );
-
-	// VStack emits its spacing as a `calc()` on the 4px base, not as pixels.
-	it( 'spaces its children by 16px, and by the gap prop', () => {
+	it( 'spaces its children by the lg gap token, and by the gap prop', () => {
 		const { container, rerender } = render( <Content>stacked</Content> );
-		expect( window.getComputedStyle( sectionOf( container ) ).gap ).toBe( 'calc(4px * 4)' );
+		expect( sectionOf( container ).style.gap ).toContain( 'gap-lg' );
 
-		rerender( <Content gap={ 2 }>stacked</Content> );
-		expect( window.getComputedStyle( sectionOf( container ) ).gap ).toBe( 'calc(4px * 2)' );
+		rerender( <Content gap="sm">stacked</Content> );
+		expect( sectionOf( container ).style.gap ).toContain( 'gap-sm' );
 	} );
 
-	// VStack keeps only elements, so these would otherwise vanish without warning.
 	it( 'keeps plain text sitting beside an element', () => {
-		render(
+		const { container } = render(
 			<Content>
 				Lead text
 				<span>an element</span>
 				{ 42 }
 			</Content>
 		);
-		expect( screen.getByText( 'Lead text' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'an element' ) ).toBeInTheDocument();
-		expect( screen.getByText( '42' ) ).toBeInTheDocument();
-	} );
-
-	it( 'keeps a run of text and interpolations on one row', () => {
-		const { container } = render( <Content>Edited by { 'Ada' } just now</Content> );
-		const rows = sectionOf( container ).children;
-		expect( rows ).toHaveLength( 1 );
-		expect( rows[ 0 ] ).toHaveTextContent( 'Edited by Ada just now' );
-	} );
-
-	it( 'starts a new row either side of an element', () => {
-		const { container } = render(
-			<Content>
-				before
-				<span>middle</span>
-				after
-			</Content>
-		);
-		expect( Array.from( sectionOf( container ).children ).map( row => row.textContent ) ).toEqual( [ 'before', 'middle', 'after' ] );
-	} );
-
-	it( 'emits no row for whitespace or empty text between elements', () => {
-		const { container } = render(
-			<Content>
-				<span>one</span> { '' }
-				<span>two</span>
-			</Content>
-		);
-		expect( Array.from( sectionOf( container ).children ).map( row => row.textContent ) ).toEqual( [ 'one', 'two' ] );
-	} );
-
-	it( 'keeps a lone string', () => {
-		render( <Content>on its own</Content> );
-		expect( screen.getByText( 'on its own' ) ).toBeInTheDocument();
+		expect( sectionOf( container ) ).toHaveTextContent( 'Lead textan element42' );
 	} );
 } );
 
@@ -158,6 +116,14 @@ describe( 'Drawer.Footer', () => {
 	it( 'renders a container with its children', () => {
 		render( <Footer>actions</Footer> );
 		expect( screen.getByText( 'actions' ) ).toHaveClass( 'newspack-drawer__footer' );
+	} );
+
+	it( 'lays its actions out in one end-aligned row that wraps', () => {
+		render( <Footer>actions</Footer> );
+		const footer = screen.getByText( 'actions' );
+		expect( footer.style.flexDirection ).toBe( 'row' );
+		expect( footer.style.justifyContent ).toBe( 'flex-end' );
+		expect( footer.style.flexWrap ).toBe( 'wrap' );
 	} );
 
 	it( 'renders its actions as direct children', () => {

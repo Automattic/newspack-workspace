@@ -8,7 +8,8 @@
 import { __ } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
-import { Button, Spinner, Notice, Panel, PanelBody, PanelHeader, Flex, FlexItem, SVG } from '@wordpress/components';
+import { Button, Spinner, Notice, Panel, PanelBody, PanelHeader, SVG } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 import { PluginSidebar } from '@wordpress/editor';
 import { registerPlugin } from '@wordpress/plugins';
 import { dateI18n, getSettings } from '@wordpress/date';
@@ -146,14 +147,12 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	const renderContent = () => {
 		if ( isLoading ) {
 			return (
-				<Flex justify="center" className="nextdoor-sidebar__loading">
-					<FlexItem>
+				<Stack justify="center" align="center" gap="sm" className="nextdoor-sidebar__loading">
+					<div>
 						<Spinner />
-					</FlexItem>
-					<FlexItem>
-						<p>{ __( 'Loading Nextdoor status…', 'newspack-plugin' ) }</p>
-					</FlexItem>
-				</Flex>
+					</div>
+					<p>{ __( 'Loading Nextdoor status…', 'newspack-plugin' ) }</p>
+				</Stack>
 			);
 		}
 

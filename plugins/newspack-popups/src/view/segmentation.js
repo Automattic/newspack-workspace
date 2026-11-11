@@ -14,6 +14,7 @@ import {
 	shouldPromptBeDisplayed,
 	syncMatchedSegments,
 } from './utils';
+import { getCarriedSegmentIds } from './utils/carried-segments';
 
 /**
  * Match reader to segments.
@@ -25,10 +26,16 @@ export const handleSegmentation = prompts => {
 			return;
 		}
 		const segments = newspack_popups_view?.segments || {};
+		// Read once per page; a signed-in reader's live matching wins over any
+		// carried snapshot, which getCarried() applies on every call.
+		const carriedIds = getCarriedSegmentIds( Object.keys( segments ) );
+		// Re-read the authenticated flag on every call: RAS can authenticate a
+		// reader mid-page, and a delayed prompt's unhide() re-check must see it.
+		const getCarried = () => ( ras?.store?.get( 'reader' )?.authenticated ? [] : carriedIds );
 		// An admin switched into the reader's account sees the reader's stored
 		// segment; a match computed here would come from the admin's browser.
 		const resolveMatchingSegment = () =>
-			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments );
+			isSwitchedSession() ? getBestPrioritySegmentFromSnapshot( ras, segments ) : getBestPrioritySegment( segments, null, getCarried() );
 		const matchingSegment = resolveMatchingSegment();
 		debug( 'matchingSegment', matchingSegment );
 
@@ -75,7 +82,10 @@ export const handleSegmentation = prompts => {
 				};
 				const unhide = () => {
 					// Conditions may have changed since the prompt was delayed.
-					// Verify whether the prompt can still be displayed.
+					// Verify whether the prompt can still be displayed. Resolve the match
+					// again rather than reusing the one computed above: a reader who
+					// authenticates mid-delay must have their live matching win over a
+					// carried snapshot, even for a prompt that was already pending.
 					const updatedMatchingSegment = resolveMatchingSegment();
 					if ( ras?.segments ) {
 						ras.segments.setMatch( updatedMatchingSegment );

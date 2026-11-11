@@ -47,6 +47,7 @@ import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
+import { worthCollapsing } from '../../../../packages/components/src/cell-list/collapse';
 import SubscriptionCard from '../components/SubscriptionCard';
 import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
 import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
@@ -58,20 +59,30 @@ import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments'
 import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
-import { billingText, fmtDate, orDash, scheduleRow } from '../format';
+import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
+import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
-// Cancelled subscriptions are folded away behind a "View more" toggle whenever
+// Cancelled subscriptions are folded away behind a "Show N more" toggle whenever
 // the reader still holds a live plan — a past cancellation next to a current
 // plan is history, not status. A fully churned reader keeps everything visible,
 // since hiding it would leave the profile looking empty. This mirrors the
 // Subscription column's rule in SubscriberList (see the SOURCE OF TRUTH note on
 // displayStatuses in status.js).
 const HIDE_CANCELLED_WHEN_LIVE = true;
+
+/**
+ * The name of whoever bought a gift, or undefined when the subscription isn't one.
+ * A buyer with no name on file reads "Unknown".
+ *
+ * @param {Object} subscription The profile subscription entry.
+ * @return {string|undefined} The buyer's name.
+ */
+const giftPayerName = subscription => ( subscription.giftedBy ? subscription.giftedBy.name || __( 'Unknown', 'newspack-plugin' ) : undefined );
 
 /**
  * Row of a two-column section: header on the left, content on the right.
@@ -120,6 +131,22 @@ const seatsSubline = group => {
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
+
+/**
+ * The "View subscription" item that leads a card's "more" menu: a link to the
+ * subscription's own edit screen, for the admin who wants the order behind a card.
+ *
+ * @param {string} name The subscription or group name, to qualify the link.
+ * @param {string} href The subscription's edit URL.
+ * @return {Object} An action descriptor for SubscriptionCard.
+ */
+const viewSubscriptionAction = ( name, href ) => ( {
+	key: 'view',
+	label: __( 'View subscription', 'newspack-plugin' ),
+	// translators: %s is a subscription/plan name.
+	ariaLabel: sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ),
+	href,
+} );
 
 export default function PersonProfile() {
 	const { id } = useParams();
@@ -231,6 +258,10 @@ export default function PersonProfile() {
 					? // translators: %s is a date.
 					  sprintf( __( 'Subscriber since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
 					: '',
+				subscriber.signedUpOn?.name
+					? // translators: %s is the name of the network site where the reader created their account.
+					  sprintf( __( 'Signed up on %s', 'newspack-plugin' ), subscriber.signedUpOn.name )
+					: '',
 			]
 				.filter( Boolean )
 				.join( '\n' ),
@@ -254,8 +285,7 @@ export default function PersonProfile() {
 				? [
 						{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( group.createdAt ) ) },
 						{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( group ) },
-						{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( group.lastPayment ) ) },
-						scheduleRow( group ),
+						...paymentRows( group ),
 				  ]
 				: [
 						{ label: __( 'Joined', 'newspack-plugin' ), value: orDash( fmtDate( group.joinedAt ) ) },
@@ -279,10 +309,10 @@ export default function PersonProfile() {
 						badges={ statusBadges( group.status ) }
 						subline={ seatsSubline( group ) }
 						rows={ rows }
-						// No per-status "more" menu yet: the group card's title already
-						// links to the group, and the money/management actions that would
-						// fill this menu are Workstreams D/E/F. A menu whose only item
-						// duplicates the title link would just add a redundant tab stop.
+						// The title opens the group; this item opens its subscription.
+						actions={ group.editUrl ? [ viewSubscriptionAction( group.plan, group.editUrl ) ] : [] }
+						// translators: %s is a group's plan name.
+						actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), group.plan ) }
 					/>
 				),
 			};
@@ -290,9 +320,76 @@ export default function PersonProfile() {
 
 		const individualCards = ( subscriber.subscriptions || [] ).map( subscription => {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
+
+			// A subscription another network site manages is read-only here, and this
+			// branch returns before any local menu or flow is built. Its ID belongs to
+			// the other site; the write endpoints resolve an ID against this site's own
+			// subscriptions, so a remote ID must never reach `setModal` or a request.
+			// Nothing below runs for it. The key carries the site as well as the ID:
+			// an ID is unique within a site, so a local #500 and a remote #500 coexist.
+			if ( isNetworkSubscription( subscription ) ) {
+				const { editUrl, managedOn } = subscription;
+				const cardKey = `subscription-${ managedOn.url || managedOn.name }-${ subscription.id }`;
+				// The site is named once, under the title, so the title is the plan alone.
+				const title = subscription.planName || name;
+				// Subscriptions the network recorded before it kept billing details have
+				// none, so their cards say where they are managed and nothing more.
+				const hasBilling = Number.isFinite( subscription.amount ) || Boolean( subscription.startDate );
+				return {
+					key: cardKey,
+					status: subscription.status,
+					date: subscription.startDate,
+					node: (
+						<SubscriptionCard
+							key={ cardKey }
+							title={ title }
+							titleHref={ editUrl || undefined }
+							// translators: %s is a subscription/plan name.
+							titleLabel={ editUrl ? sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) : undefined }
+							badges={ statusBadges( subscription.status ) }
+							// translators: %s is the name of the network site that manages the subscription.
+							subline={ sprintf( __( 'Managed on %s', 'newspack-plugin' ), managedOn.name ) }
+							rows={
+								hasBilling
+									? [
+											{
+												label: __( 'First subscribed', 'newspack-plugin' ),
+												value: orDash( fmtDate( subscription.startDate ) ),
+											},
+											{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
+											...paymentRows( subscription ),
+									  ]
+									: []
+							}
+							// A link out, so with no URL there is nothing to put in the menu.
+							actions={
+								editUrl
+									? [
+											{
+												key: 'view',
+												// translators: %s is the name of the network site that manages the subscription.
+												label: sprintf( __( 'View on %s', 'newspack-plugin' ), managedOn.name ),
+												// translators: 1: the name of the network site that manages the subscription, 2: a subscription/plan name.
+												ariaLabel: sprintf( __( 'View on %1$s: %2$s', 'newspack-plugin' ), managedOn.name, title ),
+												href: editUrl,
+											},
+									  ]
+									: []
+							}
+							// translators: %s is a subscription/plan name.
+							actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), name ) }
+						/>
+					),
+				};
+			}
+
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
+			const giftedByName = giftPayerName( subscription );
 			const menuActions = [];
+			if ( subscription.editUrl ) {
+				menuActions.push( viewSubscriptionAction( name, subscription.editUrl ) );
+			}
 			// Reactivate is offered when the server says so. `canReactivate`
 			// reflects the write endpoint's own raw-status rule — the mapped status
 			// can't be trusted here, because unknown WCS statuses map into the
@@ -320,8 +417,10 @@ export default function PersonProfile() {
 				} );
 			}
 			// Offered only when the subscription charges a resolvable saved card
-			// and there is another usable card to switch to.
-			if ( isLive && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
+			// and there is another usable card to switch to. Never on a gift: the
+			// saved cards listed here are the recipient's, but the card the gift
+			// charges belongs to the person who bought it.
+			if ( isLive && ! subscription.giftedBy && canChangePaymentMethod( subscription, subscriber.paymentMethods ) ) {
 				menuActions.push( {
 					key: 'payment',
 					label: __( 'Change payment method', 'newspack-plugin' ),
@@ -362,8 +461,19 @@ export default function PersonProfile() {
 						rows={ [
 							{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( subscription.startDate ) ) },
 							{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
-							{ label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( subscription.lastPayment ) ) },
-							scheduleRow( subscription ),
+							...paymentRows( subscription ),
+							...( subscription.giftedBy
+								? [
+										{
+											label: __( 'Gifted by', 'newspack-plugin' ),
+											value: subscription.giftedBy.editUrl ? (
+												<a href={ subscription.giftedBy.editUrl }>{ giftedByName }</a>
+											) : (
+												giftedByName
+											),
+										},
+								  ]
+								: [] ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.
@@ -379,7 +489,8 @@ export default function PersonProfile() {
 	}, [ subscriber ] );
 
 	const liveCards = useMemo( () => cards.filter( card => 'cancelled' !== card.status ), [ cards ] );
-	const collapsedCards = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 ? liveCards : cards;
+	const foldCancelled = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 && worthCollapsing( cards.length - liveCards.length );
+	const collapsedCards = foldCancelled ? liveCards : cards;
 	const hiddenCount = cards.length - collapsedCards.length;
 	const visibleCards = showCancelled ? cards : collapsedCards;
 
@@ -455,9 +566,9 @@ export default function PersonProfile() {
 								onClick={ () => setShowCancelled( value => ! value ) }
 								aria-expanded={ showCancelled }
 								// When collapsed, the accessible name extends the visible
-								// "View N more" with what it reveals (WCAG 2.5.3 wants the
+								// "Show N more" with what it reveals (WCAG 2.5.3 wants the
 								// visible label to be a substring of the accessible name).
-								// When expanded, the visible "View less" is unambiguous on
+								// When expanded, the visible "Show less" is unambiguous on
 								// its own, so no override — the visible text is the name.
 								aria-label={
 									showCancelled
@@ -465,8 +576,8 @@ export default function PersonProfile() {
 										: sprintf(
 												// translators: %d is the number of hidden cancelled subscriptions.
 												_n(
-													'View %d more cancelled subscription',
-													'View %d more cancelled subscriptions',
+													'Show %d more cancelled subscription',
+													'Show %d more cancelled subscriptions',
 													hiddenCount,
 													'newspack-plugin'
 												),
@@ -475,25 +586,34 @@ export default function PersonProfile() {
 								}
 							>
 								{ showCancelled
-									? __( 'View less', 'newspack-plugin' )
-									: // translators: %d is the number of hidden cancelled subscriptions.
-									  sprintf( __( 'View %d more', 'newspack-plugin' ), hiddenCount ) }
+									? __( 'Show less', 'newspack-plugin' )
+									: sprintf(
+											// translators: %d is the number of hidden cancelled subscriptions.
+											_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
+											hiddenCount
+									  ) }
 							</Button>
 						</HStack>
 					) }
 				</VStack>
 			</Row>
 
-			<Row
-				title={ __( 'Payment methods', 'newspack-plugin' ) }
-				description={ __(
-					'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
-					'newspack-plugin'
-				) }
-				showDivider={ false }
-			>
-				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } focusCardId={ promotedCardId } />
-			</Row>
+			{ shouldShowPaymentMethods( subscriber ) && (
+				<Row
+					title={ __( 'Payment methods', 'newspack-plugin' ) }
+					description={ __(
+						'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
+						'newspack-plugin'
+					) }
+					showDivider={ false }
+				>
+					<PaymentMethodsList
+						paymentMethods={ subscriber.paymentMethods || [] }
+						onMakeDefault={ makeDefault }
+						focusCardId={ promotedCardId }
+					/>
+				</Row>
+			) }
 
 			{ 'payment' === modal?.kind && (
 				<ChangePaymentMethodFlow
@@ -516,6 +636,9 @@ export default function PersonProfile() {
 				<RefundFlow
 					subscription={ modal.subscription }
 					subscriberName={ subscriber.name }
+					// A gift's refund goes back to whoever bought it, not to the reader;
+					// passing a payer switches RefundFlow to the gift wording.
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ paymentActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }
@@ -524,7 +647,12 @@ export default function PersonProfile() {
 			{ 'reactivate' === modal?.kind && (
 				<ReactivateFlow
 					subscription={ modal.subscription }
-					email={ subscriber.email }
+					// The payment link goes to the subscription's billing email, which
+					// for a gift is the purchaser's, not the reader's. With none on
+					// file the server sends nothing, so there's no address to name.
+					email={ modal.subscription.billingEmail }
+					// The same buyer RefundFlow names: a gift's payment link is theirs.
+					payerName={ giftPayerName( modal.subscription ) }
 					actions={ subscriptionActions }
 					onClose={ () => setModal( null ) }
 					onDone={ completeFlow }

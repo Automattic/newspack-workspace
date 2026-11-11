@@ -34,9 +34,10 @@ class Deletion_Spy_Integration extends Integration {
 	public $delete_result = true;
 
 	/**
-	 * Result that push_contact_data() returns.
+	 * Result that push_contact_data() returns. An array stands in for a
+	 * provider's contact data, such as one naming `unsynced_fields`.
 	 *
-	 * @var true|\WP_Error
+	 * @var true|array|\WP_Error
 	 */
 	public $push_result = true;
 

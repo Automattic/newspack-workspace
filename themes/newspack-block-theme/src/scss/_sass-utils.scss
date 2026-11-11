@@ -10,9 +10,6 @@ $large-screen: 1280px;
 
 // Z-indexes
 $zindex-fixed-element: 1000;
-$zindex-overlay-mask: 1999;
-$zindex-overlay-menu: 2000;
-$zindex-overlay-menu-mobile: 100000; /* Above WP toolbar. */
 $zindex-screen-reader-text: 100000; /* Above WP toolbar. */
 
 /*

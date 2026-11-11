@@ -58,13 +58,13 @@ class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that has_server_side_donor_tracking() returns false for NRH.
+	 * Test that has_server_side_donor_tracking() returns false for RevEngine.
 	 */
 	public function test_has_server_side_donor_tracking_nrh() {
 		Donations::set_platform_slug( 'nrh' );
 		self::assertFalse(
 			Donations::has_server_side_donor_tracking(),
-			'NRH platform should not have server-side donor tracking.'
+			'RevEngine platform should not have server-side donor tracking.'
 		);
 	}
 
@@ -92,14 +92,14 @@ class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that is_donor is writable on NRH platform.
+	 * Test that is_donor is writable on RevEngine platform.
 	 */
 	public function test_is_donor_writable_on_nrh() {
 		Donations::set_platform_slug( 'nrh' );
 		self::assertNotContains(
 			'is_donor',
 			Reader_Data::get_read_only_keys(),
-			'is_donor should be writable on NRH platform.'
+			'is_donor should be writable on RevEngine platform.'
 		);
 	}
 
@@ -137,7 +137,7 @@ class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 		Donations::set_platform_slug( 'nrh' );
 		self::assertFalse(
 			Donations::has_server_side_donor_tracking(),
-			'NRH should not have server-side tracking by default.'
+			'RevEngine should not have server-side tracking by default.'
 		);
 
 		$this->tracking_filter = '__return_true';
@@ -145,7 +145,7 @@ class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 
 		self::assertTrue(
 			Donations::has_server_side_donor_tracking(),
-			'Filter should allow NRH to declare server-side tracking.'
+			'Filter should allow RevEngine to declare server-side tracking.'
 		);
 		self::assertContains(
 			'is_donor',

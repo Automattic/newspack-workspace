@@ -3,7 +3,7 @@
 /**
  * Internal dependencies.
  */
-import { domReady } from '../utils';
+import { domReady, setButtonLoading } from '../utils';
 
 import './style.scss';
 
@@ -30,12 +30,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 					item.classList.remove( 'hidden' );
 					item.removeAttribute( 'inert' );
 				} );
-				newsletterContainer.style.maxHeight = 'none';
+				newsletterContainer.style.maxHeight = 'max-content';
 				if ( divider ) {
 					divider.classList.add( 'hidden' );
 				}
 				seeAllButton.classList.add( 'hidden' );
 				firstRevealed?.querySelector( 'input' )?.focus();
+				newsletterContainer.scrollTop = 0;
 			} );
 
 			if ( peekItem ) {
@@ -60,7 +61,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 
 				form.classList.add( 'processing' );
-				form.querySelector( 'button' ).setAttribute( 'disabled', 'disabled' );
+				setButtonLoading( form.querySelector( 'button[type="submit"]' ), true );
 
 				// Populate email if not already set.
 				const emailInput = form.querySelector( 'input[name="email_address"]' );
@@ -94,7 +95,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							container.newslettersSignupCallback();
 						}
 						form.classList.remove( 'processing' );
-						form.querySelector( 'button' ).removeAttribute( 'disabled' );
+						setButtonLoading( form.querySelector( 'button[type="submit"]' ), false );
 					} );
 			};
 

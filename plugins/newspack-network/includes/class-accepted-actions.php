@@ -46,6 +46,8 @@ class Accepted_Actions {
 		'newspack_network_distributor_migrate_incoming_posts' => 'Distributor_Migrate_Incoming_Posts',
 		'network_hub_name_updated'                 => 'Hub_Name_Updated',
 		'newspack_network_product_updated'         => 'Product_Updated',
+		'newspack_node_group_seat_changed'         => 'Group_Seat_Changed',
+		'newspack_node_one_time_purchase_changed'  => 'One_Time_Purchase_Changed',
 	];
 
 	/**
@@ -73,5 +75,7 @@ class Accepted_Actions {
 		'newspack_network_distributor_migrate_incoming_posts',
 		'network_hub_name_updated',
 		'newspack_network_product_updated',
+		'newspack_node_group_seat_changed',
+		'newspack_node_one_time_purchase_changed',
 	];
 }

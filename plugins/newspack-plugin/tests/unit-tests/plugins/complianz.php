@@ -623,4 +623,17 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 	// PHP cannot undefine a function, so those branches are exercised only when
 	// Complianz is genuinely absent. They are simple early returns of the incoming
 	// value.
+
+	/**
+	 * Complianz Premium registers its public post types and taxonomy only for requests
+	 * that can manage privacy, so their visibility differs between requests. Excluding
+	 * them keeps Yoast's public-type snapshot identical on every request.
+	 */
+	public function test_complianz_requester_dependent_types_are_excluded_from_yoast_indexables() {
+		$excluded_post_types = apply_filters( 'wpseo_indexable_excluded_post_types', [ 'attachment' ] );
+		$this->assertEqualsCanonicalizing( [ 'attachment', 'cmplz-processing', 'cmplz-dataleak' ], $excluded_post_types );
+
+		$excluded_taxonomies = apply_filters( 'wpseo_indexable_excluded_taxonomies', [ 'post_format' ] );
+		$this->assertEqualsCanonicalizing( [ 'post_format', 'cmplz-region' ], $excluded_taxonomies );
+	}
 }

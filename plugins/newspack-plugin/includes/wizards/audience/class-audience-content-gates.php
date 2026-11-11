@@ -97,21 +97,23 @@ class Audience_Content_Gates extends Wizard {
 			'newspackAudienceContentGates',
 			array_merge(
 				[
-					'api'                               => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
-					'available_access_rules'            => Access_Rules::get_access_rules_for_client(),
-					'available_content_rules'           => Content_Rules::get_content_rules(),
-					'edit_gate_layout_url'              => Content_Gate::get_edit_gate_layout_url(),
-					'presave_checks_enabled'            => Content_Gate::get_presave_checks_enabled(),
-					'default_gate_status'               => Content_Gate::get_default_new_gate_status(),
-					'feed_restriction_modes'            => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
+					'api'                                 => '/' . NEWSPACK_API_NAMESPACE . '/wizard/' . $this->slug,
+					'available_access_rules'              => Access_Rules::get_access_rules_for_client(),
+					'available_content_rules'             => Content_Rules::get_content_rules(),
+					'edit_gate_layout_url'                => Content_Gate::get_edit_gate_layout_url(),
+					'presave_checks_enabled'              => Content_Gate::get_presave_checks_enabled(),
+					'default_gate_status'                 => Content_Gate::get_default_new_gate_status(),
+					'feed_restriction_modes'              => Content_Gate_Advanced_Settings::get_feed_restriction_mode_options(),
 					// While Memberships is active it governs feeds and Access Control
 					// stands down, so the feed controls below still save but change
 					// nothing until cutover. The wizard says so rather than hiding
 					// them: the stored value is what takes effect once Memberships is
 					// deactivated. See Content_Gate_Advanced_Settings::get_feed_restriction_mode().
-					'feeds_governed_by_memberships'     => Memberships::is_active(),
+					'feeds_governed_by_memberships'       => Memberships::is_active(),
 					// Placeholder for the link text field, so an empty field shows what readers see.
-					'institutional_access_default_text' => Institutional_Access_Prompt::get_default_text(),
+					'institutional_access_default_text'   => Institutional_Access_Prompt::get_default_text(),
+					// Placeholder for the comment restriction message field.
+					'comment_restriction_default_message' => Comment_Restriction::get_default_message(),
 				],
 				$this->get_audience_management_script_data()
 			)
@@ -127,11 +129,13 @@ class Audience_Content_Gates extends Wizard {
 					'can_use_gifting' => Content_Gifting::can_use_gifting(),
 					'has_metering'    => Content_Gate::is_metering_enabled(),
 				],
+				'content_banner'           => Content_Banner_Style::get_wizard_data(),
 			]
 		);
 
 		// Enqueue content banner CSS for previews.
 		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
+		Content_Banner_Style::enqueue_wizard_fonts();
 	}
 
 	/**
@@ -194,16 +198,30 @@ class Audience_Content_Gates extends Wizard {
 						// rejecting them makes that contract explicit.
 						'additionalProperties' => false,
 						'properties'           => [
-							'restrict_feeds'            => [ 'type' => 'boolean' ],
-							'feed_restriction_mode'     => [
+							'restrict_feeds'              => [ 'type' => 'boolean' ],
+							'feed_restriction_mode'       => [
 								'type' => 'string',
 								'enum' => Content_Gate_Advanced_Settings::get_feed_restriction_modes(),
 							],
 							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
-							'institutional_access_text' => [
+							'institutional_access_text'   => [
 								'type'      => 'string',
 								'maxLength' => 200,
 							],
+							'comment_restriction_gate_id' => [
+								'type'    => 'integer',
+								'minimum' => 0,
+							],
+							'comment_restriction_message' => [
+								'type'      => 'string',
+								'maxLength' => 200,
+							],
+							'comment_restriction_purchase_url' => [
+								'type'      => 'string',
+								// An empty string clears the link, so 'uri' format is too strict.
+								'maxLength' => 2000,
+							],
+							'comment_require_full_name'   => [ 'type' => 'boolean' ],
 						],
 						// Validate the whole object against the schema so the nested
 						// feed_restriction_mode enum is actually enforced (a bad value
@@ -255,6 +273,15 @@ class Audience_Content_Gates extends Wizard {
 					],
 					'style'                => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
+					],
+					'bg_color'             => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_color'         => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 				],
 			]
@@ -312,6 +339,15 @@ class Audience_Content_Gates extends Wizard {
 					],
 					'style'          => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
+					],
+					'bg_color'       => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_color'   => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
 					],
 				],
 			]
@@ -490,10 +526,14 @@ class Audience_Content_Gates extends Wizard {
 	 */
 	private function prepare_advanced_settings_response( $advanced ) {
 		return [
-			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
-			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE ),
-			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
-			'institutional_access_text'      => (string) ( $advanced['institutional_access_text'] ?? '' ),
+			'restrict_feeds'                   => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'feed_restriction_mode'            => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE ),
+			'newsletter_link_bypass_enabled'   => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
+			'institutional_access_text'        => (string) ( $advanced['institutional_access_text'] ?? '' ),
+			'comment_restriction_gate_id'      => (int) ( $advanced['comment_restriction_gate_id'] ?? 0 ),
+			'comment_restriction_message'      => (string) ( $advanced['comment_restriction_message'] ?? '' ),
+			'comment_restriction_purchase_url' => (string) ( $advanced['comment_restriction_purchase_url'] ?? '' ),
+			'comment_require_full_name'        => (bool) ( $advanced['comment_require_full_name'] ?? false ),
 		];
 	}
 
@@ -539,6 +579,12 @@ class Audience_Content_Gates extends Wizard {
 		}
 		if ( isset( $args['style'] ) ) {
 			Content_Gifting_CTA::set_style( sanitize_text_field( $args['style'] ) );
+		}
+		if ( isset( $args['bg_color'] ) ) {
+			Content_Gifting_CTA::set_bg_color( $args['bg_color'] );
+		}
+		if ( isset( $args['button_color'] ) ) {
+			Content_Gifting_CTA::set_button_color( $args['button_color'] );
 		}
 		return rest_ensure_response( Content_Gifting::get_settings() );
 	}

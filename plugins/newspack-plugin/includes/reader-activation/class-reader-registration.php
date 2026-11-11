@@ -472,7 +472,7 @@ final class Reader_Registration {
 		if ( ! Reader_Activation::is_enabled() ) {
 			return new \WP_Error(
 				'reader_activation_disabled',
-				__( 'Reader Activation is not enabled.', 'newspack-plugin' ),
+				__( 'Audience Management is not enabled.', 'newspack-plugin' ),
 				[ 'status' => 403 ]
 			);
 		}

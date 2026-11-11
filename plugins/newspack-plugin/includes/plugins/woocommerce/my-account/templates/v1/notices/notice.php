@@ -1,6 +1,8 @@
 <?php
 /**
- * Show notifications as snackbar components.
+ * Show notifications as inline info notices, and urgent ones as inline warning
+ * notices, for signed-in readers. Signed-out readers, whose account forms sit
+ * outside newspack-ui, get a snackbar.
  *
  * @author   Newspack
  * @category WooCommerce Subscriptions/Templates
@@ -14,15 +16,16 @@ defined( 'ABSPATH' ) || exit;
 if ( ! $notices ) {
 	return;
 }
-$important_notices = [];
+if ( ! \is_user_logged_in() ) {
+	My_Account_UI_V1::add_snackbar_notices( $notices, 'info' );
+	return;
+}
 foreach ( $notices as $notice ) {
-	Newspack_UI::add_notice(
-		$notice['notice'],
-		[
-			'id'             => uniqid( 'newspack-myaccount-notice-' ),
-			'type'           => 'warning',
-			'autohide'       => ! apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ),
-			'active_on_load' => true,
-		]
-	);
+	$notice_type = \apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ) ? 'warning' : 'info';
+	?>
+	<div class="newspack-ui__notice newspack-ui__notice--<?php echo \esc_attr( $notice_type ); ?>"<?php echo wc_get_notice_data_attr( $notice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> role="status">
+		<?php Newspack_UI::print_notice_icon( $notice_type ); ?>
+		<p class="newspack-ui__spacing-top--0 newspack-ui__spacing-bottom--0"><?php echo wc_kses_notice( $notice['notice'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
+	</div>
+	<?php
 }

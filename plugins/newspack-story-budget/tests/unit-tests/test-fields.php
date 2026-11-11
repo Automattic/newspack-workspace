@@ -6,6 +6,7 @@
  */
 
 use Newspack_Story_Budget\Fields;
+use Newspack_Story_Budget\Fields\Abstract_Field;
 use Newspack_Story_Budget\Fields\Editable_Field;
 use Newspack_Story_Budget\Fields\Read_Only_Field;
 use Newspack_Story_Budget\Fields\Taxonomy_Field;
@@ -190,6 +191,97 @@ class TestFields extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Each <img> tag saved in the content counts once, from block markup or classic HTML.
+	 */
+	public function test_image_count_counts_images_in_content_markup() {
+		$post_id = self::create_post(
+			[
+				'post_content' => '<!-- wp:image {"id":1} --><figure class="wp-block-image"><img src="https://example.com/a.jpg" alt="" class="wp-image-1"/></figure><!-- /wp:image --><p>Classic <img src="https://example.com/b.jpg" alt=""></p>',
+			]
+		);
+
+		$this->assertSame( 2, Fields::get_image_count( $post_id ), 'Counts the image tags saved in the content.' );
+	}
+
+	/**
+	 * Gallery shortcodes and the image count each adds to a story that has two
+	 * attached images, on a site with three unattached ones. `{attached}` stands
+	 * for the first attached image's ID, `{unattached}` for the unattached IDs.
+	 *
+	 * @return array[]
+	 */
+	public function gallery_shortcodes() {
+		return [
+			'a bare gallery'                     => [ '[gallery]', 2 ],
+			'a draft story'                      => [ '[gallery]', 2, [ 'post_status' => 'draft' ] ],
+			'a password-protected story'         => [ '[gallery]', 2, [ 'post_password' => 'secret' ] ],
+			'an id of 0 falls back to the story' => [ '[gallery id="0"]', 2 ],
+			'listed ids'                         => [ '[gallery ids="{unattached}"]', 3 ],
+			'a list with no valid ids'           => [ '[gallery ids=","]', 0 ],
+			'excluded ids'                       => [ '[gallery exclude="{attached}"]', 1 ],
+			'an escaped shortcode'               => [ '[[gallery]]', 0 ],
+		];
+	}
+
+	/**
+	 * A classic [gallery] adds the images it lists, whoever is saving. Rendering
+	 * it would not: core hides a gallery from a visitor who cannot read its
+	 * post, and lists every unattached image on the site when it has no post.
+	 *
+	 * @dataProvider gallery_shortcodes
+	 *
+	 * @param string $shortcode  Gallery shortcode, with ID placeholders.
+	 * @param int    $expected   Expected image count.
+	 * @param array  $story_data Post data for the story.
+	 */
+	public function test_image_count_counts_the_images_a_gallery_shortcode_lists( $shortcode, $expected, $story_data = [] ) {
+		$post_id        = self::create_post( $story_data );
+		$attachment_ids = [];
+		foreach ( [ $post_id, $post_id, 0, 0, 0 ] as $parent ) {
+			$attachment_ids[] = self::factory()->attachment->create(
+				[
+					'file'           => 'image.jpg',
+					'post_parent'    => $parent,
+					'post_mime_type' => 'image/jpeg',
+					'post_status'    => 'inherit',
+				]
+			);
+		}
+		$placeholders = [
+			'{attached}'   => $attachment_ids[0],
+			'{unattached}' => implode( ',', array_slice( $attachment_ids, 2 ) ),
+		];
+		\wp_update_post(
+			[
+				'ID'           => $post_id,
+				'post_content' => '<p>Photos below.</p>' . strtr( $shortcode, $placeholders ),
+			]
+		);
+
+		$this->assertSame( $expected, Fields::get_image_count( $post_id ) );
+	}
+
+	/**
+	 * Refreshing read-only fields on save must not run the front-end content pipeline.
+	 */
+	public function test_read_only_fields_do_not_render_the_content_on_save() {
+		$post_id  = self::create_post( [ 'post_content' => '<p>Hello</p>[gallery]' ] );
+		$rendered = [];
+		$spy      = function ( $value ) use ( &$rendered ) {
+			$rendered[] = \current_filter();
+			return $value;
+		};
+
+		\add_filter( 'the_content', $spy );
+		\add_filter( 'pre_do_shortcode_tag', $spy );
+		Fields::update_read_only_fields( $post_id );
+		\remove_filter( 'the_content', $spy );
+		\remove_filter( 'pre_do_shortcode_tag', $spy );
+
+		$this->assertSame( [], $rendered, 'Saving a story must not render the content or its shortcodes.' );
+	}
+
+	/**
 	 * Test a select dropdown field.
 	 */
 	public function test_field_with_options() {
@@ -325,5 +417,39 @@ class TestFields extends WP_UnitTestCase {
 				sprintf( 'Array version should have the same key "%s" as the object version.', $slug )
 			);
 		}
+	}
+
+	/**
+	 * Saving a story field counts as a modification, without touching the post's own modified date.
+	 */
+	public function test_last_modified_follows_story_field_saves() {
+		global $wpdb;
+		$post_id = self::create_post();
+		$wpdb->update( $wpdb->posts, [ 'post_modified_gmt' => '2026-01-01 00:00:00' ], [ 'ID' => $post_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		delete_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified' );
+		clean_post_cache( $post_id );
+		$post_modified = strtotime( '2026-01-01 00:00:00 UTC' );
+		$field         = Fields::get_field( 'last_modified' );
+
+		$saved_at = time();
+		Fields::get_field( 'description' )->update_value( $post_id, 'A note for the desk' );
+		clean_post_cache( $post_id );
+		$this->assertGreaterThanOrEqual( $saved_at, $field->get_value( $post_id ), 'A story field save sets the last modified time.' );
+		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
+
+		update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $post_modified - 600 );
+		$this->assertEquals( $post_modified, $field->get_value( $post_id ), 'A later post edit sets the last modified time.' );
+	}
+
+	/**
+	 * WP Status carries the labels WordPress registers for each post status a story can have.
+	 */
+	public function test_wp_status_options_use_post_status_labels() {
+		$options = Fields::get_field( 'wp_status' )->to_array()['options'];
+		$labels  = array_column( $options, 'label', 'value' );
+
+		$this->assertSame( [ 'publish', 'pending', 'draft', 'future', 'private' ], array_keys( $labels ) );
+		$this->assertSame( get_post_status_object( 'publish' )->label, $labels['publish'] );
+		$this->assertSame( get_post_status_object( 'future' )->label, $labels['future'] );
 	}
 }

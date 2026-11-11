@@ -1,3 +1,64 @@
+@use "../mixins";
+@use "newspack-motion" as motion;
+
+.wp-element-button,
+.wp-block-button__link {
+	&:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button)) {
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			border-color motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
+
+		&:active:where(:not([contenteditable="true"])) {
+			transform: scale(motion.$press-scale);
+
+			@include motion.reduced-motion {
+				transform: none;
+			}
+		}
+
+		&:focus-visible {
+			@include mixins.focus-fill;
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				opacity motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
+		}
+	}
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+	:root:root .wp-block-button > .wp-block-button__link:where(:not([class*="newspack-icon"] *, [class*="wp-elements-"] *, [class*="is-style-"]:not(.is-style-fill) > *, .newspack-ui__button, .has-background, [class*="has-background"], [class*="is-style-"], [style*="background"])):hover:not(:active) {
+		background-color: var(--wp--preset--color--accent);
+	}
+
+	:root:root .wp-block-button > .wp-block-button__link:where(:not([class*="newspack-icon"] *, [class*="wp-elements-"] *, [class*="is-style-"]:not(.is-style-fill) > *, .newspack-ui__button, .has-text-color, [class*="has-background-transparent"], [class*="is-style-"], [style^="color"], [style*=";color"], [style*="; color"])):hover:not(:active) {
+		color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+	}
+}
+
+.wc-block-components-button.wp-element-button:where(:not(.newspack-ui__button, .newspack-ui .button, .newspack-ui .woocommerce-Button, [contenteditable="true"])) {
+	transition:
+		background-color motion.$duration-color motion.$ease-color,
+		border-color motion.$duration-color motion.$ease-color,
+		box-shadow motion.$duration-color motion.$ease-color,
+		color motion.$duration-color motion.$ease-color,
+		opacity motion.$duration-color motion.$ease-color,
+		transform motion.$duration-press motion.$ease-out;
+
+	&:focus-visible {
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
+	}
+}
+
 .wp-block-buttons,
 .wp-block-button {
 	&[class*="-font-size"] {
@@ -11,38 +72,59 @@
 	form .wp-block-button__link,
 	> .wp-block-button__link {
 		transition:
-			background-color 125ms ease-in-out,
-			border-color 125ms ease-in-out,
-			color 125ms ease-in-out,
-			opacity 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			background-color motion.$duration-color motion.$ease-color,
+			border-color motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color,
+			opacity motion.$duration-color motion.$ease-color,
+			box-shadow motion.$duration-color motion.$ease-color,
+			transform motion.$duration-press motion.$ease-out;
 		word-break: normal;
 
-		&:focus {
-			outline: 2px solid var(--wp--preset--color--accent);
-			outline-offset: 1px;
-
-			&.has-background {
-				outline-color: var(--wp--preset--color--contrast);
-			}
+		&:focus-visible {
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				opacity motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 		}
 
-		&.has-background:not(.has-accent-2-background-color) {
-			&:hover {
-				opacity: 0.65;
+		&.has-background:not(.has-accent-2-background-color, .has-contrast-color.has-base-background-color, [contenteditable="true"], [style*="--newspack-button-bg-hover"]) {
+			@include mixins.fill-overlay;
+		}
+
+		&[style*="--newspack-button-bg-hover"] {
+			@include motion.hover {
+				&:hover {
+					background-color: var(--newspack-button-bg-hover) !important;
+				}
+			}
+
+			&:active:where(:not([contenteditable="true"])) {
+				background-color: var(--newspack-button-bg-pressed) !important;
 			}
 		}
 
 		&.has-accent-2-background-color {
-			&:hover {
-				background-color: color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black) !important;
+			@include motion.hover {
+				&:hover {
+					background-color: color-mix(in oklab, var(--wp--preset--color--accent-2) var(--wp--custom--state--hover), black) !important;
+				}
+			}
+
+			&:active:where(:not([contenteditable="true"])) {
+				background-color: color-mix(in oklab, var(--wp--preset--color--accent-2) var(--wp--custom--state--pressed), black) !important;
 			}
 		}
 
 		&.has-contrast-color.has-base-background-color {
-			&:hover {
-				background-color: color-mix(in srgb, var(--wp--preset--color--contrast) 3.5%, transparent) !important;
-				opacity: 1;
+			@include motion.hover {
+				&:hover {
+					background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill), var(--wp--preset--color--base)) !important;
+				}
+			}
+
+			&:active:where(:not([contenteditable="true"])) {
+				background-color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--fill-hover), var(--wp--preset--color--base)) !important;
 			}
 		}
 
@@ -59,6 +141,15 @@
 		}
 	}
 
+	&:not(.is-style-outline) {
+		form .wp-block-button__link,
+		> .wp-block-button__link {
+			&.has-background:not(.has-text-color, .has-accent-background-color):is(:hover, :active) {
+				color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+			}
+		}
+	}
+
 	&.is-style-outline {
 		> .wp-block-button__link,
 		form .wp-block-button__link {
@@ -66,22 +157,32 @@
 			border: 1px solid currentcolor;
 			color: var(--wp--preset--color--accent);
 
-			&:hover {
-				background: var(--wp--preset--color--base-2);
-				color: var(--wp--preset--color--contrast);
-			}
-
-			&.has-background {
+			@include motion.hover {
 				&:hover {
-					opacity: 0.65;
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--wp--preset--color--base));
 				}
 			}
 
-			&:focus {
-				outline-color: var(--wp--preset--color--contrast);
+			&:active:where(:not([contenteditable="true"])) {
+				background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--wp--preset--color--base));
+			}
+
+			&:focus-visible {
+				@include mixins.focus-edge(currentcolor, $halo: mixins.$focus-color);
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color,
+					opacity motion.$duration-color motion.$ease-color,
+					transform motion.$duration-press motion.$ease-out;
 			}
 		}
 	}
+}
+
+// Keep a 1px border from making the button taller than a solid one. Inline custom padding wins over
+// this, but padding set in Global Styles is replaced, so this only works for the theme's default padding.
+.wp-block-button__link:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+	padding-block: calc(var(--wp--custom--spacing--25) - 1px);
 }
 
 .has-small-size {
@@ -89,15 +190,24 @@
 		&__link {
 			align-items: center;
 			display: inline-flex;
-			min-height: var(--wp--custom--spacing--65);
-			padding: var(--wp--preset--spacing--20) var(--wp--preset--spacing--30);
+			min-height: var(--wp--custom--spacing--55);
+			padding: var(--wp--preset--spacing--20) calc(var(--wp--custom--spacing--25) + 2px);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--preset--spacing--20) - 1px);
+			}
 		}
+	}
+
+	.wp-block-button > .wp-block-button__link.wp-block-newspack-my-account-button:has(svg) svg {
+		height: calc(var(--wp--custom--spacing--55) - 2 * var(--wp--preset--spacing--20));
+		width: calc(var(--wp--custom--spacing--55) - 2 * var(--wp--preset--spacing--20));
 	}
 
 	.is-style-outline,
 	&.is-style-outline {
 		.wp-block-button__link {
-			padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--preset--spacing--30) - 1px) !important;
+			padding: calc(var(--wp--preset--spacing--20) - 1px) calc(var(--wp--custom--spacing--25) + 1px) !important;
 		}
 	}
 }
@@ -106,17 +216,26 @@
 	.wp-block-button {
 		&__link {
 			align-items: center;
-			border-radius: var(--wp--custom--border--radius-small);
+			border-radius: var(--wp--custom--border--radius-medium);
 			display: inline-flex;
-			min-height: var(--wp--custom--spacing--55);
-			padding: var(--wp--custom--spacing--15) var(--wp--custom--spacing--25);
+			min-height: var(--wp--custom--spacing--45);
+			padding: var(--wp--custom--spacing--10) calc(var(--wp--custom--spacing--25) - 2px);
+
+			&:is([style*="border-width:1px"], [style*="border-width: 1px"]) {
+				padding-block: calc(var(--wp--custom--spacing--10) - 1px);
+			}
 		}
+	}
+
+	.wp-block-button > .wp-block-button__link.wp-block-newspack-my-account-button:has(svg) svg {
+		height: calc(var(--wp--custom--spacing--45) - 2 * var(--wp--custom--spacing--10));
+		width: calc(var(--wp--custom--spacing--45) - 2 * var(--wp--custom--spacing--10));
 	}
 
 	.is-style-outline,
 	&.is-style-outline {
 		.wp-block-button__link {
-			padding: calc(var(--wp--custom--spacing--15) - 1px) calc(var(--wp--custom--spacing--25) - 1px) !important;
+			padding: calc(var(--wp--custom--spacing--10) - 1px) calc(var(--wp--custom--spacing--25) - 3px) !important;
 		}
 	}
 }
@@ -124,7 +243,13 @@
 .has-background-transparent:not([class*="-background-color"]) {
 	background-color: transparent;
 
-	&:hover {
-		background-color: color-mix(in srgb, currentcolor 3.5%, transparent);
+	@include motion.hover {
+		&:hover {
+			background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), transparent);
+		}
+	}
+
+	&:active:where(:not([contenteditable="true"])) {
+		background-color: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), transparent);
 	}
 }

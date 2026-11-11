@@ -7,8 +7,11 @@
 
 namespace Newspack_Network\Incoming_Events;
 
+use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Hub\Stores\Subscriptions;
 use Newspack_Network\Debugger;
+use Newspack_Network\User_Update_Watcher;
+use Newspack_Network\Utils\Users;
 
 /**
  * Class to handle the Subscription Changed Incoming Event
@@ -69,9 +72,21 @@ class Subscription_Changed extends Woo_Item_Changed {
 
 		Debugger::log( 'Processing subscription_changed with email: ' . $email );
 
+		// The reader may not have an account here yet (the registration event can arrive later, or never),
+		// so create it rather than lose the subscription: nothing re-sends it once the account exists.
+		// Only a subscription that grants access earns an account: deleting a reader cancels their
+		// subscriptions, and that cancellation would otherwise bring the account back on every other site.
 		$existing_user = get_user_by( 'email', $email );
-
 		if ( ! $existing_user ) {
+			if ( ! in_array( $this->get_status_after(), Access::ACTIVE_STATUSES, true ) ) {
+				return;
+			}
+			User_Update_Watcher::$enabled = false;
+			$existing_user                = Users::get_or_create_user_by_email( $email, $this->get_site(), $this->data->user_id ?? '' );
+		}
+
+		if ( ! $existing_user instanceof \WP_User ) {
+			Debugger::log( 'Could not find or create a user for subscription: ' . $email );
 			return;
 		}
 
@@ -87,10 +102,13 @@ class Subscription_Changed extends Woo_Item_Changed {
 			$current_value[ $this->get_site() ] = [];
 		}
 
+		// The billing details let other sites show this subscription's dates and price
+		// without reaching back to this one.
 		$current_value[ $this->get_site() ][ $this->get_id() ] = [
 			'id'       => $this->get_id(),
 			'status'   => $this->get_status_after(),
 			'products' => $this->get_products(),
+			'billing'  => $this->get_billing(),
 		];
 
 		Debugger::log( sprintf( 'Adding meta for site %s and subscription id %d. Value: %s', $this->get_site(), $this->get_id(), wp_json_encode( $current_value, true ) ) );
@@ -142,6 +160,28 @@ class Subscription_Changed extends Woo_Item_Changed {
 	 */
 	public function get_end_date() {
 		return $this->data->end_date ?? null;
+	}
+
+	/**
+	 * Returns what the subscription costs, how often, and its dates, as the node sent them.
+	 *
+	 * Dates are GMT 'Y-m-d H:i:s' strings. A node running an older version sends no
+	 * billing period or interval, and a date the subscription doesn't have is empty.
+	 *
+	 * @return array
+	 */
+	public function get_billing() {
+		return [
+			'start_date'        => $this->get_start_date(),
+			'next_payment_date' => $this->get_next_payment_date(),
+			'last_payment_date' => $this->get_last_payment_date(),
+			'last_paid_date'    => $this->data->last_paid_date ?? null,
+			'end_date'          => $this->get_end_date(),
+			'total'             => $this->data->total ?? null,
+			'currency'          => $this->data->currency ?? null,
+			'billing_period'    => $this->data->billing_period ?? null,
+			'billing_interval'  => $this->data->billing_interval ?? null,
+		];
 	}
 
 	/**

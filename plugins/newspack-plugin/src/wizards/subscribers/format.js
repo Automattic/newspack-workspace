@@ -5,8 +5,13 @@
 /**
  * WordPress dependencies.
  */
-import { dateI18n, gmdateI18n, getSettings, humanTimeDiff } from '@wordpress/date';
+import { dateI18n, humanTimeDiff } from '@wordpress/date';
 import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies.
+ */
+import { formatSiteDate } from '../../../packages/components/src/dataviews/format-date';
 
 // "2 days ago" — defers to core's localized relative-time formatting (the same
 // helper wp-admin uses) rather than a bespoke ladder.
@@ -20,17 +25,9 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 export const fmtRelative = date => ( date ? humanTimeDiff( date ) : '' );
 
 // Calendar-date presentation, using the publisher's WordPress date format. The
-// wizard stores dates as date-only strings (YYYY-MM-DD) with no time or zone, so
-// they are anchored at UTC midnight and formatted in UTC: this keeps the shown
-// day stable no matter the viewer's timezone (a browser ahead of the site's zone
-// would otherwise roll a bare date back to the previous day).
-export const fmtDate = value => {
-	if ( ! value ) {
-		return '';
-	}
-	const anchored = /^\d{4}-\d{2}-\d{2}$/.test( value ) ? `${ value }T00:00:00+00:00` : value;
-	return gmdateI18n( getSettings().formats.date, anchored );
-};
+// wizard stores dates as date-only strings (YYYY-MM-DD), which formatSiteDate
+// keeps on the same calendar day whatever the viewer's timezone.
+export const fmtDate = formatSiteDate;
 
 // Fallback dash for an empty value, matching the list columns (e.g. "Last seen —").
 export const orDash = value => value || '—';
@@ -128,9 +125,13 @@ const periodLabel = ( period, interval ) => {
  * @param {string}        entry.currency        ISO 4217 currency code.
  * @param {string}        entry.billingPeriod   WooCommerce billing period.
  * @param {number}        entry.billingInterval Billing interval.
- * @return {string} The billing rate, or '—' when there is no amount on file.
+ * @param {boolean}       entry.isComplimentary Whether it is complimentary access.
+ * @return {string} The billing rate, "Complimentary", or '—' when there is no amount on file.
  */
-export const billingText = ( { amount, currency, billingPeriod, billingInterval } = {} ) => {
+export const billingText = ( { amount, currency, billingPeriod, billingInterval, isComplimentary } = {} ) => {
+	if ( isComplimentary ) {
+		return __( 'Complimentary', 'newspack-plugin' );
+	}
 	const price = fmtCurrency( amount, currency );
 	if ( ! price ) {
 		return '—';
@@ -172,4 +173,23 @@ export const scheduleRow = ( { nextBillingDate, endDate } = {} ) => {
 		return { label, value: fmtDate( endDate ) };
 	}
 	return { label: __( 'Next billing', 'newspack-plugin' ), value: '—' };
+};
+
+/**
+ * The rows that follow "Billing" on a subscription card: the last payment, then
+ * the schedule row. A complimentary subscription is never charged, so it keeps
+ * only the date its access ends, when it has one.
+ *
+ * @param {Object}  entry                   A subscription or group entry.
+ * @param {string}  [entry.lastPayment]     The last payment date, if any.
+ * @param {string}  [entry.nextBillingDate] The next-billing date, if any.
+ * @param {string}  [entry.endDate]         The access-end date, if any.
+ * @param {boolean} [entry.isComplimentary] Whether it is complimentary access.
+ * @return {Array<{ label: string, value: string }>} The rows.
+ */
+export const paymentRows = ( entry = {} ) => {
+	if ( entry.isComplimentary ) {
+		return entry.endDate ? [ scheduleRow( { endDate: entry.endDate } ) ] : [];
+	}
+	return [ { label: __( 'Last payment', 'newspack-plugin' ), value: orDash( fmtDate( entry.lastPayment ) ) }, scheduleRow( entry ) ];
 };

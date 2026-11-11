@@ -107,6 +107,7 @@ class User_Manual_Sync {
 						</a>
 						<p class="description">
 							<?php esc_html_e( 'Manually sync this user\'s information across all sites in your network, including their role. If this is a new user, clicking this button will also propagate the user account across your network.', 'newspack-network' ); ?>
+							<?php esc_html_e( 'On a site where this user already holds a staff role, a sync that leaves them with only reader roles, or none, does not change their role, display name or email there; make those changes on that site.', 'newspack-network' ); ?>
 						</p>
 					</td>
 				</tr>

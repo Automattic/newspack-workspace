@@ -56,6 +56,13 @@ final class Core {
 	protected static $instance = null;
 
 	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
 	 * Main Newspack_Listings instance.
 	 * Ensures only one instance of Newspack_Listings is loaded or can be loaded.
 	 *
@@ -66,6 +73,57 @@ final class Core {
 			self::$instance = new self();
 		}
 		return self::$instance;
+	}
+
+	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content hash the build writes to `dist/<name>.asset.php`, so an
+	 * asset's URL changes when its file changes, and only then. The plugin
+	 * version can't do that: it stays the same when a build is reinstalled
+	 * without a version bump, so browsers keep the cached file. The hash covers
+	 * every file in the entry, so an entry's `.css` can use the same name as
+	 * its `.js`.
+	 *
+	 * A trimmed copy of `Newspack::asset_version()` in newspack-plugin, without
+	 * its cache reset or logging. This plugin must work without newspack-plugin,
+	 * so it can't call that one. newspack-ads, newspack-blocks, newspack-listings
+	 * and newspack-newsletters each carry this copy; a change to the name check
+	 * belongs in all of them and in the original.
+	 *
+	 * @param string $name Asset path relative to `dist/`, without the extension.
+	 *                     Examples: 'editor', 'curated-list'.
+	 * @return string The content hash, or NEWSPACK_LISTINGS_VERSION when the
+	 *                `.asset.php` file is missing or malformed.
+	 */
+	public static function asset_version( string $name ): string {
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
+		}
+		$version = NEWSPACK_LISTINGS_VERSION;
+		// Accept only entry-shaped names, so a caller can't include a file
+		// outside dist/. The second pattern rejects `..` segments, which the
+		// first pattern's character set would otherwise let through.
+		if (
+			preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			&& ! preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
+			/**
+			 * Filters the directory asset_version() reads `.asset.php` files from.
+			 * Tests point this at a temp dir instead of writing into dist/.
+			 *
+			 * @param string $dir  Absolute path with a trailing slash.
+			 * @param string $name Asset name being resolved.
+			 */
+			$dist_dir = apply_filters( 'newspack_listings_asset_dist_dir', NEWSPACK_LISTINGS_PLUGIN_FILE . 'dist/', $name );
+			$path     = $dist_dir . $name . '.asset.php';
+			$asset    = file_exists( $path ) ? include $path : null;
+			if ( is_array( $asset ) && ! empty( $asset['version'] ) && is_string( $asset['version'] ) ) {
+				$version = $asset['version'];
+			}
+		}
+		self::$asset_version_cache[ $name ] = $version;
+		return $version;
 	}
 
 	/**

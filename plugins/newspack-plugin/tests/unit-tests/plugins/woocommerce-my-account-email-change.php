@@ -29,7 +29,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$this->user_id = self::factory()->user->create(
 			[
 				'role'       => 'subscriber',
-				'user_email' => 'reader@example.com',
+				'user_email' => 'reader@example.test',
 			]
 		);
 	}
@@ -41,7 +41,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 *
 	 * @return array The stored token set.
 	 */
-	private function issue_tokens( $new_email = 'new@example.com' ) {
+	private function issue_tokens( $new_email = 'new@example.test' ) {
 		$method = new ReflectionMethod( WooCommerce_My_Account::class, 'create_email_change_tokens' );
 		$method->setAccessible( true );
 		return $method->invoke( null, $this->user_id, $new_email );
@@ -54,7 +54,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 *
 	 * @return array The stored token set.
 	 */
-	private function start_email_change( $new_email = 'new@example.com' ) {
+	private function start_email_change( $new_email = 'new@example.test' ) {
 		$tokens = $this->issue_tokens( $new_email );
 		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, $new_email );
 		return $tokens;
@@ -71,21 +71,6 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$tokens['expires'] = time() - HOUR_IN_SECONDS;
 		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, $tokens );
 		return $tokens;
-	}
-
-	/**
-	 * The verification link for the test reader's pending request.
-	 *
-	 * Private on purpose in the class under test — it hands out the token that
-	 * completes a change — so the test reaches it the same way it reaches the
-	 * other private members here.
-	 *
-	 * @return string
-	 */
-	private function verify_url() {
-		$method = new ReflectionMethod( WooCommerce_My_Account::class, 'get_verify_email_change_url' );
-		$method->setAccessible( true );
-		return $method->invoke( null, $this->user_id );
 	}
 
 	/**
@@ -147,8 +132,8 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * Re-requesting a change retires the tokens from the previous request.
 	 */
 	public function test_a_new_request_retires_the_previous_tokens() {
-		$first = $this->start_email_change( 'first@example.com' );
-		$this->start_email_change( 'second@example.com' );
+		$first = $this->start_email_change( 'first@example.test' );
+		$this->start_email_change( 'second@example.test' );
 		$this->assertStringNotContainsString(
 			$first['cancel'],
 			WooCommerce_My_Account::get_cancel_email_change_url( $this->user_id ),
@@ -178,8 +163,8 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * A pending change with live links is reported as pending.
 	 */
 	public function test_pending_change_is_reported() {
-		$this->start_email_change( 'new@example.com' );
-		$this->assertSame( 'new@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
+		$this->start_email_change( 'new@example.test' );
+		$this->assertSame( 'new@example.test', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
 	}
 
 	/**
@@ -209,7 +194,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * rather than left holding the account form with nothing the reader can click.
 	 */
 	public function test_request_without_usable_links_is_dropped() {
-		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, 'new@example.com' );
+		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, 'new@example.test' );
 
 		$this->assertSame( '', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
 		$this->assertSame( '', \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, true ), 'The unusable request should be cleared.' );
@@ -237,10 +222,10 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * The verification token applies the requested address and settles the request.
 	 */
 	public function test_verifying_applies_the_requested_address() {
-		$tokens = $this->start_email_change( 'confirmed@example.com' );
+		$tokens = $this->start_email_change( 'confirmed@example.test' );
 
 		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
-		$this->assertSame( 'confirmed@example.com', $this->account_email() );
+		$this->assertSame( 'confirmed@example.test', $this->account_email() );
 		$this->assertNoPendingRequest();
 	}
 
@@ -248,12 +233,12 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * The cancellation token does not complete the change.
 	 */
 	public function test_cancellation_token_cannot_verify() {
-		$tokens = $this->start_email_change( 'confirmed@example.com' );
+		$tokens = $this->start_email_change( 'confirmed@example.test' );
 
 		$result = WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['cancel'] );
 		$this->assertWPError( $result );
-		$this->assertSame( 'reader@example.com', $this->account_email(), 'The account address should be untouched.' );
-		$this->assertSame( 'confirmed@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ), 'A rejected attempt should leave the request standing.' );
+		$this->assertSame( 'reader@example.test', $this->account_email(), 'The account address should be untouched.' );
+		$this->assertSame( 'confirmed@example.test', WooCommerce_My_Account::get_pending_email_change( $this->user_id ), 'A rejected attempt should leave the request standing.' );
 	}
 
 	/**
@@ -263,7 +248,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$tokens = $this->start_email_change();
 
 		$this->assertWPError( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['verify'] ) );
-		$this->assertSame( 'new@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
+		$this->assertSame( 'new@example.test', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
 	}
 
 	/**
@@ -273,18 +258,18 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$tokens = $this->expire_tokens( $this->start_email_change() );
 
 		$this->assertWPError( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
-		$this->assertSame( 'reader@example.com', $this->account_email() );
+		$this->assertSame( 'reader@example.test', $this->account_email() );
 	}
 
 	/**
 	 * A verification token works once.
 	 */
 	public function test_verification_token_cannot_be_replayed() {
-		$tokens = $this->start_email_change( 'confirmed@example.com' );
+		$tokens = $this->start_email_change( 'confirmed@example.test' );
 		WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] );
 
 		$this->assertWPError( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
-		$this->assertSame( 'confirmed@example.com', $this->account_email(), 'The replay should not change the address again.' );
+		$this->assertSame( 'confirmed@example.test', $this->account_email(), 'The replay should not change the address again.' );
 	}
 
 	/**
@@ -304,7 +289,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$tokens = $this->start_email_change();
 
 		$this->assertTrue( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['cancel'] ) );
-		$this->assertSame( 'reader@example.com', $this->account_email() );
+		$this->assertSame( 'reader@example.test', $this->account_email() );
 		$this->assertNoPendingRequest();
 	}
 
@@ -314,30 +299,11 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * token paired with the other's address.
 	 */
 	public function test_token_settles_the_address_it_was_issued_for() {
-		$first = $this->issue_tokens( 'first@example.com' );
-		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, 'second@example.com' );
+		$first = $this->issue_tokens( 'first@example.test' );
+		\update_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, 'second@example.test' );
 
 		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $first['verify'] ) );
-		$this->assertSame( 'first@example.com', $this->account_email() );
-	}
-
-	/**
-	 * The verification link carries the token that completes the change, and
-	 * never the one that cancels it. This is the line the vulnerability was on,
-	 * so it is asserted rather than assumed.
-	 */
-	public function test_verification_link_carries_only_the_verification_token() {
-		$tokens = $this->start_email_change();
-		$url    = $this->verify_url();
-		$this->assertStringContainsString( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM . '=' . $tokens['verify'], $url, 'The verification link should carry the verification token.' );
-		$this->assertStringNotContainsString( $tokens['cancel'], $url, 'The verification link should never carry the cancellation token.' );
-	}
-
-	/**
-	 * With nothing pending there is no verification link to hand out either.
-	 */
-	public function test_no_verification_link_without_a_pending_change() {
-		$this->assertSame( '', $this->verify_url() );
+		$this->assertSame( 'first@example.test', $this->account_email() );
 	}
 
 	/**
@@ -347,10 +313,10 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 */
 	public function test_pending_request_does_not_survive_an_outside_address_change() {
 		$tokens = $this->start_email_change( 'typo@exmaple.com' );
-		$this->move_account_email( 'corrected@example.com' );
+		$this->move_account_email( 'corrected@example.test' );
 
 		$this->assertWPError( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ), 'A link issued against the old address should no longer complete.' );
-		$this->assertSame( 'corrected@example.com', $this->account_email(), 'The correction should stand.' );
+		$this->assertSame( 'corrected@example.test', $this->account_email(), 'The correction should stand.' );
 	}
 
 	/**
@@ -359,7 +325,7 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 */
 	public function test_an_outside_address_change_releases_the_account_form() {
 		$tokens = $this->start_email_change( 'typo@exmaple.com' );
-		$this->move_account_email( 'corrected@example.com' );
+		$this->move_account_email( 'corrected@example.test' );
 
 		$this->assertWPError( WooCommerce_My_Account::cancel_email_change( $this->user_id, $tokens['cancel'] ) );
 		$this->assertSame( '', WooCommerce_My_Account::get_cancel_email_change_url( $this->user_id ), 'A stale request should offer no cancellation link.' );
@@ -406,9 +372,9 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$wpdb->suppress_errors( $suppressed );
 
 		$this->assertFalse( $claimed, 'A failed delete should not count as a claim.' );
-		$this->assertSame( 'new@example.com', WooCommerce_My_Account::get_pending_email_change( $this->user_id ), 'The request should still be pending.' );
+		$this->assertSame( 'new@example.test', WooCommerce_My_Account::get_pending_email_change( $this->user_id ), 'The request should still be pending.' );
 		$this->assertStringContainsString( $tokens['cancel'], WooCommerce_My_Account::get_cancel_email_change_url( $this->user_id ), 'The reader should still be able to cancel.' );
-		$this->assertSame( 'new@example.com', \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, true ), 'The mirror should not be cleared on a failed claim.' );
+		$this->assertSame( 'new@example.test', \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META, true ), 'The mirror should not be cleared on a failed claim.' );
 	}
 
 	/**
@@ -417,11 +383,11 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 	 * back to a link that can never work again.
 	 */
 	public function test_a_failed_update_reports_why() {
-		$tokens = $this->start_email_change( 'taken@example.com' );
+		$tokens = $this->start_email_change( 'taken@example.test' );
 		self::factory()->user->create(
 			[
 				'role'       => 'subscriber',
-				'user_email' => 'taken@example.com',
+				'user_email' => 'taken@example.test',
 			]
 		);
 
@@ -429,7 +395,123 @@ class Newspack_Test_WooCommerce_My_Account_Email_Change extends WP_UnitTestCase 
 		$this->assertWPError( $result );
 		$this->assertSame( 'newspack_email_change_failed', $result->get_error_code() );
 		$this->assertNotSame( 'Something went wrong.', $result->get_error_message(), 'The reader should be told what actually stopped the change.' );
-		$this->assertSame( 'reader@example.com', $this->account_email(), 'The account address should be untouched.' );
+		$this->assertSame( 'reader@example.test', $this->account_email(), 'The account address should be untouched.' );
+	}
+
+	/**
+	 * Request a change through the public initiator, recording who was mailed.
+	 *
+	 * @param string $new_email The address to request.
+	 *
+	 * @return array The result, and the recipients of each email sent.
+	 */
+	private function request_and_capture_recipients( $new_email ) {
+		\Newspack\Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+		$result     = WooCommerce_My_Account::request_email_change( $this->user_id, $new_email );
+		$recipients = array_map(
+			function ( $sent ) {
+				return $sent['to'][0][0];
+			},
+			tests_retrieve_phpmailer_instance()->mock_sent
+		);
+		return [ $result, $recipients ];
+	}
+
+	/**
+	 * A change requested for any account, by other code rather than the account
+	 * form, starts the same verified flow: the old address is told, the new one
+	 * is asked to confirm, and nothing moves until it does.
+	 */
+	public function test_requesting_a_change_waits_for_verification() {
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.test' );
+
+		$this->assertTrue( $result );
+		$this->assertSame( [ 'requested@example.test', 'reader@example.test' ], $recipients, 'The new address should get the verification link and the old one the notice.' );
+		$this->assertSame( 'reader@example.test', $this->account_email(), 'The address should not change before it is verified.' );
+		$this->assertSame( 'requested@example.test', WooCommerce_My_Account::get_pending_email_change( $this->user_id ) );
+
+		$tokens = \get_user_meta( $this->user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+		$this->assertTrue( WooCommerce_My_Account::verify_email_change( $this->user_id, $tokens['verify'] ) );
+		$this->assertSame( 'requested@example.test', $this->account_email(), 'Verifying should apply the requested address.' );
+	}
+
+	/**
+	 * An address that cannot be used is refused before anything is stored or sent.
+	 */
+	public function test_requesting_an_unusable_address_is_refused() {
+		self::factory()->user->create( [ 'user_email' => 'taken@example.test' ] );
+
+		foreach ( [ 'taken@example.test', 'not-an-email', 'a b@example.test' ] as $new_email ) {
+			list( $result, $recipients ) = $this->request_and_capture_recipients( $new_email );
+
+			$this->assertWPError( $result, "$new_email should be refused." );
+			$this->assertSame( [], $recipients, 'Nothing should be sent.' );
+			$this->assertNoPendingRequest();
+		}
+	}
+
+	/**
+	 * A request is refused when it could never be settled: with Reader
+	 * Activation off the links go nowhere, and without the verification email
+	 * nobody can complete it. Either way nothing is left locking the account form.
+	 */
+	public function test_an_unsettleable_request_is_not_left_pending() {
+		\add_filter( 'newspack_reader_activation_enabled', '__return_false' );
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.test' );
+		\remove_filter( 'newspack_reader_activation_enabled', '__return_false' );
+
+		$this->assertWPError( $result, 'Without Reader Activation the request should be refused.' );
+		$this->assertSame( [], $recipients, 'Nothing should be sent.' );
+		$this->assertNoPendingRequest();
+
+		$fail_verification = function ( $return, $atts ) {
+			return in_array( 'requested@example.test', (array) $atts['to'], true ) ? false : $return;
+		};
+		\add_filter( 'pre_wp_mail', $fail_verification, 10, 2 );
+		list( $result, $recipients ) = $this->request_and_capture_recipients( 'requested@example.test' );
+		\remove_filter( 'pre_wp_mail', $fail_verification, 10 );
+
+		$this->assertWPError( $result, 'An unsent verification email should be reported.' );
+		$this->assertSame( [], $recipients, 'The old address should not be told about a request that was dropped.' );
+		$this->assertNoPendingRequest();
+	}
+
+	/**
+	 * Each request's emails carry the links issued for that request. When a
+	 * newer request replaces it partway through, the first new address must
+	 * not receive the newer request's verification token, which would let it
+	 * confirm an address it does not control, and the old address is told only
+	 * about the request that is still standing.
+	 */
+	public function test_a_replaced_request_does_not_send_the_newer_links() {
+		$first       = null;
+		$replaced_by = null;
+		$replace     = function ( $meta_id, $user_id, $meta_key ) use ( &$first, &$replaced_by ) {
+			if ( WooCommerce_My_Account::PENDING_EMAIL_CHANGE_META !== $meta_key || null !== $first ) {
+				return;
+			}
+			$first = \get_user_meta( $user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+			WooCommerce_My_Account::request_email_change( $user_id, 'second@example.test' );
+			$replaced_by = \get_user_meta( $user_id, WooCommerce_My_Account::PENDING_EMAIL_CHANGE_TOKENS_META, true );
+		};
+		\add_action( 'added_user_meta', $replace, 10, 3 );
+		\add_action( 'updated_user_meta', $replace, 10, 3 );
+		\Newspack\Emails::reset_email_configs_cache();
+		reset_phpmailer_instance();
+		WooCommerce_My_Account::request_email_change( $this->user_id, 'first@example.test' );
+		\remove_action( 'added_user_meta', $replace, 10 );
+		\remove_action( 'updated_user_meta', $replace, 10 );
+
+		$bodies_by_recipient = [];
+		foreach ( tests_retrieve_phpmailer_instance()->mock_sent as $sent ) {
+			$bodies_by_recipient[ $sent['to'][0][0] ][] = quoted_printable_decode( $sent['body'] );
+		}
+		$first_verification = implode( '', $bodies_by_recipient['first@example.test'] );
+		$this->assertStringContainsString( WooCommerce_My_Account::VERIFY_EMAIL_CHANGE_PARAM . '=' . $first['verify'], $first_verification, 'The first address should get the link issued for it.' );
+		$this->assertStringNotContainsString( $replaced_by['verify'], $first_verification, 'The first address should not get the newer verification token.' );
+		$this->assertCount( 1, $bodies_by_recipient['reader@example.test'], 'The old address should be told about the standing request only.' );
+		$this->assertStringContainsString( $replaced_by['cancel'], $bodies_by_recipient['reader@example.test'][0] );
 	}
 
 	/**

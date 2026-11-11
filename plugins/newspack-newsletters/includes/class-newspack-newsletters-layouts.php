@@ -262,7 +262,7 @@ final class Newspack_Newsletters_Layouts {
 			$header_color       = 'default' === $header_status ? $primary_color_hex : $header_color_hex;
 			$bg_color           = $solid_bg ? $header_color : '#ffffff';
 			$text_color         = newspack_get_color_contrast( $bg_color );
-			$social_links_color = '#fff' === $text_color ? 'white' : 'black';
+			$social_links_color = 'white' === $text_color ? 'white' : 'black';
 		}
 
 		$sitename_block = '<!-- wp:site-title {"newsletterVisibility":"email"} /-->';
@@ -428,4 +428,7 @@ final class Newspack_Newsletters_Layouts {
 		);
 	}
 }
-Newspack_Newsletters_Layouts::instance();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Newspack_Newsletters_Layouts::instance();
+}

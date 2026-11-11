@@ -1,9 +1,5 @@
 /**
- * NPPD-1492 — the institutions list keeps the gates screen header in sync by
- * writing `config.has_institutions` into the wizard store after each fetch.
- * This is the half the "no reload" behaviour rests on: the gates config is
- * resolved once per page load, so without this write a publisher who creates
- * their first institution and navigates back sees a stale header.
+ * Deleting an institution drops the fetched option list the gate pickers name institutions from.
  */
 
 /**
@@ -17,7 +13,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Institutions from './index';
 
 // mock-prefixed so Jest's hoisted jest.mock factories may close over them.
-const mockUpdateWizardSettings = jest.fn();
 const mockApiFetch = jest.fn();
 const mockInvalidate = jest.fn();
 const mockDataViewsProps = { current: null };
@@ -30,14 +25,13 @@ jest.mock( '@wordpress/data', () => {
 	const dispatch = {
 		setHeaderData: jest.fn(),
 		addNotice: jest.fn(),
-		updateWizardSettings: ( ...args ) => mockUpdateWizardSettings( ...args ),
 	};
 	return { useDispatch: () => dispatch };
 } );
 
 // The real @wordpress/components and @wordpress/dataviews cannot load in this
-// jsdom env (data-store side effects throw at import); the store-sync contract
-// under test does not touch either.
+// jsdom env (data-store side effects throw at import); the behavior under
+// test does not touch either.
 jest.mock( '@wordpress/components', () => {
 	const React = require( 'react' );
 	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
@@ -50,7 +44,7 @@ jest.mock( '@wordpress/dataviews', () => ( {
 	filterSortAndPaginate: data => ( { data, paginationInfo: { totalItems: data.length, totalPages: 1 } } ),
 } ) );
 
-// DataViews and the router are irrelevant to the store-sync contract.
+// DataViews and the router are irrelevant to the behavior under test.
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
@@ -79,33 +73,6 @@ jest.mock( '../consts', () => ( {
 
 jest.mock( './onboarding', () => () => null );
 
-describe( 'Institutions list — gates header sync (NPPD-1492)', () => {
-	beforeEach( () => {
-		mockUpdateWizardSettings.mockReset();
-		mockApiFetch.mockReset();
-	} );
-
-	it.each( [
-		{ name: 'has institutions', institutions: [ { id: 1, title: { raw: 'Uni' }, meta: {} } ], expected: true },
-		{ name: 'has none', institutions: [], expected: false },
-	] )( 'writes has_institutions=$expected when the site $name', async ( { institutions, expected } ) => {
-		mockApiFetch.mockResolvedValue( institutions );
-
-		render( <Institutions /> );
-
-		await waitFor( () => expect( mockUpdateWizardSettings ).toHaveBeenCalled() );
-		expect( mockUpdateWizardSettings ).toHaveBeenCalledWith( {
-			slug: 'newspack-audience-access-control',
-			path: [ 'config', 'has_institutions' ],
-			value: expected,
-		} );
-		// The initial fetch changes the value from unknown to its result, so
-		// exactly one write happens; the per-instance ref guards later fetches
-		// that leave the derived boolean unchanged.
-		expect( mockUpdateWizardSettings ).toHaveBeenCalledTimes( 1 );
-	} );
-} );
-
 describe( 'Institutions list — fetched option list invalidation', () => {
 	// The gate pickers and summaries name institutions from a list fetched once per app
 	// lifetime, so a deletion here has to drop it, or a deleted institution stays named
@@ -117,7 +84,7 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		render( <Institutions /> );
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
 
-		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.isDestructive );
+		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.id === 'delete' );
 		render( <RenderModal items={ [ { id: 1 } ] } closeModal={ () => {} } /> );
 
 		await act( async () => {
@@ -125,5 +92,37 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		} );
 
 		expect( mockInvalidate ).toHaveBeenCalledWith( 'institution' );
+	} );
+} );
+
+describe( 'Institutions list — address lists', () => {
+	const renderCell = async ( fieldId, meta ) => {
+		mockApiFetch.mockResolvedValue( [] );
+		render( <Institutions /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+		const field = mockDataViewsProps.current.fields.find( ( { id } ) => id === fieldId );
+		return render( field.render( { item: { id: 1, title: { raw: 'City Library' }, meta } } ) ).container;
+	};
+
+	it( 'shows one space after a separator saved with one', async () => {
+		const cell = await renderCell( 'email_domain', { np_institution_email_domain: 'a.edu, b.edu' } );
+
+		expect( cell.textContent ).toBe( 'a.edu, b.edu' );
+		expect( [ ...cell.querySelectorAll( '.newspack-institutions__list-item' ) ].map( item => item.textContent ) ).toEqual( [
+			'a.edu,',
+			'b.edu',
+		] );
+	} );
+
+	it( 'splits reader data on semicolons only', async () => {
+		const cell = await renderCell( 'reader_data', { np_institution_reader_data: 'org=Acme,Inc;role=staff' } );
+
+		expect( cell.textContent ).toBe( 'org=Acme,Inc; role=staff' );
+	} );
+
+	it( 'adds a space where none follows the separator', async () => {
+		const cell = await renderCell( 'ip_range', { np_institution_ip_range: '192.0.2.0/24,198.51.100.10-198.51.100.40' } );
+
+		expect( cell.textContent ).toBe( '192.0.2.0/24, 198.51.100.10-198.51.100.40' );
 	} );
 } );

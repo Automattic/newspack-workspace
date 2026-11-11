@@ -1,4 +1,5 @@
 @use "../mixins";
+@use "newspack-motion" as motion;
 
 .wp-block-post-comments-form {
 	form {
@@ -41,14 +42,17 @@
 	}
 
 	.comment-form-cookies-consent {
-		gap: var(--wp--preset--spacing--20);
+		gap: var(--wp--custom--spacing--25);
 
 		input[type="checkbox"] {
-			margin-top: 2px !important;
+			font-size: var(--wp--preset--font-size--small);
+			line-height: var(--wp--custom--line-height--small);
+			margin-inline-end: 0;
+			margin-top: calc((1lh - var(--wp--custom--spacing--35)) / 2) !important;
 		}
 
 		label {
-			font-weight: normal;
+			font-weight: 400;
 			margin-bottom: 0;
 		}
 	}
@@ -57,8 +61,12 @@
 		display: none;
 	}
 
+	.comment-form :is(.comment-form-author, .comment-form-email) label {
+		margin-bottom: var(--wp--preset--spacing--20);
+	}
+
 	.required {
-		color: var(--wp--custom--color--error-50);
+		color: var(--newspack-ui-color-error-text, var(--wp--custom--color--error-text));
 	}
 
 	.required-field-message {
@@ -67,20 +75,19 @@
 }
 
 .wp-block-comment-template {
-	ol {
+	ol:not(.wp-block-comment-content *) {
 		list-style: none;
 		padding-left: var(--wp--preset--spacing--40);
 
-		&:has(.comment) {
+		&:has(> li) {
 			border-left: 1px solid var(--wp--preset--color--base-3);
 			margin: var(--wp--preset--spacing--50) 0 0;
 			padding-left: var(--wp--preset--spacing--50);
 		}
 	}
 
-	.comment,
-	.pingback,
-	.trackback {
+	// Comments and replies, but not list items inside comment text.
+	li:not(.wp-block-comment-content *) {
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
 
@@ -155,15 +162,19 @@
 	}
 }
 
+:where(.wp-block-comment-date.has-text-color:not(.has-link-color)) a:hover {
+	color: inherit;
+}
+
 .wp-block-comment-author-name {
 	a {
-		border-radius: var(--wp--custom--border--radius-x-small);
-		transition: color 125ms ease-in-out;
+		border-radius: var(--wp--custom--border--radius-small);
+		transition: color motion.$duration-color motion.$ease-color;
 	}
 
 	.bypostauthor & {
 		background: var(--wp--preset--color--base-2);
-		border-radius: var(--wp--custom--border--radius-x-small);
+		border-radius: var(--wp--custom--border--radius-small);
 
 		&:not(:has(a)) {
 			padding: 0 0.375em;
@@ -172,10 +183,6 @@
 		a {
 			display: block;
 			padding: 0 0.375em;
-
-			&:focus {
-				outline-offset: -3px;
-			}
 		}
 	}
 }

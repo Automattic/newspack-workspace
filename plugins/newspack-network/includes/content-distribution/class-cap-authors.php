@@ -163,6 +163,7 @@ class Cap_Authors {
 					$user = Incoming_Post::get_incoming_wp_user_author( $remote_url, $author );
 					if ( is_wp_error( $user ) ) {
 						Debugger::log( 'Error ingesting guest contributor: ' . $user->get_error_message() );
+						break;
 					}
 					$guest_contributors[] = $user->user_nicename;
 					break;

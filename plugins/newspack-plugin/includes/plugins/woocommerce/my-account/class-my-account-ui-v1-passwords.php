@@ -30,6 +30,27 @@ class My_Account_UI_V1_Passwords {
 		\add_filter( 'validate_password_reset', [ __CLASS__, 'validate_password_reset' ], 10, 2 );
 		\add_action( 'wp_loaded', [ __CLASS__, 'maybe_password_reset_success' ] );
 		\add_action( 'newspack_woocommerce_after_edit_account_form', [ __CLASS__, 'add_reset_password_modal' ] );
+		\add_filter( 'woocommerce_lost_password_message', [ __CLASS__, 'lost_password_message' ] );
+	}
+
+	/**
+	 * Put the second sentence of WooCommerce's lost password instructions on its own line.
+	 * A customized message, and WooCommerce's translation on a site whose language does not have these
+	 * strings translated yet, are left as they are.
+	 *
+	 * @param string $message The message, already escaped.
+	 *
+	 * @return string
+	 */
+	public static function lost_password_message( $message ) {
+		if ( \esc_html__( 'Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.', 'woocommerce' ) !== $message ) {
+			return $message;
+		}
+		$first = \esc_html__( 'Lost your password? Please enter your username or email address.', 'newspack-plugin' );
+		if ( ! str_starts_with( \determine_locale(), 'en' ) && 'Lost your password? Please enter your username or email address.' === $first ) {
+			return $message;
+		}
+		return $first . '<br />' . \esc_html__( 'You will receive a link to create a new password via email.', 'newspack-plugin' );
 	}
 
 	/**
@@ -144,7 +165,14 @@ class My_Account_UI_V1_Passwords {
 
 		// Check if the current password is correct.
 		$is_without_password = Reader_Activation::is_reader_without_password( $user );
-		$current_password    = filter_input( INPUT_POST, 'current_password', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		// The password is compared against a hash and never output, so it must not be
+		// sanitized or unslashed: WooCommerce hashes the slashed $_POST value when saving
+		// (see WC_Form_Handler::process_reset_password()), as does core's wp_signon().
+		// Any escaping here (FILTER_SANITIZE_FULL_SPECIAL_CHARS turned `&` into `&amp;`)
+		// makes a correct password fail. The nonce is verified by WooCommerce before the
+		// `validate_password_reset` hook fires.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.NonceVerification.Missing
+		$current_password = isset( $_POST['current_password'] ) && is_string( $_POST['current_password'] ) ? $_POST['current_password'] : '';
 		if ( ! $is_without_password && empty( $current_password ) ) {
 			$errors->add( 'missing_current_password', __( 'Please enter your current password.', 'newspack-plugin' ) );
 			return $errors;
@@ -184,30 +212,38 @@ class My_Account_UI_V1_Passwords {
 
 		ob_start();
 		?>
-		<p>
-			<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_1"
-				id="password_1"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
-		<p>
-			<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
-			<input
-				type="password"
-				class="woocommerce-Input woocommerce-Input--text input-text"
-				name="password_2"
-				id="password_2"
-				autocomplete="new-password"
-				required
-				aria-required="true"
-			/>
-		</p>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5">
+			<div>
+				<label for="password_1"><?php esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
+				<div class="newspack-ui__password-field">
+					<input
+						type="password"
+						class="woocommerce-Input--text input-text"
+						name="password_1"
+						id="password_1"
+						autocomplete="new-password"
+						required
+						aria-required="true"
+					/>
+					<?php Newspack_UI::print_password_toggle(); ?>
+				</div>
+			</div>
+			<div>
+				<label for="password_2"><?php esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required" aria-hidden="true">*</span><span class="screen-reader-text"><?php esc_html_e( 'Required', 'newspack-plugin' ); ?></span></label>
+				<div class="newspack-ui__password-field">
+					<input
+						type="password"
+						class="woocommerce-Input--text input-text"
+						name="password_2"
+						id="password_2"
+						autocomplete="new-password"
+						required
+						aria-required="true"
+					/>
+					<?php Newspack_UI::print_password_toggle(); ?>
+				</div>
+			</div>
+		</div>
 
 		<?php do_action( 'newspack_woocommerce_resetpassword_form' ); ?>
 
@@ -237,7 +273,7 @@ class My_Account_UI_V1_Passwords {
 					],
 					'cancel'   => [
 						'label'  => __( 'Cancel', 'newspack-plugin' ),
-						'type'   => 'ghost',
+						'type'   => 'outline',
 						'action' => 'close',
 					],
 				],

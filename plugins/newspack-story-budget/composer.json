@@ -20,11 +20,6 @@
 			"includes"
 		]
 	},
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		]
-	},
 	"extra": {},
 	"config": {
 		"platform": {

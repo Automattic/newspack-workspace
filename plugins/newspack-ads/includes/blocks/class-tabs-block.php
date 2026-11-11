@@ -84,7 +84,7 @@ final class Tabs_Block {
 			'newspack-ads-media-kit-frontend',
 			Core::plugin_url( 'dist/media-kit-frontend.js' ),
 			[],
-			NEWSPACK_ADS_VERSION,
+			Core::asset_version( 'media-kit-frontend' ),
 			[
 				'in_footer' => true,
 				'strategy'  => 'defer',

@@ -86,6 +86,7 @@ describe( 'wireInlineVerificationBox', () => {
 
 		wireInlineVerificationBox( box, { ...CONFIG, onSent, errorText: 'Something went wrong. Please try again.' } );
 		const button = box.querySelector( '[data-send-otp]' );
+		button.focus();
 		button.click();
 		await flush();
 
@@ -95,7 +96,7 @@ describe( 'wireInlineVerificationBox', () => {
 		// The line naming the reader's address is a separate node, so a failed send
 		// leaves them still able to see which address the code is going to.
 		expect( box.querySelector( '.email-address' ) ).not.toBeNull();
-		expect( button.disabled ).toBe( false );
+		expect( button.hasAttribute( 'aria-disabled' ) ).toBe( false );
 		expect( button.hasAttribute( 'aria-busy' ) ).toBe( false );
 		expect( document.activeElement ).toBe( button );
 	} );
@@ -122,7 +123,7 @@ describe( 'wireInlineVerificationBox', () => {
 		button.click();
 		await flush();
 
-		expect( button.disabled ).toBe( false );
+		expect( button.hasAttribute( 'aria-disabled' ) ).toBe( false );
 		expect( box.querySelector( '[data-error-target]' ).textContent ).toBe( 'Something went wrong. Please try again.' );
 	} );
 
@@ -135,7 +136,24 @@ describe( 'wireInlineVerificationBox', () => {
 		await flush();
 
 		expect( box.querySelector( '[data-error-target]' ).hidden ).toBe( true );
-		expect( box.querySelector( '[data-send-otp]' ).disabled ).toBe( true );
+		expect( box.querySelector( '[data-send-otp]' ).getAttribute( 'aria-disabled' ) ).toBe( 'true' );
+	} );
+
+	it( 'keeps focus on the button while the code sends, and ignores a second press', async () => {
+		const box = renderBox();
+		mockFetchJSON( { success: true } );
+
+		wireInlineVerificationBox( box, { ...CONFIG, onSent: () => true } );
+		const button = box.querySelector( '[data-send-otp]' );
+		button.focus();
+		button.click();
+		button.click();
+
+		expect( button.disabled ).toBe( false );
+		expect( document.activeElement ).toBe( button );
+		expect( button.getAttribute( 'aria-busy' ) ).toBe( 'true' );
+		await flush();
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	it( 'reports a box with no send button as unwired', () => {

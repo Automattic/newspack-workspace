@@ -16,7 +16,10 @@ export default ( state = INITIAL_STATE.meta, action ) => {
 			if ( action.payload.key === 'meta' ) {
 				return {
 					...INITIAL_STATE.meta,
-					lastRefresh: action.payload?.data?.lastRefresh || undefined,
+					// Sessions cached before the server sent its time stored the browser's
+					// time under `lastRefresh`, which can run minutes ahead of the server.
+					// Restoring only this key makes their first load a full fetch.
+					lastRefreshServerTime: action.payload?.data?.lastRefreshServerTime || undefined,
 				};
 			}
 			return state;
@@ -38,7 +41,7 @@ export default ( state = INITIAL_STATE.meta, action ) => {
 		case actions.FETCH_SUCCESS:
 			return {
 				...state,
-				lastRefresh: action.payload.timestamp,
+				lastRefreshServerTime: action.payload.timestamp,
 			};
 		case actions.REFRESH_START:
 			return {
@@ -48,7 +51,7 @@ export default ( state = INITIAL_STATE.meta, action ) => {
 		case actions.REFRESH_SUCCESS:
 			return {
 				...state,
-				lastRefresh: action.payload.timestamp,
+				lastRefreshServerTime: action.payload.timestamp,
 			};
 		case actions.REFRESH_END:
 			return {

@@ -1,8 +1,14 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { decodeEntities } from '@wordpress/html-entities';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
+
+/**
+ * Internal dependencies.
+ */
+import { PUBLISHED_AGE_RULE, normalizePublishedAgeValue } from '../../../../content-gate/utils/published-age';
 
 /**
  * Get edit gate layout URL.
@@ -64,6 +70,17 @@ export const isGateMetered = ( gate: Gate, siteMeter?: SiteMeterConfig ) => {
 	const signedOutPath = gate.registration?.active ? gate.registration : gate.custom_access;
 	return meters( signedOutPath, siteMeter?.anonymous_count ) || meters( gate.custom_access, siteMeter?.registered_count );
 };
+
+/**
+ * Whether a gate switches metering on, whether or not it grants any free views.
+ *
+ * Unlike `isGateMetered()`, a 0/0 allowance still counts, so the Metering form stays
+ * reachable to raise it again.
+ *
+ * @param gate The gate.
+ */
+export const switchesMeteringOn = ( gate: Gate ) =>
+	[ gate.registration, gate.custom_access ].some( section => Boolean( section?.active && section.metering?.enabled ) );
 
 /**
  * Whether any of a gate's audience paths keeps its own allowance.
@@ -191,6 +208,30 @@ const getContentScope = ( gate: Gate ): ContentScope => {
 };
 
 /**
+ * Whether no post can be young enough for one clause's age rule and old enough for the other's at
+ * the same moment, as with "less than 30 days" on one gate and "more than 30 days" on the next.
+ * A post's own time window replaces both durations with one, which keeps the two apart.
+ * Durations in different units are not compared, so those clauses count as overlapping.
+ *
+ * @param a One gate's clause.
+ * @param b The other gate's clause.
+ */
+const ageWindowsNeverOverlap = ( a: GateContentRule[], b: GateContentRule[] ) => {
+	const ages = [ a, b ]
+		.flatMap( clause => clause.filter( rule => rule.slug === PUBLISHED_AGE_RULE ) )
+		.map( rule => normalizePublishedAgeValue( rule.value ) );
+	const older = ages.find( age => age.comparison === 'more_than' );
+	const newer = ages.find( age => age.comparison === 'less_than' );
+	return (
+		ages.length === 2 &&
+		Boolean( older && newer ) &&
+		older!.duration_unit !== '' &&
+		older!.duration_unit === newer!.duration_unit &&
+		older!.duration_value >= newer!.duration_value
+	);
+};
+
+/**
  * The values a post needs, rule by rule, to fall under two clauses at once: the shared values where
  * both clauses set a rule, and one clause's values where only it does.
  *
@@ -199,8 +240,12 @@ const getContentScope = ( gate: Gate ): ContentScope => {
  * @return The combined values by rule slug, or null when a rule both clauses set shares no value.
  */
 const combineClauses = ( a: GateContentRule[], b: GateContentRule[] ): Map< string, string[] > | null => {
+	if ( ageWindowsNeverOverlap( a, b ) ) {
+		return null;
+	}
 	const combined = new Map< string, string[] >();
-	for ( const rule of [ ...a, ...b ] ) {
+	// An age rule stores no list of values to share; ageWindowsNeverOverlap() has judged it.
+	for ( const rule of [ ...a, ...b ].filter( ( { slug } ) => slug !== PUBLISHED_AGE_RULE ) ) {
 		const values = getRuleValues( rule );
 		const current = combined.get( rule.slug );
 		const next = current ? current.filter( value => values.includes( value ) ) : values;
@@ -254,6 +299,11 @@ const sharesContent = ( a: ContentScope, b: ContentScope ) => {
 };
 
 /**
+ * Short label for the badge that carries a priority warning.
+ */
+export const getPriorityWarningLabel = () => __( 'Overrides paid access', 'newspack-plugin' );
+
+/**
  * Warnings for gates ranked where they let readers skip a paid gate below them.
  *
  * The first gate matching a post decides access alone (NPPD-2289). A gate that asks for no paid
@@ -285,7 +335,7 @@ export const getPriorityWarnings = ( gates: Gate[] ): Record< number, string > =
 };
 
 /**
- * Describe the shared allowance, for the Metering card and the Metering page header.
+ * Describe the shared allowance, for the Metering page subtitle.
  *
  * @param siteMeter The site meter, once the wizard has loaded it.
  */
@@ -304,3 +354,86 @@ export const getMeteringDescription = ( siteMeter?: SiteMeterConfig ) => {
 		siteMeter.period === 'week' ? __( 'weekly', 'newspack-plugin' ) : __( 'monthly', 'newspack-plugin' )
 	);
 };
+
+/**
+ * The auto-signup choices for a premium newsletter gate. The first names the site-wide
+ * setting's current value, so a publisher sees what "Default" means without opening
+ * Advanced Settings.
+ *
+ * @param siteAutoSignup Whether the site-wide auto-signup setting is on. Undefined until the
+ *                       wizard data has loaded, when the first choice names no value rather
+ *                       than guess one.
+ */
+export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label: string; value: AutoSignupMode } > => {
+	let siteSettingLabel: string = _x( 'Default', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	if ( typeof siteAutoSignup === 'boolean' ) {
+		siteSettingLabel = siteAutoSignup
+			? _x( 'Default (on)', 'auto-signup mode that follows the site setting', 'newspack-plugin' )
+			: _x( 'Default (off)', 'auto-signup mode that follows the site setting', 'newspack-plugin' );
+	}
+	return [
+		{ value: 'default', label: siteSettingLabel },
+		{ value: 'on', label: _x( 'On', 'auto-signup mode', 'newspack-plugin' ) },
+		{ value: 'off', label: _x( 'Off', 'auto-signup mode', 'newspack-plugin' ) },
+	];
+};
+
+// "paid" uses the same test as the card's Paid Access column, which shows a dash for a
+// gate whose paid access is switched on with no rules and no meter.
+const GATE_FILTERS: Record< 'status' | 'access', Record< string, ( gate: Gate ) => boolean > > = {
+	status: {
+		active: gate => 'publish' === gate.status,
+		inactive: gate => 'publish' !== gate.status,
+	},
+	access: {
+		registered: gate => Boolean( gate.registration?.active ),
+		paid: gate =>
+			Boolean( gate.custom_access?.active && ( gate.custom_access.access_rules?.length > 0 || gate.custom_access.metering?.enabled ) ),
+	},
+};
+
+/**
+ * Narrow the gates list by the toolbar's search and filters.
+ *
+ * @param gates          All gates, in priority order.
+ * @param filters        The toolbar's current choices.
+ * @param filters.search The search term.
+ * @param filters.status The chosen status, if any.
+ * @param filters.access The chosen access type, if any.
+ * @return The matching gates, in the same order.
+ */
+export const filterGates = ( gates: Gate[], { search = '', status, access }: { search?: string; status?: string; access?: string } ) => {
+	const term = search.trim().toLowerCase();
+	return gates.filter(
+		gate =>
+			( ! term || decodeEntities( gate.title ).toLowerCase().includes( term ) ) &&
+			( ! status || GATE_FILTERS.status[ status ]( gate ) ) &&
+			( ! access || GATE_FILTERS.access[ access ]( gate ) )
+	);
+};
+
+/**
+ * The values of a toolbar filter that would change the list: each matches some gates but not all.
+ *
+ * @param gates All gates.
+ * @param field The filter.
+ * @return The values to offer. Empty when the filter can do nothing.
+ */
+export const getUsefulGateFilterValues = ( gates: Gate[], field: 'status' | 'access' ) =>
+	Object.keys( GATE_FILTERS[ field ] ).filter( value => {
+		const matches = gates.filter( GATE_FILTERS[ field ][ value ] ).length;
+		return matches > 0 && matches < gates.length;
+	} );
+
+/**
+ * The header subtitle for a gates screen, shared by the list and the editor so the header keeps its height between them.
+ *
+ * @param isNewsletter Whether the screen manages premium newsletter gates.
+ */
+export const getGatesSubTitle = ( isNewsletter = false ) =>
+	isNewsletter
+		? __(
+				'Choose which newsletter lists to restrict, how readers get access to them, and whether they’re signed up automatically.',
+				'newspack-plugin'
+		  )
+		: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );

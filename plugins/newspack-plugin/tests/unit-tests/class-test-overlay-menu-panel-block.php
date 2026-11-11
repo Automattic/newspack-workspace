@@ -189,4 +189,13 @@ class Newspack_Test_Overlay_Menu_Panel_Block extends WP_UnitTestCase {
 		$x_large = $this->get_class_string( $this->render( [ 'panelWidth' => 'x-large' ] ) );
 		$this->assertStringContainsString( 'overlay-menu__panel--width--x-large', $x_large );
 	}
+
+	/**
+	 * The panel text color also sets the focus color, so focus indicators follow the panel's text.
+	 */
+	public function test_text_color_sets_focus_color() {
+		$output = $this->render( [ 'panelTextColor' => '#ffffff' ] );
+
+		$this->assertMatchesRegularExpression( '/style="[^"]*--wp--custom--focus--color:\s*#ffffff/', $output );
+	}
 }

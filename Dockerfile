@@ -63,11 +63,28 @@ RUN a2enmod rewrite
 COPY .env /tmp/.env
 
 # Install requested version of PHP.
+# The PPA can be briefly unavailable. A plain apt-get update only warns, and the
+# install then fails with "Unable to locate package", so the update fails on any
+# error and every apt command retries. A retried install keeps the packages it
+# already downloaded.
 RUN \
 	: "${PHP_VERSION:?Build argument PHP_VERSION needs to be set and non-empty.}" \
 	&& export DEBIAN_FRONTEND=noninteractive \
-	&& apt-get update \
-	&& apt-get install -y \
+	&& retry() { \
+		local attempt=0 delay=10 max_retries=6; \
+		until "$@"; do \
+			attempt=$((attempt + 1)); \
+			if [ $attempt -ge $max_retries ]; then \
+				echo "$1 $2 failed after $max_retries attempts" >&2; \
+				return 1; \
+			fi; \
+			echo "$1 $2 failed (attempt $attempt). Retrying in $delay seconds..." >&2; \
+			sleep $delay; \
+			delay=$((delay * 2)); \
+		done; \
+	} \
+	&& retry apt-get update --error-on=any \
+	&& retry apt-get install -y -o Acquire::Retries=5 \
 		libapache2-mod-php${PHP_VERSION} \
 		php${PHP_VERSION} \
 		php${PHP_VERSION}-bcmath \
@@ -89,7 +106,7 @@ RUN \
 		phpunit \
 	php-pear \
 	php${PHP_VERSION}-dev \
-	&& apt-get install -y --no-install-recommends \
+	&& retry apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
 		php${PHP_VERSION}-apcu \
 		php${PHP_VERSION}-gd \
 		php${PHP_VERSION}-imagick \
@@ -102,15 +119,15 @@ RUN \
 	&& php composer-setup.php --install-dir=/usr/local/bin --filename=composer --version=$COMPOSER_VERSION \
 	&& php -r "unlink('composer-setup.php');"
 
-# Install requested version of Node.
-# We add the PPA for ease of updating, while we download the specific node version manually if possible for installation.
+# Install the latest Node release of the requested major version from NodeSource.
+# The setup script is saved before it runs: /bin/sh has no pipefail, so piping a
+# failed download into bash would let the step carry on.
 RUN \
 	: "${NODE_VERSION:?Build argument NODE_VERSION needs to be set and non-empty.}" \
-	&& N=${NODE_VERSION%%.*} \
-	&& curl -fSL https://deb.nodesource.com/setup_${N}.x | bash - \
-	&& DEB="$(curl -fSL https://deb.nodesource.com/node_${N}.x/pool/main/n/nodejs/ | perl -nwe 'BEGIN { $v = shift; $arch = shift; $re = qr/nodejs_\Q$v\E-.*_\Q$arch.deb\E/; $out=""; } $out=$1 if /href="($re)"/; END { print "$out"; }' "${NODE_VERSION}" "$(dpkg --print-architecture)")" \
-	&& if [ -n "$DEB" ]; then curl -fSL "https://deb.nodesource.com/node_${N}.x/pool/main/n/nodejs/$DEB" --output /tmp/nodejs.deb && dpkg -i /tmp/nodejs.deb; else DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs; fi \
-	&& rm -rf /var/lib/apt/lists/* /tmp/nodejs.deb
+	&& curl -fSL https://deb.nodesource.com/setup_${NODE_VERSION%%.*}.x --output /tmp/nodesource_setup.sh \
+	&& bash /tmp/nodesource_setup.sh \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs \
+	&& rm -rf /var/lib/apt/lists/* /tmp/nodesource_setup.sh
 
 # Install requested version of PHPUNIT
 RUN \

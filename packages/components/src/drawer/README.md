@@ -148,9 +148,9 @@ unsaved-changes confirmation always applies.
 
 ## `Drawer.Content`
 
-The body. Repeatable: each `Drawer.Content` is a section, rendered as a VStack
-with a 16px gap by default; `gap` changes it. Children space through the gap
-alone; their own top and bottom margins are reset.
+The body. Repeatable: each `Drawer.Content` is a section that stacks its
+children in a column, 16px apart by default; `gap` changes it. Children space
+through the gap alone; their own top and bottom margins are reset.
 
 Anything can go in a section: an element, a control, a nested stack, or plain
 text. Each child becomes a row separated by the gap, and a run of plain text and
@@ -165,8 +165,8 @@ with markup in your own element and hand the section that instead.
 |------|------|---------|-------------|
 | `children` | `React.ReactNode` | — | Section content. |
 | `className` | `string` | — | Additional CSS class. |
-| `gap` | `number` | `4` | Space between the section's children, on the 4px scale, as VStack's `spacing`. `4` is 16px. |
-| `padding` | `number` | `6` | On the 4px scale, as VStack's `spacing`. `6` is 24px; `0` is a flush section that brings its own padding. |
+| `gap` | `string` | `'lg'` | Space between the section's children, as a `Stack` gap token from `@wordpress/ui`. `'lg'` is 16px. |
+| `padding` | `number` | `6` | On the 4px scale. `6` is 24px; `0` is a flush section that brings its own padding. |
 
 Consecutive sections share one scroll container, so they scroll together between
 the pinned header and footer. Sections are not self-separating: put a
@@ -234,18 +234,12 @@ separator.
 
 ## `Drawer.Footer`
 
-A pinned container for `Drawer.Action` elements. The layout is pure CSS on the
-child count.
+A pinned container for `Drawer.Action` elements. Whatever the number of
+actions, they sit in one row aligned to the end, each at its natural width. The
+row wraps when the actions don't fit side by side.
 
-| Children | Layout |
-|---|---|
-| 1 | Row, the button fills it |
-| 2 | Row, split 50/50 |
-| 3 or more | Column, full-width buttons |
-
-Convention, not enforced: with two actions pass the secondary first, so the
-primary sits on the right; with three pass primary, secondary, tertiary
-top-down.
+Convention, not enforced: pass the primary action last, so it sits at the end
+of the row.
 
 Takes `className` and `children`.
 
@@ -418,9 +412,8 @@ that grows after mount is picked up.
 
 The Root wraps its children in a `SlotFillProvider` and renders a `Popover.Slot`
 beside them, so dropdowns and pickers inside the drawer stay visible. Without
-both, a popover
-portalled to the body would land in a container Modal has marked `aria-hidden`,
-and our own `modal/style.scss` blanks popovers while a modal is open.
+both, a popover portalled to the body would land in a container Modal has marked
+`aria-hidden`.
 
 That provider starts a fresh registry rather than chaining to a parent one. **A
 `Fill` rendered inside the drawer cannot reach a `Slot` outside it**: it renders

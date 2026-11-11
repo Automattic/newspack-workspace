@@ -339,7 +339,7 @@ class TestAdminBar extends \WP_UnitTestCase {
 		Admin_Bar::render_modal();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( '<div class="newspack-ui"><div id="newspack-network-distribute-modal" class="newspack-ui__modal-container"', $html );
+		$this->assertStringContainsString( '<div class="newspack-ui"><dialog id="newspack-network-distribute-modal" class="newspack-ui__modal-container"', $html );
 		$this->assertStringContainsString( 'newspack-ui__modal newspack-ui__modal--small', $html );
 		$this->assertStringContainsString( 'newspack-network-distribute-all-toggle', $html );
 

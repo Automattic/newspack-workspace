@@ -20,6 +20,8 @@ use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
+require_once NEWSPACK_ABSPATH . 'tests/mocks/wcs-gifting-mock.php';
+
 /**
  * Test migrate-manual-members' member-selection logic for comp/legacy parity
  * residuals on purchase plans.
@@ -121,6 +123,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		foreach ( self::MEMBERSHIP_STATUSES as $status ) {
 			\_unregister_post_status( $status );
 		}
+		if ( class_exists( 'WCS_Gifting' ) && property_exists( 'WCS_Gifting', 'recipients' ) ) {
+			WCS_Gifting::$recipients = [];
+		}
 		parent::tear_down();
 	}
 
@@ -208,6 +213,25 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->assertNotWPError( $user_id, 'Fixture reader creation should succeed.' );
 		$this->user_ids[] = $user_id;
 		update_user_meta( $user_id, '_newspack_reader', true );
+		return $user_id;
+	}
+
+	/**
+	 * Create an editor: staff with edit_others_posts, so not an eligible group member.
+	 *
+	 * @return int User ID.
+	 */
+	private function create_editor_user(): int {
+		$user_id = wp_insert_user(
+			[
+				'user_login' => 'editor-' . wp_generate_password( 8, false ),
+				'user_pass'  => wp_generate_password(),
+				'user_email' => 'editor-' . wp_generate_password( 8, false ) . '@test.com',
+				'role'       => 'editor',
+			]
+		);
+		$this->assertNotWPError( $user_id, 'Fixture editor creation should succeed.' );
+		$this->user_ids[] = $user_id;
 		return $user_id;
 	}
 
@@ -1024,18 +1048,11 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * --as-group counts only members actually added, and dry-run agrees with the live run.
 	 *
-	 * Cohort on a manual-only plan: one author (eligible -> added) and one custom low-capability
-	 * role user that lacks edit_others_posts (so it passes the admin/editor pre-filter and actually
-	 * reaches the group add) but is not a reader/author/contributor (so add_group_member returns
-	 * 'not_eligible'). Before the fix both were counted as migrated; after it only the author is,
-	 * and the non-eligible member is reported as skipped. This is the "people the group won't take"
-	 * case (NPPD-1870).
+	 * Cohort on a manual-only plan: one author (eligible -> added) and one editor (staff, so
+	 * add_group_member returns 'not_eligible'). Only the author is counted as migrated, and the
+	 * editor is reported as skipped. This is the "people the group won't take" case (NPPD-1870).
 	 */
 	public function test_as_group_reports_only_added_members() {
-		// Custom role: has `read` only — no edit_others_posts (so not pre-filtered) and not a
-		// reader/author/contributor (so not an eligible group member).
-		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
-
 		$plan_id        = $this->create_plan( 'manual-only' );
 		$group_owner_id = $this->create_reader_user();
 
@@ -1050,16 +1067,8 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$this->user_ids[] = $author_id;
 		$this->create_membership( $plan_id, $author_id );
 
-		$guest_id = wp_insert_user(
-			[
-				'user_login' => 'guest-' . wp_generate_password( 8, false ),
-				'user_pass'  => wp_generate_password(),
-				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
-				'role'       => 'newspack_test_guest',
-			]
-		);
-		$this->user_ids[] = $guest_id;
-		$this->create_membership( $plan_id, $guest_id );
+		$editor_id = $this->create_editor_user();
+		$this->create_membership( $plan_id, $editor_id );
 
 		$flags = [
 			'plan-ids'           => (string) $plan_id,
@@ -1071,14 +1080,14 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		// Dry-run (default): project exactly ONE add (the author), not two.
 		$dry_output = $this->run_migrate_manual_members( $flags );
 		$this->assertStringContainsString( 'Done. 1 member(s) would be added to group subscription(s).', $dry_output, 'Dry-run must project only the eligible author.' );
-		$this->assertStringNotContainsString( 'Done. 2 member(s)', $dry_output, 'Dry-run must not count the non-eligible guest.' );
+		$this->assertStringNotContainsString( 'Done. 2 member(s)', $dry_output, 'Dry-run must not count the non-eligible editor.' );
 
 		WP_CLI::reset();
 
-		// Live run: exactly ONE actual add; guest reported as skipped; group has one member.
+		// Live run: exactly ONE actual add; editor reported as skipped; group has one member.
 		$live_output = $this->run_migrate_manual_members( array_merge( $flags, [ 'live' => true ] ) );
 		$this->assertStringContainsString( 'Done. 1 member(s) added to group subscription(s).', $live_output, 'Live run must report only the added author.' );
-		$this->assertStringNotContainsString( 'Done. 2 member(s)', $live_output, 'Live run must not count the non-eligible guest as added.' );
+		$this->assertStringNotContainsString( 'Done. 2 member(s)', $live_output, 'Live run must not count the non-eligible editor as added.' );
 		$this->assertStringContainsString( 'not eligible group members', $live_output, 'The non-eligible member must be reported as skipped.' );
 
 		$owner_group_subscription_ids = $this->get_migration_subscription_ids_for_user( $group_owner_id );
@@ -1087,37 +1096,21 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		$group_subscription = $subscriptions_database[ $owner_group_subscription_ids[0] ];
 		Group_Subscription::reset_cache();
 		$this->assertTrue( (bool) Group_Subscription::user_is_member( $author_id, $group_subscription ), 'The author joins the group.' );
-		$this->assertFalse( (bool) Group_Subscription::user_is_member( $guest_id, $group_subscription ), 'The non-eligible guest must not join.' );
-
-		remove_role( 'newspack_test_guest' );
+		$this->assertFalse( (bool) Group_Subscription::user_is_member( $editor_id, $group_subscription ), 'The non-eligible editor must not join.' );
 	}
 
 	/**
-	 * The aggregate skip/error warning must fire even when NOTHING was added.
+	 * The aggregate not-eligible warning must fire even when NOTHING was added.
 	 *
-	 * A plan whose only member is the non-eligible custom-role guest hits the
-	 * pre-existing "$summary is empty" early return (no table, no tally) — but the
-	 * "N member(s) skipped — not eligible" warning must still print, because an
-	 * all-skipped run is exactly the case a publisher needs surfaced: a group the
-	 * command silently declined to add anyone to. No group subscription is created
-	 * either, since one is only created lazily on the first qualifying member.
+	 * A plan whose only member is an editor hits the "$summary is empty" early return (no table,
+	 * no tally), but the "N member(s) skipped — not eligible" warning must still print: an
+	 * all-skipped run is a group the command silently declined to add anyone to. No group
+	 * subscription is created either, since one is only created on the first qualifying member.
 	 */
-	public function test_as_group_reports_skips_when_no_member_is_added() {
-		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
-
+	public function test_as_group_all_staff_plan_surfaces_a_not_eligible_tally() {
 		$plan_id        = $this->create_plan( 'manual-only' );
 		$group_owner_id = $this->create_reader_user();
-
-		$guest_id = wp_insert_user(
-			[
-				'user_login' => 'guest-' . wp_generate_password( 8, false ),
-				'user_pass'  => wp_generate_password(),
-				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
-				'role'       => 'newspack_test_guest',
-			]
-		);
-		$this->user_ids[] = $guest_id;
-		$this->create_membership( $plan_id, $guest_id );
+		$this->create_membership( $plan_id, $this->create_editor_user() );
 
 		$live_output = $this->run_migrate_manual_members(
 			[
@@ -1129,47 +1122,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertStringContainsString( 'not eligible group members', $live_output, 'The aggregate skip warning must fire even though nothing was added.' );
+		$this->assertStringContainsString( '1 member(s) skipped — not eligible group members', $live_output, 'An all-editor plan must surface a non-zero aggregate not-eligible tally instead of silently skipping everyone.' );
 		$this->assertStringContainsString( 'No subscriptions were created.', $live_output, 'The early return still applies — the summary table is empty.' );
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $group_owner_id ), 'No group subscription is created for an all-skipped plan.' );
-
-		remove_role( 'newspack_test_guest' );
-	}
-
-	/**
-	 * A plan whose only member is an administrator/editor must still surface a
-	 * non-zero aggregate not-eligible tally. Before the fix, admins/editors were
-	 * skipped by the shared `edit_others_posts` pre-filter BEFORE the group-mode
-	 * not-eligible counter ever ran, so an all-admin/editor plan silently
-	 * produced no warning at all — contradicting the "all-skipped runs surface a
-	 * tally" guarantee covered by test_as_group_reports_skips_when_no_member_is_added().
-	 */
-	public function test_as_group_all_admin_editor_plan_surfaces_a_not_eligible_tally() {
-		$plan_id        = $this->create_plan( 'manual-only' );
-		$group_owner_id = $this->create_reader_user();
-
-		$editor_id = wp_insert_user(
-			[
-				'user_login' => 'editor-' . wp_generate_password( 8, false ),
-				'user_pass'  => wp_generate_password(),
-				'user_email' => 'editor-' . wp_generate_password( 8, false ) . '@test.com',
-				'role'       => 'editor',
-			]
-		);
-		$this->user_ids[] = $editor_id;
-		$this->create_membership( $plan_id, $editor_id );
-
-		$live_output = $this->run_migrate_manual_members(
-			[
-				'plan-ids'           => (string) $plan_id,
-				'as-group'           => true,
-				'group-owner-id'     => $group_owner_id,
-				'access-product-ids' => $this->access_products_flag(),
-				'live'               => true,
-			]
-		);
-
-		$this->assertStringContainsString( '1 member(s) skipped — not eligible group members', $live_output, 'An all-admin/editor plan must surface a non-zero aggregate not-eligible tally instead of silently skipping everyone.' );
 	}
 
 	/**
@@ -1179,23 +1134,13 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	 * count deduped per user via $granted_user_ids, so the two bases disagreed.
 	 */
 	public function test_as_group_not_eligible_tally_counts_a_multi_plan_member_once() {
-		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
-
 		$first_plan_id  = $this->create_plan( 'manual-only' );
 		$second_plan_id = $this->create_plan( 'manual-only' );
 		$group_owner_id = $this->create_reader_user();
 
-		$guest_id = wp_insert_user(
-			[
-				'user_login' => 'guest-' . wp_generate_password( 8, false ),
-				'user_pass'  => wp_generate_password(),
-				'user_email' => 'guest-' . wp_generate_password( 8, false ) . '@test.com',
-				'role'       => 'newspack_test_guest',
-			]
-		);
-		$this->user_ids[]  = $guest_id;
-		$first_membership  = $this->create_membership( $first_plan_id, $guest_id );
-		$second_membership = $this->create_membership( $second_plan_id, $guest_id );
+		$editor_id         = $this->create_editor_user();
+		$first_membership  = $this->create_membership( $first_plan_id, $editor_id );
+		$second_membership = $this->create_membership( $second_plan_id, $editor_id );
 		$this->assertNotEmpty( $first_membership, 'Fixture guard: first membership must be created.' );
 		$this->assertNotEmpty( $second_membership, 'Fixture guard: second membership must be created.' );
 
@@ -1211,8 +1156,6 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '1 member(s) skipped — not eligible group members', $live_output, 'A non-eligible member active on two in-scope plans must be counted once in the tally, not once per membership.' );
 		$this->assertStringNotContainsString( '2 member(s) skipped — not eligible group members', $live_output, 'The tally must not double count a repeat user across plans.' );
-
-		remove_role( 'newspack_test_guest' );
 	}
 
 	/**
@@ -1259,12 +1202,9 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 
 	/**
 	 * INDIVIDUAL mode: a custom low-capability role member (no edit_others_posts,
-	 * and not a reader per is_eligible_member()) must still receive a personal $0
-	 * subscription. Group eligibility (Group_Subscription::is_eligible_member())
-	 * is a group-membership predicate and must not gate individual-subscription
-	 * creation — only edit_others_posts (staff who already bypass the content
-	 * gate) does that in individual mode. Before the fix, this member was
-	 * incorrectly skipped by the shared is_eligible_member() pre-filter.
+	 * and not a reader) must receive a personal $0 subscription. Only
+	 * edit_others_posts (staff who already bypass the content gate) skips a
+	 * member in individual mode.
 	 */
 	public function test_individual_mode_grants_a_custom_low_capability_role_member() {
 		add_role( 'newspack_test_guest', 'Guest', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
@@ -1296,20 +1236,12 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 	/**
 	 * INDIVIDUAL mode regression guard: an editor (who has edit_others_posts and
 	 * so already bypasses the content gate) must still be skipped — no personal
-	 * subscription created. This is the edit_others_posts-only predicate, not
-	 * group eligibility.
+	 * subscription created. This is the shared access check
+	 * (Content_Gate::should_skip_access_checks()), not group eligibility.
 	 */
 	public function test_individual_mode_skips_an_editor() {
 		$plan_id   = $this->create_plan( 'manual-only' );
-		$editor_id = wp_insert_user(
-			[
-				'user_login' => 'editor-' . wp_generate_password( 8, false ),
-				'user_pass'  => wp_generate_password(),
-				'user_email' => 'editor-' . wp_generate_password( 8, false ) . '@test.com',
-				'role'       => 'editor',
-			]
-		);
-		$this->user_ids[] = $editor_id;
+		$editor_id = $this->create_editor_user();
 		$this->create_membership( $plan_id, $editor_id );
 
 		$this->run_migrate_manual_members(
@@ -1320,6 +1252,30 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		);
 
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $editor_id ), 'An editor must not receive a personal subscription — they already bypass the content gate.' );
+	}
+
+	/**
+	 * INDIVIDUAL mode skips an account Access Control never restricts, so the
+	 * helper's filter moves the line here too.
+	 */
+	public function test_individual_mode_follows_the_skip_filter() {
+		$plan_id = $this->create_plan( 'manual-only' );
+		$user_id = $this->create_reader_user();
+		$this->create_membership( $plan_id, $user_id );
+		$skip = function ( $skips, $filtered_user_id ) use ( $user_id ) {
+			return $filtered_user_id === $user_id ? true : $skips;
+		};
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		$output = $this->run_migrate_manual_members(
+			[
+				'plan-ids' => (string) $plan_id,
+				'live'     => true,
+			]
+		);
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+
+		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $user_id ), 'An account that is never restricted needs no personal subscription.' );
+		$this->assertStringContainsString( 'skipped — Access Control never restricts this account', $output );
 	}
 
 	/**
@@ -1607,45 +1563,5 @@ class Test_Teams_Migration_Manual_Members extends WP_UnitTestCase {
 		}
 		$this->assertEmpty( $this->get_migration_subscription_ids_for_user( $member_user_ids_by_status['wcm-expired'] ), 'An expired member has no access today and must be untouched.' );
 		$this->assertStringContainsString( (string) $member_user_ids_by_status['wcm-expired'], $output, 'The expired member must be reported as not found among active members.' );
-	}
-}
-
-/**
- * Minimal WCS_Gifting stub mirroring the surface
- * WooCommerce_Connection/Teams_Migration consult. A subscription is "gifted"
- * when an entry exists in $recipients; the store is reset per test.
- */
-if ( ! class_exists( 'WCS_Gifting' ) ) {
-	// phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Generic.Files.OneObjectStructurePerFile.MultipleFound
-	/**
-	 * Recording WCS_Gifting stub: gifted iff an entry exists in $recipients.
-	 */
-	class WCS_Gifting {
-		/**
-		 * Map of subscription ID => recipient user ID.
-		 *
-		 * @var array
-		 */
-		public static $recipients = [];
-
-		/**
-		 * Whether the subscription was purchased as a gift.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return bool
-		 */
-		public static function is_gifted_subscription( $subscription ) {
-			return isset( self::$recipients[ $subscription->get_id() ] );
-		}
-
-		/**
-		 * The recipient user ID for a gifted subscription.
-		 *
-		 * @param object $subscription Subscription object.
-		 * @return int
-		 */
-		public static function get_recipient_user( $subscription ) {
-			return (int) ( self::$recipients[ $subscription->get_id() ] ?? 0 );
-		}
 	}
 }

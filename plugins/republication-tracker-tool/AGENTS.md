@@ -20,9 +20,11 @@ The root file's `fix:js` remedy does not apply here: this plugin has no `fix:js`
 
 - **There is no template-override mechanism.** The path `templates/republish-template.php` is hardcoded with no `locate_template()` or filter, and if the file is missing the code falls through and returns the theme's template. Renaming or moving it is a silent no-op, not a fatal.
 
-- **There are three front doors and they assume different theme types.** The widget is the classic-theme path; the `/republish/` page template calls `get_header()`/`get_footer()`, also classic. The Republish Button block and its "Republish Section" pattern are registered on **both** theme types, but on classic themes `supports.inserter` / `inserter` is set to `false` (`includes/class-republish-button-block.php:70`, `includes/class-republish-pattern.php:70`), so they are hidden from the inserter while existing instances keep rendering. "The block is missing" on a classic theme is that gate, not a build failure. Do not replace those `$args['supports']` with a bare override: the code deep-merges deliberately, because `register_block_type_from_metadata()` shallow-merges and a flat override would drop the block's color/typography/spacing support and strip saved styles from existing instances.
+- **There are three front doors, and only the block works on both theme types.** The widget is the classic-theme path; the `/republish/` page template calls `get_header()`/`get_footer()`, also classic. The Republish Button block and its "Republish Section" pattern are available in the inserter on **both** theme types. If you ever override `supports` in the `$args` passed to `register_block_type_from_metadata()`, deep-merge it with the block.json values: that function shallow-merges, so a flat override would drop the block's color/typography/spacing support and strip saved styles from existing instances.
 
-- **The modal is guarded by a shared static, `Republication_Tracker_Tool::$modal_rendered`.** Whichever of the widget or the block renders first owns it, and the two ship different front-end scripts (`assets/widget.js` jQuery vs `dist/republish-button-view.js`) that both bind to the same `#republication-tracker-tool-modal` ID.
+- **The modal is guarded by a shared static, `Republication_Tracker_Tool::$modal_rendered`.** Whichever of the widget or the block renders first owns it, and the two ship different front-end scripts (`assets/widget.js`, which uses jQuery only for its ready handler, vs `dist/republish-button-view.js`) that both bind to the same `#republication-tracker-tool-modal` ID.
+
+- **The modal has two renderings, switched by `Republication_Tracker_Tool::use_newspack_ui()`.** The markup (`includes/modal-newspack-ui.php` vs the legacy markup in `shareable-content.php`), the CSS (`assets/newspack-ui.css` vs `assets/widget.css`) and the open/close owner (newspack-ui vs the plugin's own scripts) all follow it. It is true when newspack-plugin provides `\Newspack\Newspack_UI` and is filterable via `republication_tracker_tool_use_newspack_ui`. PHPUnit only renders the fallback path.
 
 - **Per-image distribution control depends on newspack-plugin.** Without `\Newspack\Newspack_Image_Credits`, `can_distribute()` returns false for everything once "Distribute all media" is unchecked, so every image is stripped with no warning. Image removal also only matches `<img class="wp-image-N">` inside a `<figure>`; images without the core class always ship.
 
@@ -38,14 +40,13 @@ The root file's `fix:js` remedy does not apply here: this plugin has no `fix:js`
 
 - **`assets/*.js` and `assets/*.css` are hand-written, git-tracked source served straight to the browser.** Webpack never reads or writes `assets/`. Only `src/` → `dist/` is built.
 
-- **`dist/` is gitignored and the block registration bails without it.** On an unbuilt checkout the Republish Button block and the editor sidebar panel do not exist. On block themes this is completely silent; on classic themes you also get a `wp_json_file_decode` warning. Run `n build republication-tracker-tool` after any checkout or branch switch.
+- **`dist/` is gitignored and the block registration bails without it.** On an unbuilt checkout the Republish Button block and the editor sidebar panel do not exist, silently. Run `n build republication-tracker-tool` after any checkout or branch switch.
 
 ## Missing scripts
 
-Of the standard build/lint/test script set, this plugin has only `build`, `lint:js` and `typescript:check` (it also carries `start`, `cm`, `i18n`, `readme` and the release scripts). Compared with the fully-tooled plugins here it is missing `watch`, `test`, `lint`, `clean`, `fix:js`, `format:js`, `lint:php`, `fix:php`, `lint:scss`, `format:scss` and the `*:staged` variants. `super-cool-ad-inserter` is the only other plugin missing `lint:php`. Consequences:
+Of the standard build/lint/test script set, this plugin has only `build`, `lint:js`, `test` and `typescript:check` (it also carries `start`, `cm`, `i18n`, `readme` and the release scripts). Compared with the fully-tooled plugins here it is missing `watch`, `lint`, `clean`, `fix:js`, `format:js`, `lint:php`, `fix:php`, `lint:scss`, `format:scss` and the `*:staged` variants. `super-cool-ad-inserter` is the only other plugin missing `lint:php`. Consequences:
 
 - `n watch` **fails** from this directory (`bin/watch-repo.sh` ends in `npm run watch`). Rebuild with `n build republication-tracker-tool`.
-- `n test-js` **reports success while running nothing**, because pnpm special-cases a missing `test` script and exits 0. There are no JS tests here.
 - To auto-fix JS, run `pnpm exec eslint --fix <path>` from the workspace root. It clears the formatting errors but not the structural ones (`no-undef` on `jQuery`/`$`, `no-var`, `no-unused-vars`), which need hand edits.
 
 ## Linting quirks
@@ -55,6 +56,7 @@ Of the standard build/lint/test script set, this plugin has only `build`, `lint:
 
 ## Testing quirks
 
+- JS tests run with `n test-js` (Jest under jsdom, via `newspack-scripts test`); the workspace's `packages/scripts/scripts/test.js` sets which files it collects. Keep them in `src/` even when the code under test lives in `assets/`: `src/` is what CI lints, and `.distignore` keeps it out of the released ZIP, while a test under `assets/` would ship.
 - PHP tests run with `n test-php`, but `tests/bootstrap.php` hard-requires the plugin's own `vendor/autoload.php` and exits 1 if absent. Run `n composer install` from this directory first on a fresh checkout.
 - **The block test registers from `src/blocks/republish-button` while production registers from `dist/blocks/republish-button`.** Tests are green on an unbuilt checkout and on a stale `dist/`, so they can never catch a missing or outdated build.
 - `$modal_rendered` leaks across tests. The two classes that render it (`test-widget.php`, `test-republish-button-block.php`) reset it in `tear_down()`; a new test that renders the widget or block without that reset sees empty modal markup.

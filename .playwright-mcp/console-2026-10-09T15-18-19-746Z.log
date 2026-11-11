@@ -1,0 +1,109 @@
+[      55ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[    8914ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[    9031ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ https://blocktheme2.local/wp-includes/js/dist/vendor/react-dom.js?ver=18.3.1.1:29904
+[   40919ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[   40950ms] Transition was aborted because of invalid state. ViewTransition opt-in disabled
+[   61309ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[   61355ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ https://blocktheme2.local/wp-includes/js/dist/vendor/react-dom.js?ver=18.3.1.1:29904
+[   61948ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ https://blocktheme2.local/wp-includes/js/dist/deprecated.js?ver=fe587bac92b7d0ef760e:63
+[   61955ms] [LOG] modules that can be used by either editor or front-end JS @ https://blocktheme2.local/wp-content/themes/newspack-block-theme/dist/editor.js?ver=1.31.4:0
+[   62073ms] [LOG] [api-fetch][preload] All preloads consumed. @ https://blocktheme2.local/wp-includes/js/dist/api-fetch.js?ver=6f2a4faeee3c722b1e57:200
+[   62112ms] [WARNING] wp.editPost.PluginDocumentSettingPanel is deprecated since version 6.6. Please use wp.editor.PluginDocumentSettingPanel instead. @ https://blocktheme2.local/wp-includes/js/dist/deprecated.js?ver=fe587bac92b7d0ef760e:63
+[   62269ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[   62342ms] [WARNING] Declaring non-string block descriptions is deprecated since version 6.2. @ https://blocktheme2.local/wp-includes/js/dist/deprecated.js?ver=fe587bac92b7d0ef760e:63
+[   62374ms] [WARNING] hm-query-loop-editor-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   62375ms] [WARNING] global-styles-css-custom-properties-inline-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   62375ms] [WARNING] newspack-content_gate-block-patterns-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   62376ms] [WARNING] newspack-commons-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   62376ms] [WARNING] newspack-blocks-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   62376ms] [WARNING] newspack-ads-editor-css was added to the iframe incorrectly. Please use block.json or enqueue_block_assets to add styles to the iframe. JSHandle@node @ https://blocktheme2.local/wp-includes/js/dist/block-editor.js?ver=37e58da384b2558bd479:47951
+[   69612ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[   69612ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  104645ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  104645ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  105749ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  212539ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  212539ms] [WARNING] The `useSelect` hook returns different values when called with the same state and parameters.
+This can lead to unnecessary re-renders and performance issues if not fixed.
+
+Non-equal value keys: %s
+
+ core/post-meta @ https://blocktheme2.local/wp-includes/js/dist/data.js?ver=14a216e0932d72c22976:2238
+[  325857ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ https://blocktheme2.local/wp-admin/admin-ajax.php:0
+[  326662ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ https://blocktheme2.local/wp-admin/admin-ajax.php:0
+[  368189ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ https://blocktheme2.local/wp-json/wp/v2/pages/524/autosaves?_locale=user:0
+[  408715ms] [WARNING] JQMIGRATE: jQuery.fn.focus() event shorthand is deprecated @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:135
+[  410474ms] [LOG] JQMIGRATE: Migrate is installed with logging active, version 3.4.1 @ https://blocktheme2.local/wp-includes/js/jquery/jquery-migrate.js?ver=3.4.1:103
+[ 2144825ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ https://blocktheme2.local/wp-admin/admin-ajax.php:0

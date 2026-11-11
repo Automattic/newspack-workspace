@@ -194,7 +194,9 @@ final class CSV_Exports {
 			$config['roles']     = self::sanitize_roles( $raw['roles'] ?? [] );
 		}
 		if ( 'subscriptions' === $type ) {
-			$config['statuses'] = self::sanitize_statuses( $raw['statuses'] ?? [] );
+			$config['statuses']   = self::sanitize_statuses( $raw['statuses'] ?? [] );
+			$config['per_member']            = ! empty( $raw['per_member'] );
+			$config['include_complimentary'] = ! empty( $raw['include_complimentary'] );
 		}
 
 		return $config;
@@ -554,6 +556,27 @@ final class CSV_Exports {
 					</fieldset>
 				<?php endif; ?>
 
+				<?php if ( 'subscriptions' === $type ) : ?>
+					<div class="newspack-csv-export-modal__field">
+						<label>
+							<input type="checkbox" name="per_member" value="1" aria-describedby="<?php echo \esc_attr( $id ); ?>-per-member-desc">
+							<?php \esc_html_e( 'One row per member', 'newspack-plugin' ); ?>
+						</label>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-per-member-desc">
+							<?php \esc_html_e( 'Adds a row for each member of a group subscription, after the owner\'s row. Each row names the reader, whether they own the subscription or belong to its group, and the group\'s name. Rows follow the status selection: choose Active and Pending Cancellation to list only readers who have access now.', 'newspack-plugin' ); ?>
+						</p>
+					</div>
+					<div class="newspack-csv-export-modal__field">
+						<label>
+							<input type="checkbox" name="include_complimentary" value="1" aria-describedby="<?php echo \esc_attr( $id ); ?>-include-complimentary-desc">
+							<?php \esc_html_e( 'Include complimentary subscriptions', 'newspack-plugin' ); ?>
+						</label>
+						<p class="description" id="<?php echo \esc_attr( $id ); ?>-include-complimentary-desc">
+							<?php \esc_html_e( 'Complimentary subscriptions grant access an admin gave for free. They are left out unless this is checked or the list is filtered to show them.', 'newspack-plugin' ); ?>
+						</p>
+					</div>
+				<?php endif; ?>
+
 				<div class="newspack-csv-export-modal__field">
 					<label for="<?php echo \esc_attr( $id ); ?>-delimiter"><?php \esc_html_e( 'Separate fields by', 'newspack-plugin' ); ?></label>
 					<select id="<?php echo \esc_attr( $id ); ?>-delimiter" name="delimiter">
@@ -835,7 +858,7 @@ final class CSV_Exports {
 			// An unwritable uploads dir fails silently in the WC exporter;
 			// surface it instead of serving an empty CSV.
 			$file_path = $exporter->get_export_file_path();
-			if ( $exporter->get_total_exported() > 0 && ( ! file_exists( $file_path ) || 0 === filesize( $file_path ) ) ) {
+			if ( $exporter->expects_written_rows() && ( ! file_exists( $file_path ) || 0 === filesize( $file_path ) ) ) {
 				\wp_send_json_error(
 					[ 'message' => __( 'The export file could not be written. Please check uploads directory permissions.', 'newspack-plugin' ) ]
 				);

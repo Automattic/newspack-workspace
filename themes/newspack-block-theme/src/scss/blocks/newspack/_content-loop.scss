@@ -1,5 +1,6 @@
 @use "../../sass-utils";
 @use "../../mixins";
+@use "newspack-motion" as motion;
 
 .wp-block-newspack-blocks-homepage-articles.wpnbha {
 	margin-bottom: auto;
@@ -12,7 +13,7 @@
 	}
 
 	.cat-links,
-	.tag-labels {
+	.newspack-tag-labels {
 		color: var(--wp--preset--color--contrast);
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
@@ -22,10 +23,12 @@
 		a {
 			color: inherit;
 			text-decoration: none;
-			transition: color 125ms ease-in-out;
+			transition: color motion.$duration-color motion.$ease-color;
 
-			&:hover {
-				color: var(--wp--preset--color--contrast-3);
+			@include motion.hover {
+				&:hover {
+					color: color-mix(in oklab, currentcolor var(--wp--custom--state--hover), transparent);
+				}
 			}
 		}
 	}
@@ -55,6 +58,13 @@
 
 		a {
 			color: inherit;
+			transition: color motion.$duration-color motion.$ease-color;
+
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast);
+				}
+			}
 		}
 	}
 
@@ -63,7 +73,7 @@
 	.has-background:not(.has-base-background-color) &,
 	.has-text-color & {
 		.cat-links,
-		.tag-labels,
+		.newspack-tag-labels,
 		.entry-meta,
 		.more-link {
 			color: currentcolor;
@@ -74,10 +84,13 @@
 		// not the coupling NPPM-3049 breaks: that was the shared class in the
 		// markup, which let a publisher's `.cat-links a` rule reach a tag label.
 		.cat-links,
-		.tag-labels,
+		.newspack-tag-labels,
 		.entry-title {
-			a:hover {
-				color: color-mix(in srgb, currentcolor 80%, transparent);
+			@include motion.hover {
+				a:hover {
+					color: inherit;
+					text-decoration: underline;
+				}
 			}
 		}
 
@@ -166,17 +179,19 @@
 			}
 
 			.cat-links,
-			.tag-labels,
+			.newspack-tag-labels,
 			.entry-meta,
 			.more-link {
 				color: inherit;
 			}
 
 			.cat-links,
-			.tag-labels,
+			.newspack-tag-labels,
 			.entry-title {
-				a:hover {
-					color: rgba(white, 0.85);
+				@include motion.hover {
+					a:hover {
+						color: rgba(white, 0.85);
+					}
 				}
 			}
 		}
@@ -277,10 +292,12 @@
 			margin: 0 0 var(--wp--preset--spacing--20);
 
 			a {
-				transition: color 125ms ease-in-out;
+				transition: color motion.$duration-color motion.$ease-color;
 
-				&:hover {
-					color: var(--wp--preset--color--contrast-3);
+				@include motion.hover {
+					&:hover {
+						color: color-mix(in oklab, currentcolor var(--wp--custom--state--hover), transparent);
+					}
 				}
 			}
 		}

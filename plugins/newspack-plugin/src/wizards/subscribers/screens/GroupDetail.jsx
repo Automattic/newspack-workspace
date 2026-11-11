@@ -18,30 +18,23 @@
  * WordPress dependencies.
  */
 import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
-import { __, _n, _x, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import {
-	Dropdown,
-	MenuGroup,
-	MenuItem,
-	Snackbar,
-	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
-} from '@wordpress/components';
-import { Badge } from '@wordpress/ui';
+import { Dropdown, MenuGroup, MenuItem, Snackbar } from '@wordpress/components';
+import { Badge, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Divider, Notice, Router, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Notice, Router, StatusIndicator, TableCard, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { useGroup, useGroupActions } from '../data/use-group';
-import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { fmtDate } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, ROLE_LABELS, ROLE_RANK } from '../labels';
 import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
-import { seatCountText, seatsRemaining } from '../flows/capacity';
+import { pendingInvitesText, seatsRemaining, seatUsageText } from '../flows/capacity';
 
 import AddMembersFlow from '../flows/AddMembersFlow';
 import AdjustSeatsFlow from '../flows/AdjustSeatsFlow';
@@ -53,7 +46,9 @@ import RemoveMemberFlow from '../flows/RemoveMemberFlow';
 import ResendInviteFlow from '../flows/ResendInviteFlow';
 import SubscriptionDetailsDrawer from '../flows/SubscriptionDetailsDrawer';
 
-const { useParams } = Router;
+const FIT_COLUMNS = [ 'status' ];
+
+const { useHistory, useParams } = Router;
 
 const MEMBERS_VIEW = {
 	type: 'table',
@@ -105,6 +100,7 @@ const isActive = group => group && 'active' === group.status && group.canManage;
 
 function GroupDetailView() {
 	const { id } = useParams();
+	const history = useHistory();
 	const { group, loading, error, reload } = useGroup( id );
 	const actions = useGroupActions( id );
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -162,53 +158,26 @@ function GroupDetailView() {
 	}, [ group ] );
 
 	const memberRows = useMemo( () => group?.memberList || [], [ group ] );
-	const memberEmails = useMemo( () => memberRows.map( member => member.email ).filter( Boolean ), [ memberRows ] );
-	const { avatars: avatarsByEmail } = useAvatars( memberEmails );
+	// Search earns its row only once the members run past one page.
+	const isSearchable = memberRows.length > MEMBERS_VIEW.perPage;
 
-	// Header: the subscription leads, with the owner trailing in parentheses, so
-	// this view reads as being about the group rather than about a person.
+	// Header: the group leads. The owner is the first row of the members table.
 	useEffect( () => {
 		if ( ! group ) {
 			return;
 		}
-		const ownerName = group.owner?.name;
-		// translators: %s: name of the group owner.
-		const ownedBy = sprintf( __( 'Owned by %s', 'newspack-plugin' ), ownerName );
-		const withOwner = content => (
-			<>
-				{ content }
-				{ ownerName && (
-					<>
-						{ ' ' }
-						{ /* ARIA ignores a name on a plain span, so the spoken phrasing travels as screen-reader text. */ }
-						<span className="newspack-subscribers__header-count">
-							<span aria-hidden="true">{ `(${ ownerName })` }</span>
-							<span className="screen-reader-text">{ ownedBy }</span>
-						</span>
-					</>
-				) }
-			</>
-		);
 		const groupsHref = '#/groups';
 		setHeaderData( {
 			backNav: groupsHref,
 			// Separate crumbs, so the group list stays a link back from here. The
 			// leaf is a plain string: the page region takes its accessible name
 			// from it, and markup there would be announced as "[object Object]".
-			sectionName: [
-				{ label: GROUP_LABEL_PLURAL, url: groupsHref },
-				{
-					label: ownerName
-						? /* translators: 1: group name, 2: name of the group owner. */
-						  sprintf( _x( '%1$s (%2$s)', 'group name and owner', 'newspack-plugin' ), group.plan, ownerName )
-						: group.plan,
-				},
-			],
+			sectionName: [ { label: GROUP_LABEL_PLURAL, url: groupsHref }, { label: group.plan } ],
 			// A function title renders its own badge: SectionHeader only auto-renders
 			// the `badges` array for string titles.
 			sectionTitle: () => (
 				<>
-					<span>{ withOwner( group.plan ) }</span>
+					<span>{ group.plan }</span>
 					<Badge intent={ STATUS_BADGE_INTENT[ group.status ] }>{ STATUS_LABELS[ group.status ] }</Badge>
 				</>
 			),
@@ -224,29 +193,15 @@ function GroupDetailView() {
 				id: 'name',
 				label: __( 'Member', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				getValue: ( { item } ) => `${ item.name } ${ item.email }`,
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<span>{ item.name }</span>
-							<div className="newspack-subscribers__email">{ item.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return details;
-					}
-					const avatar = item.email ? avatarsByEmail[ item.email ] : undefined;
-					return (
-						<HStack spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatar ? (
-								<img className="newspack-subscribers__avatar" src={ avatar } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
+				getValue: ( { item } ) => item.name,
+			},
+			{
+				id: 'email',
+				label: __( 'Email', 'newspack-plugin' ),
+				enableGlobalSearch: true,
+				enableSorting: false,
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => <span className="newspack-subscribers__email">{ item.email }</span>,
 			},
 			{
 				id: 'role',
@@ -254,12 +209,15 @@ function GroupDetailView() {
 				// Rank, not the label: sorting the strings would slot Manager below
 				// Member and put the owner in the middle.
 				getValue: ( { item } ) => ROLE_RANK[ item.role ] ?? ROLE_RANK.member,
-				render: ( { item } ) =>
-					'member' === item.role ? (
-						<span>{ ROLE_LABELS.member }</span>
-					) : (
-						<Badge intent={ 'owner' === item.role ? 'stable' : 'informational' }>{ ROLE_LABELS[ item.role ] }</Badge>
-					),
+				render: ( { item } ) => {
+					if ( 'owner' === item.role ) {
+						return <span className="newspack-subscribers__owner-role">{ ROLE_LABELS.owner }</span>;
+					}
+					if ( 'manager' === item.role ) {
+						return <span className="newspack-subscribers__manager-role">{ ROLE_LABELS.manager }</span>;
+					}
+					return <span>{ ROLE_LABELS.member }</span>;
+				},
 				enableSorting: true,
 			},
 			{
@@ -267,23 +225,24 @@ function GroupDetailView() {
 				label: __( 'Member since', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.joinedAt || '',
 				// The owner holds no membership record, so they have no join date.
-				render: ( { item } ) => <span>{ item.joinedAt ? fmtDate( item.joinedAt ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.joinedAt ? fmtDate( item.joinedAt ) : '—' }</span>,
 				enableSorting: true,
 			},
 		],
-		[ avatarsByEmail ]
+		[]
+	);
+
+	const openMember = useCallback(
+		member => {
+			if ( member?.id ) {
+				history.push( `/subscribers/${ member.id }?from=${ encodeURIComponent( `#/groups/${ id }` ) }` );
+			}
+		},
+		[ history, id ]
 	);
 
 	const memberActions = useMemo(
 		() => [
-			{
-				id: 'view-profile',
-				label: __( 'View profile', 'newspack-plugin' ),
-				isEligible: item => !! item.editUrl,
-				callback: items => {
-					window.location.href = items[ 0 ].editUrl;
-				},
-			},
 			{
 				id: 'make-manager',
 				label: __( 'Make manager', 'newspack-plugin' ),
@@ -315,9 +274,13 @@ function GroupDetailView() {
 		[ group, changeRole, roleBusy ]
 	);
 
+	// A search the reader can no longer see would keep the table filtered with no way
+	// to clear it, so it stops applying once the members fit on one page.
+	const shownMembersView = useMemo( () => ( isSearchable ? membersView : { ...membersView, search: '' } ), [ isSearchable, membersView ] );
+
 	const { data: processedMembers, paginationInfo: membersPagination } = useMemo(
-		() => filterSortAndPaginate( memberRows, membersView, memberFields ),
-		[ memberRows, membersView, memberFields ]
+		() => filterSortAndPaginate( memberRows, shownMembersView, memberFields ),
+		[ memberRows, shownMembersView, memberFields ]
 	);
 
 	const inviteRows = useMemo( () => group?.invites || [], [ group ] );
@@ -337,9 +300,9 @@ function GroupDetailView() {
 				getValue: ( { item } ) => item.status,
 				render: ( { item } ) =>
 					'expired' === item.status ? (
-						<Badge intent="high">{ __( 'Expired', 'newspack-plugin' ) }</Badge>
+						<StatusIndicator status="ended">{ __( 'Expired', 'newspack-plugin' ) }</StatusIndicator>
 					) : (
-						<Badge intent="medium">{ __( 'Pending', 'newspack-plugin' ) }</Badge>
+						<StatusIndicator status="pending">{ __( 'Pending', 'newspack-plugin' ) }</StatusIndicator>
 					),
 				enableSorting: false,
 			},
@@ -347,7 +310,7 @@ function GroupDetailView() {
 				id: 'sentAt',
 				label: __( 'Sent', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.sentAt || '',
-				render: ( { item } ) => <span>{ item.sentAt ? fmtDate( item.sentAt ) : '—' }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ item.sentAt ? fmtDate( item.sentAt ) : '—' }</span>,
 				enableSorting: true,
 			},
 		],
@@ -362,7 +325,8 @@ function GroupDetailView() {
 				// Re-issuing an invitation is a new invitation, so it needs an active
 				// group — the same gate the endpoint applies.
 				isEligible: () => isActive( group ),
-				callback: items => setModal( { kind: 'resend-invite', invite: items[ 0 ] } ),
+				supportsBulk: true,
+				callback: items => setModal( { kind: 'resend-invite', invites: items } ),
 			},
 			{
 				id: 'cancel-invite',
@@ -372,7 +336,8 @@ function GroupDetailView() {
 				// capability. Unlike resending it does not need an active group —
 				// clearing invitations off a lapsed group is exactly when it is useful.
 				isEligible: () => isManageable( group ),
-				callback: items => setModal( { kind: 'cancel-invite', invite: items[ 0 ] } ),
+				supportsBulk: true,
+				callback: items => setModal( { kind: 'cancel-invite', invites: items } ),
 			},
 		],
 		[ group ]
@@ -383,7 +348,10 @@ function GroupDetailView() {
 		[ inviteRows, invitesView, inviteFields ]
 	);
 
-	if ( loading ) {
+	// Only loading a group replaces the screen. A reload of the same group after a write
+	// keeps it, and any open modal, mounted, so a flow that refreshes while staying open
+	// keeps what it is showing.
+	if ( loading && Number( group?.id ) !== Number( id ) ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -408,6 +376,7 @@ function GroupDetailView() {
 	const hasSeats = seatsRemaining( group ) > 0;
 	const canInvite = isActive( group ) && hasSeats;
 	const hasLink = !! group.inviteLink?.active;
+	const invitesNote = pendingInvitesText( group );
 
 	const copyInviteLink = async () => {
 		let url = '';
@@ -444,98 +413,137 @@ function GroupDetailView() {
 	};
 
 	return (
-		<div className="newspack-subscribers__profile">
+		<Stack direction="column" gap="xl" className="newspack-subscribers__profile">
 			{ roleError && <Notice isError noticeText={ roleError } /> }
-			<HStack className="newspack-subscribers__section-head" justify="space-between" alignment="center">
-				<HStack spacing={ 2 } justify="flex-start" alignment="baseline" expanded={ false }>
-					<h2 className="newspack-subscribers__section-title">{ __( 'Members', 'newspack-plugin' ) }</h2>
-					<span className="newspack-subscribers__seat-count">{ `(${ seatCountText( group ) })` }</span>
-				</HStack>
-				<HStack spacing={ 2 } justify="flex-end" expanded={ false }>
-					<Button variant="tertiary" size="compact" onClick={ () => setModal( { kind: 'seats' } ) } disabled={ ! isManageable( group ) }>
-						{ __( 'Adjust seats', 'newspack-plugin' ) }
-					</Button>
-					<Dropdown
-						placement="bottom-end"
-						renderToggle={ ( { isOpen, onToggle } ) => (
-							<Button variant="secondary" size="compact" onClick={ onToggle } aria-expanded={ isOpen } disabled={ ! isActive( group ) }>
-								{ __( 'Add members', 'newspack-plugin' ) }
-							</Button>
-						) }
-						renderContent={ ( { onClose } ) => (
-							<MenuGroup>
-								<MenuItem
-									disabled={ ! canInvite }
-									onClick={ () => {
-										onClose();
-										setModal( { kind: 'add-members' } );
-									} }
+			<TableCard
+				heading={ 2 }
+				title={
+					<>
+						{ __( 'Members', 'newspack-plugin' ) }{ ' ' }
+						<span className="newspack-subscribers__seat-count">{ `(${ seatUsageText( group ) })` }</span>
+					</>
+				}
+				description={ invitesNote && <span className="newspack-subscribers__muted">{ invitesNote }</span> }
+				actions={
+					<>
+						<Button
+							variant="tertiary"
+							size="compact"
+							onClick={ () => setModal( { kind: 'seats' } ) }
+							disabled={ ! isManageable( group ) }
+						>
+							{ __( 'Adjust seats', 'newspack-plugin' ) }
+						</Button>
+						<Dropdown
+							placement="bottom-end"
+							renderToggle={ ( { isOpen, onToggle } ) => (
+								<Button
+									variant="tertiary"
+									size="compact"
+									onClick={ onToggle }
+									aria-expanded={ isOpen }
+									disabled={ ! isActive( group ) }
 								>
-									{ __( 'Add directly', 'newspack-plugin' ) }
-								</MenuItem>
-								<MenuItem
-									disabled={ ! canInvite }
-									onClick={ () => {
-										onClose();
-										setModal( { kind: 'invite' } );
-									} }
-								>
-									{ __( 'Invite by email', 'newspack-plugin' ) }
-								</MenuItem>
-								<MenuItem
-									onClick={ () => {
-										onClose();
-										copyInviteLink();
-									} }
-								>
-									{ hasLink ? __( 'Copy invite link', 'newspack-plugin' ) : __( 'Create invite link', 'newspack-plugin' ) }
-								</MenuItem>
-								{ hasLink && (
+									{ __( 'Add members', 'newspack-plugin' ) }
+								</Button>
+							) }
+							renderContent={ ( { onClose } ) => (
+								<MenuGroup>
+									<MenuItem
+										disabled={ ! canInvite }
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'add-members' } );
+										} }
+									>
+										{ __( 'Add directly', 'newspack-plugin' ) }
+									</MenuItem>
+									<MenuItem
+										disabled={ ! canInvite }
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'invite' } );
+										} }
+									>
+										{ __( 'Invite by email', 'newspack-plugin' ) }
+									</MenuItem>
 									<MenuItem
 										onClick={ () => {
 											onClose();
-											setModal( { kind: 'regenerate-link' } );
+											copyInviteLink();
 										} }
 									>
-										{ __( 'Regenerate invite link', 'newspack-plugin' ) }
+										{ hasLink ? __( 'Copy invite link', 'newspack-plugin' ) : __( 'Create invite link', 'newspack-plugin' ) }
 									</MenuItem>
-								) }
-								{ hasLink && (
-									<MenuItem
-										isDestructive
-										onClick={ () => {
-											onClose();
-											setModal( { kind: 'disable-link' } );
-										} }
-									>
-										{ __( 'Disable invite link', 'newspack-plugin' ) }
-									</MenuItem>
-								) }
-							</MenuGroup>
-						) }
-					/>
-				</HStack>
-			</HStack>
-			<DataViews
-				data={ processedMembers }
-				fields={ memberFields }
-				view={ membersView }
-				onChangeView={ setMembersView }
-				actions={ memberActions }
-				paginationInfo={ membersPagination }
-				defaultLayouts={ { table: {} } }
-				getItemId={ item => item.id }
-				search
-			/>
+									{ hasLink && (
+										<MenuItem
+											onClick={ () => {
+												onClose();
+												setModal( { kind: 'regenerate-link' } );
+											} }
+										>
+											{ __( 'Regenerate invite link', 'newspack-plugin' ) }
+										</MenuItem>
+									) }
+									{ hasLink && (
+										<MenuItem
+											isDestructive
+											onClick={ () => {
+												onClose();
+												setModal( { kind: 'disable-link' } );
+											} }
+										>
+											{ __( 'Disable invite link', 'newspack-plugin' ) }
+										</MenuItem>
+									) }
+								</MenuGroup>
+							) }
+						/>
+					</>
+				}
+			>
+				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of members in the group. */
+							_n( '%s member', '%s members', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
+					className={
+						isSearchable
+							? 'newspack-subscribers__members-dataviews'
+							: 'newspack-subscribers__members-dataviews newspack-subscribers__no-toolbar'
+					}
+					data={ processedMembers }
+					fields={ memberFields }
+					view={ shownMembersView }
+					onChangeView={ setMembersView }
+					actions={ memberActions }
+					paginationInfo={ membersPagination }
+					defaultLayouts={ { table: {} } }
+					getItemId={ item => item.id }
+					onClickItem={ openMember }
+					isItemClickable={ item => !! item.id }
+					search={ isSearchable }
+					inlineFilters
+					viewOptions={ false }
+				/>
+			</TableCard>
 
 			{ inviteRows.length > 0 && (
-				<>
-					<Divider alignment="full-width" variant="tertiary" />
-					<h2 className="newspack-subscribers__section-head newspack-subscribers__section-title">
-						{ __( 'Invitations', 'newspack-plugin' ) }
-					</h2>
+				<TableCard heading={ 2 } title={ __( 'Invitations', 'newspack-plugin' ) }>
 					<DataViews
+						countLabel={ ( count, formatted ) =>
+							sprintf(
+								/* translators: %s: number of invitations sent for the group. */
+								_n( '%s invitation', '%s invitations', count, 'newspack-plugin' ),
+								formatted
+							)
+						}
+						className="newspack-subscribers__no-toolbar"
 						data={ processedInvites }
+						fitColumns={ FIT_COLUMNS }
 						fields={ inviteFields }
 						view={ invitesView }
 						onChangeView={ setInvitesView }
@@ -544,8 +552,9 @@ function GroupDetailView() {
 						defaultLayouts={ { table: {} } }
 						getItemId={ item => item.id }
 						search={ false }
+						viewOptions={ false }
 					/>
-				</>
+				</TableCard>
 			) }
 
 			{ 'add-members' === modal?.kind && <AddMembersFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
@@ -557,10 +566,10 @@ function GroupDetailView() {
 			{ 'regenerate-link' === modal?.kind && <RegenerateLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
 			{ 'disable-link' === modal?.kind && <DisableLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
 			{ 'resend-invite' === modal?.kind && (
-				<ResendInviteFlow invite={ modal.invite } actions={ actions } onClose={ closeModal } onDone={ onDone } />
+				<ResendInviteFlow invites={ modal.invites } actions={ actions } onClose={ closeModal } onDone={ onDone } />
 			) }
 			{ 'cancel-invite' === modal?.kind && (
-				<CancelInviteFlow invite={ modal.invite } actions={ actions } onClose={ closeModal } onDone={ onDone } />
+				<CancelInviteFlow invites={ modal.invites } actions={ actions } onClose={ closeModal } onDone={ onDone } />
 			) }
 			{ 'view-subscription' === modal?.kind && <SubscriptionDetailsDrawer group={ group } onViewOwner={ goToOwner } onClose={ closeModal } /> }
 
@@ -569,7 +578,7 @@ function GroupDetailView() {
 					<Snackbar onRemove={ () => setSnackbar( null ) }>{ snackbar.message }</Snackbar>
 				</div>
 			) }
-		</div>
+		</Stack>
 	);
 }
 

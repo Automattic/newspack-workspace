@@ -17,7 +17,7 @@ import { getSettings, setSettings } from '@wordpress/date';
 /**
  * Internal dependencies
  */
-import { fmtCurrency, fmtRelative, billingText, orDash, scheduleRow } from './format';
+import { fmtCurrency, fmtRelative, billingText, orDash, paymentRows, scheduleRow } from './format';
 
 // Two sites whose calendar day disagrees with UTC's, in opposite directions: one
 // where UTC has rolled into the next day and the site has not, and one where the
@@ -81,6 +81,23 @@ describe( 'billingText', () => {
 		expect( billingText( { amount: 10, currency: 'USD', billingPeriod: 'fortnight', billingInterval: 1 } ) ).not.toContain( '/' );
 		expect( billingText( { amount: null, currency: 'USD', billingPeriod: 'month', billingInterval: 1 } ) ).toBe( '—' );
 		expect( billingText() ).toBe( '—' );
+	} );
+} );
+
+// A complimentary subscription is a $0 subscription the reader was given, so its
+// card reads "Complimentary" rather than "$0.00 / year", and drops the payment
+// rows that would show a dash and a next-billing date nobody is charged on.
+describe( 'complimentary billing', () => {
+	const comp = { amount: 0, currency: 'USD', billingPeriod: 'year', billingInterval: 1, nextBillingDate: '2099-08-01', isComplimentary: true };
+
+	it( 'shows "Complimentary" in place of the price, and no payment rows', () => {
+		expect( billingText( comp ) ).toBe( 'Complimentary' );
+		expect( paymentRows( comp ) ).toEqual( [] );
+		expect( paymentRows( { ...comp, isComplimentary: false } ).map( row => row.label ) ).toEqual( [ 'Last payment', 'Next billing' ] );
+	} );
+
+	it( 'keeps the date access ends', () => {
+		expect( paymentRows( { ...comp, endDate: '2099-12-01' } ).map( row => row.label ) ).toEqual( [ 'Ends' ] );
 	} );
 } );
 

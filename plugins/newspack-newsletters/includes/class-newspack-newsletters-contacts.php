@@ -17,6 +17,46 @@ use Newspack\Newsletters\Subscription_List;
 class Newspack_Newsletters_Contacts {
 
 	/**
+	 * Get the list IDs a caller asked for, as the public IDs upsert() will act on.
+	 *
+	 * Callers pass false, a single ID, or an array taken from a request, which can
+	 * hold nested arrays. Only a scalar can name a list, so anything else is dropped.
+	 *
+	 * Several spellings can resolve to one list: `newspack-05` is `newspack-5`, and
+	 * a remote ID is matched with its surrounding whitespace trimmed. Each ID is
+	 * therefore swapped for the public ID of the list it resolves to, and spellings
+	 * of one list are merged. That way the sign-up filter judges the same string a
+	 * callback keeps its own set of IDs in, and upsert() acts on the list the filter
+	 * saw rather than on an alias the filter did not recognize.
+	 *
+	 * An ID that resolves to no list, or to a list with no public ID of its own, is
+	 * kept as given: upsert() reports it as invalid, and an empty string would only
+	 * hide it from the filter.
+	 *
+	 * @param mixed $lists Lists as passed to subscribe().
+	 *
+	 * @return string[]
+	 */
+	private static function get_requested_list_ids( $lists ) {
+		if ( false === $lists || null === $lists ) {
+			return [];
+		}
+		$list_ids = [];
+		foreach ( (array) $lists as $list_id ) {
+			if ( ! is_scalar( $list_id ) || '' === (string) $list_id ) {
+				continue;
+			}
+			$list_id   = (string) $list_id;
+			$list      = Subscription_List::from_public_id( $list_id );
+			$public_id = $list ? $list->get_public_id() : '';
+			// from_public_id() returns an object for any post in the `newspack-<id>` form,
+			// and a remote list can have no ID stored, so only a real string replaces the ID.
+			$list_ids[] = is_string( $public_id ) && '' !== $public_id ? $public_id : $list_id;
+		}
+		return array_values( array_unique( $list_ids ) );
+	}
+
+	/**
 	 * Subscribe a contact to lists.
 	 *
 	 * This method uses an upsert strategy, which means the contact will be
@@ -35,14 +75,93 @@ class Newspack_Newsletters_Contacts {
 	 *    @type string   $name     Contact name. Optional.
 	 *    @type string[] $metadata Contact additional metadata. Optional.
 	 * }
-	 * @param string[]|false $lists   Array of list IDs to subscribe the contact to. If empty or false, contact will be created but not subscribed to any lists.
-	 * @param bool           $async   Whether to add the contact asynchronously. Default is false.
-	 * @param string         $context Context of the update for logging purposes.
+	 * @param string[]|false $lists         Array of list IDs to subscribe the contact to. If empty or false, contact will be created but not subscribed to any lists.
+	 * @param bool           $async         Whether to add the contact asynchronously. Default is false.
+	 * @param string         $context       Context of the update for logging purposes.
+	 * @param bool           $lists_checked Whether `$lists` already went through the
+	 *                                      `newspack_newsletters_subscribe_lists` filter. Pass true only
+	 *                                      when replaying a queued sign-up: its lists were filtered in the
+	 *                                      reader's own request, and the replay can't be relied on to
+	 *                                      carry that session.
 	 *
 	 * @return array|WP_Error|true Contact data if it was added, or error otherwise. True if async.
 	 */
-	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact' ) {
+	public static function subscribe( $contact, $lists = false, $async = false, $context = 'Subscribe contact', $lists_checked = false ) {
 		$provider = Newspack_Newsletters::get_service_provider();
+
+		// Callers pass false for "no lists". Treat null the same way, or upsert() would
+		// wrap it into [ null ] and look up a list with an empty ID.
+		if ( null === $lists ) {
+			$lists = false;
+		}
+
+		// False and [] are how a caller asks for a contact with no lists, so they are
+		// the only requests with nothing to check. Anything else names lists, even if
+		// no usable ID is left once it is read (`''`, a nested array), and upsert()
+		// would still try to act on it. `true !==` so a stray truthy value can't turn
+		// the check off.
+		if ( true !== $lists_checked && false !== $lists && [] !== $lists ) {
+			$requested_lists = self::get_requested_list_ids( $lists );
+			$allowed_lists   = [];
+			if ( ! empty( $requested_lists ) ) {
+				/**
+				 * Filters the lists a contact is opting in to.
+				 *
+				 * This runs in subscribe() because it is the entry point for reader opt-ins
+				 * (sign-up forms, the registration hook, a first sign-up from My Account),
+				 * so this is where a list the reader may not join gets refused. upsert() is
+				 * not filtered this way: it also carries system writes that must go through.
+				 * One system caller does come through subscribe(): the Woo Memberships sync
+				 * command, which runs with no reader session. A callback that refuses
+				 * sign-ups must stand down while that integration is active, as Access
+				 * Control's does.
+				 *
+				 * A callback may only remove lists. Anything it adds is dropped.
+				 *
+				 * A callback that decides who may join a list should judge the requester,
+				 * meaning the current session, and not the account behind the contact's
+				 * email. A result that depends on someone else's account tells the
+				 * requester something about that account.
+				 *
+				 * @param string[] $lists   Public IDs of the lists requested.
+				 * @param array    $contact Contact information. Always has an `email` key.
+				 * @param string   $context Context of the sign-up, for logging.
+				 */
+				$allowed_lists = apply_filters( 'newspack_newsletters_subscribe_lists', $requested_lists, $contact, $context );
+				$allowed_lists = is_array( $allowed_lists ) ? array_filter( $allowed_lists, 'is_scalar' ) : [];
+				// Opting a contact in to a list they never asked for is a consent problem,
+				// so a callback's result can only narrow the request.
+				$allowed_lists = array_values( array_intersect( $requested_lists, array_map( 'strval', $allowed_lists ) ) );
+			}
+			// A refusal and a narrowing report the same details, in the shape upsert()
+			// reports its writes. The plain log lines below leave the address out; this
+			// carries it, as upsert()'s does.
+			$log_details = [
+				'type'       => 'debug',
+				'data'       => [
+					'requested' => $requested_lists,
+					'allowed'   => $allowed_lists,
+				],
+				'user_email' => $contact['email'] ?? '',
+				'file'       => 'newspack_esp_sync',
+			];
+			if ( empty( $allowed_lists ) ) {
+				Newspack_Newsletters_Logger::log( 'Sign-up refused: none of the requested lists are available to this contact. Context: ' . $context );
+				do_action( 'newspack_log', 'newspack_newsletters_sign_up_lists_refused', $context, $log_details );
+				return new WP_Error(
+					'newspack_newsletters_lists_not_allowed',
+					__( 'The selected lists are not available for this email address.', 'newspack-newsletters' )
+				);
+			}
+			// A sign-up that lost only some of its lists still reports success to the
+			// reader, so these two lines are the only trace of it.
+			$dropped_lists = array_values( array_diff( $requested_lists, $allowed_lists ) );
+			if ( ! empty( $dropped_lists ) ) {
+				Newspack_Newsletters_Logger::log( 'Sign-up narrowed: dropped ' . implode( ', ', $dropped_lists ) . ' from the requested lists. Context: ' . $context );
+				do_action( 'newspack_log', 'newspack_newsletters_sign_up_lists_narrowed', $context, $log_details );
+			}
+			$lists = $allowed_lists;
+		}
 
 		/**
 		 * Enables asynchronous contact subscription processing. When enabled,
@@ -203,7 +322,7 @@ class Newspack_Newsletters_Contacts {
 		$result = [];
 
 		$lists_objects = [];
-		foreach ( $lists as $list_id ) {
+		foreach ( is_array( $lists ) ? $lists : [] as $list_id ) {
 			$list_obj = Subscription_List::from_public_id( $list_id );
 			if ( ! $list_obj ) {
 				$errors->add( 'newspack_newsletters_invalid_list', 'Invalid list ID: ' . $list_id );

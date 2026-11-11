@@ -20,6 +20,9 @@ final class Blocks {
 	 * Initialize Hooks.
 	 */
 	public static function init() {
+		// Hooked here, before `init`, because the blocks register on `init`.
+		\add_filter( 'block_type_metadata', [ __CLASS__, 'version_block_styles' ] );
+
 		require_once NEWSPACK_ABSPATH . 'src/blocks/reader-registration/index.php';
 		require_once NEWSPACK_ABSPATH . 'src/blocks/my-account-button/class-my-account-button-block.php';
 		require_once NEWSPACK_ABSPATH . 'src/blocks/content-gate/countdown/class-content-gate-countdown-block.php';
@@ -36,11 +39,14 @@ final class Blocks {
 			require_once NEWSPACK_ABSPATH . 'src/blocks/featured-image-caption/class-featured-image-caption-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/author-profile-social/class-author-profile-social-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/author-social-link/class-author-social-link-block.php';
-			require_once NEWSPACK_ABSPATH . 'src/blocks/copyright-date/class-copyright-date-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/copyright/class-copyright-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/class-overlay-menu-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/trigger/class-overlay-menu-trigger-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-search/class-overlay-search-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/comments-panel/class-comments-panel-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/comments-panel/trigger/class-comments-panel-trigger-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/comments-panel/content/class-comments-panel-content-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/responsive-container/class-responsive-container-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/responsive-container/breakpoint/class-responsive-container-breakpoint-block.php';
 			Social_Icons::init();
@@ -51,6 +57,65 @@ final class Blocks {
 
 		\add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_assets' ] );
+	}
+
+	/**
+	 * Version block.json stylesheets from this plugin's build by their content.
+	 *
+	 * WordPress versions a block.json `file:` stylesheet by the block's
+	 * `version` field, or by the WordPress version when there is none; it uses
+	 * the file's mtime only under SCRIPT_DEBUG, so local sites don't show this.
+	 * Without a version, an updated stylesheet keeps its URL until WordPress
+	 * itself updates, and browsers and the CDN keep serving the cached copy.
+	 * A block script with its own `.asset.php` keeps that version; one without
+	 * would take this hash too.
+	 *
+	 * The filter runs for every block on the site, so blocks outside the
+	 * `newspack/` namespace return before any lookup. newspack-ads shares that
+	 * namespace, so the `dist/` check below is what limits this to stylesheets
+	 * from this plugin's build.
+	 *
+	 * @param array $metadata Block metadata read from block.json.
+	 * @return array Metadata with `version` set to the stylesheets' content hash.
+	 */
+	public static function version_block_styles( $metadata ) {
+		if (
+			! is_array( $metadata )
+			|| ! str_starts_with( (string) ( $metadata['name'] ?? '' ), 'newspack/' )
+			|| ! empty( $metadata['version'] )
+			|| empty( $metadata['file'] )
+		) {
+			return $metadata;
+		}
+		/** This filter is documented in includes/class-newspack.php */
+		$dist_dir = realpath( \apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', '' ) );
+		if ( ! $dist_dir ) {
+			return $metadata;
+		}
+		$dist_dir = \wp_normalize_path( $dist_dir ) . '/';
+		$versions = [];
+		foreach ( [ 'style', 'editorStyle', 'viewStyle' ] as $field ) {
+			foreach ( (array) ( $metadata[ $field ] ?? [] ) as $style ) {
+				if ( ! is_string( $style ) || ! str_starts_with( $style, 'file:' ) ) {
+					continue;
+				}
+				$path = realpath( dirname( $metadata['file'] ) . '/' . \remove_block_asset_path_prefix( $style ) );
+				$path = $path ? \wp_normalize_path( $path ) : '';
+				if ( ! str_starts_with( $path, $dist_dir ) ) {
+					continue;
+				}
+				$versions[] = Newspack::asset_version( preg_replace( '/\.css$/', '', substr( $path, strlen( $dist_dir ) ) ) );
+			}
+		}
+		$versions = array_values( array_unique( $versions ) );
+		if ( 1 === count( $versions ) ) {
+			$metadata['version'] = $versions[0];
+		} elseif ( $versions ) {
+			// The block's stylesheets come from more than one build entry but share
+			// one `version`, so derive it from all of their hashes.
+			$metadata['version'] = substr( md5( implode( ',', $versions ) ), 0, 20 );
+		}
+		return $metadata;
 	}
 
 	/**
@@ -81,6 +146,9 @@ final class Blocks {
 			'collections_enabled'              => Collections::is_module_active(),
 			'has_memberships'                  => Memberships::is_active(),
 			'is_content_gate_countdown_active' => Content_Gate_Countdown_Block::is_active(),
+			// Translated here because this plugin's scripts load no JS translations.
+			/* translators: %s: Modified date. */
+			'post_date_updated_label'          => __( 'Updated %s', 'newspack-plugin' ),
 		];
 		if ( $script_data['has_memberships'] ) {
 			$script_data['content_gate_data'] = [

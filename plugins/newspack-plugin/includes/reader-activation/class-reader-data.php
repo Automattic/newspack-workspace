@@ -76,7 +76,7 @@ final class Reader_Data {
 
 		// is_donor is only read-only when the platform has a secure server-side
 		// mechanism to manage donor status. Currently only WooCommerce has this
-		// via the donation_new data event. Non-Woo platforms (NRH, other) rely
+		// via the donation_new data event. Non-Woo platforms (RevEngine, other) rely
 		// on client-side writes from the donor landing page.
 		//
 		// Note: when is_donor is NOT read-only, any authenticated reader can
@@ -99,6 +99,34 @@ final class Reader_Data {
 		 * @param string[] $keys Names of read-only keys.
 		 */
 		return apply_filters( 'newspack_reader_data_read_only_keys', $keys );
+	}
+
+	/**
+	 * Enumerate browser-only keys.
+	 *
+	 * These keys change on most page views and nothing on the server reads them,
+	 * so sending them would cost a REST request per logged-in page view. The
+	 * browser store never sends them, and never hydrates them, so a copy stored
+	 * before a key became browser-only can't overwrite the browser's.
+	 *
+	 * `pageviews` is the Campaigns prompt-frequency counter, so a logged-in
+	 * reader's prompt frequency counts per device, as an anonymous reader's
+	 * always has.
+	 *
+	 * @return string[] Names of browser-only keys.
+	 */
+	public static function get_local_keys(): array {
+		/**
+		 * Filters the list of browser-only reader data keys.
+		 *
+		 * Only list a key nothing on the server reads: its stored value stops updating.
+		 *
+		 * @param string[] $keys Names of browser-only keys.
+		 */
+		$keys = apply_filters( 'newspack_reader_data_local_keys', [ 'pageviews', 'referrer' ] );
+		// Removing a default leaves a gap in the keys, which would reach the
+		// browser as a JSON object instead of a list and break the store.
+		return array_values( (array) $keys );
 	}
 
 	/**
@@ -150,12 +178,14 @@ final class Reader_Data {
 			'is_switched_session' => $is_switched_session,
 			'reader_activity'     => self::$reader_activity,
 			'read_only_keys'      => self::get_read_only_keys(),
+			'local_keys'          => self::get_local_keys(),
 			'api_url'             => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader-data' ),
 			'session_url'         => \get_rest_url( null, NEWSPACK_API_NAMESPACE . '/reader/session' ),
+			'nonce_url'           => \admin_url( 'admin-ajax.php?action=' . Reader_Activation\Session_Hydration::NONCE_ACTION ),
 		];
 
 		if ( \is_user_logged_in() ) {
-			$config['nonce'] = \wp_create_nonce( 'wp_rest' );
+			$config = array_merge( $config, Reader_Activation\Session_Hydration::get_nonce_data() );
 			$config['items'] = self::get_data( \get_current_user_id() );
 		}
 
@@ -186,6 +216,13 @@ final class Reader_Data {
 					],
 					'value' => [
 						'type' => 'string',
+					],
+					'items' => [
+						'type'          => 'object',
+						// Bounds one request's work. Core rejects a larger batch whole, and
+						// the browser keeps every key of a rejected request pending, so this
+						// must stay well above what one sync tick sends: a handful of keys.
+						'maxProperties' => self::MAX_ITEMS,
 					],
 				],
 			]
@@ -276,6 +313,23 @@ final class Reader_Data {
 	}
 
 	/**
+	 * Whether the reader's boolean data item is true.
+	 *
+	 * Booleans are stored JSON-encoded, so a false comes back from get_data() as
+	 * the string "false", which PHP treats as true. This decodes it the way the
+	 * browser store does, so a flag reads the same on both sides.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $key     Key.
+	 *
+	 * @return bool Whether the stored value decodes to a truthy value. False when the item was never set.
+	 */
+	public static function get_bool( int $user_id, string $key ): bool {
+		$value = self::get_data( $user_id, $key );
+		return is_string( $value ) && (bool) json_decode( $value );
+	}
+
+	/**
 	 * The reader's last-known matching segment IDs (term IDs as strings), or [].
 	 *
 	 * Client-computed snapshot: a best-effort record of the reader's segment
@@ -324,6 +378,20 @@ final class Reader_Data {
 			return null;
 		}
 		return array_values( array_map( 'strval', array_filter( $ids, 'is_scalar' ) ) );
+	}
+
+	/**
+	 * The product IDs of the reader's active non-donation subscriptions, or [].
+	 *
+	 * The list is stored JSON-encoded, so once the reader's last subscription
+	 * ends, get_data() returns the string "[]", which PHP treats as non-empty.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array Product IDs. Empty when the reader has none, or the item was never set.
+	 */
+	public static function get_active_subscriptions( int $user_id ): array {
+		return self::decode_item_list( self::get_data( $user_id, 'active_subscriptions' ) );
 	}
 
 	/**
@@ -549,13 +617,17 @@ final class Reader_Data {
 	}
 
 	/**
-	 * API callback to update an item.
+	 * API callback to update an item, or a batch of items.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
 	 * @return WP_REST_Response
 	 */
 	public static function api_update_item( $request ) {
+		$items = $request->get_param( 'items' );
+		if ( null !== $items ) {
+			return self::api_update_items( $items );
+		}
 		$key   = $request->get_param( 'key' );
 		$value = $request->get_param( 'value' );
 		if ( ! $key || ! $value ) {
@@ -573,6 +645,50 @@ final class Reader_Data {
 			return $res;
 		}
 		return new \WP_REST_Response( [ 'success' => true ] );
+	}
+
+	/**
+	 * Apply a batch of item writes, as the browser store sends every pending key
+	 * in one request. A null value deletes the key.
+	 *
+	 * Keys are applied independently and rejections are reported per key in a
+	 * successful response. A rejected key stays pending in the browser, so failing
+	 * the whole batch would hold every other key back on each page load.
+	 *
+	 * @param mixed $items Map of keys to stringified JSON values; a null value deletes its key.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private static function api_update_items( mixed $items ): \WP_REST_Response|\WP_Error {
+		if ( ! is_array( $items ) || empty( $items ) ) {
+			return new \WP_Error( 'invalid_params', __( 'Invalid parameters.', 'newspack' ), [ 'status' => 400 ] );
+		}
+		$user_id        = \get_current_user_id();
+		$read_only_keys = self::get_read_only_keys();
+		$errors         = [];
+		foreach ( $items as $key => $value ) {
+			$key = (string) $key;
+			if ( '' === $key ) {
+				$errors[ $key ] = 'invalid_params';
+			} elseif ( in_array( $key, $read_only_keys, true ) ) {
+				$errors[ $key ] = 'read_only_key';
+			} elseif ( null === $value ) {
+				self::delete_item( $user_id, $key );
+			} elseif ( ! is_string( $value ) || null === json_decode( $value ) ) {
+				$errors[ $key ] = 'invalid_value';
+			} else {
+				$result = self::update_item( $user_id, $key, $value );
+				if ( \is_wp_error( $result ) ) {
+					$errors[ $key ] = $result->get_error_code();
+				}
+			}
+		}
+		return new \WP_REST_Response(
+			[
+				'success' => true,
+				'errors'  => (object) $errors,
+			]
+		);
 	}
 
 	/**

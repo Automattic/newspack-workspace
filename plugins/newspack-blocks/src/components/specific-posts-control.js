@@ -1,4 +1,11 @@
 /**
+ * External dependencies
+ */
+// Imported by path, not from the package root: the root pulls the whole
+// component library and its global `:root` styles into every editor screen.
+import ReorderModal from 'newspack-components/dist/esm/reorder-modal';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -13,7 +20,6 @@ import {
  * Internal dependencies
  */
 import AutocompleteTokenField from './autocomplete-tokenfield';
-import ReorderModal from './reorder-modal';
 import './specific-posts-control.scss';
 
 const SpecificPostsControl = ( { postIds = [], onChange, fetchSuggestions, fetchSavedInfo } ) => {

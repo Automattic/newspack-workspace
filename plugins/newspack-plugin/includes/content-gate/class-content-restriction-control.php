@@ -325,6 +325,10 @@ class Content_Restriction_Control {
 			return in_array( $post_id, array_map( 'intval', $content_rule['value'] ), true );
 		}
 
+		if ( Content_Rules::PUBLISHED_AGE_RULE === $content_rule['slug'] ) {
+			return Content_Rules::post_matches_published_age( $content_rule['value'], $post_id );
+		}
+
 		$taxonomy = get_taxonomy( $content_rule['slug'] );
 		if ( ! $taxonomy ) {
 			return false;
@@ -461,8 +465,9 @@ class Content_Restriction_Control {
 			return false;
 		}
 
-		// Don't restrict this post for users who can edit it.
-		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
+		// Don't restrict this post for users who can edit it, nor any post for an
+		// account Access Control never restricts.
+		if ( ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) || Content_Gate::should_skip_access_checks( $user_id ) ) {
 			return false;
 		}
 
@@ -475,76 +480,100 @@ class Content_Restriction_Control {
 		// get_post_gates() keeps the priority order from get_gates(). A gate that refuses
 		// the reader with no layout to show them is passed over, so the next gate decides.
 		foreach ( $post_gates as $gate ) {
-			$gate_layout_id = null;
-			$is_restricted  = false;
-			// Tracks the anonymous-bypass result so the same custom_access rules don't get
-			// evaluated twice in the second pass below. Stays null for non-anonymous calls.
-			$anonymous_bypass_passed = null;
-
-			// If registration mode is active.
-			if ( ! empty( $gate['registration']['active'] ) ) {
-				// Check if user is logged in.
-				if ( $user_id === 0 ) {
-					// Anonymous visitors can still pass via the gate's custom_access rules if they
-					// match a populated rule with `supports_anonymous` (currently only `institution`).
-					// A visitor who counts as paying doesn't need to register first, so this skips
-					// both walls. A rule left with no value names no condition, so it cannot be
-					// what lets a visitor past the registration wall.
-					//
-					// Inside a listing teaser this bypass yields nothing:
-					// evaluate_anonymous_rules() declines there, because its one rule
-					// answers from the current request and a listing is built once for
-					// everyone. {@see Content_Gate::is_withheld_outside_article()}.
-					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
-						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
-					if ( $anonymous_bypass_passed ) {
-						$is_restricted = false;
-					} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
-						// Registered access's own rules let the visitor count as registered, which
-						// is all they skip: paid access still applies, and the paid check above
-						// has already refused them (NPPD-2310).
-						$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
-						if ( $is_restricted ) {
-							$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
-						}
-					} else {
-						$is_restricted  = true;
-						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
-					}
-				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
-					// Check if email verification is required. A hypothetical evaluation
-					// asking what this reader would see if they verified has to be answered
-					// here too, or a gate that both walls registration behind verification
-					// and grants by email domain reports itself still restricting for a
-					// reader whose one act of verifying would satisfy both.
-					$user = get_user_by( 'id', $user_id );
-					if ( ! $user || ( ! \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true ) && ! Access_Rules::is_verification_assumed_for( $user->ID ) ) ) {
-						$is_restricted  = true;
-						$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
-					}
-				}
-			}
-
-			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
-			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
-				$access_rules = $gate['custom_access']['access_rules'] ?? [];
-				$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
-				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
-					$is_restricted  = true;
-					$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
-				}
-			}
-
-			if ( ! $is_restricted ) {
+			$verdict = self::evaluate_gate( $gate, $user_id );
+			if ( ! $verdict['restricted'] ) {
 				return false;
 			}
-			if ( $gate_layout_id ) {
+			if ( $verdict['gate_layout_id'] ) {
 				self::$post_gate_id_map[ $memo_key ]        = $gate['id'];
-				self::$post_gate_layout_id_map[ $memo_key ] = $gate_layout_id;
+				self::$post_gate_layout_id_map[ $memo_key ] = $verdict['gate_layout_id'];
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Whether one gate's walls (registration, then paid access) refuse a reader.
+	 *
+	 * This is the per-gate verdict {@see self::is_post_restricted()} reaches for each
+	 * gate on a post. It is public so that a rule keyed on "passes gate X" rather than
+	 * on a post, such as {@see Comment_Restriction}, answers exactly as gated content
+	 * would for the same reader.
+	 *
+	 * @param array $gate    Gate data from {@see Content_Gate::get_gate()}.
+	 * @param int   $user_id Reader to evaluate for; 0 for a logged-out visitor.
+	 *
+	 * @return array {
+	 *     @type bool            $restricted     Whether the gate refuses the reader.
+	 *     @type int|string|null $gate_layout_id The layout to show a refused reader;
+	 *                                           empty when the gate has none.
+	 * }
+	 */
+	public static function evaluate_gate( $gate, $user_id ) {
+		$gate_layout_id = null;
+		$is_restricted  = false;
+		// Tracks the anonymous-bypass result so the same custom_access rules don't get
+		// evaluated twice in the second pass below. Stays null for non-anonymous calls.
+		$anonymous_bypass_passed = null;
+
+		// If registration mode is active.
+		if ( ! empty( $gate['registration']['active'] ) ) {
+			// Check if user is logged in.
+			if ( $user_id === 0 ) {
+				// Anonymous visitors can still pass via the gate's custom_access rules if they
+				// match a populated rule with `supports_anonymous` (currently only `institution`).
+				// A visitor who counts as paying doesn't need to register first, so this skips
+				// both walls. A rule left with no value names no condition, so it cannot be
+				// what lets a visitor past the registration wall.
+				//
+				// Inside a listing teaser this bypass yields nothing:
+				// evaluate_anonymous_rules() declines there, because its one rule
+				// answers from the current request and a listing is built once for
+				// everyone. {@see Content_Gate::is_withheld_outside_article()}.
+				$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
+					&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
+				if ( $anonymous_bypass_passed ) {
+					$is_restricted = false;
+				} elseif ( Access_Rules::evaluate_anonymous_rules( $gate['registration']['access_rules'] ?? [] ) ) {
+					// Registered access's own rules let the visitor count as registered, which
+					// is all they skip: paid access still applies, and the paid check above
+					// has already refused them (NPPD-2310).
+					$is_restricted = ! empty( $gate['custom_access']['active'] ) && ! empty( $gate['custom_access']['access_rules'] );
+					if ( $is_restricted ) {
+						$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+					}
+				} else {
+					$is_restricted  = true;
+					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+				}
+			} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
+				// Check if email verification is required. A hypothetical evaluation
+				// asking what this reader would see if they verified has to be answered
+				// here too, or a gate that both walls registration behind verification
+				// and grants by email domain reports itself still restricting for a
+				// reader whose one act of verifying would satisfy both.
+				if ( ! Content_Gate::is_email_verification_met( (int) $user_id ) && ! Access_Rules::is_verification_assumed_for( (int) $user_id ) ) {
+					$is_restricted  = true;
+					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
+				}
+			}
+		}
+
+		// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
+		if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
+			$access_rules = $gate['custom_access']['access_rules'] ?? [];
+			$rule_context = [ 'payment_recovery_grace' => $gate['custom_access']['payment_recovery_grace'] ?? true ];
+			if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules_for_visitor( $access_rules, $user_id, $rule_context ) ) {
+				$is_restricted  = true;
+				$gate_layout_id = $gate['custom_access']['gate_layout_id'] ?? $gate['id'];
+			}
+		}
+
+		return [
+			'restricted'     => $is_restricted,
+			'gate_layout_id' => $is_restricted ? $gate_layout_id : null,
+		];
 	}
 
 	/**
@@ -659,7 +688,8 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Whether the current user may toggle the content-gate exemption meta.
+	 * Whether the current user may toggle the content-gate exemption meta, and set
+	 * the post's own time window for published-age rules.
 	 *
 	 * Single source of truth for the exemption's write capability, shared by
 	 * the meta's register_meta() auth_callback and the REST strip guard so the
@@ -766,7 +796,7 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Register post meta for the exemption flag.
+	 * Register post meta for the exemption flag and the post's own time window.
 	 */
 	public static function register_meta() {
 		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
@@ -786,13 +816,41 @@ class Content_Restriction_Control {
 					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
 				]
 			);
+			\register_meta(
+				'post',
+				Content_Rules::AGE_OVERRIDE_META_KEY,
+				[
+					'object_subtype' => $post_type,
+					'show_in_rest'   => [
+						'schema' => [
+							'type'                 => 'object',
+							// No minimum: a count being retyped must not fail the post save. A count
+							// below 1 is stored and ignored, so the gate's own duration applies.
+							'properties'           => [
+								'duration_value' => [
+									'type' => 'integer',
+								],
+								'duration_unit'  => [
+									'type' => 'string',
+									'enum' => Content_Rules::AGE_UNITS,
+								],
+							],
+							'additionalProperties' => false,
+						],
+					],
+					'type'           => 'object',
+					'single'         => true,
+					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
+				]
+			);
 		}
 	}
 
 	/**
-	 * Register the REST guards that keep the exemption meta out of saves that
-	 * should not carry it: one for a user who cannot toggle it, one for a value
-	 * this class inferred rather than a person choosing it. Registered
+	 * Register the REST guards that keep the exemption and time-window meta out of
+	 * saves that should not carry them: one for a user who cannot toggle them, one
+	 * for an exemption this class inferred rather than a person choosing it, and one
+	 * for an empty time window the editor only echoes back. Registered
 	 * unconditionally — independent of whether the meta itself is registered —
 	 * so their lifetime never depends on when the content-gate feature flag
 	 * resolves. Both are harmless no-ops when the key is absent from the request.
@@ -802,12 +860,33 @@ class Content_Restriction_Control {
 		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_inherited_exempt_meta' ], 10, 2 );
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'drop_empty_age_override_meta' ], 10, 2 );
 		}
 	}
 
 	/**
-	 * Remove the exemption meta from an incoming REST save when the current
-	 * user cannot toggle it, so a stray ride-along (Members / Custom Fields /
+	 * Turn an echoed empty time window into a delete.
+	 *
+	 * REST reads an unset object meta as `[]`, and the block editor sends it back with every
+	 * meta edit, so without this each such save would store an empty row on a post that never
+	 * set a time window. A delete is a no-op when no row exists.
+	 *
+	 * @param stdClass|WP_Error $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request   $request       Incoming request.
+	 * @return stdClass|WP_Error
+	 */
+	public static function drop_empty_age_override_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if ( is_array( $meta ) && isset( $meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] ) && [] === $meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] ) {
+			$meta[ Content_Rules::AGE_OVERRIDE_META_KEY ] = null;
+			$request['meta']                               = $meta;
+		}
+		return $prepared_post;
+	}
+
+	/**
+	 * Remove the exemption and age-override meta from an incoming REST save when
+	 * the current user cannot set them, so a stray ride-along (Members / Custom Fields /
 	 * third-party) is silently ignored instead of 403-ing the whole save.
 	 *
 	 * Note: `WP_REST_Request` returns array params by value, so the key must be
@@ -820,13 +899,12 @@ class Content_Restriction_Control {
 	 */
 	public static function strip_unauthorized_exempt_meta( $prepared_post, $request ) {
 		$meta = $request['meta'];
-		if (
-			is_array( $meta ) &&
-			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
-			! self::current_user_can_edit_exemption()
-		) {
-			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
-			$request['meta'] = $meta;
+		if ( ! is_array( $meta ) || self::current_user_can_edit_exemption() ) {
+			return $prepared_post;
+		}
+		$guarded_keys = [ self::IS_EXEMPT_META_KEY, Content_Rules::AGE_OVERRIDE_META_KEY ];
+		if ( array_intersect( $guarded_keys, array_keys( $meta ) ) ) {
+			$request['meta'] = array_diff_key( $meta, array_flip( $guarded_keys ) );
 		}
 		return $prepared_post;
 	}

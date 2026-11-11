@@ -497,7 +497,8 @@ class Metering {
 			]
 		);
 
-		$settings = self::get_effective_settings( $gate_post_id, false );
+		$settings   = self::get_effective_settings( $gate_post_id, false );
+		$expiration = self::get_expiration_time( $settings['period'] );
 
 		/*
 		 * The tag must stay non-executable. Metering makes the server send the whole
@@ -516,6 +517,9 @@ class Metering {
 				'use_more_tag'       => \get_post_meta( $gate_layout_id, 'use_more_tag', true ),
 				'count'              => $settings['count'],
 				'period'             => $settings['period'],
+				'expiration'         => $expiration,
+				// The reset after this one, for a page served from cache after `expiration` passed.
+				'next_expiration'    => self::get_expiration_time( $settings['period'], $expiration ),
 				'gate_id'            => $gate_post_id,
 				'meter_key'          => self::get_meter_key( $gate_post_id, false ),
 				'post_id'            => $metered_post->ID,
@@ -671,27 +675,41 @@ class Metering {
 	}
 
 	/**
-	 * Get the metering expiration time for the given date.
+	 * When the current metering period ends, which is when a meter resets.
+	 *
+	 * Periods end at midnight on the site's calendar: its time zone, and for a week the
+	 * day it starts on (Settings > General). The signed-out meter receives this timestamp
+	 * in its payload, so both meters reset at the same moment.
 	 *
 	 * @param string|null $period Metering period. Default is null, which will use the gate's metering period.
+	 * @param int|null    $now    Timestamp to compute from. Default is the current time.
 	 *
-	 * @return int Timestamp of the expiration time.
+	 * @return int Timestamp of the expiration time, or 0 for an unknown period.
 	 */
-	private static function get_expiration_time( $period = null ) {
+	public static function get_expiration_time( ?string $period = null, ?int $now = null ): int {
 		if ( ! $period ) {
 			$settings = self::get_metering_settings( Content_Gate::get_gate_post_id() );
 			$period = $settings['period'];
 		}
+		$today = ( new \DateTimeImmutable( '@' . ( $now ?? time() ) ) )->setTimezone( \wp_timezone() );
 		switch ( $period ) {
 			case 'day':
-				return strtotime( 'tomorrow' );
+				$period_end = $today->modify( '+1 day' );
+				break;
 			case 'week':
-				return strtotime( 'next monday' );
+				// 1-7 days ahead: on the first day of the week, the period runs to the next one.
+				$days_to_week_start = 7 - ( ( (int) $today->format( 'w' ) - (int) \get_option( 'start_of_week', 1 ) + 7 ) % 7 );
+				$period_end         = $today->modify( '+' . $days_to_week_start . ' days' );
+				break;
 			case 'month':
-				return mktime( 0, 0, 0, gmdate( 'n' ) + 1, 1 );
+				$period_end = $today->modify( 'first day of next month' );
+				break;
 			default:
 				return 0;
 		}
+		// Midnight is set on the end date itself: where DST starts at midnight, the clock
+		// skips 00:00 on that day, and a time carried over from another day would land at 01:00.
+		return $period_end->setTime( 0, 0 )->getTimestamp();
 	}
 
 	/**
@@ -854,15 +872,17 @@ class Metering {
 			$user_metering_data = [];
 		}
 
-		$user_expiration = isset( $user_metering_data['expiration'] ) ? $user_metering_data['expiration'] : 0;
+		$user_expiration = (int) ( $user_metering_data['expiration'] ?? 0 );
 
+		// Views clear only once the reset stored with them passes. A boundary that moved
+		// earlier (a new week start, a shorter period) is adopted without clearing them.
+		// An unknown period has no reset, so its views never clear.
 		$current_expiration = self::get_expiration_time( $settings['period'] );
-		if ( $user_expiration !== $current_expiration ) {
-			// Clear content if expired.
-			if ( $user_expiration < $current_expiration ) {
-				$user_metering_data['content'] = [];
-			}
-			// Reset expiration.
+		$is_expired         = $current_expiration && $user_expiration <= time();
+		if ( $is_expired ) {
+			$user_metering_data['content'] = [];
+		}
+		if ( $is_expired || $current_expiration < $user_expiration ) {
 			$user_metering_data['expiration'] = $current_expiration;
 			$updated_user_data                = true;
 		}

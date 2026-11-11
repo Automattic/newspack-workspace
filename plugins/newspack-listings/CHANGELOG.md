@@ -1,3 +1,25 @@
+## newspack-listings [3.7.11](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.10...newspack-listings@3.7.11) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## newspack-listings [3.7.10](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.9...newspack-listings@3.7.10) (2026-10-14)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.11.0
+
+## newspack-listings [3.7.9](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.8...newspack-listings@3.7.9) (2026-10-12)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.10.0
+* **newspack-scripts:** upgraded to 5.12.0
+
 ## newspack-listings [3.7.8](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.7...newspack-listings@3.7.8) (2026-09-28)
 
 

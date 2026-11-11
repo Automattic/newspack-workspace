@@ -8,6 +8,7 @@
 namespace Newspack\Tests\Subscriber_Commerce;
 
 use Newspack\CLI\Discounts_Migration;
+use Newspack\Content_Gate;
 use Newspack\Subscriber_Discounts;
 
 /**
@@ -382,6 +383,209 @@ class Test_Discounts_Migration extends \WP_UnitTestCase {
 
 		$this->assertNotWPError( $saved, 'A mapped rule must be storable as-is.' );
 		$this->assertCount( 1, Subscriber_Discounts::get_rules(), 'The migrated rule is persisted.' );
+	}
+
+	/**
+	 * A Memberships plan granted by the given products.
+	 *
+	 * @param int[] $product_ids Products that grant the plan.
+	 * <PERSON_06f9e545bd0d> Plan post id.
+	 */
+	private function create_plan( $product_ids ) {
+		$plan_id = $this->factory->post->create( [ 'post_type' => 'wc_membership_plan' ] );
+		update_post_meta( $plan_id, '_product_ids', $product_ids );
+		return $plan_id;
+	}
+
+	/**
+	 * A published gate with paid access on.
+	 *
+	 * @param array $access_rules Access rule groups.
+	 * <PERSON_06f9e545bd0d> Gate post id.
+	 */
+	private function create_paid_gate( $access_rules ) {
+		$gate_id = $this->factory->post->create(
+			[
+				'post_type'   => Content_Gate::GATE_CPT,
+				'post_status' => 'publish',
+			]
+		);
+		update_post_meta(
+			$gate_id,
+			'custom_access',
+			[
+				'active'       => true,
+				'access_rules' => $access_rules,
+			]
+		);
+		return $gate_id;
+	}
+
+	/**
+	 * Run the command against a single 10%-off rule for the given plan.
+	 *
+	 * @param int  $plan_id Plan the rule belongs to.
+	 * @param bool $live    Whether to write.
+	 */
+	private function migrate_discount_for_plan( $plan_id, $live ) {
+		delete_option( Subscriber_Discounts::OPTION_NAME );
+		update_option( Discounts_Migration::MEMBERSHIPS_RULES_OPTION, [ $this->percentage_rule( $plan_id, 101, '10' ) ] );
+		\WP_CLI::reset();
+		( new Discounts_Migration() )->migrate_discounts( [], $live ? [ 'live' => true ] : [] );
+	}
+
+	/**
+	 * Under Memberships, comp holders and group members are members of the plan
+	 * and get its discount. The plan's migrated gate admits them through extra
+	 * subscription products the plan itself never listed, so those join the
+	 * discount audience. A bundle gate the plan product passes only together
+	 * with another product is not the plan's gate, so it adds nobody.
+	 */
+	public function test_audience_adds_the_comp_and_group_products_of_the_plans_gate() {
+		$plan_product  = 11;
+		$comp_product  = 33;
+		$group_product = 44;
+		$plan_id       = $this->create_plan( [ $plan_product ] );
+		$this->create_paid_gate(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $plan_product, $comp_product, $group_product ],
+					],
+				],
+			]
+		);
+		$this->create_paid_gate(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ $plan_product ],
+					],
+					[
+						'slug'  => 'subscription',
+						'value' => [ 66 ],
+					],
+				],
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 77 ],
+					],
+				],
+			]
+		);
+
+		$this->migrate_discount_for_plan( $plan_id, false );
+		$this->assertSame( 3, \WP_CLI::$tables[0]['items'][0]['audience'], 'The dry run counts the plan, comp and group products (11, 33, 44).' );
+
+		$this->migrate_discount_for_plan( $plan_id, true );
+		$rules = array_values( Subscriber_Discounts::get_rules() );
+		$this->assertCount( 1, $rules, 'The rule is written.' );
+		$this->assertEqualsCanonicalizing(
+			[ $plan_product, $comp_product, $group_product ],
+			$rules[0]['subscription_product_ids'],
+			'Comp holders and group members keep the member discount; the bundle gate adds nobody.'
+		);
+	}
+
+	/**
+	 * `migrate-membership-gates` puts several plans on one gate when it merges
+	 * or carves out their content, so an extra product on that gate may belong
+	 * to either plan's readers. When the plans discount differently, neither
+	 * rule takes the extra product or the other plan's product, and the
+	 * operator is told which gate to look at.
+	 */
+	public function test_a_gate_shared_with_a_differently_discounted_plan_adds_nothing() {
+		$plan_id       = $this->create_plan( [ 11 ] );
+		$other_plan_id = $this->create_plan( [ 22 ] );
+		$gate_id       = $this->create_paid_gate(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 11, 22, 33 ],
+					],
+				],
+			]
+		);
+
+		update_option(
+			Discounts_Migration::MEMBERSHIPS_RULES_OPTION,
+			[
+				$this->percentage_rule( $plan_id, 101, '10' ),
+				array_merge( $this->percentage_rule( $other_plan_id, 101, '25' ), [ 'id' => 'other' ] ),
+			]
+		);
+		\WP_CLI::reset();
+
+		( new Discounts_Migration() )->migrate_discounts( [], [] );
+
+		$this->assertSame( [ 1, 1 ], array_column( \WP_CLI::$tables[0]['items'], 'audience' ), 'Each plan keeps only its own product.' );
+		$this->assertNotEmpty(
+			array_filter( \WP_CLI::$warnings, fn( $warning ) => false !== strpos( $warning, "gate {$gate_id} also admits" ) ),
+			'The shared gate is named so the operator can add the right products by hand.'
+		);
+	}
+
+	/**
+	 * When every plan on a shared gate carries the same discount, a comp holder
+	 * had that discount whichever plan they held, so each plan's rule takes the
+	 * extra product. Neither takes the other plan's own product.
+	 */
+	public function test_a_gate_shared_by_alike_discounted_plans_adds_the_extra_products_to_each() {
+		$annual_plan_id  = $this->create_plan( [ 11 ] );
+		$monthly_plan_id = $this->create_plan( [ 22 ] );
+		$this->create_paid_gate(
+			[
+				[
+					[
+						'slug'  => 'subscription',
+						'value' => [ 11, 22, 33 ],
+					],
+				],
+			]
+		);
+		update_option(
+			Discounts_Migration::MEMBERSHIPS_RULES_OPTION,
+			[
+				$this->memberships_rule(
+					[
+						'id'                 => 'annual',
+						'membership_plan_id' => $annual_plan_id,
+					]
+				),
+				$this->memberships_rule(
+					[
+						'id'                 => 'monthly',
+						'membership_plan_id' => $monthly_plan_id,
+					]
+				),
+			]
+		);
+
+		( new Discounts_Migration() )->migrate_discounts( [], [ 'live' => true ] );
+
+		$audiences = wp_list_pluck( array_values( Subscriber_Discounts::get_rules() ), 'subscription_product_ids' );
+		$this->assertEqualsCanonicalizing( [ [ 11, 33 ], [ 22, 33 ] ], array_map( fn( $ids ) => array_values( $ids ), $audiences ), 'Each plan keeps its own product and gains the comp product.' );
+	}
+
+	/**
+	 * Run before `migrate-membership-gates`, there is no gate to read. The plan's
+	 * own products are still the right floor, and the operator is told which
+	 * plan's audience could not be widened.
+	 */
+	public function test_a_plan_without_a_migrated_gate_falls_back_to_its_own_products() {
+		$plan_id = $this->create_plan( [ 11, 22 ] );
+
+		$this->migrate_discount_for_plan( $plan_id, false );
+
+		$this->assertSame( 2, \WP_CLI::$tables[0]['items'][0]['audience'], 'The plan products remain the audience.' );
+		$this->assertNotEmpty(
+			array_filter( \WP_CLI::$warnings, fn( $warning ) => false !== strpos( $warning, "plan {$plan_id}" ) ),
+			'The warning names the plan.'
+		);
 	}
 
 	/**

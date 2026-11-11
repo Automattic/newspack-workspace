@@ -28,18 +28,18 @@ import { Badge } from '@wordpress/ui';
  */
 import { Button, Divider } from '../../../../packages/components/src';
 import { CardRow } from '../components/SubscriptionCard';
-import { billingText, fmtDate, orDash, scheduleRow } from '../format';
+import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
-import { seatCountText } from './capacity';
+import { pendingInvites, pendingInvitesText, seatCountText } from './capacity';
 
 export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose } ) {
 	const billing = group.billing || {};
 	// The closing row (Next billing / Ends / Ended) is derived from the dates by the
 	// shared scheduleRow(), not from the status, so a pending-cancel group — which
 	// maps to the "active" status but has no next-payment date — reads "Ends <date>"
-	// instead of a bare "Next billing —". Shared with the person-profile card so the
-	// two cannot disagree.
-	const schedule = scheduleRow( billing );
+	// instead of a bare "Next billing —". Shared with the person-profile card, through
+	// paymentRows(), so the two cannot disagree.
+	const rows = paymentRows( billing );
 
 	// Close through the Modal's own Escape handler so the slide-out animation runs;
 	// calling onClose directly unmounts the panel with no animation, because the
@@ -79,11 +79,17 @@ export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose
 						) }
 					</CardRow>
 					<CardRow label={ __( 'Seats', 'newspack-plugin' ) }>{ seatCountText( group ) }</CardRow>
+					{ pendingInvites( group ) > 0 && (
+						<CardRow label={ __( 'Invitations', 'newspack-plugin' ) }>{ pendingInvitesText( group ) }</CardRow>
+					) }
 					<Divider marginTop={ 0 } marginBottom={ 0 } />
 					<CardRow label={ __( 'First subscribed', 'newspack-plugin' ) }>{ orDash( fmtDate( billing.startDate ) ) }</CardRow>
 					<CardRow label={ __( 'Billing', 'newspack-plugin' ) }>{ billingText( billing ) }</CardRow>
-					<CardRow label={ __( 'Last payment', 'newspack-plugin' ) }>{ orDash( fmtDate( billing.lastPayment ) ) }</CardRow>
-					<CardRow label={ schedule.label }>{ orDash( schedule.value ) }</CardRow>
+					{ rows.map( row => (
+						<CardRow key={ row.label } label={ row.label }>
+							{ row.value }
+						</CardRow>
+					) ) }
 					{ group.editUrl && (
 						<CardRow label={ __( 'WooCommerce', 'newspack-plugin' ) }>
 							<Button variant="link" href={ group.editUrl }>

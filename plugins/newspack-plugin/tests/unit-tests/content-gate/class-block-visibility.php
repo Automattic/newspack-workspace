@@ -79,6 +79,82 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The enqueue gate checks Block_Visibility::CONFIGURE_CAPABILITY.
+	 *
+	 * The panel's institution picker is filled from the institution REST route, so a role shown the
+	 * panel but refused the route gets an empty picker with nothing failing
+	 * (NPPM-3128). The route's read gate is defined as this constant, so checking
+	 * it here keeps the two on one capability. Records the capability the gate
+	 * asks for rather than comparing values, so it fails on any change to what the
+	 * gate checks, and it needs no built asset: the capability check runs before
+	 * the asset lookup.
+	 */
+	public function test_enqueue_gate_checks_the_configure_capability() {
+		// A user without the capability, so the gate returns before anything else
+		// asks for one.
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+
+		$checked = [];
+		$record  = function ( $allcaps, $caps, $args ) use ( &$checked ) {
+			$checked[] = $args[0];
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $record, 10, 3 );
+		try {
+			Block_Visibility::enqueue_block_editor_assets();
+		} finally {
+			remove_filter( 'user_has_cap', $record, 10 );
+		}
+
+		$this->assertSame( [ Block_Visibility::CONFIGURE_CAPABILITY ], $checked );
+	}
+
+	/**
+	 * The panel loads for exactly the roles the institution route lets read names.
+	 *
+	 * Runs the whole enqueue per built-in role, so it also catches a later guard
+	 * that hides the panel from a role the route admits. Skips without a built
+	 * asset, which is the case in CI; the test above covers the capability check
+	 * there.
+	 */
+	public function test_panel_loads_for_exactly_the_institution_read_tier() {
+		// The enqueue also bails when the built asset is absent, which would make the
+		// negative assertions pass without proving anything.
+		if ( ! file_exists( dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-block-visibility.asset.php' ) ) {
+			$this->markTestSkipped( 'dist/content-gate-block-visibility.asset.php is not built; the enqueue gate cannot be exercised.' );
+		}
+
+		// The enqueue bails when no post is in context (Site Editor, widget screens).
+		$GLOBALS['post'] = get_post( $this->factory->post->create() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$expected = [
+			'administrator' => true,
+			'editor'        => true,
+			'author'        => false,
+			'contributor'   => false,
+			'subscriber'    => false,
+		];
+		try {
+			foreach ( $expected as $role => $loads ) {
+				$user_id = $this->factory->user->create( [ 'role' => $role ] );
+				wp_set_current_user( $user_id );
+				wp_dequeue_script( 'newspack-content-gate-block-visibility' );
+
+				Block_Visibility::enqueue_block_editor_assets();
+
+				$this->assertSame( $loads, wp_script_is( 'newspack-content-gate-block-visibility', 'enqueued' ), "Panel for the $role role." );
+				$this->assertSame(
+					user_can( $user_id, \Newspack\Institution_REST_Controller::READ_CAPABILITY ),
+					$loads,
+					"The $role role must be shown the panel exactly when it may read institution names."
+				);
+			}
+		} finally {
+			unset( $GLOBALS['post'] );
+		}
+	}
+
+	/**
 	 * Test that the register_block_type_args filter is registered.
 	 */
 	public function test_register_block_type_args_filter_registered() {
@@ -242,6 +318,85 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An account Access Control never restricts sees a restricted block on a
+	 * post it cannot edit.
+	 */
+	public function test_accounts_that_skip_access_checks_see_restricted_blocks() {
+		$author_id = $this->factory->user->create( [ 'role' => 'author' ] );
+		$post_id   = $this->factory->post->create(
+			[
+				'post_author' => $this->factory->user->create( [ 'role' => 'editor' ] ),
+				'post_status' => 'publish',
+			]
+		);
+		// A rule the author does not satisfy, so only the helper could show them the block.
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		$skip  = function ( $skips, $user_id ) use ( $author_id ) {
+			return $user_id === $author_id ? true : $skips;
+		};
+		wp_set_current_user( $author_id );
+		$GLOBALS['post'] = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		Block_Visibility::reset_cache_for_tests();
+		$as_reader = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		add_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10, 2 );
+		Block_Visibility::reset_cache_for_tests();
+		$as_skipped = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+		remove_filter( 'newspack_content_gate_should_skip_access_checks', $skip, 10 );
+		unset( $GLOBALS['post'] );
+
+		$this->assertSame( '', $as_reader, 'An author is treated as a reader on a colleague\'s post.' );
+		$this->assertSame( '<div>restricted</div>', $as_skipped, 'An account filtered in sees the block.' );
+	}
+
+	/**
+	 * With no post in scope, as in a REST render, staff still see a restricted
+	 * block and an author is still treated as a reader.
+	 */
+	public function test_staff_see_restricted_blocks_with_no_post_in_scope() {
+		$rules = [
+			'custom_access' => [
+				'active'       => true,
+				'access_rules' => [
+					[
+						[
+							'slug'  => 'test_rule',
+							'value' => $this->test_user_id,
+						],
+					],
+				],
+			],
+		];
+		$block = $this->make_block_with_rules( 'core/group', $rules, 'visible' );
+		unset( $GLOBALS['post'] );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'author' ] ) );
+		Block_Visibility::reset_cache_for_tests();
+		$as_author = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'editor' ] ) );
+		Block_Visibility::reset_cache_for_tests();
+		$as_editor = Block_Visibility::filter_render_block( '<div>restricted</div>', $block );
+
+		$this->assertSame( '', $as_author, 'An author with no post in scope is a reader.' );
+		$this->assertSame( '<div>restricted</div>', $as_editor, 'An editor is never restricted.' );
+	}
+
+	/**
 	 * Registration: logged-out user does not match.
 	 */
 	public function test_registration_logged_out_does_not_match() {
@@ -283,6 +438,22 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 			],
 		];
 		$this->assertTrue( Block_Visibility::evaluate_rules_for_user_public( $rules, $this->test_user_id ) );
+	}
+
+	/**
+	 * Registration + require_verification: an account that cannot verify matches.
+	 */
+	public function test_registration_verification_is_not_required_of_non_readers() {
+		$rules = [
+			'registration' => [
+				'active'               => true,
+				'require_verification' => true,
+			],
+		];
+		foreach ( [ 'author', 'contributor' ] as $role ) {
+			$user_id = $this->factory->user->create( [ 'role' => $role ] );
+			$this->assertTrue( Block_Visibility::evaluate_rules_for_user_public( $rules, $user_id ), "A $role cannot verify." );
+		}
 	}
 
 	/**
@@ -1338,5 +1509,50 @@ class Newspack_Test_Block_Visibility extends WP_UnitTestCase {
 		}
 
 		$this->assertSame( $sees_block ? '<div>members</div>' : '', $this->render_for_signed_out_visitor_at( $block, $ip ) );
+	}
+
+	/**
+	 * The strip answers the listing's stricter anonymous reader apart from the
+	 * article page's. A listing declines the anonymous bypass, so content one
+	 * keeps the other can drop, and the memo must not hand one the other's.
+	 */
+	public function test_strip_answers_a_listing_apart_from_the_article_page() {
+		$rule_id = 'anonymous_rule_' . uniqid();
+		\Newspack\Access_Rules::register_rule(
+			[
+				'id'                 => $rule_id,
+				'name'               => 'Anonymous Rule',
+				'callback'           => '__return_true',
+				'supports_anonymous' => true,
+			]
+		);
+		$markup = '<!-- wp:group ' . wp_json_encode(
+			[
+				'newspackAccessControlMode'  => 'custom',
+				'newspackAccessControlRules' => [
+					'custom_access' => [
+						'active'       => true,
+						'access_rules' => [
+							[
+								[
+									'slug'  => $rule_id,
+									'value' => [ 1 ],
+								],
+							],
+						],
+					],
+				],
+			]
+		) . ' --><div class="wp-block-group"><!-- wp:paragraph --><p>RULEONLY</p><!-- /wp:paragraph --></div><!-- /wp:group -->';
+
+		$article = Block_Visibility::strip_blocks_hidden_from_public( $markup );
+		$listing = \Newspack\Content_Gate::in_listing_context(
+			function () use ( $markup ) {
+				return Block_Visibility::strip_blocks_hidden_from_public( $markup );
+			}
+		);
+
+		$this->assertStringContainsString( 'RULEONLY', $article, 'The anonymous rule lets the article page keep the block, which is the premise of this test.' );
+		$this->assertStringNotContainsString( 'RULEONLY', $listing );
 	}
 }

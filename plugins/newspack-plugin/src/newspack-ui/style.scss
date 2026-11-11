@@ -1,23 +1,38 @@
+@use "scss/mixins";
 @use "scss/variables";
 @use "scss/elements";
 @use "scss/modals";
 
 .newspack-ui {
-	// Need better spot for this
 	&__color-text-gray {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 	}
 
-	// Overrides for theme styles -- to move to theme?
-	h2:not([class*="font-size"]),
-	h3:not([class*="font-size"]) {
-		font-size: var(--newspack-ui-font-size-s);
-		line-height: var(--newspack-ui-line-height-s);
+	@at-root :is(.newspack-ui:where(:not(body)), .newspack-ui :where(.woocommerce-MyAccount-content, .newspack-ui__modal-container)) {
+		h1:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
+			font-size: var(--newspack-ui-font-size-title-l);
+			letter-spacing: var(--newspack-ui-letter-spacing-title-l);
+			line-height: var(--newspack-ui-line-height-title-l);
+		}
+
+		h2:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
+			font-size: var(--newspack-ui-font-size-title-m);
+			letter-spacing: var(--newspack-ui-letter-spacing-title-m);
+			line-height: var(--newspack-ui-line-height-title-m);
+		}
+
+		h3:not([class*="font-size"]):not(#{mixins.$font-size-classes}),
+		h4:not([class*="font-size"]):not(#{mixins.$font-size-classes}),
+		h5:not([class*="font-size"]):not(#{mixins.$font-size-classes}),
+		h6:not([class*="font-size"]):not(#{mixins.$font-size-classes}) {
+			font-size: var(--newspack-ui-font-size-body);
+			line-height: var(--newspack-ui-line-height-body);
+		}
 	}
 
 	a,
 	a:hover {
-		&:not(.newspack-ui__button) {
+		&:not(.newspack-ui__button):not(:where(.newspack-ui__tabs__list > a)) {
 			color: inherit;
 		}
 	}

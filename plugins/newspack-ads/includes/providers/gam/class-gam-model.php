@@ -941,20 +941,37 @@ final class GAM_Model {
 		if ( \is_user_logged_in() && method_exists( 'Newspack\Reader_Activation', 'is_user_reader' ) && \Newspack\Reader_Activation::is_user_reader( \wp_get_current_user() ) ) {
 			$targeting['reader_status'][] = 'logged_in'; // The currently logged-in user is a reader.
 			if ( method_exists( 'Newspack\Reader_Data', 'get_data' ) ) {
-				$reader_data = \Newspack\Reader_Data::get_data( get_current_user_id() );
+				$user_id     = get_current_user_id();
+				$reader_data = \Newspack\Reader_Data::get_data( $user_id );
+
+				// Reader data stores booleans JSON-encoded, so a stored false is the truthy
+				// string "false" until get_bool() decodes it. A Newspack plugin that predates
+				// get_bool() keeps the previous read rather than losing every reader status.
+				$has_flag = function( $key ) use ( $user_id, $reader_data ) {
+					if ( method_exists( 'Newspack\Reader_Data', 'get_bool' ) ) {
+						return \Newspack\Reader_Data::get_bool( $user_id, $key );
+					}
+					return ! empty( $reader_data[ $key ] );
+				};
 
 				// If the reader is signed up for any newsletters.
-				if ( ! empty( $reader_data['is_newsletter_subscriber'] ) ) {
+				if ( $has_flag( 'is_newsletter_subscriber' ) ) {
 					$targeting['reader_status'][] = 'newsletter_subscriber';
 				}
 
-				// If reader has donated.
-				if ( ! empty( $reader_data['is_donor'] ) ) {
+				// If the reader is a donor. Cancelling a recurring donation makes them a former donor instead.
+				if ( $has_flag( 'is_donor' ) ) {
 					$targeting['reader_status'][] = 'donor';
 				}
 
-				// If reader has any currently active non-donation subscriptions.
-				if ( ! empty( $reader_data['active_subscriptions'] ) ) {
+				// If reader has any currently active non-donation subscriptions. The list is stored
+				// JSON-encoded, so an emptied one is the truthy string "[]" until get_active_subscriptions()
+				// decodes it. A Newspack plugin that predates that method keeps the previous read, which
+				// still counts a former subscriber, rather than dropping the status for current ones.
+				$has_active_subscriptions = method_exists( 'Newspack\Reader_Data', 'get_active_subscriptions' )
+					? ! empty( \Newspack\Reader_Data::get_active_subscriptions( $user_id ) )
+					: ! empty( $reader_data['active_subscriptions'] );
+				if ( $has_active_subscriptions ) {
 					$targeting['reader_status'][] = 'subscriber';
 				}
 			}

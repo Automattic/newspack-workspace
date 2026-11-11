@@ -1,4 +1,5 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../../shared/sass/variables";
 
 .wpbnbd--tiers-based {
@@ -53,6 +54,7 @@
 							border-radius: 50px;
 							background: np-colors.$neutral-300;
 							margin: 0 5px;
+							transition: background-color motion.$duration-color motion.$ease-color;
 						}
 					}
 				}
@@ -120,13 +122,22 @@
 				padding: 0;
 				margin-bottom: 13px;
 				color: np-colors.$neutral-600;
+				transition: color motion.$duration-color motion.$ease-color;
 				span {
 					text-decoration: underline;
 				}
-				&:hover,
 				&:focus {
-					color: np-colors.$neutral-900;
 					background: none;
+				}
+
+				@include motion.hover {
+					&:hover {
+						color: np-colors.$neutral-900;
+					}
+				}
+
+				&:active {
+					color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-pressed, 75%), transparent);
 				}
 			}
 			&__tier-tile {

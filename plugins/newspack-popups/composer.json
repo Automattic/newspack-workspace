@@ -13,11 +13,6 @@
 		"dms/phpunit-arraysubset-asserts": "^0.5.0"
 	},
 	"license": "GPL-2.0-or-later",
-	"scripts": {
-		"post-update-cmd": [
-			"vendor/bin/cghooks update"
-		]
-	},
 	"extra": {},
 	"autoload": {
 		"classmap": [

@@ -1,0 +1,195 @@
+- generic [ref=f1e1]:
+  - link "Skip to content" [ref=f1e2] [cursor=pointer]:
+    - /url: "#wp--skip-link--target"
+  - generic [ref=f1e3]:
+    - banner [ref=f1e4]:
+      - generic [ref=f1e8]:
+        - generic [ref=f1e10]:
+          - generic [ref=f1e11]: Donate
+          - link "Sign in" [ref=f1e16] [cursor=pointer]:
+            - /url: "#"
+        - generic [ref=f1e21]:
+          - navigation [ref=f1e22]:
+            - list [ref=f1e23]:
+              - list [ref=f1e24]:
+                - listitem [ref=f1e25]:
+                  - link "Homepage" [ref=f1e26] [cursor=pointer]:
+                    - /url: https://comments-panel.test/
+                - listitem [ref=f1e27]:
+                  - link "My Account" [ref=f1e28] [cursor=pointer]:
+                    - /url: https://comments-panel.test/my-account/
+          - button "Search" [ref=f1e31] [cursor=pointer]
+    - main [ref=f1e36]:
+      - generic [ref=f1e37]:
+        - generic [ref=f1e38]:
+          - link "Science" [ref=f1e40] [cursor=pointer]:
+            - /url: https://comments-panel.test/category/_newspack_science/
+          - heading "Pariatur deserunt eiusmod vel est eu rem exercitation exercitationem numquam" [level=1] [ref=f1e41]
+        - paragraph [ref=f1e42]: Occaecat numquam ab ex dolor porro eius vitae eiusmod.
+        - time [ref=f1e47]: October 7, 2026
+      - figure [ref=f1e50]
+      - generic [ref=f1e52]:
+        - paragraph [ref=f1e53]: Laboris sint illum magna commodi neque quisquam consequat. Ab quo accusantium eos dolorem tempor tempor et dolorem in aliquip. Veritatis magnam aut illum modi aut do illum architecto laborum do modi. Elit architecto dolorem fugiat quis do eum. Corporis porro nisi aperiam non cupidatat. Commodi dicta accusantium sequi vero nesciunt corporis illum est nulla quisquam sint commodi reprehenderit. Dolore eos eu ea consequatur nisi quo incididunt veniam.
+        - paragraph [ref=f1e54]: Enim aute in nostrum accusamus vero ab corporis elit proident totam. Sed quae rem sequi sed lorem aperiam. Neque incididunt reprehenderit odit pariatur non laborum culpa incidunt suscipit eum. Eaque velit quo at elit ad laboris laboriosam velit sint. Officia cillum at amet id veritatis et vero lorem. Porro exercitationem nostrum adipiscing enim nostrum aut quaerat eius voluptate et.
+        - paragraph [ref=f1e55]: Sint magnam qui dicta consequat rem at. Ut anim fugiat quaerat enim amet in quae totam voluptas. Accusantium adipiscing esse aliquid vel tempora aute est lorem ullamco enim. Et do ex et consequat tempor. Quis velit est exercitation quisquam aute cillum tempor accusantium elit explicabo aut dolore voluptas. Ullamco culpa ipsam dolore laboris vel eu aliquip nisi porro. Et ex dolorem porro est quo dolor accusamus do quis aspernatur tempor totam tempora.
+        - paragraph [ref=f1e56]: Fugiat laborum minima officia odit vero accusamus consequat. Ut ex totam aute quaerat eu porro. Aspernatur sequi ad tempor accusantium nostrum ipsum aliquip. Tempor pariatur minim quo enim voluptas suscipit sit eos voluptas mollit fugiat sint consequat. Sequi tempora vitae labore deserunt dicta accusantium doloremque eiusmod aliquip elit eiusmod adipiscing consectetur. Odit architecto aperiam tempora tempor ipsum commodo officia et id do. Modi dicta sint nesciunt sit est magnam sint id dicta.
+        - paragraph [ref=f1e57]: Est odit culpa dicta etiam dolor laboris vero aperiam. Duis laborum quo at aliqua etiam illum corporis aperiam commodo nesciunt deserunt ipsam. Quo vero dicta nostrud qui porro minima consequat. Doloremque ipsum deserunt voluptate id ullamco. Duis laudantium nostrud neque sint quo dicta in labore labore incidunt voluptate. Aliquid commodo enim dolore vel magna.
+      - generic [ref=f1e60]:
+        - generic [ref=f1e61]:
+          - separator [ref=f1e62]
+          - separator [ref=f1e63]
+        - paragraph [ref=f1e64]: This is an edit.
+        - button "Comments" [expanded] [ref=f1e68] [cursor=pointer]
+    - contentinfo [ref=f1e73]:
+      - generic [ref=f1e78]:
+        - generic [ref=f1e79]:
+          - paragraph [ref=f1e80]:
+            - link "Newspack Site" [ref=f1e81] [cursor=pointer]:
+              - /url: https://comments-panel.test
+          - paragraph [ref=f1e83]: Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles.
+          - list [ref=f1e84]:
+            - listitem [ref=f1e85]:
+              - link "Facebook" [ref=f1e86] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f1e90]:
+              - link "Instagram" [ref=f1e91] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=f1e95]:
+              - link "X" [ref=f1e96] [cursor=pointer]:
+                - /url: "#"
+          - navigation "2" [ref=f1e100]:
+            - list [ref=f1e101]:
+              - list [ref=f1e102]:
+                - listitem [ref=f1e103]:
+                  - link "Homepage" [ref=f1e104] [cursor=pointer]:
+                    - /url: https://comments-panel.test/
+                - listitem [ref=f1e105]:
+                  - link "My Account" [ref=f1e106] [cursor=pointer]:
+                    - /url: https://comments-panel.test/my-account/
+        - generic [ref=f1e107]:
+          - separator [ref=f1e108]
+          - generic [ref=f1e109]:
+            - generic [ref=f1e110]:
+              - generic [ref=f1e111]: © 2026
+              - heading [level=1] [ref=f1e112]:
+                - link "Newspack Site" [ref=f1e113] [cursor=pointer]:
+                  - /url: https://comments-panel.test
+            - paragraph [ref=f1e114]:
+              - link "Powered by Newspack" [ref=f1e115] [cursor=pointer]:
+                - /url: https://newspack.com
+  - dialog [aria-hidden] [ref=f1e116]:
+    - button [ref=f1e118] [cursor=pointer]:
+      - generic [ref=f1e122]: Close
+    - navigation [ref=f1e125]:
+      - list [ref=f1e126]:
+        - list [ref=f1e127]:
+          - listitem [ref=f1e128]:
+            - link [ref=f1e129] [cursor=pointer]:
+              - /url: https://comments-panel.test/
+              - text: Homepage
+          - listitem [ref=f1e130]:
+            - link [ref=f1e131] [cursor=pointer]:
+              - /url: https://comments-panel.test/my-account/
+              - text: My Account
+  - dialog "Comments" [ref=f1e132]:
+    - button "Close Comments" [ref=f1e134] [cursor=pointer]
+    - generic [ref=f1e140]:
+      - generic [ref=f1e141]:
+        - heading "Leave a Reply" [level=3] [ref=f1e142]
+        - generic [ref=f1e143]:
+          - paragraph [ref=f1e144]:
+            - text: Your email address will not be published.
+            - generic [ref=f1e145]: Required fields are marked *
+          - paragraph [ref=f1e146]:
+            - generic [ref=f1e147]: Comment *
+            - textbox "Comment *" [ref=f1e148]
+          - paragraph [ref=f1e149]:
+            - generic [ref=f1e150]: Name *
+            - textbox "Name *" [ref=f1e151]
+          - paragraph [ref=f1e152]:
+            - generic [ref=f1e153]: Email *
+            - textbox "Email *" [ref=f1e154]
+          - paragraph [ref=f1e155]:
+            - checkbox "Save my name, email, and website in this browser for the next time I comment." [ref=f1e156] [cursor=pointer]
+            - generic [ref=f1e157]: Save my name, email, and website in this browser for the next time I comment.
+          - paragraph [ref=f1e158]:
+            - button "Post Comment" [ref=f1e159] [cursor=pointer]
+      - heading "28 responses" [active] [level=3] [ref=f1e160]
+      - list [ref=f1e161]:
+        - listitem [ref=f1e162]:
+          - generic [ref=f1e163]:
+            - generic [ref=f1e164]:
+              - img "Reader 21 Avatar" [ref=f1e166]
+              - generic [ref=f1e167]: Reader 21
+              - time [ref=f1e169]:
+                - link "Oct 7, 2026 12:54 AM" [ref=f1e170] [cursor=pointer]:
+                  - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/#comment-22
+            - paragraph [ref=f1e172]: Test comment number 21
+            - link "Reply to Reader 21" [ref=f1e174] [cursor=pointer]:
+              - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/?replytocom=22#respond
+              - text: Reply
+        - listitem [ref=f1e175]:
+          - generic [ref=f1e176]:
+            - generic [ref=f1e177]:
+              - img "Reader 22 Avatar" [ref=f1e179]
+              - generic [ref=f1e180]: Reader 22
+              - time [ref=f1e182]:
+                - link "Oct 7, 2026 12:54 AM" [ref=f1e183] [cursor=pointer]:
+                  - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/#comment-23
+            - paragraph [ref=f1e185]: Test comment number 22
+            - link "Reply to Reader 22" [ref=f1e187] [cursor=pointer]:
+              - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/?replytocom=23#respond
+              - text: Reply
+        - listitem [ref=f1e188]:
+          - generic [ref=f1e189]:
+            - generic [ref=f1e190]:
+              - img "Reader 23 Avatar" [ref=f1e192]
+              - generic [ref=f1e193]: Reader 23
+              - time [ref=f1e195]:
+                - link "Oct 7, 2026 12:54 AM" [ref=f1e196] [cursor=pointer]:
+                  - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/#comment-24
+            - paragraph [ref=f1e198]: Test comment number 23
+            - link "Reply to Reader 23" [ref=f1e200] [cursor=pointer]:
+              - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/?replytocom=24#respond
+              - text: Reply
+        - listitem [ref=f1e201]:
+          - generic [ref=f1e202]:
+            - generic [ref=f1e203]:
+              - img "Reader 24 Avatar" [ref=f1e205]
+              - generic [ref=f1e206]: Reader 24
+              - time [ref=f1e208]:
+                - link "Oct 7, 2026 12:54 AM" [ref=f1e209] [cursor=pointer]:
+                  - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/#comment-25
+            - paragraph [ref=f1e211]: Test comment number 24
+            - link "Reply to Reader 24" [ref=f1e213] [cursor=pointer]:
+              - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/?replytocom=25#respond
+              - text: Reply
+        - listitem [ref=f1e214]:
+          - generic [ref=f1e215]:
+            - generic [ref=f1e216]:
+              - img "Reader 25 Avatar" [ref=f1e218]
+              - generic [ref=f1e219]: Reader 25
+              - time [ref=f1e221]:
+                - link "Oct 7, 2026 12:54 AM" [ref=f1e222] [cursor=pointer]:
+                  - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/#comment-26
+            - paragraph [ref=f1e224]: Test comment number 25
+            - link "Reply to Reader 25" [ref=f1e226] [cursor=pointer]:
+              - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-5/?replytocom=26#respond
+              - text: Reply
+      - navigation "Comments pagination" [ref=f1e227]:
+        - link "Older Comments" [ref=f1e228] [cursor=pointer]:
+          - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/#comments
+        - generic [ref=f1e229]:
+          - link "1" [ref=f1e230] [cursor=pointer]:
+            - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-1/#comments
+          - generic [ref=f1e231]: …
+          - link "3" [ref=f1e232] [cursor=pointer]:
+            - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-3/#comments
+          - link "4" [ref=f1e233] [cursor=pointer]:
+            - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-4/#comments
+          - generic [ref=f1e234]: "5"
+          - link "6" [ref=f1e235] [cursor=pointer]:
+            - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/comment-page-6/#comments
+        - link "Newer Comments" [ref=f1e236] [cursor=pointer]:
+          - /url: https://comments-panel.test/2026/10/07/pariatur-deserunt-eiusmod-vel-est-eu-rem-exercitation-exercitationem-numquam/#comments
+  - generic [aria-hidden] [ref=f1e237] [cursor=pointer]

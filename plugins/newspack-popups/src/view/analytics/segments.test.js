@@ -1,5 +1,6 @@
 import { reportMatchedSegments, EVENT_NAME, WON_EVENT_NAME, STORAGE_KEY, EMPTY_VALUE, SESSION_TIMEOUT } from './segments';
 import { getMatchingSegmentIds, getPreviewedPromptId, sendEvent } from '../utils';
+import { getCarriedSegmentIds } from '../utils/carried-segments';
 import { getCriteria } from '../../criteria/utils';
 
 jest.mock( '../utils', () => ( {
@@ -7,6 +8,10 @@ jest.mock( '../utils', () => ( {
 	getPreviewedPromptId: jest.fn(),
 	isSwitchedSession: jest.requireActual( '../utils/segments' ).isSwitchedSession,
 	sendEvent: jest.fn(),
+} ) );
+
+jest.mock( '../utils/carried-segments', () => ( {
+	getCarriedSegmentIds: jest.fn(),
 } ) );
 
 jest.mock( '../../criteria/utils', () => ( {
@@ -33,10 +38,14 @@ const storedState = ( siteId = 0 ) => JSON.parse( window.localStorage.getItem( `
 // IDs reported through a given event, in call order.
 const reportedIds = eventName => sendEvent.mock.calls.filter( call => call[ 1 ] === eventName ).map( call => call[ 0 ].segment_id );
 
+// The Reader Activation object the RAS queue hands to the callback.
+const rasWithReader = authenticated => ( { store: { get: key => ( 'reader' === key ? { authenticated } : undefined ) } } );
+
 describe( 'reportMatchedSegments', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		getPreviewedPromptId.mockReturnValue( null );
+		getCarriedSegmentIds.mockReturnValue( [] );
 		getCriteria.mockReturnValue( { id: 'registered' } );
 		window.localStorage.clear();
 		global.gtag = jest.fn();
@@ -192,6 +201,46 @@ describe( 'reportMatchedSegments', () => {
 		reportMatchedSegments();
 		// Only the fully registered segment is evaluated and reported.
 		expect( getMatchingSegmentIds ).toHaveBeenCalledWith( { 45: segments[ 45 ] } );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '45' ] );
+	} );
+
+	it( 'counts a segment carried in from a newsletter click as matched, and as the winner when it outranks the live match', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
+		getCarriedSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments( rasWithReader( false ) );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12', '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '12' ] );
+	} );
+
+	it( 'reports a segment once when it is both carried and matched live', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '12' ] );
+		getCarriedSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments( rasWithReader( false ) );
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '12' ] );
+	} );
+
+	it( 'leaves carried segments out for a signed-in reader', () => {
+		getMatchingSegmentIds.mockReturnValue( [ '45' ] );
+		getCarriedSegmentIds.mockReturnValue( [ '12' ] );
+		reportMatchedSegments( rasWithReader( true ) );
+		// Prompts follow the reader's live match once signed in, so reach does too.
+		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '45' ] );
+		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '45' ] );
+	} );
+
+	it( 'withholds a carried segment whose criteria are not registered on this site', () => {
+		window.newspack_popups_view = {
+			segments: {
+				12: { criteria: [ { criteria_id: 'active_memberships' } ], priority: 0 },
+				45: { criteria: [ { criteria_id: 'articles_read' } ], priority: 1 },
+			},
+		};
+		getCriteria.mockImplementation( id => ( 'articles_read' === id ? { id } : undefined ) );
+		getMatchingSegmentIds.mockReturnValue( [] );
+		// Both were carried in; the module keeps the ones the caller knows.
+		getCarriedSegmentIds.mockImplementation( knownIds => [ '12', '45' ].filter( id => knownIds.includes( id ) ) );
+		reportMatchedSegments( rasWithReader( false ) );
 		expect( reportedIds( EVENT_NAME ) ).toEqual( [ '45' ] );
 		expect( reportedIds( WON_EVENT_NAME ) ).toEqual( [ '45' ] );
 	} );

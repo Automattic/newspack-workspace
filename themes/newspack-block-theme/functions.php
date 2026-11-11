@@ -1,7 +1,7 @@
 <?php
 /**
  * Newspack Block Theme functions and definitions
- * Version: 1.31.7
+ * Version: 1.33.1
  *
  * @link https://developer.wordpress.org/themes/basics/theme-functions/
  *
@@ -15,13 +15,17 @@ if ( ! defined( 'NEWSPACK_BLOCK_THEME_FILE' ) ) { // phpcs:ignore phpcsSniffs.Co
 	define( 'NEWSPACK_BLOCK_THEME_FILE', __FILE__ );
 	define( 'NEWSPACK_BLOCK_THEME_FILE_PATH', plugin_dir_path( NEWSPACK_BLOCK_THEME_FILE ) );
 	define( 'NEWSPACK_BLOCK_THEME_URL', plugin_dir_url( NEWSPACK_BLOCK_THEME_FILE ) );
-	define( 'NEWSPACK_BLOCK_THEME_VERSION', '1.31.7' );
+	define( 'NEWSPACK_BLOCK_THEME_VERSION', '1.33.1' );
 }
 
 
 // Include theme resources.
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-core.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-contrast.php';
+require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-focus-color.php';
+require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-button-states.php';
+require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-status-colors.php';
+require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-button-hover-guard.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/blocks/index.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-patterns.php';
 require_once NEWSPACK_BLOCK_THEME_FILE_PATH . '/includes/class-jetpack.php';

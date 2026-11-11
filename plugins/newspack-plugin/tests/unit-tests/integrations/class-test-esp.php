@@ -502,6 +502,61 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The answer delete_contact() gives when Newsletters' delete() returns this error.
+	 *
+	 * @param \WP_Error $error The provider error.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private function delete_contact_answering( \WP_Error $error ) {
+		\Newspack_Newsletters_Contacts::$next_return = $error;
+		\update_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$result = ( new ESP() )->delete_contact( 'reader@example.test' );
+
+		\delete_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+		return $result;
+	}
+
+	/**
+	 * A reader the provider holds no contact for is already deleted there.
+	 * The answer must carry the framework's not-found code, which the
+	 * deletion path treats as done instead of retrying.
+	 */
+	public function test_esp_delete_contact_reports_a_missing_contact_as_not_found() {
+		$result = $this->delete_contact_answering( new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ Integration::CONTACT_NOT_FOUND_ERROR_CODE ], $result->get_error_codes() );
+	}
+
+	/**
+	 * A not-found answer that comes with another failure is that failure, so
+	 * it must reach the caller as it is, not as a finished deletion.
+	 */
+	public function test_esp_delete_contact_passes_a_not_found_with_another_failure_through() {
+		$provider_error = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$provider_error->add( 'newspack_newsletters_mailchimp_delete_contact_failed', 'Mailchimp is down' );
+
+		$result = $this->delete_contact_answering( $provider_error );
+
+		$this->assertSame( [ 'newspack_newsletters_mailchimp_contact_not_found', 'newspack_newsletters_mailchimp_delete_contact_failed' ], $result->get_error_codes() );
+	}
+
+	/**
+	 * Any other provider error is a delete that did not happen, so the caller
+	 * must see it as it is and retry.
+	 */
+	public function test_esp_delete_contact_passes_other_errors_through() {
+		$result = $this->delete_contact_answering( new \WP_Error( 'newspack_newsletters_mailchimp_delete_contact_failed', 'Mailchimp is down' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_delete_contact_failed', $result->get_error_code() );
+	}
+
+	/**
 	 * The legacy sync_esp_delete field should no longer be declared by the ESP
 	 * integration — replaced by the base-class sync_account_deletion field.
 	 */
@@ -790,6 +845,106 @@ class Test_ESP extends \WP_UnitTestCase {
 
 		$this->assertSame( [ 'CRM_SCORE' => '11' ], $result, 'Sanity: the pull read the staged payload.' );
 		$this->assertSame( [ 'reader@example.com' ], \Newspack_Newsletters_Service_Provider::$cleared_emails, 'The provider cache entry for the pulled contact was released.' );
+	}
+
+	/**
+	 * Run contact_exists() against a staged provider payload or error.
+	 *
+	 * @param array|\WP_Error $contact_data Payload or error get_contact_data() returns.
+	 * @return bool|\WP_Error
+	 */
+	private function contact_exists_with( $contact_data ) {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => $contact_data ];
+
+		$result = $this->make_esp_with_master_list( 'list-123' )->contact_exists( 'reader@example.com' );
+
+		\Newspack_Newsletters_Subscription::reset_calls();
+		return $result;
+	}
+
+	/**
+	 * The provider not knowing the reader is the answer an update-only push
+	 * exists for: report it as "no", never as a failure.
+	 */
+	public function test_contact_exists_is_false_when_the_provider_has_no_contact() {
+		$not_found = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+
+		$this->assertFalse( $this->contact_exists_with( $not_found ) );
+	}
+
+	/**
+	 * A read that failed for any other reason is not a missing contact; the
+	 * caller must see the error so the reader is tallied as one.
+	 */
+	public function test_contact_exists_passes_other_read_errors_through() {
+		$result = $this->contact_exists_with( new \WP_Error( 'newspack_newsletters_mailchimp_search_members', 'Error reaching to search-members endpoint' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_search_members', $result->get_error_code() );
+	}
+
+	/**
+	 * A Mailchimp contact is a member of one audience. A reader who exists only
+	 * in another audience has no member in the configured one, and an upsert
+	 * would create it — exactly what an update-only push promises not to do.
+	 */
+	public function test_contact_exists_on_mailchimp_requires_the_configured_audience() {
+		$this->assertTrue( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ) );
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-999' => [ 'status' => 'subscribed' ] ] ] ), 'A member of another audience only would be created in the configured one.' );
+	}
+
+	/**
+	 * An archived member is a record Mailchimp keeps for a subscriber the
+	 * publisher removed; the upsert would restore it, which is a create in every
+	 * way an update-only push cares about.
+	 */
+	public function test_contact_exists_on_mailchimp_treats_an_archived_member_as_missing() {
+		$this->assertFalse( $this->contact_exists_with( [ 'lists' => [ 'list-123' => [ 'status' => 'archived' ] ] ] ) );
+	}
+
+	/**
+	 * The ESP override of contact_exists() is what opts it into update-only pushes.
+	 */
+	public function test_esp_supports_contact_lookup() {
+		$this->assertTrue( $this->make_esp_with_master_list()->supports_contact_lookup() );
+	}
+
+	/**
+	 * The integration syncs only to Mailchimp. Another provider's contact must
+	 * not read as existing, or an update-only push would upsert there, even
+	 * when `NEWSPACK_FORCE_ALLOW_ESP_SYNC` waves every sync gate through.
+	 */
+	public function test_contact_exists_off_mailchimp_is_an_error_not_an_answer() {
+		\Newspack_Newsletters::$is_service_provider_configured = true;
+		$this->set_provider( 'active_campaign' );
+		\Newspack_Newsletters_Subscription::$contact_data = [ 'reader@example.com' => [ 'lists' => [ 'list-123' => [ 'status' => 'subscribed' ] ] ] ];
+		$force_allowed_esp = new class() extends ESP {
+			/**
+			 * Pass every sync gate, as the force constant does.
+			 *
+			 * @param bool $return_errors Whether to return a WP_Error.
+			 * @return bool|\WP_Error
+			 */
+			public function can_sync( $return_errors = false ) {
+				return $return_errors ? new \WP_Error() : true;
+			}
+
+			/**
+			 * The audience the staged member belongs to.
+			 *
+			 * @return string
+			 */
+			public function get_master_list_id() {
+				return 'list-123';
+			}
+		};
+
+		$result = $force_allowed_esp->contact_exists( 'reader@example.com' );
+		\Newspack_Newsletters_Subscription::reset_calls();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'ras_esp_provider_not_supported', $result->get_error_code() );
 	}
 
 	/**

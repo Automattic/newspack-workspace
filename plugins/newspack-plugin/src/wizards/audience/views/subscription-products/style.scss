@@ -13,11 +13,9 @@
 		text-decoration: none;
 	}
 
-	// Bundled-plan chips (grouped "Plan bundle" products).
-	&__bundled {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
+	&__field {
+		flex: 1;
+		min-width: 0;
 	}
 
 	// A variable plan row (label + remove, then price/every/period) — separated so each
@@ -35,13 +33,6 @@
 		padding: 12px;
 	}
 
-	// "Unlocks" — content gates this product unlocks (Access control).
-	&__unlocks {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-
 	// Plan-detail caption (e.g. the read-only "Unlocks" label in the edit form).
 	&__modal-label {
 		color: wp-colors.$gray-700;
@@ -49,23 +40,6 @@
 	}
 
 	// --- Applied rules + effective price ---
-
-	&__policy-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-	}
-
-	&__policy-chip {
-		display: inline-flex;
-		align-items: center;
-		text-decoration: none;
-
-		&:hover .newspack-subscription-products__policy-chip-badge,
-		&:focus-visible .newspack-subscription-products__policy-chip-badge {
-			text-decoration: underline;
-		}
-	}
 
 	// Per-plan label in the edit form's read-only policy list (variable subscriptions).
 	&__policy-plan-label {

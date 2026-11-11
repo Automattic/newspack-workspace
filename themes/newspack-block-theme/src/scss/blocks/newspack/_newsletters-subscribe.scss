@@ -1,10 +1,25 @@
-.wp-block-newspack-newsletters-subscribe {
-	&.is-style-modern {
-		.submit-button {
-			transition: opacity 125ms ease-in-out;
+@use "../../mixins";
+@use "newspack-motion" as motion;
 
-			&:hover {
-				opacity: 0.8;
+.wp-block-newspack-newsletters-subscribe {
+	&:not(.is-style-legacy):not(.is-style-modern--grid) {
+		.submit-button {
+			transition:
+				background-color motion.$duration-color motion.$ease-color,
+				border-color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
+
+			&:focus-visible {
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color,
+					transform motion.$duration-press motion.$ease-out;
+			}
+
+			&:not(:disabled):where(:not(:has([contenteditable="true"]))) {
+				@include mixins.fill-overlay;
 			}
 		}
 	}

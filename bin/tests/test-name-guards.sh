@@ -176,6 +176,38 @@ for sub in create up down destroy list cleanup; do
 done
 
 echo
+echo "n env <subcommand> <name> --help:"
+# A help flag after the name used to be ignored, because each arm reads only $2:
+# `n env destroy <name> --help` destroyed the env without a prompt. The flag
+# must win wherever it appears, most of all on destroy.
+for sub in create up down destroy; do
+	assert_usage 0 "$sub <name> --help prints its own usage and succeeds" "$sub" demo --help
+	assert_usage 0 "$sub <name> -h prints its own usage and succeeds" "$sub" demo -h
+done
+assert_usage 0 "create with options before --help still prints usage" create demo --worktree newspack-plugin:main --help
+assert_usage 0 "up --all --help prints usage instead of starting every env" up --all --help
+assert_usage 0 "list --porcelain --help prints usage instead of the table" list --porcelain --help
+
+# down and destroy take nothing after the name, so anything else there is a
+# mistake. Before they refused it, `destroy demo --dry-run` destroyed the env.
+assert_rejects_extra() {
+	local sub="$1" extra="$2" out status=0
+	out=$(PATH="$STUB:$PATH" NABSPATH="$SANDBOX" bash "$SCRIPT_DIR/../env.sh" "$sub" demo "$extra" </dev/null 2>&1) || status=$?
+	if [[ "$status" -eq 1 && "$out" == *"Unknown option: $extra"* ]]; then
+		echo "  ok: $sub <name> $extra is refused"
+	else
+		echo "  FAIL: $sub <name> $extra is refused — want exit 1 naming the option, got exit $status: $out"
+		failures=$((failures + 1))
+	fi
+}
+
+echo
+echo "n env down|destroy <name> <anything else>:"
+for sub in down destroy; do
+	assert_rejects_extra "$sub" --dry-run
+done
+
+echo
 echo "n env <subcommand> with no name:"
 for sub in create up down destroy; do
 	# Distinct from the help path on purpose: a missing name is a usage error,

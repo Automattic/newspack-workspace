@@ -144,6 +144,31 @@ env_usage() {
     exit 1
 }
 
+# For subcommands that take nothing after the name. Without it, a mistyped or
+# imagined flag is ignored and the command runs anyway, which on destroy drops
+# the env's database and deletes its worktree.
+reject_extra_args() {
+    if [[ $# -gt 2 ]]; then
+        echo "Unknown option: $3"
+        exit 1
+    fi
+}
+
+# The arms below look for a help flag only in the name position. Without this, a
+# help flag after the name does not print usage. A help flag anywhere is a help
+# request, so move it into the name position before dispatch. cleanup and
+# e2e-setup parse their own options.
+case $1 in
+    create|up|down|destroy|list)
+        for arg in "${@:2}"; do
+            if is_help_arg "$arg"; then
+                set -- "$1" "$arg"
+                break
+            fi
+        done
+        ;;
+esac
+
 case $1 in
     create)
         env_name="$2"
@@ -298,7 +323,7 @@ case $1 in
 services:
   env-${env_name}:
     container_name: ${container_name}
-    platform: linux/arm64
+    platform: \${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}
     depends_on:
       - db
     image: newspack-dev:latest
@@ -494,6 +519,14 @@ MIGRATE
             awk '{ print } /^      - APACHE_RUN_USER=/ { print "      - WP_ENVIRONMENT_TYPE=local" }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
             grep -q 'WP_ENVIRONMENT_TYPE=' "$compose_file" && echo "Migrated $env_name: added WP_ENVIRONMENT_TYPE=local" || echo "Warning: could not add WP_ENVIRONMENT_TYPE to $compose_file. Recreate the env to pick it up." >&2
         fi
+        # --- Migration: read the platform from NEWSPACK_DOCKER_PLATFORM (same reason as above) ---
+        # Older envs pin linux/arm64, which no longer matches an image rebuilt for
+        # another platform. Only the exact generated line is rewritten, so a
+        # hand-edited platform is left alone.
+        if grep -qx '    platform: linux/arm64' "$compose_file"; then
+            awk '{ if ($0 == "    platform: linux/arm64") print "    platform: ${NEWSPACK_DOCKER_PLATFORM:-linux/arm64}"; else print }' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            echo "Migrated $env_name: platform now follows NEWSPACK_DOCKER_PLATFORM"
+        fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
@@ -662,6 +695,7 @@ MIGRATE
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
             env_usage "$env_name" "Usage: n env down <name>"
         fi
+        reject_extra_args "$@"
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         docker stop "$container_name" 2>/dev/null
@@ -672,6 +706,7 @@ MIGRATE
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
             env_usage "$env_name" "Usage: n env destroy <name>"
         fi
+        reject_extra_args "$@"
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')

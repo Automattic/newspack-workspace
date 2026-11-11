@@ -289,6 +289,32 @@ final class Magic_Link {
 	}
 
 	/**
+	 * Get an OTP code as email HTML, in two groups like the sign-in form shows it.
+	 *
+	 * The digits stay one unbroken string, so copying the code and one-time-code
+	 * autofill on phones still read the plain code. The gap is wider letter spacing
+	 * on the last digit of the first group, which email clients support more widely
+	 * than margins or padding on inline elements.
+	 *
+	 * This is what *MAGIC_LINK_OTP* expands to, so the placeholder belongs in an
+	 * email's text, never inside an attribute.
+	 *
+	 * @param string $code OTP code.
+	 *
+	 * @return string The code as HTML.
+	 */
+	public static function get_otp_code_html( string $code ): string {
+		$length = strlen( $code );
+		if ( $length < 2 ) {
+			return esc_html( $code );
+		}
+		$split = (int) ceil( $length / 2 );
+		return esc_html( substr( $code, 0, $split - 1 ) )
+			. '<span style="letter-spacing:0.75em">' . esc_html( $code[ $split - 1 ] ) . '</span>'
+			. esc_html( substr( $code, $split ) );
+	}
+
+	/**
 	 * Generate an OTP to be used as part of a token.
 	 *
 	 * @param \WP_User $user User to generate OTP for.
@@ -620,7 +646,7 @@ final class Magic_Link {
 			$email_type           = 'OTP_AUTH';
 			$email_placeholders[] = [
 				'template' => '*MAGIC_LINK_OTP*',
-				'value'    => $token_data['otp']['code'],
+				'value'    => self::get_otp_code_html( $token_data['otp']['code'] ),
 			];
 		}
 
@@ -724,7 +750,7 @@ final class Magic_Link {
 	 *
 	 * @param int    $user_id User ID.
 	 * @param string $hash    OTP hash.
-	 * @param string $code    OTP code.
+	 * @param string $code    OTP code. Anything but digits is ignored, so a code pasted with a space or a dash still matches.
 	 *
 	 * @return array|\WP_Error {
 	 *   Token data.
@@ -736,6 +762,7 @@ final class Magic_Link {
 	 * }
 	 */
 	public static function validate_otp( $user_id, $hash, $code ) {
+		$code   = preg_replace( '/\D/', '', (string) $code );
 		$errors = new \WP_Error();
 		$user   = \get_user_by( 'id', $user_id );
 
@@ -867,19 +894,18 @@ final class Magic_Link {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET[ self::AUTH_ACTION_RESULT ] ) && 0 === \absint( $_GET[ self::AUTH_ACTION_RESULT ] ) ) {
 			\add_action(
-				'before_header',
+				'after_header',
 				function () {
 					?>
-					<style>
-						.newspack-magic-link-error {
-							text-align: center;
-							padding: 1em;
-							font-size: 0.7em;
-							border-bottom: 1px solid var( --wc-red );
-						}
-					</style>
-					<div class="newspack-magic-link-error">
-						<?php \esc_html_e( 'We were not able to authenticate your account. Please try logging in again.', 'newspack-plugin' ); ?>
+					<div class="newspack-ui newspack-magic-link-error">
+						<div class="wrapper">
+							<div class="newspack-ui__notice newspack-ui__notice--error newspack-ui__spacing-top--5 newspack-ui__spacing-bottom--0" role="alert">
+								<?php Newspack_UI::print_notice_icon( 'error' ); ?>
+								<div>
+									<p><?php \esc_html_e( 'We were not able to authenticate your account. Please try logging in again.', 'newspack-plugin' ); ?></p>
+								</div>
+							</div>
+						</div>
 					</div>
 					<?php
 				},
@@ -1008,7 +1034,7 @@ final class Magic_Link {
 				return self::send_otp_request_response( __( "You've reached the maximum attempts for this code, try again.", 'newspack-plugin' ), false, [ 'expired' => true ] );
 			}
 			if ( 'invalid_otp' === $authenticated->get_error_code() ) {
-				return self::send_otp_request_response( __( 'Code not recognized, try again.', 'newspack-plugin' ), false );
+				return self::send_otp_request_response( __( "That code isn't right.", 'newspack-plugin' ), false, [ 'invalid_code' => true ] );
 			}
 		}
 

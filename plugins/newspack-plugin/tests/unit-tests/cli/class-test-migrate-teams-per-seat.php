@@ -121,6 +121,18 @@ class Test_Migrate_Teams_Per_Seat extends WP_UnitTestCase {
 		$this->post_ids[] = $team_id;
 		foreach ( $member_ids as $member_id ) {
 			add_post_meta( $team_id, '_member_id', $member_id );
+			// An active team membership, as Teams gives each seat, so the team has access to carry over.
+			$membership_id = wp_insert_post(
+				[
+					'post_type'   => 'wc_user_membership',
+					'post_status' => 'wcm-active',
+					'post_author' => $member_id,
+					'post_title'  => 'Team membership',
+				]
+			);
+			$this->assertNotWPError( $membership_id, 'Fixture membership creation should succeed.' );
+			$this->post_ids[] = $membership_id;
+			update_post_meta( $membership_id, '_team_id', $team_id );
 		}
 		if ( $seat_count ) {
 			update_post_meta( $team_id, '_seat_count', $seat_count );

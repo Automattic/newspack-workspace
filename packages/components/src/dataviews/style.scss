@@ -1,9 +1,119 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 /* stylelint-disable no-invalid-position-at-import-rule */
 @import "@wordpress/dataviews/build-style/style.css";
 
 .newspack-dataviews {
-	/* Make sure full-width DataViews aligns with the 48px margin. */
-	.newspack-wizard__content--full-width & {
-		margin-top: -16px;
+	--newspack-dataviews-stack-gap: calc((var(--wpds-dimension-size-md, #{wp-vars.$grid-unit-40}) - var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small})) / 2);
+
+	.newspack-wizard__content--full-width &:not(.newspack-dataviews--in-card) {
+		margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
+	}
+}
+
+.newspack-dataviews .dataviews-view-grid {
+	padding-bottom: wp-vars.$grid-unit-30;
+}
+
+.newspack-dataviews .dataviews-view-table col.dataviews-view-table__col-first-data {
+	width: var(--newspack-dataviews-title-width, auto);
+}
+
+.newspack-dataviews .dataviews-view-table {
+	--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
+	--newspack-dataviews-column-min-width: 30ch;
+
+	&.has-compact-density {
+		--newspack-dataviews-cell-padding: var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10});
+	}
+
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) > .dataviews-view-table__cell-content-wrapper {
+		width: max-content;
+		max-width: max(calc(var(--newspack-dataviews-column-width, 100%) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
+		white-space: normal;
+		overflow-wrap: anywhere;
+		text-wrap: pretty;
+
+		&.dataviews-view-table__cell-align-end {
+			margin-inline-start: auto;
+		}
+
+		&.dataviews-view-table__cell-align-center {
+			margin-inline: auto;
+		}
+
+		&:has(.newspack-status-indicator, .newspack-status-badge, .newspack-dataviews__date) {
+			max-width: none;
+		}
+	}
+
+	tbody td:not(.dataviews-view-table__checkbox-column, .dataviews-view-table__actions-column) .dataviews-view-table__cell-content-wrapper {
+		align-items: flex-start;
+		min-height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});
+	}
+
+	tbody td.dataviews-view-table__checkbox-column .dataviews-view-table__cell-content-wrapper,
+	tbody td.dataviews-view-table__actions-column .dataviews-item-actions,
+	tbody td .dataviews-view-table__cell-content-wrapper:has(> .newspack-status-badge) {
+		align-items: center;
+		height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});
+		min-height: 0;
+	}
+
+	.dataviews-title-field {
+		&,
+		a,
+		button.components-button.is-link {
+			line-height: inherit;
+			white-space: normal;
+		}
+	}
+
+	.newspack-cell-list button.components-button.is-link {
+		line-height: inherit;
+	}
+
+	.dataviews-column-primary__media + .dataviews-view-table__primary-column-content > .dataviews-title-field:not(:last-child) {
+		min-height: 0;
+		margin-bottom: var(--newspack-dataviews-stack-gap);
+	}
+
+	tbody td[style*="width: 1%"] > .dataviews-view-table__cell-content-wrapper {
+		min-width: 0;
+	}
+
+	thead th[style*="width: 1%"] {
+		white-space: nowrap;
+	}
+
+	tbody td > :has(> .dataviews-view-table__primary-column-content) {
+		min-width: max(calc(var(--newspack-dataviews-column-width, 0px) - 2 * var(--newspack-dataviews-cell-padding)), var(--newspack-dataviews-column-min-width));
+	}
+}
+
+.newspack-dataviews__view-config {
+	flex-shrink: 0;
+}
+
+.newspack-dataviews .newspack-dataviews__date,
+.newspack-dataviews .dataviews-view-table .newspack-status-indicator,
+.newspack-dataviews .dataviews-view-table .newspack-status-badge {
+	white-space: nowrap;
+}
+
+@container dataviews-wrapper (min-width: 431px) {
+	.newspack-dataviews:not(.newspack-dataviews--in-card) .dataviews-wrapper > * {
+		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- restores the 48px list gutter DataViews used before it moved to this token. */
+		--wpds-dimension-padding-2xl: #{wp-vars.$grid-unit-60};
+	}
+}
+
+.newspack-dataviews .dataviews-view-table thead th:has(.dataviews-view-table-header-button) {
+	&:first-child {
+		padding-left: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
+	}
+
+	&:last-child {
+		padding-right: calc(var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30}) - var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}));
 	}
 }

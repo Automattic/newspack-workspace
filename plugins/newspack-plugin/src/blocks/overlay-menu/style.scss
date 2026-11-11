@@ -1,5 +1,6 @@
 @use "../../newspack-ui/scss/variables/breakpoints";
 @use "../../../packages/colors/colors.module" as colors;
+@use "newspack-motion" as motion;
 
 .wp-block-newspack-overlay-menu {
 	// ─── Block editor only ────────────────────────────────────────────────────
@@ -65,23 +66,16 @@
 // no dependency on the theme's overlay-contents classes.
 
 .overlay-menu__panel {
-	// Slide duration scales with the panel width via per-modifier overrides below.
-	--overlay-menu-slide-duration: 250ms;
-
 	bottom: 0;
-	opacity: 0;
 	overflow-y: auto;
 	padding: var( --wp--preset--spacing--30, 1rem );
 	position: fixed;
 	top: var(--wp-admin--admin-bar--height, 0);
 	// Transition driven by CSS; JS only toggles the --open class.
 	transition:
-		opacity 125ms ease-in-out,
-		left var(--overlay-menu-slide-duration) ease-in-out,
-		right var(--overlay-menu-slide-duration) ease-in-out,
-		top var(--overlay-menu-slide-duration) ease-in-out,
-		bottom var(--overlay-menu-slide-duration) ease-in-out,
-		transform var(--overlay-menu-slide-duration) ease-in-out;
+		transform var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-drawer,
+		visibility 0s linear var(--overlay-menu-slide-duration, #{motion.$duration-modal});
+	visibility: hidden;
 	max-width: 90vw;
 	width: 100%;
 	z-index: 99998;
@@ -92,40 +86,74 @@
 
 	// Side panels slide in from left or right.
 	&--left {
-		left: -100%;
+		left: 0;
 		right: auto;
+		transform: translateX(-100%);
 	}
 
 	&--right {
 		left: auto;
-		right: -100%;
+		right: 0;
+		transform: translateX(100%);
 	}
 
 	// Full-screen panel fades in without a directional slide.
 	&--full-screen {
 		left: 0;
 		max-width: 100%;
+		opacity: 0;
 		right: 0;
-		transition: opacity 200ms ease-in-out, visibility 0s 200ms;
-		visibility: hidden;
+		transition:
+			opacity motion.$duration-modal motion.$ease-out,
+			visibility 0s linear motion.$duration-modal;
 	}
 
 	// ─── Open state (shared by frontend JS and block editor preview) ──────────
 
 	&--open {
-		opacity: 1;
-
-		&.overlay-menu__panel--left  {
-			left: 0;
-		}
-
-		&.overlay-menu__panel--right {
-			right: 0;
-		}
+		transform: none;
+		transition:
+			transform var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-drawer,
+			visibility 0s;
+		visibility: visible;
 
 		&.overlay-menu__panel--full-screen {
-			transition: opacity 200ms ease-in-out, visibility 0s;
-			visibility: visible;
+			opacity: 1;
+			transition:
+				opacity motion.$duration-modal motion.$ease-out,
+				visibility 0s;
+
+			.overlay-menu__content {
+				transform: none;
+			}
+		}
+	}
+
+	&--full-screen .overlay-menu__content {
+		transform: translateY(calc(-1 * var(--wp--preset--spacing--30, 1rem)));
+		transition: transform motion.$duration-modal motion.$ease-out;
+	}
+
+	@include motion.reduced-motion {
+		&,
+		&--full-screen {
+			opacity: 0;
+			transform: none;
+			transition:
+				opacity motion.$duration-modal motion.$ease-color,
+				visibility 0s linear motion.$duration-modal;
+		}
+
+		&--open,
+		&--open.overlay-menu__panel--full-screen {
+			opacity: 1;
+			transition:
+				opacity motion.$duration-modal motion.$ease-color,
+				visibility 0s;
+		}
+
+		&--full-screen .overlay-menu__content {
+			transform: none;
 		}
 	}
 
@@ -141,12 +169,12 @@
 		}
 	}
 
-	&--width--x-small { @include panel-width( --wp--custom--width--x-small, 300px ); --overlay-menu-slide-duration: 250ms; }
-	&--width--small   { @include panel-width( --wp--custom--width--small, 410px ); --overlay-menu-slide-duration: 275ms; }
+	&--width--x-small { @include panel-width( --wp--custom--width--x-small, 300px ); }
+	&--width--small   { @include panel-width( --wp--custom--width--small, 410px ); }
 	// Medium intentionally maps to the theme's content size (from theme.json), not the --wp--custom--width-- family used by the other sizes.
-	&--width--medium  { @include panel-width( --wp--style--global--content-size, 632px ); --overlay-menu-slide-duration: 325ms; }
-	&--width--large   { @include panel-width( --wp--custom--width--large, 964px ); --overlay-menu-slide-duration: 400ms; }
-	&--width--x-large { @include panel-width( --wp--custom--width--x-large, 1296px ); --overlay-menu-slide-duration: 475ms; }
+	&--width--medium  { @include panel-width( --wp--style--global--content-size, 632px ); }
+	&--width--large   { @include panel-width( --wp--custom--width--large, 964px ); }
+	&--width--x-large { @include panel-width( --wp--custom--width--x-large, 1296px ); }
 }
 
 // ─── Scrim ────────────────────────────────────────────────────────────────────
@@ -158,9 +186,99 @@
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;
+	opacity: 0;
+	pointer-events: none;
 	position: fixed;
-	transition: opacity 500ms ease-in-out;
+	transition:
+		opacity var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-out,
+		visibility 0s linear var(--overlay-menu-slide-duration, #{motion.$duration-modal});
+	visibility: hidden;
 	z-index: 99997;
+
+	&--open {
+		opacity: 1;
+		pointer-events: auto;
+		transition:
+			opacity var(--overlay-menu-slide-duration, #{motion.$duration-modal}) motion.$ease-out,
+			visibility 0s;
+		visibility: visible;
+	}
+
+	@include motion.reduced-motion {
+		transition:
+			opacity motion.$duration-modal motion.$ease-color,
+			visibility 0s linear motion.$duration-modal;
+
+		&--open {
+			transition:
+				opacity motion.$duration-modal motion.$ease-color,
+				visibility 0s;
+		}
+	}
+}
+
+.overlay-menu__panel .wp-block-navigation:not(.is-style-flatten) .has-child:not(.open-always) {
+	flex-wrap: wrap;
+
+	> .wp-block-navigation__submenu-container {
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		color: inherit;
+		flex-basis: 100%;
+		padding: 0 0 0 var(--wp--preset--spacing--30, 1rem);
+		position: static;
+		transition:
+			opacity motion.$duration-reveal motion.$ease-out,
+			visibility 0s linear motion.$duration-reveal,
+			width 0s linear motion.$duration-reveal,
+			height 0s linear motion.$duration-reveal,
+			min-width 0s linear motion.$duration-reveal,
+			overflow 0s linear motion.$duration-reveal;
+		transition-behavior: allow-discrete;
+	}
+
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container {
+		transition: opacity motion.$duration-reveal motion.$ease-out;
+	}
+
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] ~ .wp-block-navigation__submenu-container,
+	&:not(.open-on-click, .open-on-hover-click) > .wp-block-navigation__submenu-container {
+		height: auto;
+		min-width: 0;
+		opacity: 1;
+		overflow: visible;
+		visibility: visible;
+		width: auto;
+	}
+
+	&.open-on-hover-click:not(:has(> .wp-block-navigation-submenu__toggle[aria-expanded="true"]), .editor-styles-wrapper *):hover > .wp-block-navigation__submenu-container {
+		height: 0;
+		min-width: 0;
+		opacity: 0;
+		overflow: hidden;
+		visibility: hidden;
+		width: 0;
+	}
+
+	> .wp-block-navigation__submenu-icon svg,
+	> .wp-block-navigation-submenu__toggle > svg {
+		transform: none;
+		transition: transform motion.$duration-reveal motion.$ease-out;
+	}
+
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] + .wp-block-navigation__submenu-icon svg,
+	> .wp-block-navigation-submenu__toggle[aria-expanded="true"] > svg {
+		transform: rotate(180deg);
+	}
+
+	@include motion.reduced-motion {
+		> .wp-block-navigation__submenu-icon svg,
+		> .wp-block-navigation-submenu__toggle > svg {
+			transition: none;
+		}
+	}
 }
 
 // Lock document scrolling while any overlay menu instance is open.

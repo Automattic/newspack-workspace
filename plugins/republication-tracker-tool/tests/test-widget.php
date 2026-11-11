@@ -25,10 +25,18 @@ class WidgetTest extends WP_UnitTestCase {
 	private $test_post;
 
 	/**
+	 * Server state at set-up, restored in tear_down.
+	 *
+	 * @var array
+	 */
+	private $saved_server;
+
+	/**
 	 * Set up test environment.
 	 */
 	public function set_up() {
 		parent::set_up();
+		$this->saved_server = $_SERVER;
 
 		$this->widget = new Republication_Tracker_Tool_Widget();
 
@@ -47,6 +55,7 @@ class WidgetTest extends WP_UnitTestCase {
 	public function tear_down() {
 		wp_delete_post( $this->test_post->ID, true );
 		Republication_Tracker_Tool::$modal_rendered = false;
+		$_SERVER = $this->saved_server;
 		parent::tear_down();
 	}
 
@@ -163,5 +172,48 @@ class WidgetTest extends WP_UnitTestCase {
 		// Check only one modal wrapper is present.
 		$this->assertEquals( 1, substr_count( $output, 'id="republication-tracker-tool-modal"' ), 'Single modal found in output.' );
 		$this->assertEquals( 3, substr_count( $output, 'republication-tracker-tool-button' ), 'Multiple buttons found in output.' );
+	}
+
+	/**
+	 * A quote in the request path stays inside the Page button's data attribute.
+	 */
+	public function test_page_layout_quoted_request_path_stays_in_data_attribute() {
+		$_SERVER['REQUEST_URI'] = '/2026/09/sample-story/?ref=o\'brien';
+
+		$output = $this->render_page_layout_widget();
+
+		$this->assertStringContainsString( 'republication-tracker-tool-button page', $output );
+		$this->assertMatchesRegularExpression( '/data-republish-url="[^"]*o&#039;brien[^"]*"/', $output );
+		$this->assertStringNotContainsString( 'onclick', $output );
+		$this->assertStringNotContainsString( 'window.location.href', $output );
+	}
+
+	/**
+	 * Render the widget's Page layout on a single post and return its markup.
+	 *
+	 * @return string
+	 */
+	private function render_page_layout_widget() {
+		global $post, $wp_query;
+		$post                        = $this->test_post;
+		$wp_query->is_single         = true;
+		$wp_query->queried_object    = $this->test_post;
+		$wp_query->queried_object_id = $this->test_post->ID;
+
+		ob_start();
+		$this->widget->widget(
+			array(
+				'before_widget' => '<div class="widget">',
+				'after_widget'  => '</div>',
+				'before_title'  => '<h2>',
+				'after_title'   => '</h2>',
+			),
+			array(
+				'layout' => 'page',
+				'title'  => 'Republish This Story',
+				'text'   => 'Test widget text',
+			)
+		);
+		return ob_get_clean();
 	}
 }

@@ -4,7 +4,9 @@
 #
 # After a release on the `release` branch:
 #   - reset the single-serving `alpha` branch onto `release` (when the release
-#     came from an alpha merge), or merge `release` into `alpha` otherwise;
+#     came from an alpha merge), or merge `release` into `alpha` otherwise.
+#     ALPHA_SYNC=merge, which the workflow sets on a dispatched run, always
+#     merges;
 #   - restore `workspace:*` for any internal workspace dep that the release
 #     concretized (see restore_workspace_deps below);
 #   - merge `release` back into the repository's default branch so they stay in
@@ -26,10 +28,9 @@ DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 # The last commit here is the automated release commit; the one before it
 # carries the merge info used to decide whether the release came from alpha.
 SECOND_TO_LAST_COMMIT_MSG=$(git log -n 1 --skip 1 --pretty=format:"%s")
-LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
 
 # Restore workspace:* for any internal monorepo dep
-# (newspack-{scripts,components,colors,icons}) in every plugin/theme
+# (newspack-{scripts,components,colors,icons,motion}) in every plugin/theme
 # package.json, then commit if anything changed.
 #
 # Why: @semantic-release/npm's prepare step rewrites "workspace:*" to a concrete
@@ -51,7 +52,7 @@ restore_workspace_deps_and_commit() {
   local branch="$1"
   node -e '
     const fs = require("fs"), path = require("path");
-    const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons"];
+    const WS_PACKAGES = ["newspack-scripts", "newspack-components", "newspack-colors", "newspack-icons", "newspack-motion"];
     // "packages" belongs here too: msr pins the shared packages the same way
     // it pins plugins and themes, and pnpm-lock.yaml is keyed to workspace:*
     // for all three roots. Leaving packages out is what made every release
@@ -229,16 +230,35 @@ notify_slack() {
 sync_failed=0
 
 git pull origin release
+
+# Names the release in the merge subjects. The checkout is the commit that
+# triggered the run, which predates the tags this release created, so
+# `git describe` from there returns a tag from an earlier release. RELEASED_TAGS
+# is the release job's list of tags this run created. One release can cut
+# several; from that list, the foundation plugin's `newspack@` tag is preferred.
+# A run_post_release dispatch that releases nothing passes none, so fall back to
+# the nearest tag, read only after the pull above has reached the release tip.
+LATEST_VERSION_TAG=$(printf '%s\n' "${RELEASED_TAGS:-}" | grep -m 1 '^newspack@' || true)
+if [ -z "$LATEST_VERSION_TAG" ]; then
+  LATEST_VERSION_TAG=$(printf '%s\n' "${RELEASED_TAGS:-}" | grep -m 1 . || true)
+fi
+if [ -z "$LATEST_VERSION_TAG" ]; then
+  LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
+fi
+
 git checkout alpha
 
-if echo "$SECOND_TO_LAST_COMMIT_MSG" | grep -q '^Merge .*alpha'; then
+# ALPHA_SYNC=merge rules out the reset. A dispatched run can start some time
+# after the release it follows: the commit read above is then not the one the
+# release came from, and alpha may hold work that release does not.
+if [ "${ALPHA_SYNC:-auto}" != merge ] && echo "$SECOND_TO_LAST_COMMIT_MSG" | grep -q '^Merge .*alpha'; then
   echo "[post-release] Release came from the alpha branch. Resetting alpha onto release."
   # The alpha branch is single-serving; discard its history after a release.
   git reset --hard release --
   restore_workspace_deps_and_commit alpha
   git push --force origin alpha
 else
-  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix). Merging release into alpha."
+  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix), or this run was dispatched. Merging release into alpha."
   if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then
     restore_workspace_deps_and_commit alpha
     git push origin alpha

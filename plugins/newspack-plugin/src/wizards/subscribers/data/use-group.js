@@ -109,6 +109,14 @@ export function useGroupActions( id ) {
 		addMembers: useCallback( userIds => post( '/members', { members_to_add: userIds } ), [ post ] ),
 		removeMembers: useCallback( userIds => post( '/members', { members_to_remove: userIds } ), [ post ] ),
 		invite: useCallback( email => post( '/invite', { email } ), [ post ] ),
+		/**
+		 * Preview, or with `confirm`, send invitations for a pasted list and/or a CSV's contents.
+		 * The server parses both, so the preview and the send can't read the list differently.
+		 *
+		 * @param {{ emails?: string, csv?: string, confirm?: boolean }} input The raw input.
+		 * @return {Promise<Object>} The classification, its `summary` sentences, and on confirm the outcome.
+		 */
+		inviteBulk: useCallback( ( { emails = '', csv = '', confirm = false } ) => post( '/invite-bulk', { emails, csv, confirm } ), [ post ] ),
 		cancelInvite: useCallback( email => post( '/invite', { email }, 'DELETE' ), [ post ] ),
 		generateInviteLink: useCallback( () => post( '/invite-link', {} ), [ post ] ),
 		disableInviteLink: useCallback( () => post( '/invite-link', {}, 'DELETE' ), [ post ] ),

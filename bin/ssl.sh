@@ -6,11 +6,17 @@ if [[ ! $(command -v mkcert) ]]; then
   echo "Installing mkcert"
   apt-get -qq update && apt -qq install -y wget libnss3-tools
 
-  LATEST_RELEASE_DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/FiloSottile/mkcert/releases" | jq -r 'first | .assets[] | select(.name | contains("linux-arm64")) | .browser_download_url')
+  # Download the mkcert build that matches the container's architecture.
+  case "$(uname -m)" in
+    x86_64) MKCERT_ARCH=amd64 ;;
+    *) MKCERT_ARCH=arm64 ;;
+  esac
+
+  LATEST_RELEASE_DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/FiloSottile/mkcert/releases" | jq -r --arg arch "linux-${MKCERT_ARCH}" 'first | .assets[] | select(.name | contains($arch)) | .browser_download_url')
   printf "$LATEST_RELEASE_DOWNLOAD_URL"
 
   wget -q "$LATEST_RELEASE_DOWNLOAD_URL"
-  mv mkcert-v*-linux-arm64 mkcert
+  mv mkcert-v*-linux-"${MKCERT_ARCH}" mkcert
   chmod a+x mkcert
   mv mkcert /usr/local/bin/
 fi

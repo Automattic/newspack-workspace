@@ -23,6 +23,12 @@ class Content_Gate {
 	const GATE_LAYOUT_CPT = 'np_gate_layout';
 
 	/**
+	 * Values a premium newsletter gate's `auto_signup` setting can take: follow the
+	 * site-wide newsletter sign-up setting, or override it to on or off for this gate.
+	 */
+	const AUTO_SIGNUP_MODES = [ 'default', 'on', 'off' ];
+
+	/**
 	 * Whether the gate has been rendered in this execution.
 	 *
 	 * @var boolean
@@ -129,7 +135,7 @@ class Content_Gate {
 	private static array $withheld_instances = [];
 
 	/**
-	 * Whether a listing teaser is being built right now.
+	 * Whether a listing teaser, or the excerpt cut from it, is being built right now.
 	 *
 	 * The teaser is cached with no reader dimension and served to everyone for an
 	 * hour, so every question asked while it is being built has to answer to the
@@ -137,8 +143,9 @@ class Content_Gate {
 	 *
 	 * - {@see Block_Visibility::filter_render_block()} evaluates a block's
 	 *   visibility as user 0 and skips the admin bypass.
-	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations
-	 *   out of the entries the article page cached under the same user 0.
+	 * - {@see Block_Visibility::evaluation_cache_suffix()} keeps those evaluations,
+	 *   and the stripped-content memo, out of the entries the article page cached
+	 *   under the same user 0.
 	 * - {@see Access_Rules::evaluate_anonymous_rules()} declines the anonymous
 	 *   bypass, which the `institution` rule grants on an IP match.
 	 * - {@see Content_Restriction_Control::get_gate_memo_key()} keeps the resolved
@@ -209,7 +216,8 @@ class Content_Gate {
 
 	/**
 	 * Object cache group holding the teasers built by
-	 * {@see self::get_teaser_outside_article()}.
+	 * {@see self::get_teaser_outside_article()}, and the excerpt texts
+	 * {@see Content_Gate_Excerpt::get_free_excerpt_text()} cuts from them.
 	 */
 	const WITHHELD_TEASER_CACHE_GROUP = 'newspack_withheld_teasers';
 
@@ -281,9 +289,11 @@ class Content_Gate {
 		include __DIR__ . '/class-access-rules.php';
 		include __DIR__ . '/class-content-rules.php';
 		include __DIR__ . '/class-content-restriction-control.php';
+		include __DIR__ . '/class-member-body-class.php';
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
+		include __DIR__ . '/class-content-banner-style.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
@@ -292,10 +302,12 @@ class Content_Gate {
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
 		include __DIR__ . '/class-premium-newsletters.php';
+		include __DIR__ . '/class-gate-access-reader-data.php';
 		include __DIR__ . '/class-block-visibility.php';
 		include __DIR__ . '/class-gate-preview.php';
 		include __DIR__ . '/class-email-verification-prompt.php';
 		include __DIR__ . '/class-institutional-access-prompt.php';
+		include __DIR__ . '/class-comment-restriction.php';
 
 		Site_Meter::init();
 		Content_Gate\Gate_Preview::init();
@@ -375,6 +387,106 @@ class Content_Gate {
 	 */
 	public static function is_gating_active(): bool {
 		return self::is_newspack_feature_enabled() && Reader_Activation::is_enabled();
+	}
+
+	/**
+	 * Whether Access Control should skip its checks for a user.
+	 *
+	 * By default that is staff: anyone who can edit other people's posts. Every
+	 * other account is checked as a reader is, whatever its role is called, so an
+	 * Author or Contributor meets the same gates and comment restrictions a
+	 * subscriber does. A site can move the line in either direction with the filter.
+	 *
+	 * Verification walls are the exception: they hold readers only, since Reader
+	 * Activation verifies no one else. An unverified account that isn't a reader,
+	 * such as an Author or custom-role account added in wp-admin, passes one; an
+	 * unverified subscriber is held ({@see self::is_email_verification_met()}).
+	 *
+	 * Gates, block visibility and comment restrictions also let through whoever
+	 * can edit the post in hand, so an account can pass on its own post and still
+	 * be checked elsewhere.
+	 *
+	 * The default asks `user_can()`, so a plugin that grants `edit_others_posts`
+	 * for one request moves the answer for that request. Co-Authors Plus does
+	 * this: while a co-author's own post is the current one, it grants them the
+	 * capability, so on that page they skip access checks. A Contributor viewing
+	 * their own published post sees the comment form, though posting is still
+	 * refused, because the submission arrives without that post in view. Two
+	 * effects outlast that page: a newsletter sign-up made there keeps any
+	 * premium list it joined, and the paid-member body class can stay for as long
+	 * as its cached answer lasts ({@see Member_Body_Class}). Both are left as is on
+	 * purpose; they reach only the publisher's own writers.
+	 *
+	 * Two neighbouring questions are answered elsewhere. Who may change gate
+	 * settings stays a capability check, so adding an account here grants it no
+	 * say over them. Who gets reader account features is
+	 * {@see Reader_Activation::is_user_reader()}.
+	 *
+	 * @param int|string|\WP_User|null $user User ID (an int or a string of digits) or object. Defaults to the current user.
+	 *
+	 * @return bool
+	 */
+	public static function should_skip_access_checks( $user = null ): bool {
+		if ( null === $user ) {
+			$user = \wp_get_current_user();
+		} elseif ( ! $user instanceof \WP_User ) {
+			// Only an int or a string of digits is an ID. Casting anything else would turn `true`, 1.5 or '1e0' into user 1.
+			$is_id = is_int( $user ) || ( is_string( $user ) && ctype_digit( $user ) );
+			$user  = $is_id ? \get_user_by( 'id', (int) $user ) : false;
+		}
+		if ( ! $user instanceof \WP_User || ! $user->exists() ) {
+			return false;
+		}
+
+		$skips = \user_can( $user, 'edit_others_posts' );
+
+		/**
+		 * Filters whether Access Control skips its checks for a user.
+		 *
+		 * Returning true lifts every reader-facing restriction for that account:
+		 * gates, restricted blocks, comment restrictions and newsletter-link
+		 * checks. The account also gets the paid-member body class, can see and
+		 * join premium newsletter lists, and, unless it is a reader, stops
+		 * qualifying for a group subscription seat by default. In individual
+		 * mode, the Teams migration gives it no comped subscription, and changing
+		 * the filter later doesn't add one. Returning true grants no permission
+		 * to change gate settings.
+		 *
+		 * Returning false applies the checks to an account that would skip them.
+		 * Gates, blocks and comments still let that account through on any post
+		 * it can edit.
+		 *
+		 * Runs several times per request, so keep callbacks cheap.
+		 *
+		 * @param bool $skips   Whether to skip the checks. Defaults to whether the user can edit other people's posts.
+		 * @param int  $user_id The user ID.
+		 */
+		return (bool) \apply_filters( 'newspack_content_gate_should_skip_access_checks', $skips, $user->ID );
+	}
+
+	/**
+	 * Whether a signed-in user meets a "verified email" requirement.
+	 *
+	 * Reader Activation verifies readers and no one else. An account that isn't a
+	 * reader, such as an Author added in wp-admin, has no way to meet the
+	 * requirement, so it is not held to one. A reader meets it once they have
+	 * verified. An ID that matches no user does not meet it.
+	 *
+	 * This reads the verified flag itself instead of calling
+	 * {@see Reader_Activation::is_reader_verified()}, which counts every reader as
+	 * verified when NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION is set to
+	 * true. That constant governs My Account and must not open verification walls.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool
+	 */
+	public static function is_email_verification_met( int $user_id ): bool {
+		$user = \get_user_by( 'id', $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		return ! Reader_Activation::is_user_reader( $user ) || (bool) \get_user_meta( $user->ID, Reader_Activation::EMAIL_VERIFIED, true );
 	}
 
 	/**
@@ -1025,11 +1137,15 @@ class Content_Gate {
 			];
 		}
 
-		// post_excerpt is deliberately left alone. Empty, it makes core build the
-		// excerpt from post_content — now the teaser — so the trimming and the
-		// "read more" suffix stay core's to decide; non-empty, it is the author's
-		// own words about a post they chose to gate, and survives.
-		$post->post_content = $teaser;
+		// A hand-written excerpt (post_excerpt) is left alone: it is the author's
+		// own words about a post they chose to gate. An auto-generated one stops
+		// where the free part ends, so post_content carries the free part as
+		// excerpt text, captions and the like already removed, for a block that
+		// builds its own excerpt from it, as Homepage Posts does. The content passes
+		// above substitute the full teaser from the staged entry.
+		$text               = Content_Gate_Excerpt::get_free_excerpt_text( $post, $teaser );
+		$post->post_content = '<p>' . $text
+			. ( '' !== $text && Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) ? ' [&hellip;]' : '' ) . '</p>';
 	}
 
 	/**
@@ -1191,10 +1307,10 @@ class Content_Gate {
 	 * nests, and a block inside a teaser that lists another withheld post builds
 	 * that post's teaser from inside this one.
 	 *
-	 * @param callable $build Callback producing the teaser.
+	 * @param callable $build Callback producing the teaser, or the excerpt cut from it.
 	 * @return mixed The callback's return value.
 	 */
-	private static function in_listing_context( $build ) {
+	public static function in_listing_context( callable $build ): mixed {
 		$was_listing_context      = self::$is_listing_context;
 		self::$is_listing_context = true;
 		try {
@@ -1248,7 +1364,7 @@ class Content_Gate {
 	/**
 	 * The staged pieces a 'the_content' pass over a restricted post is answered
 	 * from — the teaser to substitute, and the gate that pass owes — or null when
-	 * nothing is staged for the post.
+	 * nothing is staged for the post or the request is a feed.
 	 *
 	 * One post can be both the article being read and a card in a listing on that
 	 * same page, and the two are not answered alike. The article's entry holds a
@@ -1272,6 +1388,15 @@ class Content_Gate {
 	 * @return array{teaser: string, gate: string}|null
 	 */
 	private static function get_staged_restriction_for_render( $post_id ) {
+		// Feeds answer to Content_Gate_Advanced_Settings, as in restrict_post().
+		// Asked again here because staging can happen inside a feed request with
+		// the feed flag off: newspack-manager's Pugpig homepage feed renders the
+		// front page to learn which posts to list, and the teasers its listings
+		// stage would otherwise replace those posts' feed items.
+		if ( is_feed() ) {
+			return null;
+		}
+
 		if ( ! isset( self::$restricted_content[ $post_id ] ) ) {
 			return null;
 		}
@@ -1801,6 +1926,8 @@ class Content_Gate {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
 		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
+		wp_enqueue_style( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.css', [], $asset['version'] );
+		wp_style_add_data( 'newspack-content-gate-post-settings', 'rtl', 'replace' );
 
 		// Localize active gates data for reactive matching in the editor.
 		$gates      = self::get_gates( self::GATE_CPT, 'publish' );
@@ -2182,6 +2309,11 @@ class Content_Gate {
 		// Update rule-combination mode.
 		if ( isset( $gate['content_rules_match'] ) ) {
 			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
+		}
+
+		// Update the premium newsletter list settings.
+		if ( $is_newsletter ) {
+			self::update_newsletter_gate_settings( $gate_id, $gate );
 		}
 
 		// Create default layouts for registration and custom_access modes.
@@ -2936,6 +3068,58 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the list settings of a premium newsletter gate.
+	 *
+	 * A gate saved before these settings existed has neither stored, and reads as
+	 * following the site's sign-up setting with its lists shown, which is how it
+	 * behaved then. A stored value outside the known modes reads the same way.
+	 *
+	 * @param int $id Gate ID.
+	 *
+	 * @return array {
+	 *     @type string $auto_signup Whether readers are signed up automatically: one of
+	 *                               self::AUTO_SIGNUP_MODES.
+	 *     @type bool   $hide_lists  Whether the gate's lists are hidden from readers.
+	 * }
+	 */
+	public static function get_newsletter_gate_settings( $id ) {
+		$auto_signup = get_post_meta( $id, 'auto_signup', true );
+
+		return [
+			'auto_signup' => in_array( $auto_signup, self::AUTO_SIGNUP_MODES, true ) ? $auto_signup : 'default',
+			'hide_lists'  => (bool) get_post_meta( $id, 'hide_lists', true ),
+		];
+	}
+
+	/**
+	 * Update the list settings of a premium newsletter gate.
+	 *
+	 * Only premium newsletter gates carry these settings, so a content gate is left
+	 * untouched even when its payload names them. Like the other gate settings, a
+	 * key the payload leaves out keeps its stored value, and an `auto_signup` outside
+	 * self::AUTO_SIGNUP_MODES is ignored rather than stored, so a bad payload cannot
+	 * leave the gate in a mode nothing reads.
+	 *
+	 * @param int   $id       Gate ID.
+	 * @param array $settings Gate settings; only `auto_signup` and `hide_lists` are read.
+	 *
+	 * @return void
+	 */
+	public static function update_newsletter_gate_settings( $id, $settings ) {
+		if ( ! get_post_meta( $id, 'is_newsletter', true ) ) {
+			return;
+		}
+
+		if ( isset( $settings['auto_signup'] ) && in_array( $settings['auto_signup'], self::AUTO_SIGNUP_MODES, true ) ) {
+			\update_post_meta( $id, 'auto_signup', $settings['auto_signup'] );
+		}
+
+		if ( isset( $settings['hide_lists'] ) ) {
+			\update_post_meta( $id, 'hide_lists', (bool) $settings['hide_lists'] );
+		}
+	}
+
+	/**
 	 * Get gate.
 	 *
 	 * @param int $id Gate ID.
@@ -2948,7 +3132,7 @@ class Content_Gate {
 			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ) );
 		}
 
-		return [
+		$gate = [
 			'id'                  => $post->ID,
 			'status'              => $post->post_status,
 			'title'               => $post->post_title,
@@ -2958,6 +3142,13 @@ class Content_Gate {
 			'registration'        => self::get_registration_settings( $post->ID ),
 			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
+
+		// The list settings mean nothing on a content gate, so they are left off its payload.
+		if ( get_post_meta( $post->ID, 'is_newsletter', true ) ) {
+			$gate = array_merge( $gate, self::get_newsletter_gate_settings( $post->ID ) );
+		}
+
+		return $gate;
 	}
 
 	/**
@@ -3062,6 +3253,9 @@ class Content_Gate {
 		if ( isset( $gate['custom_access'] ) ) {
 			self::update_custom_access_settings( $id, $gate['custom_access'] );
 		}
+
+		// Update the premium newsletter list settings.
+		self::update_newsletter_gate_settings( $id, $gate );
 
 		return self::get_gate( $id );
 	}

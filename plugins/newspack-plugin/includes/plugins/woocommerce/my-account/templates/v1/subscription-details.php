@@ -14,6 +14,8 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 $is_group_member_subscription = Group_Subscription::is_group_subscription( $subscription ) && Group_Subscription::user_is_member( get_current_user_id(), $subscription );
+// A complimentary reader has no payments to show, so the table keeps only when their access started and ends.
+$is_complimentary_subscription = ! $is_group_member_subscription && Complimentary_Access::is_complimentary_order( $subscription );
 
 ?>
 <table class="shop_table subscription_details">
@@ -24,13 +26,18 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
 			<?php
 			$dates_to_display = apply_filters(
 				'wcs_subscription_details_table_dates_to_display',
-				[
-					'start_date'              => _x( 'First payment', 'customer subscription table header', 'newspack-plugin' ),
-					'last_order_date_created' => _x( 'Latest payment', 'customer subscription table header', 'newspack-plugin' ),
-					'next_payment'            => _x( 'Next payment', 'customer subscription table header', 'newspack-plugin' ),
-					'end'                     => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
-					'trial_end'               => _x( 'Trial end date', 'customer subscription table header', 'newspack-plugin' ),
-				],
+				$is_complimentary_subscription
+					? [
+						'start_date' => __( 'Member since', 'newspack-plugin' ),
+						'end'        => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
+					]
+					: [
+						'start_date'              => _x( 'First payment', 'customer subscription table header', 'newspack-plugin' ),
+						'last_order_date_created' => _x( 'Latest payment', 'customer subscription table header', 'newspack-plugin' ),
+						'next_payment'            => _x( 'Next payment', 'customer subscription table header', 'newspack-plugin' ),
+						'end'                     => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
+						'trial_end'               => _x( 'Trial end date', 'customer subscription table header', 'newspack-plugin' ),
+					],
 				$subscription
 			);
 			foreach ( $dates_to_display as $date_type => $date_title ) :
@@ -45,7 +52,7 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
 			<?php endforeach; ?>
 			<?php do_action( 'wcs_subscription_details_table_after_dates', $subscription ); ?>
 		<?php endif; ?>
-		<?php if ( ! $is_group_member_subscription && \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
+		<?php if ( ! $is_group_member_subscription && ! $is_complimentary_subscription && \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
 			<tr>
 				<td><?php esc_html_e( 'Auto renew', 'newspack-plugin' ); ?></td>
 				<td>
@@ -108,7 +115,7 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
 				<?php
 			endif;
 			?>
-		<?php else : ?>
+		<?php elseif ( ! $is_complimentary_subscription ) : ?>
 			<?php do_action( 'wcs_subscription_details_table_before_payment_method', $subscription ); ?>
 		<tr>
 			<td><?php esc_html_e( 'Payment method', 'newspack-plugin' ); ?></td>

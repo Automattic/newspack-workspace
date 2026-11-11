@@ -44,6 +44,7 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-duplicate-orders.php';
 		include_once __DIR__ . '/class-woocommerce-update-payment-notice.php';
 		include_once __DIR__ . '/class-woocommerce-custom-currency-symbol.php';
+		include_once __DIR__ . '/class-woocommerce-cart-session.php';
 
 		\add_action( 'admin_init', [ __CLASS__, 'disable_woocommerce_setup' ] );
 		// Newspack configures WooCommerce itself; suppress WC's first-run setup-wizard
@@ -466,8 +467,26 @@ class WooCommerce_Connection {
 		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return [];
 		}
+		// WooCommerce Subscriptions Gifting hides a recipient's gifts while the
+		// billing address form is on screen, so the form can't change the
+		// purchaser's billing details. What a reader holds doesn't depend on the
+		// page, so the lookup steps around that filter and puts it back for the
+		// form. Without this, any check on that page, such as the reader data
+		// refresh, misses the gifts.
+		$gifting_address_filter   = 'WCSG_Recipient_Addresses::get_users_subscriptions';
+		$gifting_address_priority = \has_filter( 'wcs_get_users_subscriptions', $gifting_address_filter );
+		if ( false !== $gifting_address_priority ) {
+			\remove_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, $gifting_address_priority );
+		}
+		try {
+			$user_subscriptions = \wcs_get_users_subscriptions( $user_id );
+		} finally {
+			if ( false !== $gifting_address_priority ) {
+				\add_filter( 'wcs_get_users_subscriptions', $gifting_address_filter, $gifting_address_priority, 2 );
+			}
+		}
 		$subcriptions = array_reduce(
-			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
+			array_keys( $user_subscriptions ),
 			function( $acc, $subscription_id ) use ( $product_ids, $user_id, $include_payment_recovery ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
 				// wcs_get_subscription() returns false when the subscription post is

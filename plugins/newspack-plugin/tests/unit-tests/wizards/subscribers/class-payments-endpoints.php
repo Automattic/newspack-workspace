@@ -36,6 +36,7 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 3 ) . '/mocks/wc-mocks.php';
 		require_once dirname( __DIR__, 3 ) . '/mocks/payment-tokens-mocks.php';
+		require_once dirname( __DIR__, 3 ) . '/mocks/wcs-gifting-mock.php';
 		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
@@ -57,6 +58,8 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$wc_mock_refund_result     = null;
 		$wc_mock_gateways_by_order = [];
 		$this->user_ids            = [];
+		// The gifting stub's recipient map is static and shared with other test files.
+		\WCS_Gifting::$recipients = [];
 		// The payment-meta contract a tokenized gateway declares to WCS: one meta
 		// slot, `_mock_token`, holding the charged token's value.
 		add_filter( 'woocommerce_subscription_payment_meta', [ $this, 'mock_gateway_payment_meta' ], 10, 2 );
@@ -73,6 +76,7 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$products_database          = [];
 		$orders_database            = [];
 		\WC_Payment_Tokens::$tokens = [];
+		\WCS_Gifting::$recipients  = [];
 		foreach ( $this->user_ids as $user_id ) {
 			wp_delete_user( $user_id );
 		}
@@ -165,6 +169,70 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 				],
 				$data
 			)
+		);
+	}
+
+	/**
+	 * Create a tokenized subscription the purchaser gave to another reader.
+	 *
+	 * The purchaser stays the WooCommerce customer (and the owner of the card
+	 * that pays renewals); the recipient is who the Subscribers screens treat as
+	 * the subscriber.
+	 *
+	 * @param int   $purchaser_id The purchasing customer's user ID.
+	 * @param int   $recipient_id The gift recipient's user ID.
+	 * @param array $data         Extra subscription data.
+	 * @return WC_Subscription
+	 */
+	private function create_gifted_subscription( $purchaser_id, $recipient_id, $data = [] ) {
+		$subscription = $this->create_tokenized_subscription( $purchaser_id, $data );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		return $subscription;
+	}
+
+	/**
+	 * Create a gifted subscription on a plan the plan route can swap away from.
+	 *
+	 * Registers the source plan (201) and a target plan (202).
+	 *
+	 * @param int $purchaser_id The purchasing customer's user ID.
+	 * @param int $recipient_id The gift recipient's user ID.
+	 * @return WC_Subscription
+	 */
+	private function create_gifted_plan_subscription( $purchaser_id, $recipient_id ) {
+		foreach ( [
+			201 => [ 'Digital Monthly', 10, 'month' ],
+			202 => [ 'Print + Digital Yearly', 150, 'year' ],
+		] as $product_id => $plan ) {
+			wc_create_mock_product(
+				[
+					'id'   => $product_id,
+					'name' => $plan[0],
+					'type' => 'subscription',
+					'meta' => [
+						'_subscription_price'           => $plan[1],
+						'_subscription_period'          => $plan[2],
+						'_subscription_period_interval' => 1,
+					],
+				]
+			);
+		}
+		return $this->create_gifted_subscription(
+			$purchaser_id,
+			$recipient_id,
+			[
+				'items' => [
+					501 => new WC_Order_Item_Product(
+						[
+							'id'         => 501,
+							'product_id' => 201,
+							'name'       => 'Digital Monthly',
+							'quantity'   => 1,
+						]
+					),
+				],
+				'dates' => [ 'next_payment' => '2027-01-01 00:00:00' ],
+			]
 		);
 	}
 
@@ -745,6 +813,125 @@ class Test_Subscribers_Wizard_Payments_Endpoints extends WP_UnitTestCase {
 		$notes = implode( ' ', $subscription->data['order_notes'] );
 		$this->assertStringContainsString( 'Digital Monthly', $notes );
 		$this->assertStringContainsString( 'Print + Digital Yearly', $notes );
+	}
+
+	/**
+	 * The profile that manages a gift is its recipient's: the write actions send
+	 * the profile's user ID as `customer_id`, so the refund/cancel route accepts
+	 * the recipient and refuses the purchaser, whose profile no longer lists it.
+	 */
+	public function test_refund_accepts_gift_recipient_as_customer() {
+		$this->login_as_admin();
+		$purchaser_id = $this->create_user();
+		$recipient_id = $this->create_user();
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/refund',
+			[
+				'cancel'      => true,
+				'customer_id' => $recipient_id,
+			]
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['cancelled'] );
+		$this->assertSame( 'cancelled', $subscription->get_status() );
+	}
+
+	/**
+	 * The purchaser's ID no longer identifies the profile a gift is managed from.
+	 */
+	public function test_refund_rejects_gift_purchaser_as_customer() {
+		$this->login_as_admin();
+		$purchaser_id = $this->create_user();
+		$recipient_id = $this->create_user();
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/refund',
+			[
+				'cancel'      => true,
+				'customer_id' => $purchaser_id,
+			]
+		);
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'newspack_payments_customer_mismatch', $response->get_data()['code'] );
+		$this->assertSame( 'active', $subscription->get_status(), 'A mismatched claim must not cancel the gift.' );
+	}
+
+	/**
+	 * The plan route follows the same rule as refund: the recipient's profile
+	 * may change the gift's plan.
+	 */
+	public function test_plan_change_accepts_gift_recipient_as_customer() {
+		$this->login_as_admin();
+		$purchaser_id = $this->create_user();
+		$recipient_id = $this->create_user();
+		$subscription = $this->create_gifted_plan_subscription( $purchaser_id, $recipient_id );
+
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/plan',
+			[
+				'product_id'  => 202,
+				'customer_id' => $recipient_id,
+			]
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$items = $subscription->get_items();
+		$this->assertSame( 202, reset( $items )['product_id'] );
+	}
+
+	/**
+	 * A plan change claimed for the purchaser is refused and leaves the gift's
+	 * plan alone.
+	 */
+	public function test_plan_change_rejects_gift_purchaser_as_customer() {
+		$this->login_as_admin();
+		$purchaser_id = $this->create_user();
+		$recipient_id = $this->create_user();
+		$subscription = $this->create_gifted_plan_subscription( $purchaser_id, $recipient_id );
+
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/plan',
+			[
+				'product_id'  => 202,
+				'customer_id' => $purchaser_id,
+			]
+		);
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 'newspack_payments_customer_mismatch', $response->get_data()['code'] );
+		$items = $subscription->get_items();
+		$this->assertSame( 201, reset( $items )['product_id'], 'A mismatched claim must not swap the plan.' );
+	}
+
+	/**
+	 * Whose profile a gift is managed from does not change whose card pays for
+	 * it: the renewal charges the purchaser's saved card, so a card saved by the
+	 * recipient is still refused as another customer's.
+	 */
+	public function test_change_payment_method_on_a_gift_still_requires_the_purchasers_card() {
+		$this->login_as_admin();
+		$purchaser_id = $this->create_user();
+		$recipient_id = $this->create_user();
+		$this->save_card( $purchaser_id, 'tok_current', [ 'default' => true ] );
+		$recipient_card = $this->save_card( $recipient_id, 'tok_recipient' );
+		$subscription   = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+
+		$response = $this->post(
+			'/subscriptions/' . $subscription->get_id() . '/payment-method',
+			[
+				'token_id'    => $recipient_card->get_id(),
+				'customer_id' => $recipient_id,
+			]
+		);
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'newspack_payments_token_mismatch', $response->get_data()['code'] );
+		$this->assertSame( 'tok_current', $subscription->get_meta( '_mock_token' ) );
 	}
 
 	/**

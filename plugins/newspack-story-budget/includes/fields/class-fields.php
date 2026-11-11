@@ -235,6 +235,7 @@ class Fields {
 				'description'        => __( 'The user who published the story online.', 'newspack-story-budget' ),
 				'is_editable'        => false,
 				'is_sortable'        => true,
+				'is_filterable'      => 'yes',
 				'name'               => __( 'Published by', 'newspack-story-budget' ),
 				'post_save_callback' => [ __CLASS__, 'get_published_user' ],
 				'slug'               => 'published_by',
@@ -278,8 +279,9 @@ class Fields {
 			[
 				'description'             => __( 'The status of the post in WordPress.', 'newspack-story-budget' ),
 				'get_value_callback'      => [ __CLASS__, 'get_post_wp_status' ],
+				'options'                 => [ __CLASS__, 'get_post_wp_status_options' ],
 				'is_editable'             => false,
-				'is_filterable'           => 'always',
+				'is_filterable'           => 'yes',
 				'name'                    => __( 'WP Status', 'newspack-story-budget' ),
 				'show_in_table'           => true,
 				'slug'                    => 'wp_status',
@@ -569,8 +571,14 @@ class Fields {
 
 	/**
 	 * Get the image count of the post's content, not including the featured image.
-	 * Searches for all instances of <img> tags in the post content, which should
-	 * capture Image blocks as well as images embedded via other means such as galleries.
+	 *
+	 * Counts the <img> tags saved in the content (Image, Gallery, Cover and
+	 * Media & Text blocks, classic HTML) plus the images each classic [gallery]
+	 * shortcode lists. It deliberately renders neither the content nor the
+	 * shortcode: this can run with no global post set (a REST save, the story
+	 * GET), where a rendered [gallery] without ids falls back to post_parent 0
+	 * and loads every unattached image on the site. That exhausts PHP memory on
+	 * large media libraries and makes the editor fail to save the post.
 	 *
 	 * @param int $post_id The post ID.
 	 *
@@ -584,16 +592,76 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return 0;
 		}
-		$rendered_post_content = \apply_filters( 'the_content', \get_post_field( 'post_content', $post_id ) );
-		return substr_count( $rendered_post_content, '<img ' );
+		$content = \get_post_field( 'post_content', $post_id );
+		$count   = substr_count( $content, '<img ' );
+
+		if ( \has_shortcode( $content, 'gallery' ) && preg_match_all( '/' . \get_shortcode_regex( [ 'gallery' ] ) . '/s', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $shortcode ) {
+				// An escaped [[gallery]] is literal text, not a gallery.
+				if ( '[' === $shortcode[1] && ']' === $shortcode[6] ) {
+					continue;
+				}
+				$attrs  = \shortcode_parse_atts( $shortcode[3] );
+				$count += self::get_gallery_image_count( is_array( $attrs ) ? $attrs : [], (int) $post_id );
+			}
+		}
+		return $count;
 	}
 
 	/**
-	 * Get the last modified time of the post.
+	 * Count the images a classic [gallery] shortcode lists, without rendering it.
+	 *
+	 * Lists what core's gallery_shortcode() would: the images named by `ids`
+	 * or `include`, otherwise the image attachments of the post named by `id`,
+	 * minus `exclude`. It deliberately differs from the rendered gallery in
+	 * three ways: an `id` that is missing or not a positive integer means the
+	 * story, never post_parent 0; an `ids` or `include` list of only separators,
+	 * such as ",", counts nothing, where core lists images from the whole
+	 * library; and the count does not depend on whether the current user can
+	 * view the post the gallery reads from (core renders nothing for a
+	 * password-protected or unpublished post the visitor cannot read).
+	 *
+	 * @param array $attrs   The shortcode attributes.
+	 * @param int   $post_id The story's post ID.
+	 *
+	 * @return int The image count.
+	 */
+	private static function get_gallery_image_count( $attrs, $post_id ) {
+		$query_args = [
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_mime_type' => 'image',
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Scoped to a listed set of IDs or to one post's attachments, and returns IDs only.
+		];
+		$listed_ids = ! empty( $attrs['ids'] ) ? $attrs['ids'] : ( $attrs['include'] ?? '' );
+		if ( ! empty( $listed_ids ) ) {
+			$query_args['post__in'] = array_filter( \wp_parse_id_list( $listed_ids ) );
+			// An empty post__in places no restriction, which would list every image on the site.
+			if ( empty( $query_args['post__in'] ) ) {
+				return 0;
+			}
+		} else {
+			$parent_id                 = (int) ( $attrs['id'] ?? 0 );
+			$query_args['post_parent'] = $parent_id > 0 ? $parent_id : $post_id;
+		}
+		$image_ids = ( new \WP_Query( $query_args ) )->posts;
+		if ( empty( $listed_ids ) && ! empty( $attrs['exclude'] ) ) {
+			$image_ids = array_diff( $image_ids, \wp_parse_id_list( $attrs['exclude'] ) );
+		}
+		return count( $image_ids );
+	}
+
+	/**
+	 * Get the last modified time of the story: the later of the post's own
+	 * modified time and the last time a story field was saved. Story fields are
+	 * post meta and terms, which don't touch `post_modified`, and bumping it
+	 * would move a published post's public "updated" date for an editorial change.
 	 *
 	 * @param int $post_id The post ID.
 	 *
-	 * @return int The post's last modified time in UNIX format.
+	 * @return int The story's last modified time in UNIX format.
 	 */
 	public static function get_modified_time( $post_id = null ) {
 		if ( ! $post_id ) {
@@ -603,7 +671,10 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return '';
 		}
-		return \get_post_modified_time( 'U', true, $post_id );
+		$post_modified  = (int) \get_post_modified_time( 'U', true, $post_id );
+		$field_modified = (int) \get_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', true );
+		$modified       = max( $post_modified, $field_modified );
+		return $modified ? $modified : '';
 	}
 
 	/**
@@ -719,6 +790,24 @@ class Fields {
 			require_once ABSPATH . 'wp-admin/includes/post.php';
 		}
 		return (bool) \wp_check_post_lock( $post_id );
+	}
+
+	/**
+	 * The WordPress post statuses a story can have, with the labels WordPress
+	 * registers for them.
+	 *
+	 * @return array[] Options with `value` and `label`.
+	 */
+	public static function get_post_wp_status_options() {
+		$options = [];
+		foreach ( Budgets::STORY_POST_STATUSES as $status ) {
+			$status_object = \get_post_status_object( $status );
+			$options[]     = [
+				'value' => $status,
+				'label' => $status_object ? $status_object->label : $status,
+			];
+		}
+		return $options;
 	}
 
 	/**

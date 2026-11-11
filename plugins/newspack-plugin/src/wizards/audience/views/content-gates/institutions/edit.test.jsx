@@ -81,7 +81,7 @@ describe( 'InstitutionEdit — IP range warnings', () => {
 
 	it( 'recomputes from the committed value on blur, not on every keystroke', () => {
 		renderEditor();
-		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP range' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP Range' } ) );
 		const field = getIpRangeField();
 
 		// A half-typed range is not yet wrong, so nothing is flagged while typing.
@@ -104,7 +104,7 @@ describe( 'InstitutionEdit — IP range warnings', () => {
 	it( 'drops the warning when the rule is toggled off', async () => {
 		await renderStoredInstitution( '10.0.0.1-banana' );
 		expect( getMessagesRegion() ).not.toBeEmptyDOMElement();
-		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP range' } ) );
+		fireEvent.click( screen.getByRole( 'checkbox', { name: 'IP Range' } ) );
 		expect( getMessagesRegion() ).toBeNull();
 	} );
 

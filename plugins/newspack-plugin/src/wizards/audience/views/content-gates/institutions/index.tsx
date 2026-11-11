@@ -5,8 +5,8 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { Fragment, useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
@@ -18,18 +18,32 @@ import { Button, Spinner } from '@wordpress/components';
  */
 import { DataViews, Router } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
-import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import { INSTITUTION_RULE_SLUG, invalidateAccessRuleOptions } from '../../../../../content-gate/access-rule-option-sources';
 import InstitutionsOnboarding from './onboarding';
+import InstitutionsAdvancedSettings from './advanced-settings';
 
 const { useHistory } = Router;
 
 const API_PATH = '/wp/v2/np_institution';
 
-// The bundled @wordpress/dataviews types (v10) predate `isDestructive`,
-// which the WP-core-provided runtime DataViews does support — extend the
-// Action type locally so destructive styling can be declared.
-type InstitutionAction = Action< Institution > & { isDestructive?: boolean };
+/**
+ * Shows a list such as `a.edu,b.edu` or `org=a;role=b` with one space after
+ * each separator, however it was saved, and keeps each item on one line where
+ * it fits, so the list wraps between items rather than inside one, such as at
+ * the hyphen of an IP range. Only the separator the field's access rule splits
+ * on counts, so a comma inside a reader data value stays part of that value.
+ *
+ * @param value     The stored list.
+ * @param separator The character the field's access rule splits the list on.
+ * @return The value's items, separated by a space.
+ */
+const withBreakOpportunities = ( value: string, separator: ',' | ';' ) =>
+	value.split( separator === ',' ? /(?<=,)/ : /(?<=;)/ ).map( ( part, index ) => (
+		<Fragment key={ index }>
+			{ index > 0 && ' ' }
+			<span className="newspack-institutions__list-item">{ part.trim() }</span>
+		</Fragment>
+	) );
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -41,19 +55,16 @@ const DEFAULT_VIEW: View = {
 	filters: [],
 	layout: {},
 	titleField: 'title',
-	mediaField: 'logo',
 	descriptionField: 'description',
 };
 
 export default function Institutions() {
 	const history = useHistory();
-	const { setHeaderData, addNotice, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< Institution[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	// The last has_institutions value pushed to the gates screen, so a fetch
-	// that does not change it does not clone the whole wizard payload.
-	const lastHasInstitutions = useRef< boolean | undefined >( undefined );
+	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 
 	useEffect( () => {
 		const actions: HeaderAction[] = [];
@@ -61,11 +72,21 @@ export default function Institutions() {
 			actions.push( {
 				type: 'primary',
 				label: __( 'Add Institution', 'newspack-plugin' ),
+				mobileIcon: 'plus',
 				href: '#/institutions/new',
+			} );
+			actions.push( {
+				type: 'more',
+				label: __( 'Advanced Settings', 'newspack-plugin' ),
+				action: () => setShowAdvancedSettings( true ),
 			} );
 		}
 		setHeaderData( {
 			actions,
+			subTitle: __(
+				'Give members of universities, libraries, and other organizations access by email domain, IP range, or reader data.',
+				'newspack-plugin'
+			),
 		} );
 	}, [ setHeaderData, data, isLoading ] );
 
@@ -77,23 +98,9 @@ export default function Institutions() {
 		// size put the institutions past it out of reach entirely: not listed, and so not
 		// editable. The value is apiFetch's, not the REST API's: the posts controller caps
 		// `per_page` at 100 and would reject -1 outright.
-		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit&_embed=wp:featuredmedia` } )
+		apiFetch< Institution[] >( { path: `${ API_PATH }?per_page=-1&context=edit` } )
 			.then( institutions => {
 				setData( institutions );
-				// Keep the gates screen header in sync: it promotes the
-				// Institutions entry point out of the kebab menu when the site
-				// has at least one institution. Only write when the derived
-				// value actually changes, since UPDATE_WIZARD_SETTINGS clones
-				// the whole wizard payload and this runs on every list fetch.
-				const hasInstitutions = institutions.length > 0;
-				if ( hasInstitutions !== lastHasInstitutions.current ) {
-					lastHasInstitutions.current = hasInstitutions;
-					updateWizardSettings( {
-						slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
-						path: [ 'config', 'has_institutions' ],
-						value: hasInstitutions,
-					} );
-				}
 			} )
 			.catch( () => {
 				addNotice( {
@@ -103,7 +110,7 @@ export default function Institutions() {
 				} );
 			} )
 			.finally( () => setIsLoading( false ) );
-	}, [ addNotice, updateWizardSettings ] );
+	}, [ addNotice ] );
 
 	useEffect( () => {
 		fetchData();
@@ -111,16 +118,6 @@ export default function Institutions() {
 
 	const fields: Field< Institution >[] = useMemo(
 		() => [
-			{
-				id: 'logo',
-				label: __( 'Logo', 'newspack-plugin' ),
-				type: 'media',
-				render: ( { item }: { item: Institution } ) => {
-					const url = item._embedded?.[ 'wp:featuredmedia' ]?.[ 0 ]?.source_url;
-					return url ? <img src={ url } alt={ item.title.raw } /> : null;
-				},
-				enableSorting: false,
-			},
 			{
 				id: 'id',
 				label: __( 'ID', 'newspack-plugin' ),
@@ -130,26 +127,21 @@ export default function Institutions() {
 				filterBy: false,
 				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Institution } ) => item.id,
-				render: ( { item }: { item: Institution } ) => <code>{ item.id }</code>,
+				render: ( { item }: { item: Institution } ) => item.id,
 			},
 			{
 				id: 'title',
 				label: __( 'Title', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Institution } ) => item.title.raw,
-				render: ( { item }: { item: Institution } ) => (
-					<div>
-						<strong>{ item.title.raw }</strong>
-					</div>
-				),
+				render: ( { item }: { item: Institution } ) => <div>{ item.title.raw }</div>,
 			},
 			{
 				id: 'description',
 				label: __( 'Description', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				getValue: ( { item }: { item: Institution } ) => item.excerpt.raw,
-				render: ( { item }: { item: Institution } ) =>
-					item.excerpt.raw ? <div className="newspack-institutions__description">{ item.excerpt.raw }</div> : null,
+				render: ( { item }: { item: Institution } ) => item.excerpt.raw || null,
 			},
 			{
 				id: 'email_domain',
@@ -157,7 +149,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_email_domain || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_email_domain;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ',' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -166,7 +158,7 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_ip_range || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_ip_range;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ',' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 			{
@@ -175,14 +167,14 @@ export default function Institutions() {
 				getValue: ( { item }: { item: Institution } ) => item.meta?.np_institution_reader_data || '',
 				render: ( { item }: { item: Institution } ) => {
 					const val = item.meta?.np_institution_reader_data;
-					return val ? <code>{ val }</code> : <span className="newspack-institutions__empty">&mdash;</span>;
+					return val ? <span>{ withBreakOpportunities( val, ';' ) }</span> : <span className="newspack-institutions__empty">&mdash;</span>;
 				},
 			},
 		],
 		[]
 	);
 
-	const actions: InstitutionAction[] = useMemo(
+	const actions: Action< Institution >[] = useMemo(
 		() => [
 			{
 				id: 'edit',
@@ -221,7 +213,6 @@ export default function Institutions() {
 			{
 				id: 'delete',
 				label: __( 'Delete', 'newspack-plugin' ),
-				isDestructive: true,
 				RenderModal: ( { items, closeModal }: { items: Institution[]; closeModal?: () => void } ) => {
 					const item = items[ 0 ];
 					const [ isDeleting, setIsDeleting ] = useState( false );
@@ -285,18 +276,29 @@ export default function Institutions() {
 	}
 
 	return (
-		<DataViews
-			className="newspack-institutions"
-			data={ processedData }
-			fields={ fields }
-			view={ view }
-			onChangeView={ setView }
-			actions={ actions }
-			paginationInfo={ paginationInfo }
-			defaultLayouts={ { table: {}, grid: {} } }
-			isLoading={ isLoading }
-			getItemId={ ( item: Institution ) => String( item.id ) }
-			search
-		/>
+		<>
+			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of institutions. */
+						_n( '%s institution', '%s institutions', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
+				className="newspack-institutions"
+				data={ processedData }
+				fields={ fields }
+				view={ view }
+				onChangeView={ setView }
+				actions={ actions }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ ( item: Institution ) => String( item.id ) }
+				search
+				inlineFilters
+			/>
+			{ showAdvancedSettings && <InstitutionsAdvancedSettings closeModal={ () => setShowAdvancedSettings( false ) } /> }
+		</>
 	);
 }

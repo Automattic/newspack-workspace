@@ -40,6 +40,9 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 			}
 		}
 		$this->fixture_files = [];
+		if ( null !== $this->fixture_dir && is_dir( $this->fixture_dir . 'sub' ) ) {
+			rmdir( $this->fixture_dir . 'sub' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
+		}
 		if ( null !== $this->fixture_dir && is_dir( $this->fixture_dir ) ) {
 			rmdir( $this->fixture_dir ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
 		}
@@ -148,17 +151,19 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It rejects unsafe names by character class — absolute paths, spaces,
-	 * backslashes, etc. fall back to NEWSPACK_PLUGIN_VERSION.
+	 * It rejects unsafe names by character class. Each name has a fixture on
+	 * disk, so only the rejection, not a missing file, can return
+	 * NEWSPACK_PLUGIN_VERSION.
 	 */
 	public function test_falls_back_to_plugin_version_when_name_is_unsafe() {
 		$unsafe = [
-			'/absolute/path',
 			'has spaces',
 			'name;with;semicolons',
 			'name\\with\\backslashes',
 		];
 		foreach ( $unsafe as $name ) {
+			$this->write_fixture( $name, '<?php return [ "version" => "fixture-version-that-should-never-be-returned" ];' );
+			$this->assertFileExists( $this->fixture_dir . $name . '.asset.php', 'The fixture must resolve, or this case proves nothing.' );
 			$this->assertSame(
 				NEWSPACK_PLUGIN_VERSION,
 				Newspack::asset_version( $name ),
@@ -169,10 +174,10 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 
 	/**
 	 * It rejects `..` segments even when the resolved path would point at a
-	 * real fixture. Without this guard a name like `foo/../foo` would resolve
-	 * on disk to `foo` and bypass the character-class regex (which allows `.`
-	 * inside segments). The fixture is intentionally resolvable to prove the
-	 * rejection branch — not the missing-file fallback — is what's working.
+	 * real fixture. Without this guard a name like `sub/../foo` would resolve
+	 * on disk to `foo` and pass the character-class regex (which allows `.`
+	 * inside segments). The `sub/` directory makes the traversal resolvable,
+	 * so only the rejection branch, not the missing-file fallback, can pass.
 	 */
 	public function test_rejects_dot_dot_segments_even_when_resolvable() {
 		$name    = 'tmp-test-traversal-' . wp_rand();
@@ -182,22 +187,27 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 		// Sanity check: the fixture itself resolves cleanly.
 		$this->assertSame( $version, Newspack::asset_version( $name ) );
 
-		// Each of these would filesystem-resolve to the fixture above if the
-		// `..` guard weren't doing its job. They must all fall back instead.
-		$traversals = [
-			'..',
-			'../' . $name,
-			$name . '/../' . $name,
-			'../../' . $name,
-		];
-		foreach ( $traversals as $traversal ) {
-			Newspack::asset_version_reset_cache();
-			$this->assertSame(
-				NEWSPACK_PLUGIN_VERSION,
-				Newspack::asset_version( $traversal ),
-				"Traversal should fall back, not resolve via filesystem: {$traversal}"
-			);
-		}
+		wp_mkdir_p( $this->fixture_dir . 'sub' );
+		$traversal = 'sub/../' . $name;
+		$this->assertFileExists( $this->fixture_dir . $traversal . '.asset.php', 'The traversal must resolve, or this test proves nothing.' );
+
+		Newspack::asset_version_reset_cache();
+		$this->assertSame(
+			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( $traversal ),
+			"Traversal should fall back, not resolve via filesystem: {$traversal}"
+		);
+
+		// A leading `..`, read from inside `sub/`, resolves to the same fixture.
+		$from_sub = fn() => $this->fixture_dir . 'sub/';
+		add_filter( 'newspack_asset_dist_dir', $from_sub, 20 );
+		Newspack::asset_version_reset_cache();
+		$this->assertSame(
+			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( '../' . $name ),
+			'A leading `..` should fall back, not resolve via filesystem.'
+		);
+		remove_filter( 'newspack_asset_dist_dir', $from_sub, 20 );
 	}
 
 	/**

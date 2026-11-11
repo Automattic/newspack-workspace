@@ -22,13 +22,16 @@ const logout = (
 
 export default function SitesNav() {
 	const sites = getSites();
+	if ( ! remoteSite && ! sites.length ) {
+		return null;
+	}
 	const leaveLabel = sprintf(
 		// translators: %s is the name of the site.
 		__( 'Leave %s', 'newspack-story-budget' ),
 		getCurrentSiteName()
 	);
 	return (
-		<HStack justify={ remoteSite ? 'space-between' : 'end' } style={ { marginLeft: '-16px' } }>
+		<HStack justify={ remoteSite ? 'space-between' : 'end' }>
 			{ remoteSite && (
 				<Button href={ getLeaveSiteUrl() } variant="secondary" size="small" icon={ logout } iconPosition="right" iconSize={ 16 }>
 					{ leaveLabel }
