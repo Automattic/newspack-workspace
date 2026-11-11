@@ -10,6 +10,11 @@ import EndTestModal from './end-test-modal';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
+// Pinned so the en-US expectations below hold on a host in any locale.
+beforeEach( () => {
+	document.documentElement.lang = 'en-US';
+} );
+
 const test = {
 	test_id: 'donate',
 	name: 'Donate banner',

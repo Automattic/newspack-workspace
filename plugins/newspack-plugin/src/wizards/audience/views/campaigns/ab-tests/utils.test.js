@@ -12,6 +12,11 @@ import {
 	splitSummary,
 } from './utils';
 
+// Pinned so the en-US expectations below hold on a host in any locale.
+beforeEach( () => {
+	document.documentElement.lang = 'en-US';
+} );
+
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
 describe( 'getTestStatus', () => {
@@ -40,10 +45,16 @@ describe( 'getStatusIntent', () => {
 } );
 
 describe( 'formatLift', () => {
-	it( 'always shows a sign, and a dash when there is nothing to compare', () => {
+	it( 'shows a sign on any lift, and a dash when there is nothing to compare', () => {
 		expect( formatLift( 41.6 ) ).toBe( '+41.6%' );
 		expect( formatLift( -3.25 ) ).toBe( '-3.3%' );
 		expect( formatLift( null ) ).toBe( '—' );
+	} );
+
+	it( 'leaves a zero lift unsigned, including one rounded down to negative zero', () => {
+		expect( formatLift( 0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0.04 ) ).toBe( '0.0%' );
 	} );
 } );
 
@@ -56,13 +67,12 @@ describe( 'formatConfidence', () => {
 	} );
 } );
 
-describe( 'percentages in the site’s language', () => {
+describe( 'percentages in the page’s language', () => {
 	const setLang = lang => {
 		document.documentElement.lang = lang;
 	};
-	afterEach( () => setLang( '' ) );
 
-	it( 'uses the site’s decimal mark and percent sign placement', () => {
+	it( 'uses the page’s decimal mark and percent sign placement', () => {
 		setLang( 'fr-FR' );
 		expect( formatRate( 2.6912 ) ).toMatch( /^2,69\s%$/ );
 		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, { reliable: 'Fiable' } ) ).toMatch( /^99,1\s% Fiable$/ );

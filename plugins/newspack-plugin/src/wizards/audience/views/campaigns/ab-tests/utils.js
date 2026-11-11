@@ -101,10 +101,11 @@ export const getStatusIntent = status => {
 };
 
 /**
- * A percentage in the site's language, so the decimal mark and the percent
- * sign's place match the translated sentence around it: "2,69 %" in French,
- * "%2,69" in Turkish. The language comes from the page, as formatCount() reads
- * it, and the same fallback applies to locale tags Intl rejects.
+ * A percentage in the page's language, which in wp-admin is the admin's own,
+ * so the decimal mark and the percent sign's place match the translated
+ * sentence around it: "2,69 %" in French, "%2,69" in Turkish. The language
+ * comes from the page, as formatCount() reads it, and the same fallback
+ * applies to locale tags Intl rejects.
  *
  * @param {number} percent  Value out of 100.
  * @param {number} decimals Digits after the decimal mark, always shown.
@@ -134,9 +135,9 @@ export const formatRate = rate => ( rate === null || rate === undefined ? DASH :
 
 /**
  * @param {?number} lift Percent change against A.
- * @return {string} Formatted, always signed.
+ * @return {string} Formatted, signed unless it rounds to zero.
  */
-export const formatLift = lift => ( lift === null || lift === undefined ? DASH : formatPercent( lift, 1, { signDisplay: 'always' } ) );
+export const formatLift = lift => ( lift === null || lift === undefined ? DASH : formatPercent( lift, 1, { signDisplay: 'exceptZero' } ) );
 
 /**
  * Confidence split into the percentage and its label.
