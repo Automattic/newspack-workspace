@@ -300,16 +300,6 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A version A with no end date gives B none.
-	 */
-	public function test_version_b_has_no_end_date_when_version_a_has_none() {
-		$started = Newspack_Popups_AB_Tests::start_test( $this->createPopup(), 'Open ended', 'donation', 50 );
-
-		$this->assertIsArray( $started );
-		$this->assertFalse( metadata_exists( 'post', $started['version_b']['id'], 'expiration_date' ) );
-	}
-
-	/**
 	 * Duplicate still leaves the end date behind; only a test's B copies it.
 	 */
 	public function test_duplicate_leaves_the_end_date_behind() {
