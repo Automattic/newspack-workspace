@@ -453,7 +453,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without server-side tracking the handler stores `false`, as before.
+	 * Without server-side tracking the handler stores `false`.
 	 */
 	public function test_cancellation_without_tracking_stores_false() {
 		$this->set_tracking( false );

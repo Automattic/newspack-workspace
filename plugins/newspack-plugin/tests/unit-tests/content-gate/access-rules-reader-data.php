@@ -111,8 +111,7 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Arrays, objects and null match only by their raw stored form, as every rule
-	 * did before values were decoded.
+	 * Arrays, objects and null match only by their raw stored form.
 	 */
 	public function test_array_value_matches_only_by_raw_form() {
 		Reader_Data::update_item( $this->uid, 'active_subscriptions', [ 1, 2 ] );

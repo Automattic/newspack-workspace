@@ -493,8 +493,8 @@ class Contact_Pull {
 	 * `reader_data_write_failed` — Reader_Data::update_item() rejections are
 	 * validation-level and deterministic (`invalid_value` for an empty
 	 * sanitized value, `too_many_items` at the per-reader key cap for a field
-	 * that is not read-only), so a retry
-	 * would re-fetch from the provider only to fail the exact same write again.
+	 * that is not read-only), so a retry would re-fetch from the provider only
+	 * to fail the exact same write again.
 	 * `no_selected_incoming_fields` — a configuration state, not a failure the
 	 * provider can recover from. `invalid_pull_payload` — the integration's own
 	 * return type is wrong, which no amount of waiting fixes.

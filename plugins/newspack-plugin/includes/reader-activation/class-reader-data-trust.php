@@ -302,13 +302,12 @@ final class Reader_Data_Trust {
 	/**
 	 * Whether a stored value equals a reader-data rule value.
 	 *
-	 * A rule value equal to the raw stored value always matches, as every rule did
-	 * before values were decoded, so a rule on a list such as
-	 * `active_memberships=[5]` keeps matching. Beyond that, the stored side is
-	 * JSON-decoded and compared by type: strings exactly, whether the rule value
-	 * is bare or JSON-quoted, booleans as `true`/`false`, numbers numerically.
-	 * Arrays, objects and null match only by the raw form. Callers trim the rule
-	 * value.
+	 * A rule value equal to the raw stored value always matches, so a rule
+	 * written against the stored form, such as `active_memberships=[5]`,
+	 * matches. Beyond that, the stored side is JSON-decoded and compared by
+	 * type: strings exactly, whether the rule value is bare or JSON-quoted,
+	 * booleans as `true`/`false`, numbers numerically. Arrays, objects and null
+	 * match only by the raw form. Callers trim the rule value.
 	 *
 	 * @param string $stored     Raw stored value.
 	 * @param string $rule_value Rule value.
