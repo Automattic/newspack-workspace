@@ -25,6 +25,15 @@ final class Newspack_Popups_AB_Tests {
 
 	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
 
+	/**
+	 * A random value replaced each time a test starts or resumes on a prompt.
+	 * An editor tab sends back the value it loaded, so a different one marks a
+	 * tab opened before then. Starting and ending change the Test ID, which
+	 * tells too, but resuming keeps it. Kept out of META_KEYS: it is no test
+	 * setting.
+	 */
+	const META_REVISION = 'newspack_popups_ab_revision';
+
 	// Not the whole key: bucket_meta_key() puts the site's table prefix in front.
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
@@ -495,6 +504,19 @@ final class Newspack_Popups_AB_Tests {
 				]
 			)
 		);
+
+		// In REST only so the editor loads it and sends it back; the save guard
+		// drops it from every save.
+		\register_meta(
+			'post',
+			self::META_REVISION,
+			array_merge(
+				$base,
+				[
+					'type' => 'string',
+				]
+			)
+		);
 	}
 
 	/**
@@ -561,7 +583,9 @@ final class Newspack_Popups_AB_Tests {
 	 * belong to starting, resuming and ending a test, which write them directly,
 	 * and no editor control sets them. The editor still sends them back as loaded,
 	 * so a tab opened before one of those actions would otherwise undo it: take
-	 * version A out of the test it just joined, or put an ended test back.
+	 * version A out of the test it just joined, or put an ended test back. The
+	 * revision is dropped the same way. Such a tab's goal and split are dropped
+	 * too, for every user, and the rest of its save goes through.
 	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
@@ -576,9 +600,15 @@ final class Newspack_Popups_AB_Tests {
 		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
 
+		// A tab opened before the test started, resumed or ended still holds the
+		// goal and split from then, and would put them back over the test's.
+		if ( $post_id && self::is_stale_ab_save( $post_id, $meta ) ) {
+			unset( $meta[ self::META_GOAL ], $meta[ self::META_CONTROL_SHARE ] );
+		}
+
 		// Dropped before the permission check below, which would otherwise refuse a
 		// restricted user's save over a stale value the save can't write anyway.
-		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ] );
+		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ], $meta[ self::META_REVISION ] );
 		$request->set_param( 'meta', $meta );
 
 		// A validity rule, not a permission, so it runs before the permission branch
@@ -619,6 +649,45 @@ final class Newspack_Popups_AB_Tests {
 		$request->set_param( 'meta', $meta );
 
 		return $prepared_post;
+	}
+
+	/**
+	 * Whether a save comes from a tab loaded before the prompt's test last
+	 * started, resumed or ended: the revision or Test ID it sends back differs
+	 * from the stored one. A key the save leaves out says nothing either way,
+	 * so a REST client that sends only the goal is taken at its word.
+	 *
+	 * The Test ID covers ending, which writes no revision, and tests started
+	 * before revisions existed.
+	 *
+	 * @param int   $post_id Prompt post ID.
+	 * @param array $meta    Meta sent with the save.
+	 * @return bool
+	 */
+	private static function is_stale_ab_save( $post_id, $meta ) {
+		foreach ( [ self::META_REVISION, self::META_TEST_ID ] as $meta_key ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				continue;
+			}
+			$sent = $meta[ $meta_key ];
+			if ( ! is_scalar( $sent ) && null !== $sent ) {
+				return true;
+			}
+			if ( (string) $sent !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Mark a prompt's test settings as changed, so a save from a tab loaded
+	 * before now can't put the old ones back.
+	 *
+	 * @param int $prompt_id Prompt post ID.
+	 */
+	private static function bump_revision( $prompt_id ) {
+		update_post_meta( $prompt_id, self::META_REVISION, wp_generate_uuid4() );
 	}
 
 	/**
@@ -1651,6 +1720,8 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' !== $end_date ) {
 			update_post_meta( $version_b, 'expiration_date', $end_date );
 		}
+		// First, so a stale save landing between these writes is caught too.
+		self::bump_revision( $prompt->ID );
 		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
 		update_post_meta( $prompt->ID, self::META_GOAL, $goal );
 		update_post_meta( $prompt->ID, self::META_CONTROL_SHARE, self::sanitize_control_share( $control_share ) );

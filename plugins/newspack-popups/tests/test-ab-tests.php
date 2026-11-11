@@ -1388,6 +1388,190 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The meta an editor tab loads for a prompt, as the given role.
+	 *
+	 * @param int    $prompt_id Prompt post ID.
+	 * @param string $role      Role of the user whose tab it is.
+	 * @return array
+	 */
+	private function open_tab( $prompt_id, $role = 'administrator' ) {
+		$this->start_rest_as( $role );
+		$route = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		return rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data()['meta'];
+	}
+
+	/**
+	 * Save from a tab: the meta it loaded sent back whole, with changes merged in,
+	 * as the current user.
+	 *
+	 * @param int   $prompt_id Prompt post ID.
+	 * @param array $tab_meta  Meta the tab loaded.
+	 * @param array $changes   Post fields to change; a 'meta' entry merges into the tab's meta.
+	 * @return WP_REST_Response
+	 */
+	private function save_from_tab( $prompt_id, $tab_meta, $changes ) {
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id );
+		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $tab_meta, $changes['meta'] ?? [] ) ] ) );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Assert a prompt's stored goal and split.
+	 *
+	 * @param int    $prompt_id Prompt post ID.
+	 * @param string $goal      Expected goal.
+	 * @param int    $share     Expected control share.
+	 */
+	private function assert_goal_and_share( $prompt_id, $goal, $share ) {
+		self::assertSame( $goal, get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, true ) );
+		self::assertSame( (string) $share, (string) get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
+	}
+
+	/**
+	 * A tab opened before Start still holds no goal and a 50/50 split. Its next
+	 * save keeps the test's goal and split, and the rest of the save goes through.
+	 */
+	public function test_a_tab_opened_before_start_keeps_the_goal_and_split() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$tab       = $this->open_tab( $prompt_id );
+		self::assertIsArray( Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Stale start', 'link_click', 70 ) );
+
+		$response = $this->save_from_tab(
+			$prompt_id,
+			$tab,
+			[
+				'title' => 'Edited in an old tab',
+				'meta'  => [ 'frequency' => 'once' ],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+		self::assertSame( 'Edited in an old tab', get_the_title( $prompt_id ) );
+		self::assertSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+	}
+
+	/**
+	 * Resuming keeps the Test ID, so only the revision tells a tab opened before
+	 * the resume from a current one. Its save keeps the resumed goal and split.
+	 */
+	public function test_a_tab_opened_before_resume_keeps_the_goal_and_split() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$this->start_rest_as( 'administrator' );
+		$started = Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Stale resume', 'link_click', 70 );
+		self::assertIsArray( $started );
+		$tab = $this->open_tab( $prompt_id );
+		wp_delete_post( $started['version_b']['id'], true );
+		$resumed = Newspack_Popups_AB_Tests::start_test( $prompt_id, Newspack_Popups_AB_Tests::get_test_name( $started['test_id'] ), 'donation', 30 );
+		self::assertIsArray( $resumed );
+		self::assertSame( $started['test_id'], $resumed['test_id'] );
+
+		$response = $this->save_from_tab( $prompt_id, $tab, [ 'title' => 'Edited before the resume' ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'donation', 30 );
+		self::assertSame( 'Edited before the resume', get_the_title( $prompt_id ) );
+	}
+
+	/**
+	 * Ending a test clears its versions' goal and split. A tab opened before the
+	 * end doesn't put them back.
+	 */
+	public function test_a_tab_opened_before_end_leaves_the_goal_and_split_cleared() {
+		$a = $this->create_test_variant( 'stale-end', 'a', null, [], 70 );
+		$this->create_test_variant( 'stale-end', 'b' );
+		update_post_meta( $a, Newspack_Popups_AB_Tests::META_GOAL, 'link_click' );
+		$tab = $this->open_tab( $a );
+		self::assertSame( 'link_click', $tab[ Newspack_Popups_AB_Tests::META_GOAL ] );
+		self::assertNotWPError( Newspack_Popups_AB_Tests::end_test( 'stale-end', 'a' ) );
+
+		$response = $this->save_from_tab( $a, $tab, [ 'title' => 'Edited before the end' ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		// get_post_meta() would report the registered default share for a deleted row.
+		self::assertFalse( metadata_exists( 'post', $a, Newspack_Popups_AB_Tests::META_GOAL ) );
+		self::assertFalse( metadata_exists( 'post', $a, Newspack_Popups_AB_Tests::META_CONTROL_SHARE ) );
+	}
+
+	/**
+	 * A test set up without a revision, as one started before revisions existed
+	 * was: the Test ID alone tells a tab opened before it.
+	 */
+	public function test_a_tab_opened_before_a_test_without_a_revision_keeps_the_goal_and_split() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$tab       = $this->open_tab( $prompt_id );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, 'no-revision' );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_VARIANT, 'a' );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_GOAL, 'link_click' );
+		update_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, 70 );
+
+		$response = $this->save_from_tab( $prompt_id, $tab, [ 'title' => 'Edited before a legacy start' ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+	}
+
+	/**
+	 * Before a test runs, a manager sets the goal and split from a current tab.
+	 */
+	public function test_a_current_tab_changes_the_goal_and_split() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$tab       = $this->open_tab( $prompt_id );
+
+		$response = $this->save_from_tab(
+			$prompt_id,
+			$tab,
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_GOAL => 'donation',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => 60,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'donation', 60 );
+	}
+
+	/**
+	 * Only starting and resuming a test write the revision. A save that
+	 * sends its own keeps the stored one, so it can't pass off a stale tab as current.
+	 */
+	public function test_a_save_never_writes_the_revision() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$this->start_rest_as( 'administrator' );
+		self::assertIsArray( Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Revision', 'link_click', 70 ) );
+		$stored = get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_REVISION, true );
+		self::assertNotSame( '', $stored );
+		$tab = $this->open_tab( $prompt_id );
+
+		$response = $this->save_from_tab( $prompt_id, $tab, [ 'meta' => [ Newspack_Popups_AB_Tests::META_REVISION => 'forged' ] ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( $stored, get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_REVISION, true ) );
+	}
+
+	/**
+	 * A user who can't change the test gets a stale tab's save through, without
+	 * its goal and split, instead of a refusal over values they never touched.
+	 */
+	public function test_a_restricted_users_stale_tab_saves_without_the_goal_and_split() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$tab       = $this->open_tab( $prompt_id, 'editor' );
+		$editor_id = get_current_user_id();
+		$this->start_rest_as( 'administrator' );
+		self::assertIsArray( Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Restricted stale', 'link_click', 70 ) );
+		wp_set_current_user( $editor_id );
+
+		$response = $this->save_from_tab( $prompt_id, $tab, [ 'title' => 'Edited by a restricted editor' ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+		self::assertSame( 'Edited by a restricted editor', get_the_title( $prompt_id ) );
+	}
+
+	/**
 	 * A null asks core to delete the key, which leaves an unset control share at
 	 * its default of 50. Nothing changes, so a restricted user's save goes through.
 	 */
