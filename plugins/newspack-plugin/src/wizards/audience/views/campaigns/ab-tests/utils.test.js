@@ -2,6 +2,7 @@ import {
 	canEndTest,
 	formatConfidence,
 	formatLift,
+	formatRate,
 	getRecommendation,
 	getVerdict,
 	getStatusIntent,
@@ -10,6 +11,11 @@ import {
 	sortTests,
 	splitSummary,
 } from './utils';
+
+// Pinned so the en-US expectations below hold on a host in any locale.
+beforeEach( () => {
+	document.documentElement.lang = 'en-US';
+} );
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -39,10 +45,16 @@ describe( 'getStatusIntent', () => {
 } );
 
 describe( 'formatLift', () => {
-	it( 'always shows a sign, and a dash when there is nothing to compare', () => {
+	it( 'shows a sign on a nonzero lift, and a dash when there is nothing to compare', () => {
 		expect( formatLift( 41.6 ) ).toBe( '+41.6%' );
 		expect( formatLift( -3.25 ) ).toBe( '-3.3%' );
 		expect( formatLift( null ) ).toBe( '—' );
+	} );
+
+	it( 'leaves a zero lift unsigned, including one rounded down to negative zero', () => {
+		expect( formatLift( 0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0.04 ) ).toBe( '0.0%' );
 	} );
 } );
 
@@ -52,6 +64,36 @@ describe( 'formatConfidence', () => {
 		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, labels ) ).toBe( '99.1% Reliable' );
 		expect( formatConfidence( { confidence: null, label: 'collecting' }, labels ) ).toBe( 'Too early' );
 		expect( formatConfidence( null, labels ) ).toBe( '—' );
+	} );
+} );
+
+describe( 'percentages in the page’s language', () => {
+	const setLang = lang => {
+		document.documentElement.lang = lang;
+	};
+
+	it( 'uses the page’s decimal mark and percent sign placement', () => {
+		setLang( 'fr-FR' );
+		expect( formatRate( 2.6912 ) ).toMatch( /^2,69\s%$/ );
+		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, { reliable: 'Fiable' } ) ).toMatch( /^99,1\s% Fiable$/ );
+		setLang( 'tr-TR' );
+		expect( formatRate( 2.6912 ) ).toBe( '%2,69' );
+	} );
+
+	it( 'keeps the sign on a lift in any language', () => {
+		setLang( 'de-DE' );
+		expect( formatLift( 41.6 ) ).toMatch( /^\+41,6\s%$/ );
+		expect( formatLift( -3.25 ) ).toMatch( /^-3,3\s%$/ );
+	} );
+
+	it( 'falls back to a shorter tag when Intl rejects the page’s locale', () => {
+		setLang( 'pt-PT-ao90' );
+		expect( formatRate( 2.6912 ) ).toBe( '2,69%' );
+	} );
+
+	it( 'shows the decimals even for a whole number', () => {
+		setLang( 'en-US' );
+		expect( formatRate( 3 ) ).toBe( '3.00%' );
 	} );
 } );
 

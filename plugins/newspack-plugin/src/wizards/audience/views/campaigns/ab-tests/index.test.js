@@ -14,6 +14,11 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 // eslint-disable-next-line import/order -- After the mock it reads.
 import { speak } from '@wordpress/a11y';
 
+// Pinned so the en-US expectations below hold on a host in any locale.
+beforeEach( () => {
+	document.documentElement.lang = 'en-US';
+} );
+
 jest.mock( '../../../../../../packages/components/src/with-wizard-screen', () => ( {
 	__esModule: true,
 	default: Component => props => (
