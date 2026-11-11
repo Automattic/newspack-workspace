@@ -284,6 +284,28 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 			$this->assertSame( '', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ), "test ID on prompt $id" );
 		}
 		$this->assertSame( 'ended', $this->rows( 't' )[0]['status'] );
+		$this->assertNull( $this->rows( 't' )[0]['started_at'] );
+	}
+
+	/**
+	 * A test that ran and was then paused keeps its start when it ends, so its
+	 * results still have a window to count from.
+	 */
+	public function test_paused_test_keeps_its_start_when_it_ends() {
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		wp_update_post(
+			[
+				'ID'          => $ids['b'],
+				'post_status' => 'draft',
+			]
+		);
+		$this->assertNull( $this->rows( 't' )[0]['started_at'], 'a paused test lists no start' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$row = $this->rows( 't' )[0];
+		$this->assertSame( 'ended', $row['status'] );
+		$this->assertSame( '2026-10-01T00:00:00Z', $row['started_at'] );
 	}
 
 	/**

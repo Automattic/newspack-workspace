@@ -83,7 +83,9 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 	const [ picked, setPicked ] = useState( null );
 	const letters = Object.keys( test.variants ).sort();
 	// A test left with one version, such as A after B was deleted, has nothing to choose.
-	const keep = 1 === letters.length ? letters[ 0 ] : picked ?? recommendation.letter;
+	// Without results the recommendation is A, which a test whose A was deleted lacks.
+	const fallback = letters.includes( recommendation.letter ) ? recommendation.letter : letters[ 0 ];
+	const keep = 1 === letters.length ? letters[ 0 ] : picked ?? fallback;
 	const [ isBusy, setIsBusy ] = useState( false );
 	const [ error, setError ] = useState( '' );
 	const formRef = useRef( null );

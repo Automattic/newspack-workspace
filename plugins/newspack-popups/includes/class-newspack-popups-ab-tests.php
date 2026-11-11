@@ -1333,7 +1333,7 @@ final class Newspack_Popups_AB_Tests {
 	 * and only the earliest goes on, before either has drafted anything. Then
 	 * every other prompt in the test goes to draft, which stops the split; a
 	 * draft that fails puts back the ones already drafted and removes the record,
-	 * so the test is still running and can be ended again. Only after every draft
+	 * so the test is as it was and can be ended again. Only after every draft
 	 * do the prompts leave the test, so a fatal in between leaves a test that has
 	 * ended but still lists its prompts, never one that has silently lost its
 	 * record. A fatal partway through the drafts can still leave a version
@@ -1371,10 +1371,13 @@ final class Newspack_Popups_AB_Tests {
 		if ( is_wp_error( $term ) ) {
 			return $term;
 		}
-		$record = [
+		// A paused test lists no start, since readers aren't split, but its results
+		// still count from the one recorded when it first ran.
+		$started_at = $test['started_at'] ?? ( self::get_recorded_starts( [ $test_id ] )[ $test_id ] ?? null );
+		$record     = [
 			'ended_at'      => gmdate( 'Y-m-d\TH:i:s\Z' ),
 			'kept'          => $keep,
-			'started_at'    => $test['started_at'],
+			'started_at'    => $started_at,
 			'goal'          => $test['goal'],
 			'control_share' => $test['control_share'],
 			'versions'      => array_map(
@@ -1427,7 +1430,7 @@ final class Newspack_Popups_AB_Tests {
 				}
 				delete_term_meta( $term->term_id, self::TERM_META_ENDED, $stored );
 				// A reader request that saw the record may have recorded that the
-				// site has no tests running; the test is running again.
+				// site has no tests running, and the test may be splitting readers again.
 				self::invalidate_has_tests();
 				return is_wp_error( $result ) ? $result : new WP_Error( 'newspack_popups_ab_end_failed', __( 'Could not end the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 			}

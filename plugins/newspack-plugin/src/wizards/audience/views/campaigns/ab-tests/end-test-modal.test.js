@@ -112,6 +112,20 @@ describe( 'EndTestModal', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/donate/end', method: 'POST', data: { keep: 'b' } } );
 	} );
 
+	it( 'preselects a version the test has when A was deleted', async () => {
+		apiFetch.mockResolvedValueOnce( { test_id: 'donate', status: 'ended' } );
+		const onEnded = jest.fn();
+		const bAndC = {
+			...test,
+			variants: { b: test.variants.b, c: { id: 3, title: 'Donate banner: annual ask', status: 'publish' } },
+		};
+		render( <EndTestModal test={ bAndC } stats={ null } onEnded={ onEnded } onClose={ jest.fn() } /> );
+		expect( screen.getByRole( 'radio', { checked: true } ) ).toHaveAccessibleName( expect.stringMatching( /^Keep B/ ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		await waitFor( () => expect( onEnded ).toHaveBeenCalled() );
+		expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/donate/end', method: 'POST', data: { keep: 'b' } } );
+	} );
+
 	it( 'shows the error and stays open when ending fails', async () => {
 		apiFetch.mockRejectedValue( { message: 'This test has already ended.' } );
 		const onEnded = jest.fn();
