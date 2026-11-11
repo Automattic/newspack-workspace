@@ -45,6 +45,7 @@ class Initializer {
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-fix-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-convert-subscription-variation.php';
 		include_once NEWSPACK_ABSPATH . 'includes/cli/class-complimentary-access-cli.php';
+		include_once NEWSPACK_ABSPATH . 'includes/cli/class-post-subtitle-backfill.php';
 	}
 
 	/**
@@ -106,6 +107,7 @@ class Initializer {
 		WP_CLI::add_command( 'newspack export-subscriptions', [ 'Newspack\CLI\Export', 'export_subscriptions' ] );
 		WP_CLI::add_command( 'newspack export-users', [ 'Newspack\CLI\Export', 'export_users' ] );
 		WP_CLI::add_command( 'newspack complimentary-access pre-mark', [ 'Newspack\CLI\Complimentary_Access_CLI', 'pre_mark' ] );
+		WP_CLI::add_command( 'newspack backfill-post-subtitles', [ 'Newspack\CLI\Post_Subtitle_Backfill', 'backfill' ] );
 
 		// Registered whether or not WooCommerce Memberships is active, unlike the
 		// migrate-* commands below: it reads `_wc_memberships_force_public`, ordinary
