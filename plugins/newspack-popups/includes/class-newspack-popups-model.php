@@ -198,6 +198,12 @@ final class Newspack_Popups_Model {
 				]
 			);
 		}
+		// Ahead of the loop, which writes each option as it goes, so a refused move
+		// leaves every option as it was.
+		$placement_error = Newspack_Popups_AB_Tests::get_placement_change_error( $id, array_intersect_key( $options, array_flip( [ 'placement', 'manual_only' ] ) ) );
+		if ( $placement_error ) {
+			return $placement_error;
+		}
 		foreach ( $options as $key => $value ) {
 			switch ( $key ) {
 				case 'frequency':

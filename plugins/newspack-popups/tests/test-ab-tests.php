@@ -1808,4 +1808,126 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
 		self::assertSame( 'flag-off-move', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 	}
+
+	/**
+	 * A version that reached an ineligible placement past the save guards drops
+	 * out of the live config, so readers stop being split around it, and every
+	 * version renders as untested.
+	 */
+	public function test_tests_config_leaves_out_a_version_on_an_ineligible_placement() {
+		$a_id = $this->create_test_variant( 'moved-b', 'a', [ 'placement' => 'inline' ] );
+		$b_id = $this->create_test_variant( 'moved-b', 'b', [ 'placement' => 'inline' ] );
+		self::assertArrayHasKey( 'moved-b', Newspack_Popups_AB_Tests::get_tests_config() );
+
+		update_post_meta( $b_id, 'placement', 'manual' );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+
+		self::assertArrayNotHasKey( 'moved-b', Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $a_id, true ) );
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $b_id, true ) );
+	}
+
+	/**
+	 * An overlay set to Manual only drops out the same way.
+	 */
+	public function test_tests_config_leaves_out_a_manual_only_overlay() {
+		$this->create_test_variant( 'manual-only-a', 'a', [ 'placement' => 'center' ] );
+		$b_id = $this->create_test_variant( 'manual-only-a', 'b', [ 'placement' => 'center' ] );
+		update_post_meta( $b_id, 'manual_only', true );
+
+		self::assertArrayNotHasKey( 'manual-only-a', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * A test that keeps a control and a challenger runs without the dropped
+	 * version, which renders as untested rather than as a version no reader is
+	 * ever shown.
+	 */
+	public function test_a_dropped_version_renders_untested_while_its_test_runs() {
+		$a_id = $this->create_test_variant( 'three-way', 'a', [ 'placement' => 'inline' ] );
+		$this->create_test_variant( 'three-way', 'b', [ 'placement' => 'inline' ] );
+		$c_id = $this->create_test_variant( 'three-way', 'c', [ 'placement' => 'inline' ] );
+		update_post_meta( $c_id, 'placement', 'custom1' );
+
+		self::assertSame( [ 'a', 'b' ], Newspack_Popups_AB_Tests::get_tests_config()['three-way']['variants'] );
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $c_id, true ) );
+		self::assertSame(
+			[
+				'test_id' => 'three-way',
+				'variant' => 'a',
+			],
+			Newspack_Popups_AB_Tests::get_popup_ab_fields( $a_id, true )
+		);
+	}
+
+	/**
+	 * The Campaigns wizard saves through set_popup_options(), which refuses the
+	 * same moves the editor does, before writing any option, and as a notice
+	 * rather than the wizard's unrecoverable error.
+	 */
+	public function test_wizard_save_refuses_moving_a_tested_prompt_to_an_ineligible_placement() {
+		$prompt_id = $this->create_test_variant( 'wizard-move', 'a', [ 'placement' => 'inline' ] );
+
+		$result = Newspack_Popups_Model::set_popup_options(
+			$prompt_id,
+			[
+				'frequency' => 'once',
+				'placement' => 'manual',
+			]
+		);
+
+		self::assertWPError( $result );
+		self::assertSame( 'newspack_popups_ab_ineligible_placement', $result->get_error_code() );
+		self::assertSame( 'notice', $result->get_error_data()['level'] );
+		self::assertSame( 'inline', get_post_meta( $prompt_id, 'placement', true ) );
+		self::assertNotSame( 'once', get_post_meta( $prompt_id, 'frequency', true ) );
+	}
+
+	/**
+	 * The wizard can't set a tested overlay to Manual only either.
+	 */
+	public function test_wizard_save_refuses_manual_only_on_a_tested_overlay() {
+		$prompt_id = $this->create_test_variant( 'wizard-manual-only', 'a', [ 'placement' => 'center' ] );
+
+		$result = Newspack_Popups_Model::set_popup_options( $prompt_id, [ 'manual_only' => true ] );
+
+		self::assertWPError( $result );
+		self::assertStringContainsString( 'Manual only', $result->get_error_message() );
+		self::assertFalse( rest_sanitize_boolean( get_post_meta( $prompt_id, 'manual_only', true ) ) );
+	}
+
+	/**
+	 * The wizard sends every option on each save, so a prompt already on an
+	 * ineligible placement keeps taking other edits, and an untested prompt can
+	 * move anywhere.
+	 */
+	public function test_wizard_save_allows_edits_that_do_not_move_a_tested_prompt() {
+		$stuck_id = $this->create_test_variant( 'wizard-stuck', 'a', [ 'placement' => 'inline' ] );
+		update_post_meta( $stuck_id, 'placement', 'manual' );
+		$result = Newspack_Popups_Model::set_popup_options(
+			$stuck_id,
+			[
+				'placement'   => 'manual',
+				'manual_only' => false,
+				'frequency'   => 'once',
+			]
+		);
+		self::assertNotWPError( $result );
+		self::assertSame( 'once', get_post_meta( $stuck_id, 'frequency', true ) );
+
+		$untested_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		self::assertNotWPError( Newspack_Popups_Model::set_popup_options( $untested_id, [ 'placement' => 'manual' ] ) );
+		self::assertSame( 'manual', get_post_meta( $untested_id, 'placement', true ) );
+	}
+
+	/**
+	 * With the flag off, the wizard's save is not checked, as the editor's isn't.
+	 */
+	public function test_wizard_save_placement_rule_is_off_with_the_flag() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$prompt_id = $this->create_test_variant( 'wizard-flag-off', 'a', [ 'placement' => 'inline' ] );
+
+		self::assertNotWPError( Newspack_Popups_Model::set_popup_options( $prompt_id, [ 'placement' => 'manual' ] ) );
+		self::assertSame( 'manual', get_post_meta( $prompt_id, 'placement', true ) );
+	}
 }
