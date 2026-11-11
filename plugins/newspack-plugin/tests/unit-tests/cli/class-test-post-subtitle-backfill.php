@@ -2,10 +2,9 @@
 /**
  * Tests for the `backfill-post-subtitles` CLI command.
  *
- * The sanitizer itself (`newspack_sanitize_post_subtitle()`, normally defined by
- * newspack-theme) is not plugin code and is not loaded here, so a minimal stub with the
- * theme's own allow-list stands in for it — this suite is about which rows the command
- * reads, writes, and reports, not about what the sanitizer does to a given string.
+ * This suite is about which rows the command reads, writes, and reports, not about
+ * what the sanitizer does to a given string — see post-subtitle-sanitizer-mock.php for
+ * why a stub stands in for the real one.
  *
  * @package Newspack\Tests
  */
@@ -202,9 +201,9 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	/**
 	 * A literal backslash in the sanitized value survives the write.
 	 *
-	 * WordPress's update_post_meta() unslashes its value before saving, on the
-	 * assumption that a caller is passing on already-slashed request data. A write that
-	 * skips wp_slash() first would have this silently strip every backslash.
+	 * Unlike update_post_meta(), update_metadata_by_mid() does not unslash its value —
+	 * a wp_slash() call creeping back into the write path would have this silently
+	 * strip every backslash.
 	 */
 	public function test_preserves_a_literal_backslash_when_live() {
 		$post_id = self::factory()->post->create();
@@ -216,9 +215,9 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A revision keeps its own raw value; update_post_meta() on a revision ID redirects
-	 * the write to its parent post, so writing through a revision would overwrite the
-	 * parent's current value instead of the revision's own.
+	 * A revision keeps its own raw value; this meta key is registered without
+	 * revisions_enabled, so nothing in core's revision machinery ever reads or restores
+	 * a revision's own copy, and there is nothing to sanitize it for.
 	 */
 	public function test_excludes_revisions() {
 		$parent_id   = self::factory()->post->create();
@@ -307,5 +306,46 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'A failed write must not be reported as changed.' );
 		$this->assertStringContainsString( 'update_metadata_by_mid() failed for: ' . $post_id, $output );
 		$this->assertSame( 1, WP_CLI::$halt_code );
+	}
+
+	/**
+	 * A row whose stored value no longer matches what the upfront batch read saw is
+	 * left alone rather than overwritten — guarding against a save that lands in the
+	 * gap between that read and this row's own write (an editor's own edit, or another
+	 * run of this command overlapping this one).
+	 */
+	public function test_write_sanitized_value_skips_a_row_that_changed_since_it_was_read() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+
+		global $wpdb;
+		$meta_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = 'newspack_post_subtitle'",
+				$post_id
+			)
+		);
+
+		// The row as a batch read saw it, before a save lands in the gap.
+		$stale_row = (object) [
+			'meta_id'    => $meta_id,
+			'post_id'    => $post_id,
+			'meta_value' => '<script>alert(1)</script><b>Bold</b> subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+		];
+
+		// A save on the same row — same meta_id — lands in the gap before the write.
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->postmeta,
+			[ 'meta_value' => "An editor's newer subtitle" ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[ 'meta_id' => $meta_id ]
+		);
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		$write_sanitized_value = new ReflectionMethod( Post_Subtitle_Backfill::class, 'write_sanitized_value' );
+		$write_sanitized_value->setAccessible( true );
+		$result = $write_sanitized_value->invoke( null, $stale_row, 'alert(1)<b>Bold</b> subtitle' );
+
+		$this->assertSame( 'concurrent-change', $result );
+		$this->assertSame( "An editor's newer subtitle", $this->stored_subtitle( $post_id ), 'The newer value must survive untouched.' );
 	}
 }
