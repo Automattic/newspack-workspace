@@ -174,10 +174,6 @@ $drawer-size-x-large: 640px;
 	animation: 0.2s ease-in forwards newspack-drawer-overlay-fade-out;
 }
 
-.components-modal__frame.newspack-drawer .components-popover__content {
-	opacity: 1;
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.components-modal__frame.newspack-drawer,
 	.components-modal__frame.newspack-drawer.is-exiting,

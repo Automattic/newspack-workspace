@@ -2,10 +2,6 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-integration-logs {
-	.dataviews__view-actions {
-		margin-bottom: wp-vars.$grid-unit-20;
-	}
-
 	.dataviews-item-actions .components-button:not(:disabled) {
 		cursor: pointer;
 	}
@@ -37,6 +33,14 @@
 	font: inherit;
 	padding: 0;
 	text-align: left;
+
+	&.is-truncated {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 
 	&:hover {
 		color: var( --wp-admin-theme-color );

@@ -66,10 +66,17 @@ const placementMap = {
 	manual: __( 'Manual Only', 'newspack-plugin' ),
 };
 
-export const placementForPopup = ( { options: { frequency, placement } } ) => {
+export const placementForPopup = ( { options: { frequency, placement, manual_only } } ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 	if ( 'manual' === frequency || customPlacements.hasOwnProperty( placement ) ) {
 		return __( 'Custom Placement', 'newspack-plugin' );
+	}
+	if ( manual_only && isOverlay( { options: { placement } } ) ) {
+		return sprintf(
+			// translators: %s: overlay placement, e.g. "Center Overlay".
+			__( '%s (Manual Only)', 'newspack-plugin' ),
+			placementMap[ placement ]
+		);
 	}
 	return placementMap[ placement ];
 };
@@ -98,7 +105,7 @@ const frequencyMap = {
 	weekly: __( 'Once a week', 'newspack-plugin' ),
 	daily: __( 'Once a day', 'newspack-plugin' ),
 	always: __( 'Every pageview', 'newspack-plugin' ),
-	custom: __( 'Custom frequency (edit prompt to manage)', 'newspack-plugin' ),
+	custom: __( 'Custom', 'newspack-plugin' ),
 };
 
 export const frequenciesForPopup = () => {
@@ -109,41 +116,76 @@ export const overlaySizesForPopups = () => {
 	return window.newspackAudienceCampaigns?.overlay_sizes;
 };
 
-export const getCardClassName = ( status, forceDisabled = false ) => {
-	if ( 'publish' !== status || forceDisabled ) {
-		return 'newspack-card__is-disabled';
-	}
-	return 'newspack-card__is-supported';
-};
-
 const ensureTermArray = terms => ( Array.isArray( terms ) ? terms.filter( Boolean ) : [] );
 
-export const promptDescription = prompt => {
-	const { categories, tags, campaign_groups: campaigns, status } = prompt;
-	const descriptionMessages = [];
+export const promptStatus = ( { status }, segmentDisabled = false ) => {
+	if ( 'publish' === status ) {
+		return segmentDisabled
+			? { label: __( 'Segment Disabled', 'newspack-plugin' ), intent: 'low' }
+			: { label: __( 'Active', 'newspack-plugin' ), intent: 'stable' };
+	}
+	if ( 'pending' === status ) {
+		return { label: __( 'Pending Review', 'newspack-plugin' ), intent: 'draft' };
+	}
+	if ( 'future' === status ) {
+		return { label: __( 'Scheduled', 'newspack-plugin' ), intent: 'informational' };
+	}
+	if ( 'trash' === status ) {
+		return { label: __( 'Trash', 'newspack-plugin' ), intent: 'draft' };
+	}
+	return { label: __( 'Inactive', 'newspack-plugin' ), intent: 'draft' };
+};
+
+/**
+ * The badge that marks a prompt as one version of a running A/B test.
+ *
+ * The payload carries `ab_test_id` only while the test has a published A and
+ * at least one other published version, so the test's own state needs no check
+ * here. Draft, scheduled and private versions still carry it but take no part
+ * in the test, so the prompt itself must be published. A disabled segment is
+ * left to the status badge, matching the A/B Tests tab, which doesn't look at
+ * segments either.
+ *
+ * @param {Object} prompt The prompt.
+ * @return {?Object} `{ label, intent }`, or null when the prompt gets no badge.
+ */
+export const abTestBadge = prompt => {
+	if ( ! prompt.ab_test_id || ! prompt.ab_variant || 'publish' !== prompt.status ) {
+		return null;
+	}
+	return {
+		label: sprintf(
+			// Translators: %s is the letter of the prompt's version in its A/B test, such as A or B.
+			__( 'A/B test · %s', 'newspack-plugin' ),
+			String( prompt.ab_variant ).toUpperCase()
+		),
+		intent: 'informational',
+	};
+};
+
+export const promptDetails = prompt => {
+	const { categories, tags, campaign_groups: campaigns } = prompt;
 	const validCampaigns = ensureTermArray( campaigns );
 	const validCategories = ensureTermArray( categories );
 	const validTags = ensureTermArray( tags );
+	const names = terms => terms.map( ( { name } ) => name ).join( ', ' );
+	const details = [
+		{ label: __( 'Placement:', 'newspack-plugin' ), value: placementForPopup( prompt ) },
+		{ label: __( 'Frequency:', 'newspack-plugin' ), value: frequencyForPopup( prompt ) },
+	];
 	if ( validCampaigns.length > 0 ) {
-		const campaignsList = validCampaigns.map( ( { name } ) => name ).join( ', ' );
-		descriptionMessages.push(
-			( validCampaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
-		);
+		details.push( {
+			label: _n( 'Campaign:', 'Campaigns:', validCampaigns.length, 'newspack-plugin' ),
+			value: names( validCampaigns ),
+		} );
 	}
 	if ( validCategories.length > 0 ) {
-		descriptionMessages.push( __( 'Categories: ', 'newspack-plugin' ) + validCategories.map( category => category.name ).join( ', ' ) );
+		details.push( { label: __( 'Categories:', 'newspack-plugin' ), value: names( validCategories ) } );
 	}
 	if ( validTags.length > 0 ) {
-		descriptionMessages.push( __( 'Tags: ', 'newspack-plugin' ) + validTags.map( tag => tag.name ).join( ', ' ) );
+		details.push( { label: __( 'Tags:', 'newspack-plugin' ), value: names( validTags ) } );
 	}
-	if ( 'pending' === status ) {
-		descriptionMessages.push( __( 'Pending review', 'newspack-plugin' ) );
-	}
-	if ( 'future' === status ) {
-		descriptionMessages.push( __( 'Scheduled', 'newspack-plugin' ) );
-	}
-	descriptionMessages.push( __( 'Frequency: ', 'newspack-plugin' ) + frequencyForPopup( prompt ) );
-	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
+	return details;
 };
 
 /**
@@ -177,7 +219,7 @@ const dateBoundLabel = bound => {
  * Render a date-range criterion value.
  *
  * Each bound is itself an object, so the generic `key: value` pass in
- * segmentDescription() would stringify it as "[object Object]".
+ * segmentDescriptionItems() would stringify it as "[object Object]".
  *
  * @param {*} value The criterion value.
  * @return {?string} A human-readable range, or null when the value isn't one.
@@ -204,7 +246,7 @@ const dateRangeLabel = value => {
 	return null;
 };
 
-export const segmentDescription = segment => {
+export const segmentDescriptionItems = segment => {
 	const descriptionMessages = [];
 
 	// If the segment is disabled.
@@ -252,6 +294,26 @@ export const segmentDescription = segment => {
 			}
 		}
 	}
+
+	return descriptionMessages;
+};
+
+/**
+ * Split a plain criteria message at its label, so the label can be styled apart.
+ *
+ * @param {*} message A criteria message: a "Label: value" string, or a React element that handles its own label.
+ * @return {Object} The `label`, when there is one, and the `value`.
+ */
+export const splitCriteriaMessage = message => {
+	const separator = 'string' === typeof message ? message.indexOf( ': ' ) : -1;
+	if ( separator < 1 ) {
+		return { value: message };
+	}
+	return { label: message.slice( 0, separator + 1 ), value: message.slice( separator + 2 ) };
+};
+
+export const segmentDescription = segment => {
+	const descriptionMessages = segmentDescriptionItems( segment );
 
 	if ( ! descriptionMessages.length ) {
 		return null;
@@ -301,7 +363,8 @@ const FavoriteCategoriesNames = ( { ids } ) => {
 	}
 	return (
 		<span>
-			{ __( 'Favorite Categories:', 'newspack-plugin' ) } { favoriteCategoryNames.length ? favoriteCategoryNames.join( ', ' ) : '' }
+			<span className="newspack-campaigns__details-key">{ __( 'Favorite Categories:', 'newspack-plugin' ) }</span>{ ' ' }
+			{ favoriteCategoryNames.length ? favoriteCategoryNames.join( ', ' ) : '' }
 		</span>
 	);
 };
@@ -347,7 +410,7 @@ const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
 	} );
 	return (
 		<span>
-			{ label } { labels.length ? labels.join( ', ' ) : '' }
+			<span className="newspack-campaigns__details-key">{ label }</span> { labels.length ? labels.join( ', ' ) : '' }
 		</span>
 	);
 };
@@ -471,9 +534,15 @@ export const warningForPopup = ( prompts, prompt ) => {
 				( 0 === promptCategories.length && 0 === conflictCategories.length ) ||
 				promptCategories.some( category => conflictCategories.some( conflictCategory => category.term_id === conflictCategory.term_id ) );
 
+			// Different arms of one A/B test overlap on purpose: each reader sees one of
+			// them. Two prompts on the same arm reach the same readers, so they still conflict.
+			const isOtherArmOfSameAbTest =
+				Boolean( prompt.ab_test_id ) && conflict.ab_test_id === prompt.ab_test_id && conflict.ab_variant !== prompt.ab_variant;
+
 			return (
 				'publish' === conflict.status &&
 				conflict.id !== prompt.id &&
+				! isOtherArmOfSameAbTest &&
 				isSameType( prompt, conflict ) &&
 				sharesSegments( prompt.segments, conflict.segments ) &&
 				hasConflictingCategory

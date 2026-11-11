@@ -835,16 +835,74 @@ class WC_Product {
 		$this->meta[ $key ] = $value;
 	}
 	/**
+	 * Drop a meta value in memory, as WC_Data::delete_meta_data() does before a save().
+	 *
+	 * @param string $key Meta key.
+	 */
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
+	}
+	/**
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 * Fires the before-save action WC_Data::save() fires, so code that adjusts a
+	 * product as it is saved runs here too.
 	 *
 	 * @return int The product ID.
 	 */
 	public function save() {
+		do_action( 'woocommerce_before_product_object_save', $this, null );
 		global $products_database;
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();
+	}
+	/**
+	 * Setters Donations::update_donation_product() calls on an existing product.
+	 * They store into the same data the getters above read, so a test can run
+	 * that method against mock products and read the results back.
+	 *
+	 * @param string $value Product name.
+	 */
+	public function set_name( $value ) {
+		$this->data['name'] = $value;
+	}
+	public function set_regular_price( $value ) {
+		$this->data['regular_price'] = $value;
+	}
+	public function set_children( $value ) {
+		$this->data['children'] = $value;
+	}
+	public function set_status( $value ) {
+		$this->data['status'] = $value;
+	}
+	public function set_virtual( $value ) {
+		$this->data['virtual'] = $value;
+	}
+	public function set_downloadable( $value ) {
+		$this->data['downloadable'] = $value;
+	}
+	public function set_catalog_visibility( $value ) {
+		$this->data['catalog_visibility'] = $value;
+	}
+	public function set_sold_individually( $value ) {
+		$this->data['sold_individually'] = $value;
+	}
+}
+
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * Minimal stand-in for WooCommerce's wc_format_decimal(): normalizes a numeric
+	 * value to a string without trailing zeros, which is all the donation code needs.
+	 *
+	 * @param mixed $number Number to format.
+	 * @return string
+	 */
+	function wc_format_decimal( $number ) {
+		if ( '' === $number || null === $number ) {
+			return '';
+		}
+		return (string) ( 0 + $number );
 	}
 }
 
@@ -1012,6 +1070,9 @@ class WC_Order {
 		// customer must read the same way when another suite's query walks it.
 		return $this->data['customer_id'] ?? 0;
 	}
+	public function get_user() {
+		return $this->get_customer_id() ? get_user_by( 'id', $this->get_customer_id() ) : false;
+	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
 	}
@@ -1122,6 +1183,9 @@ class WC_Order {
 	}
 	public function get_checkout_payment_url() {
 		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
+	}
+	public function get_order_number() {
+		return (string) $this->get_id();
 	}
 	/**
 	 * Accepts a gateway object or id string, like the real setter.
@@ -2061,6 +2125,12 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
 		}
 	}
+	if ( $wants_any || in_array( 'resubscribe', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_resubscribe' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
+	}
 	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
 		foreach ( (array) $subscriptions_database as $id => $subscription ) {
 			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
@@ -2363,6 +2433,9 @@ function wc_clean( $var ) {
 		return array_map( 'wc_clean', $var );
 	}
 	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
+}
+function wc_price( $price, $args = [] ) {
+	return '<span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#36;</span>' . number_format( (float) $price, 2 ) . '</bdi></span>';
 }
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;

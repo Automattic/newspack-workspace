@@ -12,6 +12,27 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
+	 * APCA luminance below which a close button fill counts as near-black, see close_button_state_colors(). The value keeps the neutral cut between #262626 and #282828, matching the previous cut rather than any APCA guidance.
+	 *
+	 * @var float
+	 */
+	const CLOSE_BUTTON_LIGHTEN_LUMINANCE = 0.0125;
+
+	/**
+	 * The shares of the fill kept on hover and press, matching newspack-ui and the block theme.
+	 *
+	 * @var float[]
+	 */
+	const CLOSE_BUTTON_SHARES = [ 0.85, 0.75 ];
+
+	/**
+	 * The least a near-black fill lightens on hover and press: what pure black would get, as shares of black kept.
+	 *
+	 * @var float[]
+	 */
+	const CLOSE_BUTTON_LIGHTEN_FLOORS = [ 0.75, 0.6 ];
+
+	/**
 	 * Transient key caching whether the site has any published above-header prompts.
 	 *
 	 * @var string
@@ -177,6 +198,14 @@ final class Newspack_Popups_Model {
 				]
 			);
 		}
+		// Ahead of the loop, which writes each option as it goes, so a refused move
+		// leaves every option as it was.
+		$placement_error = Newspack_Popups_AB_Tests::get_placement_change_error( $id, array_intersect_key( $options, array_flip( [ 'placement', 'manual_only' ] ) ) );
+		if ( $placement_error ) {
+			// The wizard renders error messages as HTML. The editor shows the same
+			// message as text, so the shared helper leaves it unescaped.
+			return new \WP_Error( $placement_error->get_error_code(), esc_html( $placement_error->get_error_message() ), $placement_error->get_error_data() );
+		}
 		foreach ( $options as $key => $value ) {
 			switch ( $key ) {
 				case 'frequency':
@@ -210,6 +239,9 @@ final class Newspack_Popups_Model {
 						);
 					}
 					update_post_meta( $id, $key, $value );
+					break;
+				case 'manual_only':
+					update_post_meta( $id, $key, wp_validate_boolean( $value ) );
 					break;
 				case 'post_types':
 				case 'archive_page_types':
@@ -261,7 +293,18 @@ final class Newspack_Popups_Model {
 			$args['tax_query'] = [ $tax_query ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 		}
 
-		return self::retrieve_popups_with_query( new WP_Query( $args ) );
+		$popups = self::retrieve_popups_with_query( new WP_Query( $args ) );
+		if ( is_array( $placements ) ) {
+			return $popups;
+		}
+		return array_values(
+			array_filter(
+				$popups,
+				function( $popup ) {
+					return ! self::is_manual_only( $popup );
+				}
+			)
+		);
 	}
 
 	/**
@@ -468,6 +511,7 @@ final class Newspack_Popups_Model {
 			'overlay_opacity'                => get_post_meta( $id, 'overlay_opacity', true ),
 			'overlay_size'                   => get_post_meta( $id, 'overlay_size', true ),
 			'no_overlay_background'          => get_post_meta( $id, 'no_overlay_background', true ),
+			'manual_only'                    => get_post_meta( $id, 'manual_only', true ),
 			'placement'                      => get_post_meta( $id, 'placement', true ),
 			'trigger_type'                   => get_post_meta( $id, 'trigger_type', true ),
 			'trigger_delay'                  => get_post_meta( $id, 'trigger_delay', true ),
@@ -514,6 +558,7 @@ final class Newspack_Popups_Model {
 				'overlay_opacity'                => 30,
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'time',
 				'trigger_delay'                  => 0,
@@ -810,7 +855,9 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Is it a manual-only popup or not.
+	 * Is it a manual-only popup or not: an inline prompt with the "Manual only" placement,
+	 * or an overlay with the "Manual only" toggle on. Either appears only where the
+	 * Single Prompt block or the shortcode places it.
 	 *
 	 * @param object $popup The popup object.
 	 * @return boolean True if it is a manual-only popup.
@@ -820,7 +867,8 @@ final class Newspack_Popups_Model {
 			return false;
 		}
 
-		return 'manual' === $popup['options']['placement'];
+		return 'manual' === $popup['options']['placement']
+			|| ( self::is_overlay( $popup ) && ! empty( $popup['options']['manual_only'] ) );
 	}
 
 	/**
@@ -1179,6 +1227,7 @@ final class Newspack_Popups_Model {
 		$classes[]            = $no_padding ? 'newspack-lightbox-no-padding' : null;
 		$classes[]            = $is_newsletter_prompt ? 'newspack-newsletter-prompt-inline' : null;
 		$classes[]            = self::is_block_theme() ? 'is-layout-constrained' : null;
+		$classes[]            = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes              = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$assigned_segments    = Newspack_Segments_Model::get_popup_segments_ids_string( $popup['id'] );
 		$frequency_config     = self::get_frequency_config( $popup );
@@ -1189,8 +1238,6 @@ final class Newspack_Popups_Model {
 			<div
 				<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-				role="button"
-				tabindex="0"
 				style="<?php echo esc_attr( self::container_style( $popup ) ); ?>"
 				id="<?php echo esc_attr( $element_id ); ?>"
 				data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
@@ -1324,7 +1371,7 @@ final class Newspack_Popups_Model {
 		$has_featured_image             = has_post_thumbnail( $popup['id'] ) || ! empty( $popup['options']['featured_image_id'] );
 		$enable_close_button_background = $popup['options']['enable_close_button_background'];
 		$close_button_background_color  = $enable_close_button_background ? $popup['options']['close_button_background_color'] : '';
-		$close_button_color             = $enable_close_button_background ? self::foreground_color_for_background( $popup['options']['close_button_background_color'] ) : self::foreground_color_for_background( $popup['options']['background_color'] );
+		$close_button_color             = $enable_close_button_background ? self::close_button_icon_color( $popup['options']['close_button_background_color'], $popup['options']['background_color'] ) : self::foreground_color_for_background( $popup['options']['background_color'] );
 		$hidden_fields                  = self::get_hidden_fields( $popup );
 		$is_newsletter_prompt           = self::has_newsletter_prompt( $popup );
 		$classes                        = [ 'newspack-popup-container', 'newspack-lightbox', 'newspack-popup', 'hidden', 'newspack-lightbox-placement-' . $popup['options']['placement'], 'newspack-lightbox-size-' . $overlay_size ];
@@ -1335,6 +1382,7 @@ final class Newspack_Popups_Model {
 		$classes[]                      = $no_overlay_background ? 'newspack-lightbox-no-overlay' : null;
 		$classes[]                      = $has_featured_image ? 'newspack-lightbox-featured-image' : null;
 		$classes[]                      = $enable_close_button_background ? 'newspack-lightbox-close-button-background' : null;
+		$classes[]                      = self::is_block_theme() ? 'newspack-popup--block-theme' : null;
 		$classes                        = array_merge( $classes, explode( ' ', $popup['options']['additional_classes'] ) );
 		$wrapper_classes                = [ 'newspack-popup-wrapper' ];
 		$wrapper_classes[]              = 'publish' !== $popup['status'] ? 'newspack-inactive-popup-status' : null;
@@ -1345,7 +1393,11 @@ final class Newspack_Popups_Model {
 
 		$close_button_styles = 'color: ' . $close_button_color . ';';
 		if ( $enable_close_button_background ) {
-			$close_button_styles .= 'background-color: ' . $close_button_background_color . ';';
+			$close_button_styles .= '--newspack-lightbox-close-bg: ' . $close_button_background_color . ';';
+			$state_colors = self::close_button_state_colors( $popup['options']['close_button_background_color'], $popup['options']['background_color'] );
+			if ( null !== $state_colors ) {
+				$close_button_styles .= '--newspack-lightbox-close-bg-hover: ' . $state_colors['hover'] . '; --newspack-lightbox-close-bg-pressed: ' . $state_colors['pressed'] . ';';
+			}
 		}
 
 		$animation_id = 'a_' . $element_id;
@@ -1355,8 +1407,6 @@ final class Newspack_Popups_Model {
 		<div
 			<?php echo self::get_data_status_preview_attrs( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
-			role="button"
-			tabindex="0"
 			id="<?php echo esc_attr( $element_id ); ?>"
 			data-segments="<?php echo esc_attr( $assigned_segments ); ?>"
 			data-frequency="<?php echo esc_attr( $frequency_config ); ?>"
@@ -1394,7 +1444,7 @@ final class Newspack_Popups_Model {
 			</div>
 			<?php if ( ! $no_overlay_background ) : ?>
 				<?php if ( Newspack_Popups_Settings::enable_dismiss_overlays_on_background_tap() ) : ?>
-					<button style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay"></button>
+					<button style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay" tabindex="-1" aria-hidden="true"></button>
 				<?php else : ?>
 					<div style="opacity: <?php echo floatval( $overlay_opacity ); ?>;background-color:<?php echo esc_attr( $overlay_color ); ?>;" class="newspack-lightbox-overlay"></div>
 				<?php endif; ?>
@@ -1419,44 +1469,322 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
-	 * Pick either white or black, whatever has sufficient contrast with the color being passed to it.
-	 * Copied from https://github.com/Automattic/newspack-theme/blob/trunk/newspack-theme/inc/template-functions.php#L401-L431
+	 * Pick black or white for the close button icon on its fill.
 	 *
-	 * @param  string $background_color Hexidecimal value of the background color.
-	 * @return string Either black or white hexidecimal values.
+	 * The fill may be translucent, so it is composited over the prompt background first.
+	 * The pick follows the same rule as the prompt text: whichever of black or white reads better by APCA (ties to black).
 	 *
-	 * @ref https://stackoverflow.com/questions/1331591/given-a-background-color-black-or-white-text
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return string Either black or white hexadecimal values.
+	 */
+	public static function close_button_icon_color( $fill_color, $background_color ): string {
+		$rgb = self::composited_close_button_fill( $fill_color, $background_color );
+		if ( null === $rgb ) {
+			$rgb = self::composited_close_button_fill( '#00000000', $background_color );
+		}
+
+		return 'white' === self::contrast_text_color( vsprintf( '#%02x%02x%02x', $rgb ) ) ? '#fff' : '#000';
+	}
+
+	/**
+	 * The close button's hover and press fills, mixed in oklab like every other state.
+	 *
+	 * A filled button darkens 85% then 75% toward black. A near-black fill can't
+	 * darken visibly, so it lightens toward its icon by the same shares instead,
+	 * like newspack-ui's dark button, and never by less than pure black would get
+	 * (25% of the icon color in on hover, 40% on press). The cut-off sits just above
+	 * the theme's default contrast color (#1E1E1E), so a dark neutral lightens
+	 * while a dark accent, such as #003DA5, still darkens like a button. A
+	 * translucent fill must stay translucent over whatever the button sits on, so
+	 * it gets no mixed colors: a near-black one (the cleared default, #00000000,
+	 * over a dark prompt) gets the floor as a color-mix toward the icon that the
+	 * browser resolves, and any other translucent fill is left to the stylesheet's
+	 * own mix toward black.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return string[]|null [ 'hover' => <css color>, 'pressed' => <css color> ], or null when the fill is left to the stylesheet or can't be parsed.
+	 */
+	public static function close_button_state_colors( $fill_color, $background_color ): ?array {
+		$rgba = self::hex_to_rgba( $fill_color );
+		if ( null === $rgba ) {
+			return null;
+		}
+		$near_black = self::close_button_fill_luminance( $fill_color, $background_color ) < self::CLOSE_BUTTON_LIGHTEN_LUMINANCE;
+		if ( $rgba[3] < 1 ) {
+			if ( ! $near_black ) {
+				return null;
+			}
+			return [
+				'hover'   => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) ) ),
+				'pressed' => sprintf( 'color-mix(in oklab, currentcolor %d%%, var(--newspack-lightbox-close-bg))', round( 100 * ( 1 - self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) ) ),
+			];
+		}
+		$fill = self::composited_close_button_fill( $fill_color, $background_color );
+		if ( null === $fill ) {
+			return null;
+		}
+
+		if ( ! $near_black ) {
+			$hover   = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[0] );
+			$pressed = self::mix_oklab( $fill, [ 0, 0, 0 ], self::CLOSE_BUTTON_SHARES[1] );
+		} else {
+			$icon    = '#fff' === self::close_button_icon_color( $fill_color, $background_color ) ? [ 255, 255, 255 ] : [ 0, 0, 0 ];
+			$hover   = self::lighter_oklab( self::mix_oklab( $fill, $icon, self::CLOSE_BUTTON_SHARES[0] ), self::mix_oklab( [ 0, 0, 0 ], $icon, self::CLOSE_BUTTON_LIGHTEN_FLOORS[0] ) );
+			$pressed = self::lighter_oklab( self::mix_oklab( $fill, $icon, self::CLOSE_BUTTON_SHARES[1] ), self::mix_oklab( [ 0, 0, 0 ], $icon, self::CLOSE_BUTTON_LIGHTEN_FLOORS[1] ) );
+		}
+
+		return [
+			'hover'   => sprintf( '#%02x%02x%02x', ...$hover ),
+			'pressed' => sprintf( '#%02x%02x%02x', ...$pressed ),
+		];
+	}
+
+	/**
+	 * The close button fill as painted over the prompt background, as opaque RGB.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return int[]|null [ r, g, b ] in 0..255, or null when the fill is not valid hex.
+	 */
+	private static function composited_close_button_fill( $fill_color, $background_color ): ?array {
+		$fill       = self::hex_to_rgba( $fill_color );
+		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
+		if ( null === $fill ) {
+			return null;
+		}
+
+		$composite = [];
+		foreach ( [ 0, 1, 2 ] as $index ) {
+			$composite[ $index ] = (int) round( $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] ) );
+		}
+
+		return $composite;
+	}
+
+	/**
+	 * Mix two RGB colors in oklab, as color-mix( in oklab, <a> <share>, <b> ) does.
+	 *
+	 * @param int[] $a     [ r, g, b ] in 0..255.
+	 * @param int[] $b     [ r, g, b ] in 0..255.
+	 * @param float $share The first color's share, in 0..1.
+	 * @return int[] [ r, g, b ] in 0..255.
+	 */
+	private static function mix_oklab( array $a, array $b, float $share ): array {
+		$lab_a = self::rgb_to_oklab( $a );
+		$lab_b = self::rgb_to_oklab( $b );
+		$mixed = [];
+		foreach ( $lab_a as $i => $component ) {
+			$mixed[ $i ] = $share * $component + ( 1 - $share ) * $lab_b[ $i ];
+		}
+
+		return self::oklab_to_rgb( $mixed );
+	}
+
+	/**
+	 * Pick the lighter of two RGB colors by oklab lightness.
+	 *
+	 * @param int[] $a [ r, g, b ] in 0..255.
+	 * @param int[] $b [ r, g, b ] in 0..255.
+	 * @return int[]
+	 */
+	private static function lighter_oklab( array $a, array $b ): array {
+		return self::rgb_to_oklab( $b )[0] > self::rgb_to_oklab( $a )[0] ? $b : $a;
+	}
+
+	/**
+	 * Convert an RGB color to oklab.
+	 *
+	 * @param int[] $rgb [ r, g, b ] in 0..255.
+	 * @return float[] [ L, a, b ].
+	 */
+	private static function rgb_to_oklab( array $rgb ): array {
+		[ $r, $g, $b ] = array_map( [ __CLASS__, 'srgb_channel_to_linear' ], $rgb );
+		$l             = pow( 0.4122214708 * $r + 0.5363325363 * $g + 0.0514459929 * $b, 1 / 3 );
+		$m             = pow( 0.2119034982 * $r + 0.6806995451 * $g + 0.1073969566 * $b, 1 / 3 );
+		$s             = pow( 0.0883024619 * $r + 0.2817188376 * $g + 0.6299787005 * $b, 1 / 3 );
+
+		return [
+			0.2104542553 * $l + 0.7936177850 * $m - 0.0040720468 * $s,
+			1.9779984951 * $l - 2.4285922050 * $m + 0.4505937099 * $s,
+			0.0259040371 * $l + 0.7827717662 * $m - 0.8086757660 * $s,
+		];
+	}
+
+	/**
+	 * Convert an oklab color to RGB, clamping to the sRGB gamut.
+	 *
+	 * @param float[] $lab [ L, a, b ].
+	 * @return int[] [ r, g, b ] in 0..255.
+	 */
+	private static function oklab_to_rgb( array $lab ): array {
+		[ $big_l, $a, $b ] = $lab;
+		$l                 = pow( $big_l + 0.3963377774 * $a + 0.2158037573 * $b, 3 );
+		$m                 = pow( $big_l - 0.1055613458 * $a - 0.0638541728 * $b, 3 );
+		$s                 = pow( $big_l - 0.0894841775 * $a - 1.2914855480 * $b, 3 );
+
+		return array_map(
+			[ __CLASS__, 'linear_channel_to_srgb' ],
+			[
+				4.0767416621 * $l - 3.3077115913 * $m + 0.2309699292 * $s,
+				-1.2684380046 * $l + 2.6097574011 * $m - 0.3413193965 * $s,
+				-0.0041960863 * $l - 0.7034186147 * $m + 1.7076147010 * $s,
+			]
+		);
+	}
+
+	/**
+	 * Decode an 8-bit sRGB channel to linear light.
+	 *
+	 * @param int $channel 0..255.
+	 * @return float
+	 */
+	private static function srgb_channel_to_linear( int $channel ): float {
+		$value = $channel / 255;
+		return $value <= 0.04045 ? $value / 12.92 : pow( ( $value + 0.055 ) / 1.055, 2.4 );
+	}
+
+	/**
+	 * Encode a linear-light channel as an 8-bit sRGB channel.
+	 *
+	 * @param float $value Linear light, clamped to 0..1.
+	 * @return int 0..255.
+	 */
+	private static function linear_channel_to_srgb( float $value ): int {
+		$value = max( 0.0, min( 1.0, $value ) );
+		return (int) round( 255 * ( $value <= 0.0031308 ? $value * 12.92 : 1.055 * pow( $value, 1 / 2.4 ) - 0.055 ) );
+	}
+
+	/**
+	 * APCA luminance of the close button fill as painted over the prompt background.
+	 *
+	 * @param string $fill_color       Hex close button fill, with optional alpha.
+	 * @param string $background_color Hex prompt background.
+	 * @return float Soft-clamped luminance in the 0..1 range.
+	 */
+	private static function close_button_fill_luminance( $fill_color, $background_color ): float {
+		$fill       = self::hex_to_rgba( $fill_color );
+		$background = self::hex_to_rgba( $background_color ) ?? [ 255, 255, 255, 1 ];
+		if ( null === $fill ) {
+			$fill = [ 0, 0, 0, 0 ];
+		}
+
+		$channels = [];
+		foreach ( [ 0, 1, 2 ] as $index ) {
+			$channels[] = $fill[ $index ] * $fill[3] + $background[ $index ] * ( 1 - $fill[3] );
+		}
+
+		return self::apca_luminance( $channels );
+	}
+
+	/**
+	 * Parse a 3, 4, 6 or 8 digit hex color.
+	 *
+	 * @param string $color Hex color.
+	 * @return array|null Red, green and blue from 0 to 255 and alpha from 0 to 1, or null if the color is not valid hex.
+	 */
+	private static function hex_to_rgba( $color ): ?array {
+		$hex = ltrim( trim( (string) $color ), '#' );
+		if ( in_array( strlen( $hex ), [ 3, 4 ], true ) ) {
+			$hex = implode( '', array_map( fn( $digit ) => $digit . $digit, str_split( $hex ) ) );
+		}
+		if ( ! in_array( strlen( $hex ), [ 6, 8 ], true ) || ! ctype_xdigit( $hex ) ) {
+			return null;
+		}
+		$channels = array_map( 'hexdec', str_split( $hex, 2 ) );
+		return [ $channels[0], $channels[1], $channels[2], isset( $channels[3] ) ? $channels[3] / 255 : 1 ];
+	}
+
+	/**
+	 * Pick either white or black text for a background.
+	 *
+	 * Whichever of black or white reads better by APCA (ties to black).
+	 *
+	 * @param  string $background_color Hexadecimal value of the background color.
+	 * @return string Either black or white hexadecimal values.
 	 */
 	public static function foreground_color_for_background( $background_color ) {
-		// hex RGB.
-		$r1 = hexdec( substr( $background_color, 1, 2 ) );
-		$g1 = hexdec( substr( $background_color, 3, 2 ) );
-		$b1 = hexdec( substr( $background_color, 5, 2 ) );
-		// Black RGB.
-		$black_color    = '#000';
-		$r2_black_color = hexdec( substr( $black_color, 1, 2 ) );
-		$g2_black_color = hexdec( substr( $black_color, 3, 2 ) );
-		$b2_black_color = hexdec( substr( $black_color, 5, 2 ) );
-		// Calc contrast ratio.
-		$l1             = 0.2126 * pow( $r1 / 255, 2.2 ) +
-			0.7152 * pow( $g1 / 255, 2.2 ) +
-			0.0722 * pow( $b1 / 255, 2.2 );
-		$l2             = 0.2126 * pow( $r2_black_color / 255, 2.2 ) +
-			0.7152 * pow( $g2_black_color / 255, 2.2 ) +
-			0.0722 * pow( $b2_black_color / 255, 2.2 );
-		$contrast_ratio = 0;
-		if ( $l1 > $l2 ) {
-			$contrast_ratio = (int) ( ( $l1 + 0.05 ) / ( $l2 + 0.05 ) );
-		} else {
-			$contrast_ratio = (int) ( ( $l2 + 0.05 ) / ( $l1 + 0.05 ) );
+		return 'white' === self::contrast_text_color( $background_color ) ? '#fff' : '#000';
+	}
+
+	/**
+	 * Parse a hex color into its 0-255 channels, as \Newspack\newspack_parse_hex_channels() does.
+	 *
+	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or without the leading #.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return int[]|null [ $r, $g, $b ], or null when unparseable.
+	 */
+	private static function parse_hex_channels( $hex ): ?array {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			$hex = substr( $hex, 0, 6 );
 		}
-		if ( $contrast_ratio > 5 ) {
-			// If contrast is more than 5, return black color.
-			return '#000';
-		} else {
-			// if not, return white color.
-			return '#fff';
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return null;
 		}
+		return [ hexdec( substr( $hex, 0, 2 ) ), hexdec( substr( $hex, 2, 2 ) ), hexdec( substr( $hex, 4, 2 ) ) ];
+	}
+
+	/**
+	 * Pick the text color for a background, as newspack-plugin does when it is active.
+	 *
+	 * Whichever of black or white reads better by APCA (ties to black).
+	 *
+	 * Keep in sync with: \Newspack\newspack_get_color_contrast() (newspack-plugin),
+	 * Newspack_Blocks::get_color_for_contrast() and getColorForContrast() in donate/utils.ts (newspack-blocks),
+	 * newspack_get_color_contrast() (newspack-theme), getContrastColor() in contrast-color.js (packages/components),
+	 * and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+	 * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
+	 *
+	 * @param string $hex Hexadecimal background color.
+	 * @return string Either 'black' or 'white'.
+	 */
+	private static function contrast_text_color( $hex ): string {
+		if ( function_exists( '\Newspack\newspack_get_color_contrast' ) ) {
+			return \Newspack\newspack_get_color_contrast( $hex );
+		}
+
+		$channels = self::parse_hex_channels( $hex ) ?? [ 255, 255, 255 ];
+
+		$background_y = self::apca_luminance( $channels );
+		$black_lc     = self::apca_contrast( $background_y, self::apca_luminance( [ 0, 0, 0 ] ) );
+		$white_lc     = self::apca_contrast( $background_y, self::apca_luminance( [ 255, 255, 255 ] ) );
+
+		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+	}
+
+	/**
+	 * Soft-clamped APCA screen luminance (Y) of a color, as \Newspack\newspack_get_apca_luminance() computes it.
+	 *
+	 * @param float[]|int[] $rgb Red, green and blue from 0 to 255.
+	 * @return float Luminance in the 0..1 range.
+	 */
+	private static function apca_luminance( array $rgb ): float {
+		$y = 0.2126729 * pow( $rgb[0] / 255, 2.4 ) + 0.7151522 * pow( $rgb[1] / 255, 2.4 ) + 0.072175 * pow( $rgb[2] / 255, 2.4 );
+		return $y <= 0.022 ? $y + pow( 0.022 - $y, 1.414 ) : $y;
+	}
+
+	/**
+	 * APCA lightness contrast (Lc) of text on a background, as \Newspack\newspack_get_apca_contrast() computes it.
+	 *
+	 * @param float $background_y Soft-clamped background luminance.
+	 * @param float $text_y       Soft-clamped text luminance.
+	 * @return float The Lc value.
+	 */
+	private static function apca_contrast( float $background_y, float $text_y ): float {
+		if ( abs( $background_y - $text_y ) < 0.0005 ) {
+			return 0.0;
+		}
+		if ( $background_y > $text_y ) {
+			$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+			return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+		}
+		$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+		return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
 	}
 
 	/**

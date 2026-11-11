@@ -344,6 +344,150 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		$this->assertSame( '2025-04-01 10:00:00', $metadata['Last_Donation_Date'] );
 	}
 
+	/**
+	 * Helper to create a completed one-time donation order.
+	 *
+	 * Donations::get_donation_product() returns nothing unless WC() exists, so the
+	 * one-time order would never be found. Defining WC() here is only safe from
+	 * tests annotated `@runInSeparateProcess`: in the main suite process it would
+	 * flip function_exists( 'WC' ) gates for every later test in the run.
+	 *
+	 * @param string $total     Order total.
+	 * @param string $date_paid Date paid (Y-m-d H:i:s).
+	 */
+	private function create_one_time_donation_order( $total, $date_paid ) {
+		if ( ! $this->isInIsolation() ) {
+			$this->fail( 'create_one_time_donation_order() may only be called from @runInSeparateProcess tests.' );
+		}
+		if ( ! function_exists( 'WC' ) ) {
+			function WC() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global, isolated to a separate test process.
+				return new stdClass();
+			}
+		}
+		return wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => $total,
+				'date_paid'   => $date_paid,
+				'items'       => [
+					new WC_Order_Item_Product(
+						[
+							'name'       => 'Donation once',
+							'product_id' => self::$donation_once_product_id,
+						]
+					),
+				],
+			]
+		);
+	}
+
+	/**
+	 * Helper to create a completed order carrying the monthly donation product.
+	 *
+	 * Renewal and switch orders hold the recurring donation's line item, so they
+	 * look like donation orders to anything that only inspects line items.
+	 *
+	 * @param string $total     Order total.
+	 * @param string $date_paid Date paid (Y-m-d H:i:s).
+	 */
+	private function create_monthly_donation_order( $total, $date_paid ) {
+		return wc_create_order(
+			[
+				'customer_id' => self::$user_id,
+				'status'      => 'completed',
+				'total'       => $total,
+				'date_paid'   => $date_paid,
+				'items'       => [
+					new WC_Order_Item_Product(
+						[
+							'name'       => 'Donation month',
+							'product_id' => self::$donation_month_product_id,
+						]
+					),
+				],
+			]
+		);
+	}
+
+	/**
+	 * A one-time gift made after a recurring donation lapsed is the last donation.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_last_donation_prefers_newer_one_time_gift_over_lapsed_subscription() {
+		$renewal = $this->create_monthly_donation_order( '15.00', '2023-09-15 12:00:00' );
+		$this->create_donation_subscription(
+			[
+				'status' => 'expired',
+				'orders' => [ $renewal ],
+				'dates'  => [
+					'start'        => '2023-08-15 12:00:00',
+					'end'          => '2023-10-15 12:00:00',
+					'next_payment' => 0,
+				],
+			]
+		);
+		$this->create_one_time_donation_order( '50.00', '2026-08-20 10:00:00' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '50.00', $metadata['Last_Donation_Amount'] );
+		$this->assertSame( '2026-08-20 10:00:00', $metadata['Last_Donation_Date'] );
+		$this->assertSame( 'Ex-Monthly Donor', $metadata['Donor_Status'] );
+	}
+
+	/**
+	 * One-time gift paid dates around a 2025-04-01 renewal, with the expected last donation.
+	 */
+	public function data_one_time_gift_around_renewal() {
+		return [
+			'gift between renewals'       => [ '2025-04-10 10:00:00', '25.00', '2025-04-10 10:00:00' ],
+			'renewal after an older gift' => [ '2025-01-05 10:00:00', '10.00', '2025-04-01 10:00:00' ],
+		];
+	}
+
+	/**
+	 * The later of a one-time gift and an active recurring donation's renewal is the last donation.
+	 *
+	 * @dataProvider data_one_time_gift_around_renewal
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 *
+	 * @param string $gift_date_paid  When the one-time gift was paid.
+	 * @param string $expected_amount Expected Last Donation Amount.
+	 * @param string $expected_date   Expected Last Donation Date.
+	 */
+	public function test_last_donation_is_the_later_of_one_time_gift_and_renewal( $gift_date_paid, $expected_amount, $expected_date ) {
+		$this->create_one_time_donation_order( '25.00', $gift_date_paid );
+		$renewal = $this->create_monthly_donation_order( '10.00', '2025-04-01 10:00:00' );
+		$this->create_donation_subscription( [ 'orders' => [ $renewal ] ] );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( $expected_amount, $metadata['Last_Donation_Amount'] );
+		$this->assertSame( $expected_date, $metadata['Last_Donation_Date'] );
+	}
+
+	/**
+	 * Editing a recurring donation after its last renewal doesn't make the edit the last donation.
+	 *
+	 * The switch order an edit leaves behind carries the recurring donation product
+	 * and often totals 0.00, so it must not compete as a one-time gift.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_last_donation_ignores_donation_edit_after_renewal() {
+		$this->create_one_time_donation_order( '25.00', '2025-01-05 10:00:00' );
+		$renewal = $this->create_monthly_donation_order( '10.00', '2025-04-01 10:00:00' );
+		$this->create_donation_subscription( [ 'orders' => [ $renewal ] ] );
+		$this->create_monthly_donation_order( '0.00', '2025-04-10 10:00:00' );
+
+		$metadata = ( new Donation( self::$user_id ) )->get_metadata();
+		$this->assertSame( '10.00', $metadata['Last_Donation_Amount'] );
+		$this->assertSame( '2025-04-01 10:00:00', $metadata['Last_Donation_Date'] );
+	}
+
 	public function test_previous_donation_amount_from_switch() {
 		global $subscriptions_database;
 

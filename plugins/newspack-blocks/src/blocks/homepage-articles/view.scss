@@ -1,4 +1,6 @@
+@use "sass:math";
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../shared/sass/variables";
 @use "../../shared/sass/mixins";
 @use "../../shared/sass/preview";
@@ -43,6 +45,29 @@
 
 		&:last-of-type {
 			margin-bottom: 0;
+		}
+
+		&.is-entering {
+			transition:
+				opacity motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * #{math.div(motion.$duration-reveal, 5)}),
+				transform motion.$duration-reveal motion.$ease-out calc(var(--wpnbha-enter-index, 0) * #{math.div(motion.$duration-reveal, 5)});
+
+			@starting-style {
+				opacity: 0;
+				transform: translateY(motion.$enter-offset);
+			}
+
+			&:focus-within {
+				transition: none;
+			}
+
+			@include motion.reduced-motion {
+				transition: opacity motion.$duration-reveal motion.$ease-out;
+
+				@starting-style {
+					transform: none;
+				}
+			}
 		}
 	}
 
@@ -251,6 +276,12 @@
 				display: block;
 			}
 		}
+
+		// Shown in place of the publish date; outranks the `.updated` rule above
+		// and themes that hide `.updated`.
+		.updated-date .updated {
+			display: inline;
+		}
 	}
 
 	.avatar {
@@ -274,9 +305,6 @@
 		.newspack-tag-labels,
 		figcaption {
 			color: inherit;
-		}
-		.entry-meta span:not(.avatar) {
-			opacity: 0.8;
 		}
 	}
 

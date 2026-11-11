@@ -47,8 +47,6 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
-jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
-
 let headerCalls = [];
 
 register(
@@ -276,5 +274,20 @@ describe( 'the group list search', () => {
 			} );
 		} );
 		expect( dataViewsProps.data.map( item => item.id ) ).toEqual( [ 2 ] );
+	} );
+
+	it( 'hides cancelled groups until the Status filter is cleared', async () => {
+		const statuses = [ 'active', 'pending', 'on-hold', 'cancelled' ];
+		apiFetch.mockResolvedValue( { items: statuses.map( ( status, index ) => ( { ...group( index + 1 ), status } ) ) } );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( dataViewsProps.data.map( item => item.status ).sort() ).toEqual( [ 'active', 'on-hold', 'pending' ] );
+
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, filters: [] } );
+		} );
+		expect( dataViewsProps.data ).toHaveLength( 4 );
 	} );
 } );

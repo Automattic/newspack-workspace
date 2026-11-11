@@ -1,8 +1,6 @@
-/* stylelint-disable no-invalid-position-at-import-rule */
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
-@import "@wordpress/dataviews/build-style/style.css";
 
 body.toplevel_page_newspack-story-budget {
 	background: #fff;
@@ -127,6 +125,9 @@ body.toplevel_page_newspack-story-budget {
 				color: inherit !important;
 			}
 		}
+		&__no-value {
+			color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+		}
 		&__empty-value {
 			color: #a0a0a0;
 			font-style: italic;
@@ -159,12 +160,21 @@ body.toplevel_page_newspack-story-budget {
 	&__table-row-field {
 		margin: 0 -8px;
 		position: relative;
-		.newspack-story-budget__field__button,
+		.newspack-story-budget__field__button {
+			margin-block-start: calc(-1 * #{wp-vars.$grid-unit-05});
+			padding: wp-vars.$grid-unit-05 wp-vars.$grid-unit-10;
+		}
 		.newspack-story-budget__field__value {
-			padding: 4px 8px;
+			padding: 0 wp-vars.$grid-unit-10;
 		}
 		.newspack-story-budget__table-row-field-error {
 			fill: wp-colors.$alert-red;
+		}
+		.newspack-story-budget__field--date {
+			.newspack-story-budget__field__button,
+			.newspack-story-budget__field__value {
+				white-space: nowrap !important;
+			}
 		}
 	}
 	&__story {
@@ -460,4 +470,49 @@ body.toplevel_page_newspack-story-budget {
 // Fix menu item cursor.
 div[role="menuitem"] {
 	cursor: pointer;
+}
+
+.newspack-story-budget__toolbar {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: wp-vars.$grid-unit-05;
+}
+
+.newspack-story-budget__filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: wp-vars.$grid-unit-10;
+}
+
+.newspack-story-budget__view-config {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: wp-vars.$grid-unit-05;
+}
+
+.newspack-story-budget__header-actions {
+	margin-inline-start: wp-vars.$grid-unit-10;
+}
+
+.newspack-story-budget__table-row-field--description {
+	color: var(--wpds-color-foreground-content-neutral-weak, #{wp-colors.$gray-700});
+	font-size: wp-vars.$helptext-font-size;
+	font-weight: wp-vars.$font-weight-regular;
+	line-height: wp-vars.$default-line-height;
+
+	.newspack-story-budget__field__value {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.newspack-story-budget__field__button {
+		margin-block-start: 0;
+		font-size: inherit;
+		font-weight: inherit;
+	}
 }

@@ -1,3 +1,5 @@
+@use "../../mixins";
+
 .newspack-ui {
 	input[type="checkbox"],
 	input[type="radio"] {
@@ -5,7 +7,7 @@
 		background: var(--newspack-ui-color-input-bg);
 		border: solid 1px var(--newspack-ui-color-input-border);
 		box-shadow: none;
-		color: var(--newspack-ui-color-neutral-0);
+		color: var(--newspack-ui-color-on-selected);
 		cursor: pointer;
 		display: inline-grid;
 		flex-shrink: 0;
@@ -14,86 +16,200 @@
 		margin: 0;
 		place-content: center;
 		transition:
-			background-color 125ms ease-in-out,
-			border-color 125ms ease-in-out,
-			outline 125ms ease-in-out;
+			background-color var(--newspack-ui-duration-color) ease,
+			border-color var(--newspack-ui-duration-color) ease,
+			box-shadow var(--newspack-ui-duration-color) ease;
 		width: var(--newspack-ui-control-size) !important;
 
-		&::before {
-			content: "";
-			display: block;
-			opacity: 0;
-		}
-
-		&:checked {
-			&::before {
-				opacity: 1;
+		@media ( hover: hover ) and ( pointer: fine ) {
+			&:hover:not(:checked, :disabled) {
+				border-color: var(--newspack-ui-color-text);
 			}
-		}
-
-		&:hover:not(:checked, :disabled) {
-			border-color: var(--newspack-ui-color-input-border-hover);
 		}
 
 		&:focus {
 			outline: unset;
 		}
 
-		&:focus-visible {
-			outline: 2px solid var(--newspack-ui-color-input-border-focus);
-			outline-offset: 2px;
+		&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
+			@include mixins.focus-edge;
+
+			transition: background-color var(--newspack-ui-duration-color) ease;
+
+			&:checked {
+				@include mixins.focus-edge( var(--newspack-ui-color-surface), $halo: var(--newspack-ui-color-focus) );
+
+				transition: background-color var(--newspack-ui-duration-color) ease;
+			}
 		}
 
 		&:disabled {
-			background: var(--newspack-ui-color-input-bg-disabled);
-			border-color: var(--newspack-ui-color-input-border-disabled);
+			background: var(--newspack-ui-color-surface-sunken);
+			border-color: var(--newspack-ui-color-border);
+			border-style: dashed;
 			cursor: not-allowed;
-		}
-
-		&:checked:disabled {
-			background: var(--newspack-ui-color-neutral-60);
-			border-color: var(--newspack-ui-color-neutral-60);
 		}
 	}
 
 	label.checkbox {
-		font-size: var(--newspack-ui-font-size-s) !important;
-		font-weight: normal !important;
-		line-height: var(--newspack-ui-line-height-s) !important;
+		font-size: var(--newspack-ui-font-size-body) !important;
+		font-weight: var(--newspack-ui-font-weight-regular) !important;
+		line-height: var(--newspack-ui-line-height-body) !important;
 	}
 
 	input[type="checkbox"] {
-		border-radius: var(--newspack-ui-border-radius-2xs);
+		border-radius: calc(var(--newspack-ui-radius-control) * 0.5);
 
 		&::before {
-			background:
-				transparent
-				url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z' fill='white'%3E%3C/path%3E%3C/svg%3E")
-				0 0 no-repeat;
-			height: var(--newspack-ui-spacer-5);
-			margin: 0;
-			width: var(--newspack-ui-spacer-5);
+			background: currentcolor;
+			content: "";
+			display: block;
+			height: var(--newspack-ui-spacer-4);
+			mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z'/%3E%3C/svg%3E") center / contain no-repeat;
+			opacity: 0;
+			transform: scale(0.9);
+			transition:
+				opacity var(--newspack-ui-duration-press) var(--newspack-ui-ease-out),
+				transform var(--newspack-ui-duration-press) var(--newspack-ui-ease-out);
+			width: var(--newspack-ui-spacer-4);
+
+			@media ( prefers-reduced-motion: reduce ) {
+				transform: none;
+			}
 		}
 
 		&:checked {
-			background: var(--newspack-ui-color-neutral-90);
-			border-color: transparent;
+			background: var(--newspack-ui-color-selected);
+			border-color: var(--newspack-ui-color-selected);
+
+			&::before {
+				opacity: 1;
+				transform: scale(1);
+			}
+		}
+
+		&:checked:disabled {
+			background: var(--newspack-ui-color-text-subtle);
+			border-color: var(--newspack-ui-color-text-subtle);
+			border-style: solid;
+			color: var(--newspack-ui-color-surface);
 		}
 	}
 
 	input[type="radio"] {
 		border-radius: 100%;
 
-		&::before {
-			background: var(--newspack-ui-color-neutral-0);
-			border-radius: 100%;
-			height: var(--newspack-ui-spacer-1);
-			width: var(--newspack-ui-spacer-1);
+		&:checked {
+			border-color: var(--newspack-ui-color-selected);
+			box-shadow: inset 0 0 0 5px var(--newspack-ui-color-selected);
+
+			&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
+				@include mixins.focus-edge( var(--newspack-ui-color-surface), $halo: var(--newspack-ui-color-focus), $inner: inset 0 0 0 5px var(--newspack-ui-color-selected) );
+			}
 		}
 
-		&:checked {
-			background: var(--newspack-ui-color-neutral-90);
-			border-color: var(--newspack-ui-color-neutral-90);
+		&:checked:disabled {
+			background: var(--newspack-ui-color-surface);
+			border-color: var(--newspack-ui-color-text-subtle);
+			border-style: solid;
+			box-shadow: inset 0 0 0 5px var(--newspack-ui-color-text-subtle);
+		}
+	}
+
+	@media ( forced-colors: active ) {
+		input[type="checkbox"],
+		input[type="radio"] {
+			&:checked {
+				--newspack-ui-forced-mark: Highlight;
+				--newspack-ui-forced-tick: HighlightText;
+
+				forced-color-adjust: none;
+			}
+
+			&:checked:disabled {
+				--newspack-ui-forced-mark: GrayText;
+				--newspack-ui-forced-tick: Canvas;
+			}
+
+			&:checked,
+			&:checked:disabled {
+				background: Canvas;
+				border-color: var(--newspack-ui-forced-mark);
+			}
+		}
+
+		input[type="checkbox"]:checked {
+			&,
+			&:disabled {
+				background: var(--newspack-ui-forced-mark);
+			}
+
+			&::before {
+				background: var(--newspack-ui-forced-tick);
+			}
+		}
+
+		input[type="radio"]:checked {
+			&,
+			&:disabled,
+			&:focus-visible {
+				box-shadow: inset 0 0 0 5px var(--newspack-ui-forced-mark);
+			}
+		}
+
+		input[type="checkbox"]:checked:focus-visible {
+			box-shadow: none;
+		}
+
+		:is(input[type="checkbox"], input[type="radio"]):checked:focus-visible {
+			border-color: var(--newspack-ui-forced-mark);
+			outline-color: CanvasText;
+		}
+	}
+
+	.newspack-ui__field-error input[type="checkbox"],
+	.newspack-ui__field-error input[type="radio"],
+	input[type="checkbox"][aria-invalid="true"],
+	input[type="radio"][aria-invalid="true"] {
+		border-color: var(--newspack-ui-color-error);
+		box-shadow: 0 0 0 1px var(--newspack-ui-color-error);
+
+		&[type="radio"]:checked {
+			box-shadow:
+				inset 0 0 0 5px var(--newspack-ui-color-selected),
+				0 0 0 1px var(--newspack-ui-color-error);
+		}
+
+		&:focus-visible:where(:not(.newspack-ui__input-card > *)) {
+			@include mixins.focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus) );
+
+			transition: background-color var(--newspack-ui-duration-color) ease;
+
+			&[type="radio"]:checked {
+				@include mixins.focus-edge( var(--newspack-ui-color-error), 2px, var(--newspack-ui-color-focus), inset 0 0 0 5px var(--newspack-ui-color-selected) );
+			}
+		}
+
+		@media ( forced-colors: active ) {
+			&:checked {
+				border-color: var(--newspack-ui-forced-mark);
+				box-shadow: none;
+			}
+
+			&[type="radio"]:checked {
+				box-shadow: inset 0 0 0 5px var(--newspack-ui-forced-mark);
+			}
+
+			&:checked:focus-visible {
+				border-color: var(--newspack-ui-forced-mark);
+				outline-color: CanvasText;
+			}
+
+			&[type="radio"]:checked:focus-visible {
+				border-color: var(--newspack-ui-forced-mark);
+				box-shadow: inset 0 0 0 5px var(--newspack-ui-forced-mark);
+				outline-color: CanvasText;
+			}
 		}
 	}
 }

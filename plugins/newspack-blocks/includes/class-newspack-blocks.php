@@ -992,15 +992,7 @@ class Newspack_Blocks {
 		// previews, which are open to anyone who can edit posts. So the post type restriction
 		// lives here rather than in each caller.
 		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
-		$included_post_statuses = [ 'publish' ];
-		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			// Only the statuses the editor offers. Anything else (private, or core's request-*
-			// statuses) would let the editor routes read content the block was never meant to show.
-			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
-			if ( empty( $included_post_statuses ) ) {
-				$included_post_statuses = [ 'publish' ];
-			}
-		}
+		$included_post_statuses = self::get_included_post_statuses( $attributes );
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();
 		$include_subcategories      = isset( $attributes['includeSubcategories'] ) ? intval( $attributes['includeSubcategories'] ) : false;
@@ -1779,6 +1771,23 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Get the post statuses a block query may use for the current user.
+	 *
+	 * @param array $attributes Block attributes, or request params carrying the same key.
+	 * @return string[] Post statuses.
+	 */
+	public static function get_included_post_statuses( $attributes ) {
+		if ( ! current_user_can( 'edit_others_posts' ) || empty( $attributes['includedPostStatuses'] ) ) {
+			return [ 'publish' ];
+		}
+		// Only the statuses the block editor offers. Anything else (private, or core's request-*
+		// statuses) would let the editor routes read content the block was never meant to show.
+		// An empty list would let WP_Query choose, which adds private posts.
+		$post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+		return empty( $post_statuses ) ? [ 'publish' ] : $post_statuses;
+	}
+
+	/**
 	 * Get post status label.
 	 */
 	public static function get_post_status_label() {
@@ -1800,10 +1809,13 @@ class Newspack_Blocks {
 	 * Pick either black or white text, whichever reads better on the given background.
 	 *
 	 * Scores pure black and pure white as text against the background and returns
-	 * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+	 * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
 	 * black. The constants are the SA98G set from apca-w3 0.1.9.
 	 *
-	 * Keep in sync with getColorForContrast() in src/blocks/donate/utils.ts.
+	 * Keep in sync with: getColorForContrast() in src/blocks/donate/utils.ts, newspack_get_color_contrast() (newspack-theme),
+	 * \Newspack\newspack_get_color_contrast() (newspack-plugin), getContrastColor() in contrast-color.js (packages/components),
+	 * Newspack_Popups_Model::contrast_text_color() (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+	 * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
 	 *
 	 * @param string $hex Hexadecimal background color (#RGB, #RRGGBB or #RRGGBBAA, with or without #).
 	 * @return string Either 'black' or 'white' (literal CSS color keywords).
@@ -1817,30 +1829,53 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 * Parse a hex color into its 0-255 channels.
 	 *
 	 * Accepts #RGB, #RRGGBB and #RRGGBBAA (the alpha pair is stripped), with or
-	 * without the leading #, case-insensitively. Unparseable input is treated as
-	 * white (luminance 1.0) so callers fall back to black text.
+	 * without the leading #, case-insensitively. Unparseable input returns null.
+	 *
+	 * @param string $hex Hexadecimal color.
+	 * @return int[]|null [ $r, $g, $b ] as 0..255 integers, or null when unparseable.
+	 */
+	private static function parse_hex_channels( $hex ): ?array {
+		$hex = ltrim( trim( (string) $hex ), '#' );
+		if ( 3 === strlen( $hex ) ) {
+			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+		} elseif ( 8 === strlen( $hex ) ) {
+			$hex = substr( $hex, 0, 6 );
+		}
+		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+			return null;
+		}
+
+		return [
+			hexdec( substr( $hex, 0, 2 ) ),
+			hexdec( substr( $hex, 2, 2 ) ),
+			hexdec( substr( $hex, 4, 2 ) ),
+		];
+	}
+
+	/**
+	 * Compute the soft-clamped APCA screen luminance (Y) of a hex color.
+	 *
+	 * Accepts the same formats as parse_hex_channels(). Unparseable input is
+	 * treated as white (luminance 1.0) so callers fall back to black text.
 	 *
 	 * @param string $hex Hexadecimal color.
 	 * @return float Soft-clamped luminance in the 0..1 range.
 	 */
 	private static function get_apca_luminance( $hex ) {
-		$hex = ltrim( trim( (string) $hex ), '#' );
-		if ( 3 === strlen( $hex ) ) {
-			$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
-		} elseif ( 8 === strlen( $hex ) ) {
-			// Drop the alpha pair from #RRGGBBAA.
-			$hex = substr( $hex, 0, 6 );
-		}
-		if ( 6 !== strlen( $hex ) || ! ctype_xdigit( $hex ) ) {
+		$channels = self::parse_hex_channels( $hex );
+		if ( null === $channels ) {
 			return 1.0;
 		}
 
-		$r = hexdec( substr( $hex, 0, 2 ) ) / 255;
-		$g = hexdec( substr( $hex, 2, 2 ) ) / 255;
-		$b = hexdec( substr( $hex, 4, 2 ) ) / 255;
+		list( $r, $g, $b ) = array_map(
+			function ( $channel ) {
+				return $channel / 255;
+			},
+			$channels
+		);
 
 		$y = 0.2126729 * pow( $r, 2.4 ) + 0.7151522 * pow( $g, 2.4 ) + 0.0721750 * pow( $b, 2.4 );
 
@@ -1950,6 +1985,49 @@ class Newspack_Blocks {
 		$date_format    = get_option( 'date_format' );
 		$date_formatted = date_i18n( $date_format, $date->getTimestamp() );
 		return apply_filters( 'newspack_blocks_formatted_displayed_post_date', $date_formatted, $post );
+	}
+
+	/**
+	 * Whether a post's card shows when the post was last updated instead of
+	 * when it was published.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return bool
+	 */
+	public static function should_display_updated_date( $post = null ) {
+		$post = get_post( $post );
+		if ( ! $post ) {
+			return false;
+		}
+		/**
+		 * Filters whether a post's card shows when the post was last updated
+		 * instead of when it was published.
+		 *
+		 * With the Newspack plugin active, a card shows it only where the
+		 * post's byline would too, so a plugin turning it on for a post may
+		 * also need `newspack_updated_date_override`.
+		 *
+		 * @param bool    $display Whether to show the updated date. Default false.
+		 * @param WP_Post $post    Post object.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_display_updated_date', false, $post );
+	}
+
+	/**
+	 * Get the post's updated date to be displayed, formatted.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return string Formatted date.
+	 */
+	public static function get_formatted_displayed_updated_date( $post = null ) {
+		$post = get_post( $post );
+		/**
+		 * Filters the formatted date a post's card shows as its updated date.
+		 *
+		 * @param string  $date_formatted Formatted date.
+		 * @param WP_Post $post           Post object.
+		 */
+		return apply_filters( 'newspack_blocks_formatted_displayed_updated_date', get_the_modified_date( '', $post ), $post );
 	}
 
 	/**

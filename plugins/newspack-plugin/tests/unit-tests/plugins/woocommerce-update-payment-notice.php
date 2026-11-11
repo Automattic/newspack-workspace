@@ -105,6 +105,15 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			}
 
 			/**
+			 * Return the variation ID: none, for a simple product.
+			 *
+			 * @return int
+			 */
+			public function get_variation_id() {
+				return 0;
+			}
+
+			/**
 			 * Return the WC_Product object for this line item.
 			 *
 			 * @return WC_Product|false
@@ -673,5 +682,137 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( [], $this->get_notices(), 'A variation-only plan must suppress via the variation-accurate product.' );
+	}
+
+	/**
+	 * Build a renewal order of a subscription to the given product, billed every month.
+	 *
+	 * @param int    $product_id Product ID.
+	 * @param string $status     Order status.
+	 * @return WC_Order
+	 */
+	private function make_renewal_order( $product_id, $status ) {
+		require_once __DIR__ . '/../../mocks/on-hold-duration-mocks.php';
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id'      => $this->make_current_customer(),
+				'status'           => 'on-hold',
+				'billing_period'   => 'month',
+				'billing_interval' => 1,
+				'total'            => 15,
+				'items'            => [ $this->make_line_item( $product_id ) ],
+			]
+		);
+		$GLOBALS['teams_mock_subscriptions'] = [ $subscription ];
+		$order                               = wcs_create_renewal_order( $subscription );
+		$order->data['status']               = $status;
+		return $order;
+	}
+
+	/**
+	 * A failed monthly donation renewal says the payment failed and what paying restarts.
+	 */
+	public function test_order_payment_message_for_a_failed_donation_renewal() {
+		$product = wc_create_mock_product( [ 'id' => 4242 ] );
+		update_post_meta( $product->get_id(), \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, 'yes' );
+		$order = $this->make_renewal_order( $product->get_id(), 'failed' );
+
+		$this->assertSame(
+			"This payment didn't go through. Pay $15.00 to restart your monthly donation.",
+			WooCommerce_Update_Payment_Notice::get_order_payment_message( $order, '$15.00' )
+		);
+	}
+
+	/**
+	 * A subscription renewal asks to reactivate the subscription.
+	 */
+	public function test_order_payment_message_for_a_subscription_renewal() {
+		$product = wc_create_mock_product( [ 'id' => 4243 ] );
+		$order   = $this->make_renewal_order( $product->get_id(), 'pending' );
+
+		$this->assertSame(
+			'Pay $15.00 to reactivate your subscription.',
+			WooCommerce_Update_Payment_Notice::get_order_payment_message( $order, '$15.00' )
+		);
+	}
+
+	/**
+	 * A plain order asks to complete the order, after the failed payment when there was one.
+	 */
+	public function test_order_payment_message_for_a_plain_order() {
+		$order = new WC_Order(
+			[
+				'status' => 'failed',
+				'total'  => 20,
+			]
+		);
+		$this->assertSame(
+			"This payment didn't go through. Pay $20.00 to complete your order.",
+			WooCommerce_Update_Payment_Notice::get_order_payment_message( $order, '$20.00' )
+		);
+
+		$order->data['status'] = 'pending';
+		$this->assertSame(
+			'Pay $20.00 to complete your order.',
+			WooCommerce_Update_Payment_Notice::get_order_payment_message( $order, '$20.00' )
+		);
+	}
+
+	/**
+	 * Whether the notice shows on the My Account page for the given endpoint.
+	 *
+	 * @param string $endpoint Endpoint query var, or an empty string for the dashboard.
+	 * @return bool
+	 */
+	private function is_notice_endpoint( $endpoint ) {
+		global $wp;
+		$query_vars       = $wp->query_vars;
+		$wp->query_vars   = $endpoint ? [ $endpoint => 'view-order' === $endpoint ? '369' : '' ] : [];
+		$is_notice_endpoint = WooCommerce_Update_Payment_Notice::is_notice_endpoint();
+		$wp->query_vars   = $query_vars;
+		return $is_notice_endpoint;
+	}
+
+	/**
+	 * The notice shows on Account settings, the subscriptions list, a subscription's
+	 * page and the Orders list, and nowhere else in My Account.
+	 */
+	public function test_notice_endpoint_allowlist() {
+		foreach ( [ 'edit-account', 'subscriptions', 'view-subscription', 'orders' ] as $endpoint ) {
+			$this->assertTrue( $this->is_notice_endpoint( $endpoint ), $endpoint );
+		}
+		foreach ( [ '', 'view-order', 'newsletters', 'payment-methods', 'add-payment-method', 'edit-address', 'group' ] as $endpoint ) {
+			$this->assertFalse( $this->is_notice_endpoint( $endpoint ), $endpoint );
+		}
+	}
+
+	/**
+	 * A subscription's page shows only that subscription's notice.
+	 */
+	public function test_subscription_page_shows_only_its_own_notice() {
+		$customer_id = $this->make_current_customer();
+		$first       = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$second      = wc_create_mock_product(
+			[
+				'id'   => 4343,
+				'name' => 'Newsroom Plus',
+			]
+		);
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $first->get_id() );
+		$viewed = $this->make_needs_payment_subscription( $customer_id, 'on-hold', $second->get_id() );
+
+		$this->assertCount( 2, $this->get_notices() );
+
+		set_query_var( 'view-subscription', $viewed->get_id() );
+		$notices = $this->get_notices();
+		set_query_var( 'view-subscription', '' );
+
+		$this->assertCount( 1, $notices );
+		$this->assertStringContainsString( 'Newsroom Plus', $notices[0] );
 	}
 }

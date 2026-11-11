@@ -113,16 +113,16 @@ export default function CatalogImpact( { stats }: CatalogImpactProps ) {
 					) }
 					{ ! hasError && emptyReason && <ImpactEmpty reason={ emptyReason } headingLevel={ 2 } /> }
 					{ ! hasError && detail && ! emptyReason && (
-						<>
+						<VStack spacing={ 6 }>
 							{ note && <p className="newspack-pricing-rules__muted">{ note }</p> }
 							<ImpactTable
 								baseline={ detail.sample }
 								segmentGroups={ detail.segment_groups ?? [] }
 								currency={ detail.currency }
-								framed={ false }
+								title={ null }
 								collapsible={ false }
 							/>
-						</>
+						</VStack>
 					) }
 				</Modal>
 			) }

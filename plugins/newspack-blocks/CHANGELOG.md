@@ -1,3 +1,38 @@
+## @automattic/newspack-blocks [4.36.9](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.8...newspack-blocks@4.36.9) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** stop overwriting per-block and per-product minimums ([#1550](https://github.com/Automattic/newspack-workspace/issues/1550)) ([5d79d59](https://github.com/Automattic/newspack-workspace/commit/5d79d59d4c492b13c2dab53f6569240c4b87ea99))
+
+## @automattic/newspack-blocks [4.36.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.7...newspack-blocks@4.36.8) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## @automattic/newspack-blocks [4.36.7](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.6...newspack-blocks@4.36.7) (2026-11-06)
+
+
+### Bug Fixes
+
+* **blocks:** let Static mode add draft and scheduled posts ([#1514](https://github.com/Automattic/newspack-workspace/issues/1514)) ([9fcf53f](https://github.com/Automattic/newspack-workspace/commit/9fcf53f4808e82828a461b2ad940910d7b804798))
+
+## @automattic/newspack-blocks [4.36.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.5...newspack-blocks@4.36.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **modal-checkout:** track wallet payment attempts in GA4 (NPPM-3212) ([#1417](https://github.com/Automattic/newspack-workspace/issues/1417)) ([60fba92](https://github.com/Automattic/newspack-workspace/commit/60fba9271e8228e35e54a2ee7a67e260a2f28657))
+
+## @automattic/newspack-blocks [4.36.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.4...newspack-blocks@4.36.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
 ## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
 
 

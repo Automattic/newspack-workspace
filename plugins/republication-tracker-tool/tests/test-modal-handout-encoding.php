@@ -115,6 +115,60 @@ class ModalHandoutEncodingTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The site icon keeps a small size through an ordinary paste into the block editor.
+	 *
+	 * That paste keeps only these attributes on an image (the paste schema in the
+	 * `@wordpress/dom` package) and drops the rest, `style` included, so an icon sized
+	 * only by `style` shows at the size of the file in the republished story. Core
+	 * also deletes a pasted image that is 1px wide or high.
+	 */
+	public function test_site_icon_keeps_a_small_size_through_a_block_editor_paste() {
+		$paste_keeps = [ 'alt', 'src', 'srcset', 'usemap', 'ismap', 'width', 'height' ];
+		$processor   = new WP_HTML_Tag_Processor( $this->textarea_value() );
+		$icon        = [];
+		while ( $processor->next_tag( 'img' ) ) {
+			if ( 'https://example.test/icon.png' === $processor->get_attribute( 'src' ) ) {
+				foreach ( array_intersect( $processor->get_attribute_names_with_prefix( '' ), $paste_keeps ) as $name ) {
+					$icon[ $name ] = $processor->get_attribute( $name );
+				}
+				break;
+			}
+		}
+
+		$this->assertArrayHasKey( 'src', $icon, 'The site icon is missing.' );
+		foreach ( [ 'width', 'height' ] as $dimension ) {
+			$this->assertArrayHasKey( $dimension, $icon, "Nothing the paste keeps sets the icon's $dimension." );
+			$this->assertMatchesRegularExpression( '/^\d+$/', (string) $icon[ $dimension ] );
+			$this->assertGreaterThan( 1, (int) $icon[ $dimension ] );
+			$this->assertLessThanOrEqual( 32, (int) $icon[ $dimension ] );
+		}
+	}
+
+	/**
+	 * A non-breaking space sets the site icon off from the attribution text.
+	 *
+	 * A margin in the icon's `style` would not survive the paste; the space does.
+	 */
+	public function test_site_icon_is_set_off_by_a_non_breaking_space() {
+		$this->assertStringContainsString( '&nbsp;<img src="https://example.test/icon.png"', $this->textarea_value() );
+	}
+
+	/**
+	 * The site icon is marked decorative, because the attribution beside it already names the site.
+	 *
+	 * An empty `alt` tells screen readers to skip the icon, and `alt` is one of the
+	 * attributes the block editor paste keeps.
+	 */
+	public function test_site_icon_is_marked_decorative() {
+		$processor = new WP_HTML_Tag_Processor( $this->textarea_value() );
+		while ( $processor->next_tag( 'img' ) && 'https://example.test/icon.png' !== $processor->get_attribute( 'src' ) ) {
+			continue;
+		}
+		$this->assertSame( 'https://example.test/icon.png', $processor->get_attribute( 'src' ), 'The site icon is missing.' );
+		$this->assertSame( '', $processor->get_attribute( 'alt' ), 'The site icon has no empty alt.' );
+	}
+
+	/**
 	 * A literal closing textarea tag in tracking code stays inside the textarea.
 	 */
 	public function test_footer_cannot_close_the_textarea() {

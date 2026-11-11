@@ -120,7 +120,10 @@
 		}
 	}
 	input[disabled] {
-		opacity: 0.5;
+		-webkit-text-fill-color: currentcolor;
+		background: var(--newspack-ui-color-input-bg-disabled, color-mix(in oklab, wp-colors.$gray-900 7%, wp-colors.$white));
+		color: var(--newspack-ui-color-disabled-ink, color-mix(in oklab, wp-colors.$gray-900 45%, wp-colors.$white));
+		opacity: 1;
 	}
 
 	// The lists come first in the markup. This moves them below the name and
@@ -256,13 +259,7 @@
 		}
 	}
 
-	// The submit button gets its default background/text color from the
-	// `button[type="submit"]` selector above. The after-success Continue button is
-	// a sibling of the (now-replaced) form and is rendered as `type="button"`, so
-	// it doesn't match that selector — give it the same default appearance here.
-	// The named-palette classes and inline colors copied from the submit button in
-	// view.js are more specific, so a customized button still overrides these.
-	&__continue {
+	& &__continue {
 		background-color: #d33;
 		color: white;
 		cursor: pointer;

@@ -29,6 +29,11 @@ class Statuses {
 	const ORDER_META_KEY = 'order';
 
 	/**
+	 * The glyph names a status may use for its `icon`.
+	 */
+	const ICONS = [ 'draft', 'pending', 'scheduled', 'search', 'check', 'active' ];
+
+	/**
 	 * Initialize the class.
 	 */
 	public static function init() {
@@ -73,6 +78,17 @@ class Statuses {
 	/**
 	 * Get the default statuses.
 	 *
+	 * The `newspack_story_budget_statuses` filter receives the list of statuses. Each entry has:
+	 *
+	 * - `slug`       The status slug.
+	 * - `label`      The status label.
+	 * - `capability` The capability required to use the status, or an empty string.
+	 * - `order`      The position of the status.
+	 * - `icon`       Optional. The glyph the stories list draws beside the status:
+	 *                `draft`, `pending`, `scheduled`, `search`, `check` or `active`.
+	 *                A status without an `icon`, or with any other value, draws a
+	 *                neutral glyph that implies no state.
+	 *
 	 * @return array The default statuses.
 	 */
 	public static function get_default_statuses() {
@@ -84,6 +100,7 @@ class Statuses {
 					'label'      => __( 'Writing', 'newspack-story-budget' ),
 					'capability' => '',
 					'order'      => 1,
+					'icon'       => 'draft',
 					'is_default' => true,
 				],
 				[
@@ -91,24 +108,28 @@ class Statuses {
 					'label'      => __( 'Editing', 'newspack-story-budget' ),
 					'capability' => '',
 					'order'      => 2,
+					'icon'       => 'pending',
 				],
 				[
 					'slug'       => 'factcheck',
 					'label'      => __( 'Fact-checking', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
 					'order'      => 3,
+					'icon'       => 'search',
 				],
 				[
 					'slug'       => 'approved',
 					'label'      => __( 'Approved', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
 					'order'      => 4,
+					'icon'       => 'check',
 				],
 				[
 					'slug'       => 'published',
 					'label'      => __( 'Published', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
 					'order'      => 5,
+					'icon'       => 'active',
 				],
 			]
 		);

@@ -1,3 +1,10 @@
+## newspack-components [4.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.0...newspack-components@4.12.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **components:** stop hiding dropdowns while a modal is open ([#1557](https://github.com/Automattic/newspack-workspace/issues/1557)) ([0b71695](https://github.com/Automattic/newspack-workspace/commit/0b716959963723c62ed6cfa12903b1f7c5b2c276))
+
 # newspack-components [4.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.11.0...newspack-components@4.12.0) (2026-10-26)
 
 

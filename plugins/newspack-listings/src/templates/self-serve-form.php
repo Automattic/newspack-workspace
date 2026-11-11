@@ -83,7 +83,7 @@ call_user_func(
 							id="listing-title-single-<?php echo esc_attr( $client_id ); ?>"
 							name="listing-title-single"
 							value=""
-							placeholder="<?php echo esc_attr( __( 'My Listing Title' ) ); ?>"
+							placeholder="<?php echo esc_attr( __( 'My listing title', 'newspack-listings' ) ); ?>"
 						/>
 						<label for="listing-type-<?php echo esc_attr( $client_id ); ?>">
 							<?php echo esc_html( __( 'Listing Type', 'newspack-listings' ) ); ?>
@@ -159,7 +159,7 @@ call_user_func(
 							id="listing-title-subscription-<?php echo esc_attr( $client_id ); ?>"
 							name="listing-title-subscription"
 							value=""
-							placeholder="<?php echo esc_attr( __( 'My Listing Title' ) ); ?>"
+							placeholder="<?php echo esc_attr( __( 'My listing title', 'newspack-listings' ) ); ?>"
 						/>
 						<input
 							type="checkbox"

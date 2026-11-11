@@ -112,6 +112,8 @@ class Audience_Wizard extends Wizard {
 			'has_metering'    => Content_Gate::is_metering_enabled( Memberships::GATE_CPT ),
 		];
 
+		$data['content_banner'] = Content_Banner_Style::get_wizard_data();
+
 		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
 
 		// Bootstrap only the cheap inputs the Emails tab needs to decide
@@ -146,6 +148,7 @@ class Audience_Wizard extends Wizard {
 
 		// Enqueue content banner CSS for previews.
 		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
+		Content_Banner_Style::enqueue_wizard_fonts();
 	}
 
 	/**
@@ -726,6 +729,12 @@ class Audience_Wizard extends Wizard {
 			}
 			if ( isset( $args['content_gifting']['style'] ) ) {
 				Content_Gifting_CTA::set_style( sanitize_text_field( $args['content_gifting']['style'] ) );
+			}
+			if ( isset( $args['content_gifting']['bg_color'] ) ) {
+				Content_Gifting_CTA::set_bg_color( $args['content_gifting']['bg_color'] );
+			}
+			if ( isset( $args['content_gifting']['button_color'] ) ) {
+				Content_Gifting_CTA::set_button_color( $args['content_gifting']['button_color'] );
 			}
 		}
 		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {

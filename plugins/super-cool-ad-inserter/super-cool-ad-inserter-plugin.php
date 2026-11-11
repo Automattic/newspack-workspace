@@ -3,7 +3,7 @@
  * Plugin Name: Super Cool Ad Inserter Plugin
  * Plugin URI: https://github.com/Automattic/newspack-workspace/tree/main/plugins/super-cool-ad-inserter/docs
  * Description: A simple way to insert widgets after the nth paragraph
- * Version: 0.7.8
+ * Version: 0.7.9
  * Requires PHP: 8.1
  * Author: Automattic
  * License: GPL Version 2 or later

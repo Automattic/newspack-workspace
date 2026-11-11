@@ -11,7 +11,7 @@ export function getFields( { onEdit } = {} ) {
 	const renderName = ( { item } ) => {
 		const label = item?.name || __( '(no name)', 'newspack-newsletters' );
 		if ( ! onEdit ) {
-			return <strong>{ label }</strong>;
+			return label;
 		}
 		// Render as a button-style link so keyboard users can activate
 		// the Edit modal from the column directly. The DataView's
@@ -27,15 +27,8 @@ export function getFields( { onEdit } = {} ) {
 					event.stopPropagation();
 					onEdit( item );
 				} }
-				style={ {
-					background: 'none',
-					border: 'none',
-					cursor: 'pointer',
-					padding: 0,
-					textAlign: 'left',
-				} }
 			>
-				<strong>{ label }</strong>
+				{ label }
 			</button>
 		);
 	};
@@ -54,6 +47,7 @@ export function getFields( { onEdit } = {} ) {
 			label: __( 'Description', 'newspack-newsletters' ),
 			enableSorting: false,
 			getValue: ( { item } ) => item?.description || '',
+			render: ( { item } ) => ( item?.description ? <span className="newspack-newsletters-list__secondary">{ item.description }</span> : null ),
 		},
 		{
 			id: 'slug',
