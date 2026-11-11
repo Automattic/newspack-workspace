@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.2-rc.2
+Stable tag: 2.4.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -96,9 +96,10 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 == Changelog ==
 
-= 2.4.2-rc.2 =
+= 2.4.2 =
 * New: Administrator-enabled author assignment for Co-Authors Plus through a dedicated byline endpoint. Supports users, guest authors and ordered bylines on existing editable content.
 * New: Permission-gated author lookup and strict rejection of mixed content/status updates. No broad editing capabilities are added.
+* Fix: Preserve an explicit full-access wildcard when saving credential scopes.
 
 
 = 2.4.1 =
