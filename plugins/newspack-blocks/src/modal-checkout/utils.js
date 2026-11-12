@@ -226,9 +226,9 @@ export function placeOrderSummary( doc, summary, reviewTable ) {
  * Restate an element's computed background as an inline `rgb()`/`rgba()` value.
  *
  * Stripe picks its light or dark card form from the first opaque background
- * around the form, and parses it with tinycolor, which reads modern colour
+ * around the form, and parses it with tinycolor, which reads modern color
  * syntax (`oklab()`, `color()`, what `color-mix()` computes to) as black. The
- * colour drawn is unchanged; only its notation moves to one Stripe can read,
+ * color drawn is unchanged; only its notation moves to one Stripe can read,
  * so the form still follows the theme's own light or dark surface. It has to
  * run before Stripe mounts, since Stripe caches its theme for the page.
  *
@@ -248,6 +248,10 @@ export function setReadableBackground( element ) {
 	if ( ! context ) {
 		return;
 	}
+	// A canvas ignores a color it can't parse and keeps its previous fill, so
+	// start from transparent: an unreadable color then draws nothing and is
+	// skipped below, rather than painting the element black.
+	context.fillStyle = 'transparent';
 	context.fillStyle = background;
 	context.fillRect( 0, 0, 1, 1 );
 	const [ r, g, b, a ] = context.getImageData( 0, 0, 1, 1 ).data;
