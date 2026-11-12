@@ -583,7 +583,7 @@ describe( 'Ended tests', () => {
 		// The load from before the end resolves: nothing on the card changes.
 		const card = await screen.findByRole( 'region', { name: `Test ${ endedId }` } );
 		await act( async () => pending[ 0 ].resolve( otherStats ) );
-		expect( within( card ).queryByText( '2.69%' ) ).not.toBeInTheDocument();
+		expect( within( card ).queryByText( '4.12%' ) ).not.toBeInTheDocument();
 		expect( within( card ).getByText( 'Loading results…' ) ).toBeInTheDocument();
 		// Ending switched the list to ended tests, so the other card's queued load never goes out.
 		expect( screen.queryByRole( 'region', { name: `Test ${ hiddenId }` } ) ).not.toBeInTheDocument();
@@ -591,7 +591,6 @@ describe( 'Ended tests', () => {
 
 		pending[ 1 ].resolve( stats );
 		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
-		expect( within( card ).queryByText( '4.12%' ) ).not.toBeInTheDocument();
 	}, 15000 );
 
 	it( 'keeps the ended results when a refresh sent before the end returns after them', async () => {
