@@ -1720,7 +1720,8 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' !== $end_date ) {
 			update_post_meta( $version_b, 'expiration_date', $end_date );
 		}
-		// First, so a stale save landing between these writes is caught too.
+		// First, so a stale save checked from here on is caught. One checked just
+		// before can still write after these: nothing locks the post.
 		self::bump_revision( $prompt->ID );
 		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
 		update_post_meta( $prompt->ID, self::META_GOAL, $goal );

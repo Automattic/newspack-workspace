@@ -1534,6 +1534,46 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Once a test has started, a tab opened after the start is current, and a
+	 * manager still sets the goal and split from it while B is a draft.
+	 */
+	public function test_a_tab_opened_after_start_changes_the_goal_and_split() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$this->start_rest_as( 'administrator' );
+		self::assertIsArray( Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Current tab', 'link_click', 70 ) );
+		$tab = $this->open_tab( $prompt_id );
+
+		$response = $this->save_from_tab(
+			$prompt_id,
+			$tab,
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_GOAL => 'donation',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => 60,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'donation', 60 );
+	}
+
+	/**
+	 * A save that sends neither the revision nor the Test ID carries no sign of
+	 * a stale tab, so its goal is written as sent.
+	 */
+	public function test_a_save_without_the_revision_or_test_id_writes_the_goal() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$this->start_rest_as( 'administrator' );
+		self::assertIsArray( Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Goal only', 'link_click', 70 ) );
+
+		$response = $this->save_from_tab( $prompt_id, [], [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => 'donation' ] ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'donation', 70 );
+	}
+
+	/**
 	 * Only starting and resuming a test write the revision. A save that
 	 * sends its own keeps the stored one, so it can't pass off a stale tab as current.
 	 */
