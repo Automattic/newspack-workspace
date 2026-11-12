@@ -16,14 +16,33 @@ class Newspack_Test_Content_Blocks_Activation extends WP_UnitTestCase {
 	const CONTENT = 'newspack-content-blocks/newspack-content-blocks.php';
 
 	/**
-	 * Create a minimal fixture plugin.
+	 * Fixture plugin slugs this test created, and so may remove.
+	 *
+	 * @var string[]
+	 */
+	private $created = [];
+
+	/**
+	 * Create a minimal fixture plugin, unless a real one is already there.
+	 *
+	 * The class under test needs the real slugs, so the paths can't be randomised;
+	 * nothing is created, and so nothing removed later, where a file already exists.
 	 *
 	 * @param string $slug Plugin slug.
 	 */
 	private function create_plugin( $slug ) {
-		$dir = WP_PLUGIN_DIR . '/' . $slug;
+		$dir  = WP_PLUGIN_DIR . '/' . $slug;
+		$file = $dir . '/' . $slug . '.php';
+		if ( file_exists( $file ) ) {
+			$this->markTestSkipped( "A real {$slug} plugin exists at {$file}; refusing to overwrite or remove it." );
+		}
+		$dir_existed = is_dir( $dir );
 		wp_mkdir_p( $dir );
-		file_put_contents( $dir . '/' . $slug . '.php', "<?php\n/**\n * Plugin Name: Fixture {$slug}\n */\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+		$this->created[ $slug ] = [
+			'file' => $file,
+			'dir'  => $dir_existed ? null : $dir,
+		];
+		file_put_contents( $file, "<?php\n/**\n * Plugin Name: Fixture {$slug}\n */\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 		wp_clean_plugins_cache();
 	}
 
@@ -33,10 +52,16 @@ class Newspack_Test_Content_Blocks_Activation extends WP_UnitTestCase {
 	 * @param string $slug Plugin slug.
 	 */
 	private function remove_plugin( $slug ) {
-		$dir = WP_PLUGIN_DIR . '/' . $slug;
-		if ( is_dir( $dir ) ) {
-			array_map( 'unlink', glob( $dir . '/*' ) );
-			rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
+		if ( ! isset( $this->created[ $slug ] ) ) {
+			return;
+		}
+		$fixture = $this->created[ $slug ];
+		unset( $this->created[ $slug ] );
+		if ( file_exists( $fixture['file'] ) ) {
+			unlink( $fixture['file'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+		if ( $fixture['dir'] && is_dir( $fixture['dir'] ) ) {
+			rmdir( $fixture['dir'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
 		}
 	}
 

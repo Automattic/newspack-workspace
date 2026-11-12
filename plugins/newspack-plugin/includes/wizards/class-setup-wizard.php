@@ -215,7 +215,7 @@ class Setup_Wizard extends Wizard {
 			'wordpress-seo',
 			'google-site-kit',
 			'newspack-blocks',
-			'newspack-content-blocks',
+			// newspack-content-blocks joins this list in the release that removes newspack-blocks.
 			'newspack-newsletters',
 			'newspack-theme',
 		];
