@@ -15,13 +15,16 @@ defined( 'ABSPATH' ) || exit;
 final class Plugin {
 	/**
 	 * Files to load, in load order, as class name (in this namespace) => file path
-	 * relative to the plugin root. Each class has an `init()` method; later tasks
-	 * add to this list.
+	 * relative to the plugin root. `init()` is called on each class that has one; later
+	 * tasks add to this list. A sub-namespace is written in the key, e.g. `REST\Foo`.
 	 *
 	 * @var array<string, string>
 	 */
 	const FILES = [
-		'Blocks' => 'includes/class-blocks.php',
+		'Blocks'                   => 'includes/class-blocks.php',
+		'API'                      => 'includes/class-api.php',
+		'REST\Articles_Controller' => 'src/blocks/homepage-articles/class-articles-controller.php',
+		'REST\Authors_Controller'  => 'includes/class-authors-controller.php',
 	];
 
 	/**
@@ -63,7 +66,9 @@ final class Plugin {
 		foreach ( self::FILES as $class => $file ) {
 			require_once NEWSPACK_CONTENT_BLOCKS_PLUGIN_DIR . $file;
 			$class = __NAMESPACE__ . '\\' . $class;
-			$class::init();
+			if ( method_exists( $class, 'init' ) ) {
+				$class::init();
+			}
 		}
 
 		foreach ( self::INCLUDES as $file ) {

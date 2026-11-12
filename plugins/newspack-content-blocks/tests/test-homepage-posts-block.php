@@ -728,4 +728,746 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertStringContainsString( 'class="entry-date published" datetime="' . wp_date( DATE_W3C, $published ) . '"', $html, 'The card shows the publish date.' );
 		self::assertStringNotContainsString( 'updated-date', $html, 'The card has no updated date.' );
 	}
+
+	/**
+	 * The public /articles endpoint must not return posts from non-viewable post types.
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_post_types() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'    => $secret,
+				'post_status'  => 'publish',
+				'post_title'   => 'Secret CPT title',
+				'post_content' => 'Secret CPT body.',
+			]
+		);
+		// A regular published post exists, to prove the endpoint returns nothing here
+		// rather than silently substituting a different post type.
+		self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $secret ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'A non-viewable post type must not be returned by the public articles endpoint.'
+		);
+		self::assertEmpty(
+			$ids,
+			'A request for only non-viewable post types returns no results, not substituted posts.'
+		);
+	}
+
+	/**
+	 * Mixed input keeps the viewable post types and drops the non-viewable ones.
+	 */
+	public function test_articles_endpoint_filters_mixed_post_types() {
+		$secret     = $this->register_non_viewable_cpt();
+		$secret_id  = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+			]
+		);
+		$regular_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'post', $secret ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertContains( $regular_id, $ids, 'The viewable post type is kept.' );
+		self::assertNotContains( $secret_id, $ids, 'The non-viewable post type is dropped.' );
+	}
+
+	/**
+	 * A publicly viewable custom post type is still returned by the endpoint.
+	 */
+	public function test_articles_endpoint_allows_viewable_post_types() {
+		$public    = $this->register_viewable_cpt();
+		$public_id = self::factory()->post->create(
+			[
+				'post_type'   => $public,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $public ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertContains(
+			$public_id,
+			$ids,
+			'A publicly viewable post type must still be returned by the public articles endpoint.'
+		);
+	}
+
+	/**
+	 * The specific-posts selection mode must not surface a non-viewable post by ID
+	 * (requested post type is itself non-viewable — the empty-guard path).
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_in_specific_posts_mode() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $secret ] );
+		$request->set_param( 'specificMode', 1 );
+		$request->set_param( 'specificPosts', [ $secret_id ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'Specific-posts mode must not surface a non-viewable post by ID.'
+		);
+	}
+
+	/**
+	 * The Static mode search offers the statuses ticked on the block, to users who can
+	 * edit others' posts. Statuses the block has no checkbox for stay out of the results.
+	 */
+	public function test_specific_posts_search_follows_included_post_statuses() {
+		$post_ids = [];
+		foreach ( [ 'publish', 'draft', 'future', 'private' ] as $status ) {
+			$post_ids[ $status ] = self::factory()->post->create(
+				[
+					'post_title'  => 'Static search ' . $status,
+					'post_status' => $status,
+					'post_date'   => 'future' === $status ? gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) : '',
+				]
+			);
+		}
+
+		$search = function( $statuses ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-specific-posts' );
+			$request->set_param( 'search', 'Static search' );
+			$request->set_param( 'postsToShow', 10 );
+			if ( $statuses ) {
+				$request->set_param( 'includedPostStatuses', $statuses );
+			}
+			return rest_do_request( $request )->get_data();
+		};
+		$search_ids = function( $statuses ) use ( $search ) {
+			$ids = wp_list_pluck( $search( $statuses ), 'id' );
+			sort( $ids );
+			return $ids;
+		};
+		$only_published = [ $post_ids['publish'] ];
+		$all_statuses   = [ 'publish', 'draft', 'future', 'private' ];
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		self::assertSame( $only_published, $search_ids( null ), 'The search stays on published posts by default.' );
+		self::assertSame(
+			[ $post_ids['publish'], $post_ids['draft'], $post_ids['future'] ],
+			$search_ids( $all_statuses ),
+			'An editor finds the ticked draft and scheduled posts, but never private ones.'
+		);
+		self::assertSame( [ 'draft' ], wp_list_pluck( $search( [ 'draft' ] ), 'post_status' ), 'Each result names its status.' );
+		self::assertSame( $only_published, $search_ids( [ 'private' ] ), 'A list with no offered status falls back to published.' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'author' ] ) );
+		self::assertSame( $only_published, $search_ids( $all_statuses ), 'An author only finds published posts.' );
+	}
+
+	/**
+	 * Specific-posts mode must not surface a non-viewable post by ID even when the
+	 * requested postType is viewable. This reaches the WP_Query post_type + post__in
+	 * intersection (the realistic attack), not the empty-guard short-circuit.
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_specific_post_under_viewable_type() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'post' ] ); // Viewable — survives the filter.
+		$request->set_param( 'specificMode', 1 );
+		$request->set_param( 'specificPosts', [ $secret_id ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'A non-viewable post requested by ID must not surface even under a viewable postType.'
+		);
+	}
+
+	/**
+	 * Load More offers a next page exactly while posts remain: every request in the
+	 * chain returns posts, and together they return every matching post exactly once,
+	 * whether or not "Allow duplicate content" is on.
+	 *
+	 * @dataProvider deduplicate_settings
+	 *
+	 * @param bool $deduplicate The block's deduplicate attribute.
+	 */
+	public function test_articles_endpoint_offers_next_url_exactly_while_posts_remain( $deduplicate ) {
+		$category_id = self::factory()->category->create();
+		$post_ids    = [];
+		for ( $i = 0; $i < 7; $i++ ) {
+			// Distinct dates keep the date ordering, and so each page's contents, deterministic.
+			$post_ids[] = self::factory()->post->create(
+				[
+					'post_status'   => 'publish',
+					'post_category' => [ $category_id ],
+					'post_date'     => gmdate( 'Y-m-d H:i:s', strtotime( '2026-01-01' ) + $i * HOUR_IN_SECONDS ),
+				]
+			);
+		}
+		wp_set_current_user( 0 );
+
+		// Follow the chain the way the block's Load More script does: each request is the
+		// previous response's next URL plus the IDs of every post shown so far. The first
+		// request carries no page param, so it must be served as page 1 and stands in for
+		// the block's server render.
+		$params   = [
+			'postsToShow' => 3,
+			'moreButton'  => 1,
+			'categories'  => [ $category_id ],
+			'deduplicate' => $deduplicate ? 1 : 0,
+		];
+		$seen_ids = [];
+		// Bounded so a next URL that never empties fails the test instead of hanging it.
+		for ( $i = 0; $i < 10; $i++ ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+			$request->set_query_params( array_merge( $params, [ 'exclude_ids' => implode( ',', $seen_ids ) ] ) );
+			$response = rest_do_request( $request );
+			self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			$data = $response->get_data();
+			// A next URL that leads to no posts would leave readers a Load More click that does nothing.
+			self::assertNotEmpty( $data['ids'], 'Every request in the Load More chain returns posts.' );
+			$seen_ids = array_merge( $seen_ids, $data['ids'] );
+			if ( empty( $data['next'] ) ) {
+				break;
+			}
+			wp_parse_str( (string) wp_parse_url( $data['next'], PHP_URL_QUERY ), $params );
+		}
+
+		self::assertEqualsCanonicalizing( $post_ids, $seen_ids, 'Following the next URLs returns every post exactly once.' );
+	}
+
+	/**
+	 * Values of the block's deduplicate attribute.
+	 *
+	 * @return array[]
+	 */
+	public function deduplicate_settings() {
+		return [
+			'allow duplicate content off' => [ true ],
+			'allow duplicate content on'  => [ false ],
+		];
+	}
+
+	/**
+	 * The editor posts payload never carries an unsafe URL scheme.
+	 *
+	 * post_link resolves from the newspack_sponsor_url / newspack_supporter_url
+	 * meta, which is stored through sanitize_text_field and so can hold any
+	 * string. The editor renders it as an href, and a modified click follows it,
+	 * so the payload applies the same protocol allowlist the front end gets from
+	 * esc_url() in templates/article.php.
+	 */
+	public function test_editor_posts_endpoint_strips_unsafe_link_schemes() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_sponsor_url', 'javascript:alert(1)' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The editor posts endpoint returns the post.' );
+		self::assertStringNotContainsString(
+			'javascript:',
+			(string) $posts_by_id[ $post_id ]['post_link'],
+			'The editor payload does not carry a javascript: URL for the preview to render as an href.'
+		);
+	}
+
+	/**
+	 * The editor sponsor payload never carries an unsafe URL scheme.
+	 *
+	 * The preview renders sponsor_url as the href on the sponsor logo and byline,
+	 * choosing a link or plain text by whether the value is truthy, so an unsafe
+	 * scheme has to arrive as an empty string rather than reach the href.
+	 */
+	public function test_editor_sponsor_payload_strips_unsafe_sponsor_url() {
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+
+		\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = [
+			[
+				'sponsor_flag'   => 'Sponsored',
+				'sponsor_name'   => 'Example Sponsor',
+				'sponsor_url'    => 'javascript:alert(1)',
+				'sponsor_byline' => 'Sponsored by',
+				'sponsor_id'     => 1001,
+				'sponsor_scope'  => 'native',
+			],
+		];
+		try {
+			$sponsor_info = \Newspack_Content_Blocks\API::sponsor_info( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack_Sponsors\Sponsors_Stub::$stub_sponsors = null;
+		}
+
+		self::assertSame( '', $sponsor_info[0]['sponsor_url'], 'An unsafe sponsor URL arrives empty, so the preview renders the sponsor unlinked.' );
+	}
+
+	/**
+	 * The editor posts payload carries real author-archive links.
+	 *
+	 * Navigation is prevented at the preview container (see
+	 * shared/js/inert-preview.js), so the payload keeps the same URLs the front
+	 * end renders — which is what lets an editor ctrl/middle-click a previewed
+	 * post open in a new tab.
+	 */
+	public function test_editor_posts_endpoint_carries_live_author_links() {
+		$author_id = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'display_name'  => 'Nia Fixture',
+				'user_nicename' => 'nia-fixture',
+			]
+		);
+		$authored_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $authored_post_id, $posts_by_id, 'The editor posts endpoint returns the authored post.' );
+		self::assertStringContainsString(
+			get_author_posts_url( $author_id, 'nia-fixture' ),
+			$posts_by_id[ $authored_post_id ]['newspack_post_byline'],
+			'The editor byline carries the live author-archive link; the preview container is what prevents navigation.'
+		);
+	}
+
+	/**
+	 * The editor byline never carries an unsafe URL scheme from a byline filter.
+	 *
+	 * newspack_blocks_post_byline output reaches the payload as markup the
+	 * preview renders, and a modified click on one of its links reaches the
+	 * browser, so the payload applies the same wp_kses_post() the front end does.
+	 */
+	public function test_editor_byline_strips_unsafe_schemes_from_filtered_byline() {
+		$author_id        = self::factory()->user->create(
+			[
+				'role'          => 'author',
+				'user_nicename' => 'kai-fixture',
+			]
+		);
+		$authored_post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$append_unsafe_link = function ( $byline ) {
+			return $byline . ' <a href="javascript:alert(1)">Filtered link</a>';
+		};
+		add_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
+		try {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+			$request->set_param( 'postsToShow', 10 );
+			$posts = rest_do_request( $request )->get_data();
+		} finally {
+			remove_filter( 'newspack_blocks_post_byline', $append_unsafe_link );
+		}
+
+		$byline = array_column( $posts, null, 'id' )[ $authored_post_id ]['newspack_post_byline'];
+		self::assertStringNotContainsString( 'javascript:', $byline, 'The editor byline does not carry a javascript: URL for the preview to render as an href.' );
+		self::assertStringContainsString( get_author_posts_url( $author_id, 'kai-fixture' ), $byline, 'Safe author links survive.' );
+	}
+
+	/**
+	 * The newspack_tag_labels REST field exposes the { flag, link } shape
+	 * returned by \Newspack\Tag_Labels, normalized to a 0-indexed list.
+	 *
+	 * Locks in the cross-repo contract: the field passes through whatever
+	 * \Newspack\Tag_Labels::get_labels_for_post() returns, so the plugin,
+	 * blocks, and theme must agree on this shape.
+	 */
+	public function test_tag_labels_rest_field_shape() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+		$post_id = self::factory()->post->create();
+
+		// Keyed input (as returned by Tag_Labels::get_labels_for_post()).
+		\Newspack\Tag_Labels::$stub_labels = [
+			42 => [
+				'flag' => 'Breaking',
+				'link' => 'https://example.org/tag/breaking/',
+			],
+		];
+
+		$result = \Newspack_Content_Blocks\API::get_tag_labels( [ 'id' => $post_id ] );
+
+		self::assertIsArray( $result );
+		self::assertSame( [ 0 ], array_keys( $result ), 'Keyed input is normalized to a 0-indexed list.' );
+		self::assertArrayHasKey( 'flag', $result[0] );
+		self::assertArrayHasKey( 'link', $result[0] );
+		self::assertSame( 'Breaking', $result[0]['flag'] );
+		self::assertSame( 'https://example.org/tag/breaking/', $result[0]['link'] );
+
+		\Newspack\Tag_Labels::$stub_labels = null;
+	}
+
+	/**
+	 * The newspack_tag_labels REST field never carries an unsafe URL scheme.
+	 *
+	 * Tag-label links come from get_term_link(), which a term_link filter can
+	 * change. The editor renders them as hrefs and a modified click follows
+	 * them, so the payload applies the protocol allowlist the front end gets
+	 * from esc_url().
+	 */
+	public function test_tag_labels_rest_field_strips_unsafe_link_schemes() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+		$post_id = self::factory()->post->create();
+
+		\Newspack\Tag_Labels::$stub_labels = [
+			[
+				'flag' => 'Breaking',
+				'link' => 'javascript:alert(1)',
+			],
+		];
+		try {
+			$result = \Newspack_Content_Blocks\API::get_tag_labels( [ 'id' => $post_id ] );
+		} finally {
+			\Newspack\Tag_Labels::$stub_labels = null;
+		}
+
+		self::assertSame( '', $result[0]['link'], 'An unsafe tag-label link arrives empty.' );
+		self::assertSame( 'Breaking', $result[0]['flag'], 'The label itself is unchanged.' );
+	}
+
+	/**
+	 * The newspack_tag_labels REST field returns false when there are no labels.
+	 */
+	public function test_tag_labels_rest_field_empty_returns_false() {
+		if ( ! property_exists( '\Newspack\Tag_Labels', 'stub_labels' ) ) {
+			$this->markTestSkipped( 'Real \Newspack\Tag_Labels present; stub-based contract test skipped.' );
+		}
+		$post_id = self::factory()->post->create();
+
+		\Newspack\Tag_Labels::$stub_labels = [];
+		self::assertFalse( \Newspack_Content_Blocks\API::get_tag_labels( [ 'id' => $post_id ] ) );
+
+		\Newspack\Tag_Labels::$stub_labels = null;
+		self::assertFalse( \Newspack_Content_Blocks\API::get_tag_labels( [ 'id' => $post_id ] ) );
+	}
+
+	/**
+	 * A non-viewable post type explicitly opted in via the
+	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
+	 * without loosening the gate for other non-viewable types.
+	 */
+	public function test_articles_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed  = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$excluded = $this->register_non_viewable_cpt( 'newspack_secret_cpt' );
+		$allowed_id  = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$excluded_id = self::factory()->post->create( [ 'post_type' => $excluded, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed, $excluded ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
+		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
+	}
+
+	/**
+	 * Opting a post type into the endpoint opts in its published posts only. The
+	 * status gate in build_articles_query() is what keeps unpublished posts of an
+	 * allow-listed type away from an anonymous caller, so assert it directly.
+	 */
+	public function test_articles_endpoint_allowlist_still_hides_unpublished() {
+		$allowed = $this->register_non_viewable_cpt( 'newspack_status_cpt' );
+		$published_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'private' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new \Newspack_Content_Blocks\REST\Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed ] );
+		$request->set_param( 'postsToShow', 10 );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
+
+		self::assertContains( $published_id, $ids, 'A published post of an allow-listed type is served.' );
+		self::assertNotContains( $draft_id, $ids, 'A draft of an allow-listed type stays hidden from an anonymous caller.' );
+		self::assertNotContains( $private_id, $ids, 'A private post of an allow-listed type stays hidden from an anonymous caller.' );
+	}
+
+	/**
+	 * Request an editor route and return the IDs of the posts it served.
+	 *
+	 * @param string $route  Route under the newspack-blocks/v1 namespace.
+	 * @param array  $params Query params.
+	 * @return int[]
+	 */
+	private static function editor_route_ids( $route, $params ) {
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/' . $route );
+		$request->set_query_params( $params );
+		$response = rest_do_request( $request );
+		self::assertSame( 200, $response->get_status(), "The $route route answers the request." );
+		return array_map( 'intval', wp_list_pluck( $response->get_data(), 'id' ) );
+	}
+
+	/**
+	 * The editor routes are gated on edit_posts, which a Contributor holds, so the gate says
+	 * nothing about which post types the caller may read. They apply the same post type
+	 * restriction as the public route (NPPM-3509).
+	 */
+	public function test_editor_posts_endpoints_exclude_non_viewable_post_types() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT title',
+			]
+		);
+		$post_id   = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Secret CPT neighbour',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'postsToShow' => 10 ] ),
+			'A request for only a non-viewable post type returns nothing, not substituted posts.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret, 'post' ], 'postsToShow' => 10 ] ),
+			'Mixed input keeps the viewable post type and drops the non-viewable one.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $secret ], 'include' => [ $secret_id, $post_id ], 'specificMode' => true, 'specificPosts' => [ $secret_id, $post_id ] ] ),
+			'Naming posts by ID gets neither the non-viewable post nor a substituted post of the default type.'
+		);
+		self::assertSame(
+			[],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search does not list titles of a non-viewable post type.'
+		);
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-specific-posts', [ 'postType' => [ $secret, 'post' ], 'search' => 'Secret', 'postsToShow' => 10 ] ),
+			'The specific posts search keeps the viewable post type in mixed input.'
+		);
+	}
+
+	/**
+	 * The batch route answers each block through the single editor route, so it gets the
+	 * same post type restriction.
+	 */
+	public function test_editor_posts_batch_excludes_non_viewable_post_types() {
+		$secret = $this->register_non_viewable_cpt();
+		self::factory()->post->create( [ 'post_type' => $secret, 'post_status' => 'publish' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		$request = new WP_REST_Request( 'POST', '/newspack-blocks/v1/newspack-blocks-posts-batch' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				[
+					'queries' => [
+						[
+							'clientId'   => 'a',
+							'postsQuery' => [
+								'postType'    => [ $secret ],
+								'postsToShow' => 10,
+							],
+						],
+					],
+				]
+			)
+		);
+		$data = rest_do_request( $request )->get_data();
+
+		self::assertSame( 'a', $data[0]['clientId'] );
+		self::assertSame( [], $data[0]['posts'], 'The batch serves nothing for a non-viewable post type.' );
+	}
+
+	/**
+	 * Blocks saved before the post type picker required a selection carry an empty
+	 * postType. They keep listing posts.
+	 */
+	public function test_empty_post_type_falls_back_to_post() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'Regular post title',
+			]
+		);
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		// Before the render, which records the post for deduplication.
+		self::assertSame(
+			[ $post_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [], 'postsToShow' => 10 ] ),
+			'The editor route lists posts for an empty postType.'
+		);
+
+		$request = new WP_REST_Request( 'GET', '/wp/v2/block-renderer/newspack-blocks/homepage-articles' );
+		$request->set_query_params(
+			[
+				'context'    => 'edit',
+				'attributes' => [ 'postType' => [] ],
+			]
+		);
+		self::assertStringContainsString( 'Regular post title', rest_do_request( $request )->get_data()['rendered'], 'The render lists posts for an empty postType.' );
+	}
+
+	/**
+	 * The editor routes keep serving a non-viewable post type a plugin opted in, which is
+	 * how the Sponsors CPT stays usable in the block's post type picker.
+	 */
+	public function test_editor_posts_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed    = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$allowed_id = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+
+		self::assertSame(
+			[ $allowed_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'postType' => [ $allowed ], 'postsToShow' => 10 ] ),
+			'An allow-listed non-viewable post type is served to the editor.'
+		);
+	}
+
+	/**
+	 * An Editor may preview drafts and scheduled posts, the statuses the block offers, but
+	 * not statuses it never offers, such as private.
+	 */
+	public function test_editor_posts_endpoint_limits_statuses_to_those_the_editor_offers() {
+		$published_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		$draft_id     = self::factory()->post->create( [ 'post_status' => 'draft' ] );
+		$private_id   = self::factory()->post->create( [ 'post_status' => 'private' ] );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+
+		$ids = self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'publish', 'draft', 'private' ], 'postsToShow' => 10 ] );
+		self::assertContains( $published_id, $ids, 'Published posts are served.' );
+		self::assertContains( $draft_id, $ids, 'Drafts are served to an Editor who asked for them.' );
+		self::assertNotContains( $private_id, $ids, 'A status the block does not offer is dropped.' );
+
+		self::assertSame(
+			[ $published_id ],
+			self::editor_route_ids( 'newspack-blocks-posts', [ 'includedPostStatuses' => [ 'private' ], 'postsToShow' => 10 ] ),
+			'When no requested status is allowed, the route falls back to published posts.'
+		);
+	}
+
+	/**
+	 * The editor endpoint returns the whole registered-meta bag, and the Homepage Posts
+	 * editor component assigns the subtitle as HTML. A value stored while the theme had
+	 * no sanitize_callback is still raw in the database, so the endpoint filters it.
+	 */
+	public function test_editor_posts_endpoint_sanitizes_post_subtitle() {
+		// Registered without a sanitize_callback on purpose: this is the pre-fix theme,
+		// and therefore the state of every subtitle stored before the fix ships.
+		register_post_meta(
+			'post',
+			'newspack_post_subtitle',
+			[
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
+			]
+		);
+		$post_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		update_post_meta( $post_id, 'newspack_post_subtitle', '<em>Kept</em><img src=x onerror="STEAL()">' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-posts' );
+		$request->set_param( 'postsToShow', 10 );
+		$posts = rest_do_request( $request )->get_data();
+
+		$posts_by_id = array_column( $posts, null, 'id' );
+		self::assertArrayHasKey( $post_id, $posts_by_id, 'The endpoint returns the carrier post.' );
+
+		$subtitle = $posts_by_id[ $post_id ]['meta']['newspack_post_subtitle'];
+		self::assertStringNotContainsString( 'onerror', $subtitle, 'The payload does not reach the editor.' );
+		self::assertStringNotContainsString( '<img', $subtitle, 'The disallowed element does not reach the editor.' );
+		self::assertStringContainsString( '<em>Kept</em>', $subtitle, 'Allowed formatting still reaches the editor.' );
+
+		unregister_post_meta( 'post', 'newspack_post_subtitle' );
+	}
 }

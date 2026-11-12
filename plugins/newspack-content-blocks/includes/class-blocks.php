@@ -1577,12 +1577,13 @@ class Blocks {
 	 * Get the guest author linked to a WP user account (Co-Authors Plus).
 	 *
 	 * Same lookup as `WP_REST_Newspack_Authors_Controller::get_linked_guest_author()` in
-	 * newspack-blocks, duplicated so this plugin doesn't depend on it.
+	 * newspack-blocks, duplicated so this plugin doesn't depend on it. Also used by the
+	 * authors REST endpoint.
 	 *
 	 * @param string $user_login The user's login.
 	 * @return \WP_Post|false The guest author post, or false if none is linked.
 	 */
-	private static function get_linked_guest_author( $user_login ) {
+	public static function get_linked_guest_author( $user_login ) {
 		$linked_guest_authors = get_posts(
 			[
 				'post_type'      => 'guest-author',
