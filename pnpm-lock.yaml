@@ -442,6 +442,33 @@ importers:
         specifier: workspace:*
         version: link:../../packages/scripts
 
+  plugins/newspack-content-blocks:
+    devDependencies:
+      classnames:
+        specifier: ^2.5.0
+        version: 2.5.1
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
+      newspack-components:
+        specifier: workspace:*
+        version: link:../../packages/components
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../../packages/scripts
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      react-router-dom:
+        specifier: ^5.3.4
+        version: 5.3.4(react@18.3.1)
+      redux:
+        specifier: ^5.0.0
+        version: 5.0.1
+
   plugins/newspack-listings:
     dependencies:
       newspack-components:

@@ -12,7 +12,7 @@ It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lock
 
 | Path | Contents | In-container path |
 | --- | --- | --- |
-| `plugins/<name>/` | 12 product plugins | `/newspack-plugins/` |
+| `plugins/<name>/` | 13 product plugins | `/newspack-plugins/` |
 | `themes/<name>/` | `newspack-theme` (classic; style variations nested inside it) and `newspack-block-theme` (FSE) | `/newspack-themes/` |
 | `packages/<name>/` | `scripts`, `components`, `colors`, `icons`, `motion` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
 | `repos/plugins/<name>/`, `repos/themes/<name>/` | Checkouts that live outside the monorepo | `/newspack-repos` |
@@ -38,6 +38,7 @@ Each plugin/theme directory is standalone and can be zipped and installed on its
 | `newspack-listings` | Directories and listings |
 | `newspack-sponsors` | Sponsored content and labelling |
 | `newspack-story-budget` | Newsroom editorial planning |
+| `newspack-content-blocks` | Content Loop and Carousel blocks; standalone, also used on WordPress.com |
 | `republication-tracker-tool` | Tracks republished content |
 | `super-cool-ad-inserter` | Programmatic ad insertion |
 
