@@ -30,7 +30,7 @@ import { Icon, formatListBullets, grid } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { getMigratedAmount } from '../utils';
+import { getMigratedAmount, getMinimumDonation, toggleManualMode } from '../utils';
 import type { DonationSettings, DonationFrequencySlug, DonationAmountsArray, EditState, EditProps } from '../types';
 import TierBasedLayout from './TierBasedLayout';
 import FrequencyBasedLayout from './FrequencyBasedLayout';
@@ -83,10 +83,6 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 
 				if ( isEmpty( attributes.disabledFrequencies ) ) {
 					setAttributes( { disabledFrequencies: donationSettings.disabledFrequencies } );
-				}
-
-				if ( isEmpty( attributes.minimumDonation ) ) {
-					setAttributes( { minimumDonation: donationSettings.minimumDonation } );
 				}
 
 				// Migrate old attributes.
@@ -197,7 +193,9 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 		},
 	];
 
-	const minimumDonation = isManual ? attributes.minimumDonation : settings.minimumDonation;
+	// The front end uses a manual block's own minimum, or the site-wide one when it has none.
+	const siteMinimumDonation = getMinimumDonation( settings.minimumDonation );
+	const minimumDonation = ( isManual ? getMinimumDonation( attributes.minimumDonation ) : undefined ) ?? siteMinimumDonation ?? 0;
 	const displayedAmounts = { ...amounts };
 	( Object.keys( amounts ) as DonationFrequencySlug[] ).forEach( frequency => {
 		const amountsWithMinimum = amounts[ frequency ].map( amount => Math.max( amount, minimumDonation ) ) as DonationAmountsArray;
@@ -207,6 +205,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 	const componentProps = {
 		attributes,
 		amounts,
+		minimumDonation,
 		availableFrequencies,
 		settings,
 		setAttributes,
@@ -266,7 +265,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					<PanelBody title={ __( 'Suggested Donations', 'newspack-plugin' ) }>
 						<ToggleControl
 							checked={ Boolean( isManual ) }
-							onChange={ () => setAttributes( { manual: ! attributes.manual } ) }
+							onChange={ () => setAttributes( toggleManualMode( attributes.manual ) ) }
 							label={ __( 'Configure manually', 'newspack-plugin' ) }
 						/>
 						{ isManual ? (
@@ -341,9 +340,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 										<div className="wp-block-newspack-blocks-donate__panel-inputs">
 											{ FREQUENCY_SLUGS.reduce(
 												( acc: boolean, frequencySlug: DonationFrequencySlug ) =>
-													! amounts[ frequencySlug ][ 3 ] || amounts[ frequencySlug ][ 3 ] < attributes.minimumDonation
-														? true
-														: acc,
+													! amounts[ frequencySlug ][ 3 ] || amounts[ frequencySlug ][ 3 ] < minimumDonation ? true : acc,
 												false
 											) && renderMinAmountWarning() }
 
@@ -365,10 +362,11 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									className="components-frequency-donations__minimum-donation"
 									type="number"
 									label={ __( 'Minimum donation', 'newspack-plugin' ) }
+									help={ __( 'Leave empty to use the site-wide minimum donation.', 'newspack-plugin' ) }
 									min={ 1 }
-									// @ts-expect-error -- From newspack-blocks, which typed @wordpress/components as any; kept as is to preserve saved attributes.
-									onChange={ ( value: number ) => setAttributes( { minimumDonation: value } ) }
-									value={ attributes.minimumDonation }
+									placeholder={ siteMinimumDonation === undefined ? undefined : String( siteMinimumDonation ) }
+									onChange={ ( value: string ) => setAttributes( { minimumDonation: getMinimumDonation( value ) } ) }
+									value={ attributes.minimumDonation ?? '' }
 								/>
 							</>
 						) : (

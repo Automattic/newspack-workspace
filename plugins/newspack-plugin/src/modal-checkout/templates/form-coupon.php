@@ -26,6 +26,6 @@ if (
 	<h3><?php esc_html_e( 'Apply a coupon code', 'newspack-plugin' ); ?></h3>
 	<p>
 		<input type="text" name="coupon_code" class="input-text" placeholder="<?php esc_attr_e( 'Coupon code', 'newspack-plugin' ); ?>" id="coupon_code" value="" />
-		<button type="submit" class="<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?> newspack-ui__button newspack-ui__button--outline" name="apply_coupon" value="<?php esc_attr_e( 'Apply coupon', 'newspack-plugin' ); ?>"><?php esc_html_e( 'Apply', 'newspack-plugin' ); ?></button>
+		<button type="submit" class="<?php echo esc_attr( wc_wp_theme_get_element_class_name( 'button' ) ? wc_wp_theme_get_element_class_name( 'button' ) : '' ); ?> newspack-ui__button newspack-ui__button--secondary" name="apply_coupon" value="<?php esc_attr_e( 'Apply coupon', 'newspack-plugin' ); ?>"><?php esc_html_e( 'Apply', 'newspack-plugin' ); ?></button>
 	</p>
 </form>

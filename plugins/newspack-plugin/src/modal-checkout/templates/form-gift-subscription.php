@@ -20,9 +20,9 @@ defined( 'ABSPATH' ) || exit;
 		</p>
 		<p id="wcsg_gift_recipients_email_field" class="newspack-wcsg--gift-email form-row form-row-wide">
 			<label for="wcsg_gift_recipients_email">
-				<?php esc_html_e( 'Recipient’s Email Address', 'newspack-plugin' ); ?>
+				<?php esc_html_e( 'Recipient’s email address', 'newspack-plugin' ); ?>
 			</label>
-			<input type="email" class="input-text" name="wcsg_gift_recipients_email" placeholder="<?php echo esc_attr( __( 'recipient@example.com', 'newspack-plugin' ) ); ?>" value="<?php echo esc_attr( $email ); ?>"/>
+			<input type="email" class="input-text" name="wcsg_gift_recipients_email" placeholder="<?php echo esc_attr( __( 'Recipient’s email address', 'newspack-plugin' ) ); ?>" value="<?php echo esc_attr( $email ); ?>"/>
 		</p>
 		<?php else : ?>
 			<label class="woocommerce_subscriptions_gifting_recipient_email">

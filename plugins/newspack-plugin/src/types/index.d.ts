@@ -95,6 +95,7 @@ declare global {
 	};
 
 	type HomepageArticlesAttributes = {
+		includedPostStatuses: string[];
 		postsToShow: number;
 		authors: AuthorId[];
 		categories: CategoryId[];
