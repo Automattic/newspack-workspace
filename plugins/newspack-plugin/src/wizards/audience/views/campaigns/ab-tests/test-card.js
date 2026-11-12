@@ -149,10 +149,11 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue =
 		headingRef.current?.focus( { preventScroll: true } );
 	}, [ isTarget ] );
 
-	// A refresh is one request the user asked for, so it skips the queue the
-	// card's first load waits in. A load whose card has gone, or whose test has
-	// ended since it was queued, is skipped when its turn comes.
-	const load = ( refresh, isCancelled = () => false ) => {
+	// The card's first load waits in the tab's queue. A refresh, or the reload
+	// once the test ends, is one request the user just caused, so it goes
+	// straight out. A load whose card has gone, or whose test has ended since,
+	// writes nothing: skipped if its turn hasn't come, ignored once it is out.
+	const load = ( refresh, isCancelled = () => false, queued = false ) => {
 		setLoading( true );
 		setError( null );
 		setWasRefresh( refresh );
@@ -162,25 +163,37 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue =
 			}
 			return apiFetch( { path: `${ REST_BASE }/${ encodeURIComponent( test.test_id ) }/stats${ refresh ? '?refresh=1' : '' }` } )
 				.then( response => {
+					if ( isCancelled() ) {
+						return;
+					}
 					setStats( response );
 					if ( refresh ) {
 						speak( __( 'Results loaded.', 'newspack-plugin' ) );
 					}
 				} )
-				.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) ) )
-				.finally( () => setLoading( false ) );
+				.catch( err => {
+					if ( ! isCancelled() ) {
+						setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) );
+					}
+				} )
+				.finally( () => {
+					if ( ! isCancelled() ) {
+						setLoading( false );
+					}
+				} );
 		};
-		return refresh ? request() : enqueue( request );
+		return queued ? enqueue( request ) : request();
 	};
 
 	// Again once the test ends: its results now stop at the day it ended, not
 	// today, so the counts already on the card no longer match.
+	const endedAtMount = useRef( isEnded );
 	useEffect( () => {
 		if ( ! canLoadStats ) {
 			return;
 		}
 		let cancelled = false;
-		load( false, () => cancelled );
+		load( false, () => cancelled, isEnded === endedAtMount.current );
 		return () => {
 			cancelled = true;
 		};

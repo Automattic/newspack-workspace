@@ -315,6 +315,10 @@ final class Newspack_Popups_API {
 	 * stored form either way. A full rawurldecode() would not: it turns
 	 * caf%c3%a9 into café, which sanitize_title() then stores as a different ID.
 	 *
+	 * The one ID this can't recover is one that stores a literal %25 before two
+	 * hex digits, through ?rest_route=: the value alone can't say whether PHP
+	 * already decoded it, so that ID still finds no test there.
+	 *
 	 * @param mixed $value Test ID from the route.
 	 * @return string
 	 */

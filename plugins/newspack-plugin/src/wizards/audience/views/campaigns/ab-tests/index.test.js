@@ -550,6 +550,47 @@ describe( 'Ended tests', () => {
 		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
 	} );
 
+	it( 'ignores a load that was out when its test ended, and drops the queued load of a card the end hid', async () => {
+		const active = id => test( id, { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01T00:00:00Z', status: 'active' } );
+		const list = listResponse( [ active( 'one' ), active( 'two' ) ] );
+		const pending = [];
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if ( path === '/newspack-popups/v1/ab-tests' && ! method ) {
+				return Promise.resolve( list );
+			}
+			if ( path.endsWith( '/end' ) ) {
+				const id = path.split( '/' ).at( -2 );
+				return Promise.resolve( { ...active( id ), status: 'ended', ended_at: '2026-11-08T10:00:00Z', kept: 'b' } );
+			}
+			return new Promise( resolve => pending.push( { path, resolve } ) );
+		} );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test one' } );
+		await waitFor( () => expect( pending ).toHaveLength( 1 ) );
+		const endedId = pending[ 0 ].path.includes( '/one/' ) ? 'one' : 'two';
+		const hiddenId = 'one' === endedId ? 'two' : 'one';
+
+		// End the test whose first load is still out; the other card's load waits behind it.
+		fireEvent.click( within( cardFor( `Test ${ endedId }` ) ).getByRole( 'button', { name: `End Test: Test ${ endedId }` } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		// The reload goes out without waiting for the load already out.
+		await waitFor( () => expect( pending ).toHaveLength( 2 ) );
+		expect( pending[ 1 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ endedId }/stats` );
+
+		// The load from before the end resolves: nothing on the card changes.
+		pending[ 0 ].resolve( stats );
+		const card = await screen.findByRole( 'region', { name: `Test ${ endedId }` } );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( within( card ).queryByText( '2.69%' ) ).not.toBeInTheDocument();
+		expect( within( card ).getByText( 'Loading results…' ) ).toBeInTheDocument();
+		// Ending switched the list to ended tests, so the other card's queued load never goes out.
+		expect( screen.queryByRole( 'region', { name: `Test ${ hiddenId }` } ) ).not.toBeInTheDocument();
+		expect( pending.map( ( { path } ) => path ) ).not.toContain( `/newspack-popups/v1/ab-tests/${ hiddenId }/stats` );
+
+		pending[ 1 ].resolve( stats );
+		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
+	}, 15000 );
+
 	it( 'ends a test, then shows it first among ended tests, focused and announced', async () => {
 		const refetch = jest.fn();
 		// The earlier-ended test is listed first, so only the move puts this one ahead.
