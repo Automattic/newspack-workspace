@@ -25,6 +25,7 @@ export { default as emailCheck } from './src/email-check';
 export { default as emailError } from './src/email-error';
 export { default as emailPremium } from './src/email-premium';
 export { default as emailSend } from './src/email-send';
+export { default as feather } from './src/feather';
 export { default as gift } from './src/gift';
 export { default as hand } from './src/hand';
 export { default as iframe } from './src/iframe';
