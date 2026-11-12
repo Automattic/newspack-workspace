@@ -432,6 +432,55 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Get the tiers a reader can buy as a new purchase.
+	 *
+	 * Leaves out Name Your Price tiers with no suggested or minimum price, which
+	 * have nothing to charge. This matches the Checkout Button, which renders
+	 * nothing for such a product on its own.
+	 *
+	 * @param \WC_Product|null $product Optional grouped or variable subscription product.
+	 *
+	 * @return array<string, \WC_Product[]> Product tiers by frequency.
+	 */
+	public static function get_purchasable_tiers( $product = null ) {
+		$tiers = self::get_tiers_by_frequency( $product );
+		foreach ( $tiers as $frequency => $products ) {
+			$products = array_values(
+				array_filter(
+					$products,
+					function( $tier_product ) {
+						return ! self::is_unpriced_nyp( $tier_product );
+					}
+				)
+			);
+			if ( empty( $products ) ) {
+				unset( $tiers[ $frequency ] );
+			} else {
+				$tiers[ $frequency ] = $products;
+			}
+		}
+		return $tiers;
+	}
+
+	/**
+	 * Whether a product is Name Your Price with neither a suggested nor a minimum price.
+	 *
+	 * @param \WC_Product $product Product.
+	 *
+	 * @return bool
+	 */
+	private static function is_unpriced_nyp( $product ) {
+		if ( class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			return \WC_Name_Your_Price_Helpers::is_nyp( $product )
+				&& ! \WC_Name_Your_Price_Helpers::get_suggested_price( $product )
+				&& ! \WC_Name_Your_Price_Helpers::get_minimum_price( $product );
+		}
+		return 'yes' === $product->get_meta( '_nyp' )
+			&& ! $product->get_meta( '_suggested_price' )
+			&& ! $product->get_meta( '_min_price' );
+	}
+
+	/**
 	 * Find the tier the current user is actively subscribed to, if any.
 	 *
 	 * A subscription counts as "current" when it holds one of the tier products
@@ -742,7 +791,10 @@ class Subscriptions_Tiers {
 	 * @param array|null  $switch_data  Switch subscription data or null.
 	 */
 	public static function render_form( $product = null, $title = null, $button_label = null, $switch_data = null ) {
-		$tiers = self::get_tiers_by_frequency( $product );
+		// A switch keeps every tier, since its amount input starts from what the
+		// reader already pays.
+		$all_tiers = self::get_tiers_by_frequency( $product );
+		$tiers     = $switch_data ? $all_tiers : self::get_purchasable_tiers( $product );
 		if ( empty( $tiers ) ) {
 			return;
 		}
@@ -755,7 +807,9 @@ class Subscriptions_Tiers {
 		$current_product   = null;
 		$user_subscription = null;
 		if ( is_user_logged_in() ) {
-			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $tiers );
+			// Read from every tier, so a reader who holds a tier that is no longer
+			// offered still sees the notice about their subscription.
+			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $all_tiers );
 		}
 
 		// The line item being switched, when this form is a switch modal.
@@ -1333,6 +1387,11 @@ class Subscriptions_Tiers {
 		$switch_data = null;
 		if ( self::should_attempt_to_switch_subscription() ) {
 			$switch_data = self::get_product_switch_data( $product );
+		}
+
+		// Nothing to sell: skip the modal rather than open an empty one.
+		if ( ! $switch_data && empty( self::get_purchasable_tiers( $product ) ) ) {
+			return;
 		}
 
 		self::render_modal( $product, null, null, $switch_data, 'open' );
