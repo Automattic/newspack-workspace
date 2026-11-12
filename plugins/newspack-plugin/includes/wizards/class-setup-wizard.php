@@ -215,6 +215,7 @@ class Setup_Wizard extends Wizard {
 			'wordpress-seo',
 			'google-site-kit',
 			'newspack-blocks',
+			'newspack-content-blocks',
 			'newspack-newsletters',
 			'newspack-theme',
 		];
