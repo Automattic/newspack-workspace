@@ -592,8 +592,10 @@ describe( 'afterModalExit()', () => {
 } );
 
 describe( 'setReadableBackground()', () => {
-	// A stand-in 2D context that, like a real canvas, ignores a fill it can't
-	// parse and returns the pixel for whatever fill it last accepted.
+	// A stand-in 2D context that, like a real canvas, starts with a black fill,
+	// ignores a fill it can't parse, and returns the pixel for whatever fill it
+	// last accepted. The black start is what makes a missing transparent reset
+	// show up as an opaque black background.
 	const mockCanvas = pixels => {
 		jest.spyOn( HTMLCanvasElement.prototype, 'getContext' ).mockImplementation( () => {
 			let fill = '#000000';
