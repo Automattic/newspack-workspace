@@ -17,6 +17,7 @@ import {
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
 	restorePaymentFocus,
+	setReadableBackground,
 } from './utils';
 
 afterEach( () => {
@@ -587,5 +588,33 @@ describe( 'afterModalExit()', () => {
 		await flushPromises();
 		finish();
 		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'setReadableBackground()', () => {
+	const mockBackground = ( value, pixel ) => {
+		jest.spyOn( window, 'getComputedStyle' ).mockReturnValue( { backgroundColor: value } );
+		jest.spyOn( HTMLCanvasElement.prototype, 'getContext' ).mockReturnValue( {
+			fillRect: () => {},
+			getImageData: () => ( { data: pixel } ),
+		} );
+	};
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+	} );
+
+	it( 'restates a colour Stripe cannot parse as rgb()', () => {
+		const element = document.createElement( 'div' );
+		mockBackground( 'oklab(0.969 0 0)', [ 245, 245, 245, 255 ] );
+		setReadableBackground( element );
+		expect( element.style.backgroundColor ).toBe( 'rgb(245, 245, 245)' );
+	} );
+
+	it( 'leaves an rgb() background alone', () => {
+		const element = document.createElement( 'div' );
+		mockBackground( 'rgb(255, 255, 255)', [ 0, 0, 0, 255 ] );
+		setReadableBackground( element );
+		expect( element.style.backgroundColor ).toBe( '' );
 	} );
 } );

@@ -18,6 +18,7 @@ import {
 	onCheckoutPlaceOrderProcessing,
 	placeOrderSummary,
 	restorePaymentFocus,
+	setReadableBackground,
 } from './utils';
 
 ( $ => {
@@ -30,6 +31,9 @@ import {
 		}
 
 		const container = document.querySelector( '#newspack_modal_checkout_container' );
+
+		// `#order_review` is the first opaque background Stripe finds around its card form.
+		setReadableBackground( document.getElementById( 'order_review' ) );
 
 		// The checkout scrolls inside this frame, under the modal's header, so the frame fades its top
 		// edge to show that content continues beneath the header.
