@@ -34,7 +34,7 @@ class Content_Blocks_Activation {
 	 * Initialize hooks.
 	 */
 	public static function init() {
-		add_action( 'admin_init', [ __CLASS__, 'maybe_run' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_run_admin' ] );
 		add_action(
 			'wp_loaded',
 			function () {
@@ -43,6 +43,33 @@ class Content_Blocks_Activation {
 				}
 			}
 		);
+	}
+
+	/**
+	 * Run from admin_init, for users allowed to activate (and install) plugins only.
+	 *
+	 * Logged-out requests reach admin_init through admin-ajax.php and admin-post.php.
+	 */
+	public static function maybe_run_admin() {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		if ( ! self::is_installed() && ! current_user_can( 'install_plugins' ) ) {
+			return;
+		}
+		self::maybe_run();
+	}
+
+	/**
+	 * Whether the plugin files are present.
+	 *
+	 * @return bool
+	 */
+	private static function is_installed() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return isset( Plugin_Manager::get_installed_plugins()[ self::SLUG ] );
 	}
 
 	/**
@@ -125,11 +152,16 @@ class Content_Blocks_Activation {
 			return;
 		}
 
-		$installed = isset( Plugin_Manager::get_installed_plugins()[ self::SLUG ] );
-		if ( ! $installed && ! Plugin_Manager::can_install_plugins() ) {
+		if ( ! self::is_installed() && ! Plugin_Manager::can_install_plugins() ) {
 			self::record( 'not_installable', (int) $state['attempts'] );
 			return;
 		}
+
+		// Record the attempt first: activation includes the plugin file, and a fatal
+		// there would otherwise leave no trace and be retried on every request. This
+		// also keeps a concurrent request out for the retry window.
+		$attempts = (int) $state['attempts'] + 1;
+		self::record( 'failed', $attempts, 'Activation did not complete.' );
 
 		/**
 		 * Filters the activation result before it is attempted.
@@ -141,9 +173,9 @@ class Content_Blocks_Activation {
 			$result = Plugin_Manager::activate( self::SLUG );
 		}
 
-		if ( is_wp_error( $result ) ) {
-			$attempts = (int) $state['attempts'] + 1;
-			$message  = $result->get_error_message();
+		// A concurrent request may have activated it meanwhile.
+		if ( is_wp_error( $result ) && ! is_plugin_active( self::SLUG . '/' . self::SLUG . '.php' ) ) {
+			$message = $result->get_error_message();
 			self::record( 'failed', $attempts, $message );
 			Logger::newspack_log( 'newspack_content_blocks_activation_failed', $message, [ 'attempts' => $attempts ], 'error' );
 			return;
