@@ -47,8 +47,8 @@
 #
 # Requires php and wp (WP-CLI) on PATH unless --dry-run, plus msgmerge and
 # msgfmt for the units that ship .po files (newspack-plugin, newspack-blocks and
-# the classic newspack-theme). On macOS: `brew install wp-cli gettext`, and gettext is
-# keg-only so its bin directory needs adding to PATH.
+# the classic newspack-theme). On macOS: `brew install wp-cli gettext`, and
+# gettext is keg-only so its bin directory needs adding to PATH.
 
 set -euo pipefail
 shopt -s nullglob
