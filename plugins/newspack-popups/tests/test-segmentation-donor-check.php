@@ -112,4 +112,29 @@ class SegmentationDonorCheckTest extends WP_UnitTestCase {
 			"Value $description was a false positive under old behavior and should now be rejected."
 		);
 	}
+
+	/**
+	 * Mailchimp returns merge tags in uppercase, while the setting is typed by
+	 * hand. Each comma-separated entry in the setting matches on its own.
+	 */
+	public function test_merge_fields_match_setting_case_insensitively_and_per_entry() {
+		$merge_fields = [
+			'FNAME'      => 'Pat',
+			'HUB-MEMBER' => 'yes',
+		];
+
+		self::assertTrue( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'Hub-Member' ) );
+		self::assertTrue( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT, hub-member' ) );
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT' ) );
+	}
+
+	/**
+	 * A blank setting, or a blank entry in it, matches no field.
+	 */
+	public function test_blank_setting_entries_match_nothing() {
+		$merge_fields = [ 'FNAME' => 'Pat' ];
+
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, '' ) );
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT, ' ) );
+	}
 }
