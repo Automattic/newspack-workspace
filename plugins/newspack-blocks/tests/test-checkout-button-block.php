@@ -12,6 +12,10 @@ require_once dirname( __DIR__ ) . '/src/blocks/checkout-button/view.php';
 
 /**
  * Checkout Button Block.
+ *
+ * The product tests use the WC_Product stub and the wc_get_product() mock
+ * defined in test-modal-checkout-data.php; the suite loads every test file,
+ * so they are available here.
  */
 class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
@@ -387,19 +391,22 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * A product whose picker would offer no tiers renders no button, even when
-	 * the product itself has a price.
+	 * A product that opens the tier picker renders a button only when the picker
+	 * has a tier to sell, even when the product itself has a price.
 	 *
 	 * @dataProvider picker_products
 	 *
-	 * @param string $type        Product type.
-	 * @param bool   $is_variable The block's is_variable attribute.
+	 * @param string $type            Product type.
+	 * @param bool   $is_variable     The block's is_variable attribute.
+	 * @param bool   $has_purchasable Whether any tier can be bought.
 	 */
-	public function test_picker_with_no_purchasable_tiers_renders_nothing( $type, $is_variable ) {
+	public function test_picker_renders_only_with_purchasable_tiers( $type, $is_variable, $has_purchasable ) {
 		$GLOBALS['newspack_blocks_test_products'] = [
 			11 => new WC_Product( 11, $type, [ 22 ], '10' ),
 		];
-		\Newspack\Subscriptions_Tiers::$stub_tiers = [ 'month' => [ new WC_Product( 22, 'subscription', [], '' ) ] ];
+		$tiers = [ 'month' => [ new WC_Product( 22, 'subscription', [], '' ) ] ];
+		\Newspack\Subscriptions_Tiers::$stub_tiers             = $tiers;
+		\Newspack\Subscriptions_Tiers::$stub_purchasable_tiers = $has_purchasable ? $tiers : [];
 
 		$output = $this->render(
 			[
@@ -408,18 +415,24 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			]
 		);
 
-		$this->assertSame( '', $output );
+		if ( $has_purchasable ) {
+			$this->assertStringContainsString( '<button', $output );
+		} else {
+			$this->assertSame( '', $output );
+		}
 	}
 
 	/**
-	 * Products that open the tier picker.
+	 * Products that open the tier picker, with and without a tier to sell.
 	 *
 	 * @return array
 	 */
 	public function picker_products() {
 		return [
-			'variable subscription' => [ 'variable-subscription', true ],
-			'grouped'               => [ 'grouped', false ],
+			'variable subscription, nothing to sell' => [ 'variable-subscription', true, false ],
+			'variable subscription, tier to sell'    => [ 'variable-subscription', true, true ],
+			'grouped, nothing to sell'               => [ 'grouped', false, false ],
+			'grouped, tier to sell'                  => [ 'grouped', false, true ],
 		];
 	}
 }
