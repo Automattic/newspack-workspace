@@ -17,6 +17,7 @@ import {
 	preventDisabledCloseClicks,
 	removeFrameProcessingScreen,
 	restorePaymentFocus,
+	setReadableBackground,
 } from './utils';
 
 afterEach( () => {
@@ -587,5 +588,58 @@ describe( 'afterModalExit()', () => {
 		await flushPromises();
 		finish();
 		expect( callback ).toHaveBeenCalledTimes( 1 );
+	} );
+} );
+
+describe( 'setReadableBackground()', () => {
+	// A stand-in 2D context that, like a real canvas, starts with a black fill,
+	// ignores a fill it can't parse, and returns the pixel for whatever fill it
+	// last accepted. The black start is what makes a missing transparent reset
+	// show up as an opaque black background.
+	const mockCanvas = pixels => {
+		jest.spyOn( HTMLCanvasElement.prototype, 'getContext' ).mockImplementation( () => {
+			let fill = '#000000';
+			return {
+				set fillStyle( value ) {
+					if ( value in pixels ) {
+						fill = value;
+					}
+				},
+				get fillStyle() {
+					return fill;
+				},
+				fillRect: () => {},
+				getImageData: () => ( { data: pixels[ fill ] ?? [ 0, 0, 0, 255 ] } ),
+			};
+		} );
+	};
+	const mockBackground = value => jest.spyOn( window, 'getComputedStyle' ).mockReturnValue( { backgroundColor: value } );
+
+	afterEach( () => {
+		jest.restoreAllMocks();
+	} );
+
+	it( 'restates a color Stripe cannot parse as rgb()', () => {
+		const element = document.createElement( 'div' );
+		mockBackground( 'oklab(0.969 0 0)' );
+		mockCanvas( { transparent: [ 0, 0, 0, 0 ], 'oklab(0.969 0 0)': [ 245, 245, 245, 255 ] } );
+		setReadableBackground( element );
+		expect( element.style.backgroundColor ).toBe( 'rgb(245, 245, 245)' );
+	} );
+
+	it( 'leaves the element alone when the canvas cannot parse the color either', () => {
+		const element = document.createElement( 'div' );
+		mockBackground( 'oklab(0.969 0 0)' );
+		mockCanvas( { transparent: [ 0, 0, 0, 0 ] } );
+		setReadableBackground( element );
+		expect( element.style.backgroundColor ).toBe( '' );
+	} );
+
+	it( 'leaves an rgb() background alone', () => {
+		const element = document.createElement( 'div' );
+		mockBackground( 'rgb(255, 255, 255)' );
+		mockCanvas( { transparent: [ 0, 0, 0, 0 ], 'rgb(255, 255, 255)': [ 0, 0, 0, 255 ] } );
+		setReadableBackground( element );
+		expect( element.style.backgroundColor ).toBe( '' );
 	} );
 } );
