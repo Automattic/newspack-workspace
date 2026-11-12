@@ -23,6 +23,11 @@ class Budgets {
 	const AUTO_ARCHIVE_CRON_HOOK = 'newspack_story_budget_auto_archive_budgets';
 
 	/**
+	 * The post statuses a story can have.
+	 */
+	const STORY_POST_STATUSES = [ 'publish', 'pending', 'draft', 'future', 'private' ];
+
+	/**
 	 * Stories query object.
 	 *
 	 * @var \WP_Query
@@ -180,7 +185,7 @@ class Budgets {
 			$query_args,
 			[
 				'post_type'      => self::get_post_types(),
-				'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private' ],
+				'post_status'    => self::STORY_POST_STATUSES,
 				'posts_per_page' => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Tax-scoped to active budgets; bounded editorial set.
 			]
 		);

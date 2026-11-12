@@ -7,6 +7,7 @@
 
 namespace Newspack_Blocks\Tracking;
 
+use Newspack_Blocks\Modal_Checkout;
 use Newspack_Blocks\Modal_Checkout\Checkout_Data;
 
 /**
@@ -25,10 +26,44 @@ final class Data_Events {
 	const FORM_SUBMISSION_FAILURE = 'form_submission_failure';
 
 	/**
+	 * Order meta key recording that the order's modal checkout interaction was
+	 * dispatched. An order can return to a paid status from an unpaid one (a
+	 * payment review or dispute that puts it on hold, a refunded order
+	 * completed again), and each purchase must be reported once.
+	 */
+	const INTERACTION_DISPATCHED_META_KEY = '_newspack_modal_checkout_interaction_dispatched';
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
 		add_action( 'plugins_loaded', [ __CLASS__, 'register_listeners' ] );
+
+		// Inert without WooCommerce Subscriptions: nothing applies these filters.
+		foreach ( [ 'subscription', 'parent', 'renewal_order', 'resubscribe_order' ] as $copy_type ) {
+			add_filter( "wc_subscriptions_{$copy_type}_data", [ __CLASS__, 'exclude_order_meta_from_subscription_copy' ] );
+		}
+	}
+
+	/**
+	 * Keep the modal checkout marker and the dispatched flag out of the order
+	 * meta WooCommerce Subscriptions copies.
+	 *
+	 * Subscriptions copies a parent order's meta to the subscription, and the
+	 * subscription's meta to every renewal and resubscribe order. A copied
+	 * marker would report each renewal as a new modal checkout purchase, and a
+	 * copied flag would suppress a resubscribe that really was one.
+	 *
+	 * @param array $data Meta to copy, keyed by meta key.
+	 *
+	 * @return array
+	 */
+	public static function exclude_order_meta_from_subscription_copy( $data ) {
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+		unset( $data[ Modal_Checkout::ORDER_META_KEY ], $data[ self::INTERACTION_DISPATCHED_META_KEY ] );
+		return $data;
 	}
 
 	/**
@@ -40,85 +75,80 @@ final class Data_Events {
 		}
 
 		/**
-		 * Modal Checkout Interaction: Order Processed.
+		 * Modal Checkout Interaction: Order Paid.
 		 *
-		 * Both hooks fire when the order is created, before payment is
-		 * processed — not when the order reaches the "completed" status.
-		 *
-		 * Both WooCommerce checkout pipelines feed the same Data Events action:
-		 * classic checkout fires woocommerce_checkout_order_processed, while
-		 * Store API checkouts (the transport express wallets such as Apple Pay
-		 * and Google Pay use) fire woocommerce_store_api_checkout_order_processed
-		 * instead. Each hook gets a callback matching its exact argument shape.
+		 * The purchase is reported when the order first reaches a paid status,
+		 * not when it is created: both checkout pipelines create the order, fire
+		 * their order-processed hooks, and only then try the payment, on every
+		 * submission (see woocommerce/woocommerce#68757). A paid status also
+		 * arrives from places with no modal signal in the request (a 3D Secure
+		 * return, a gateway webhook, an admin marking a cheque paid), so modal
+		 * origin is read from the order.
 		 */
 		\Newspack\Data_Events::register_listener(
-			'woocommerce_checkout_order_processed',
+			'woocommerce_order_status_changed',
 			'modal_checkout_interaction',
-			[ __CLASS__, 'order_status_completed' ]
-		);
-		\Newspack\Data_Events::register_listener(
-			'woocommerce_store_api_checkout_order_processed',
-			'modal_checkout_interaction',
-			[ __CLASS__, 'store_api_order_processed' ]
+			[ __CLASS__, 'order_status_changed' ]
 		);
 	}
 
 	/**
-	 * Classic checkout listener callback.
+	 * Order status change listener callback.
 	 *
-	 * $posted_data and $order are accepted to match the classic hook's
-	 * signature and are deliberately unused: the payload is built from the
-	 * order ID alone, so both checkout pipelines share one builder.
+	 * Dispatches when a modal checkout order is paid for the first time. A
+	 * declined payment never gets there, and a payment retried on the same
+	 * order dispatches once, when it succeeds.
 	 *
-	 * @param int            $order_id Order's ID.
-	 * @param array|null     $posted_data Posted Data.
-	 * @param \WC_Order|null $order Order object.
-	 *
-	 * @return array|void The event payload; void suppresses the dispatch.
-	 */
-	public static function order_status_completed( $order_id, $posted_data = null, $order = null ) {
-		return self::get_modal_checkout_interaction_data( $order_id );
-	}
-
-	/**
-	 * Store API checkout listener callback.
-	 *
-	 * The Store API hook passes a single \WC_Order, unlike the classic hook's
-	 * three arguments; only a scalar order ID crosses into the shared payload
-	 * builder, so neither callback can misread the other hook's argument list.
-	 *
-	 * @param mixed $order Order object. The hook contract promises a \WC_Order;
-	 *                     anything else is ignored rather than trusted.
+	 * @param int            $order_id    Order ID.
+	 * @param string         $status_from Previous status.
+	 * @param string         $status_to   New status.
+	 * @param \WC_Order|null $order       Order object. Anything else is ignored
+	 *                                    rather than trusted.
 	 *
 	 * @return array|void The event payload; void suppresses the dispatch.
 	 */
-	public static function store_api_order_processed( $order ) {
-		if ( ! is_a( $order, 'WC_Order' ) ) {
+	public static function order_status_changed( $order_id, $status_from = '', $status_to = '', $order = null ) {
+		if ( ! is_a( $order, 'WC_Order' ) || ! $order->is_paid() ) {
+			return;
+		}
+		// A move between paid statuses is not a new purchase: the move into the
+		// first paid status reports it. The flag cannot stop a second report when
+		// this move is nested inside that first one (an auto-complete hooked on
+		// processing): the nested change runs on a second copy of the order and
+		// reaches this listener before the outer copy has reported or saved the
+		// flag.
+		if ( in_array( $status_from, wc_get_is_paid_statuses(), true ) ) {
+			return;
+		}
+		if ( ! Modal_Checkout::is_modal_checkout_order( $order ) || $order->get_meta( self::INTERACTION_DISPATCHED_META_KEY ) ) {
 			return;
 		}
 
-		return self::get_modal_checkout_interaction_data( $order->get_id() );
-	}
-
-	/**
-	 * Build the modal checkout interaction payload for an order, or bail when
-	 * the request is not modal-origin.
-	 *
-	 * Origin detection covers all three modal request shapes: the
-	 * modal_checkout request param (classic card), express_payment_type in
-	 * $_POST (classic express), and the modal referer carried by Store API
-	 * JSON submissions.
-	 *
-	 * @param int $order_id Order's ID.
-	 *
-	 * @return array|void The event payload; void suppresses the dispatch.
-	 */
-	private static function get_modal_checkout_interaction_data( $order_id ) {
-		if ( ! \Newspack_Blocks\Modal_Checkout::is_modal_checkout_origin() ) {
+		$data = self::get_modal_checkout_interaction_data( $order );
+		if ( empty( $data ) ) {
 			return;
 		}
 
-		$data = \Newspack\Data_Events\Utils::get_order_data( $order_id );
+		$order->update_meta_data( self::INTERACTION_DISPATCHED_META_KEY, time() );
+		$order->save_meta_data();
+
+		return $data;
+	}
+
+	/**
+	 * Build the modal checkout interaction payload for an order.
+	 *
+	 * A renewal checked out through the modal is reported like any other modal
+	 * purchase, with is_renewal set in the payload. Scheduled renewals are not
+	 * reported: they never carry the marker.
+	 *
+	 * @param \WC_Order $order Order object.
+	 *
+	 * @return array|void The event payload; void suppresses the dispatch.
+	 */
+	private static function get_modal_checkout_interaction_data( $order ) {
+		$data = \Newspack\Data_Events\Utils::get_order_data( $order->get_id() );
+
 		if ( empty( $data ) ) {
 			return;
 		}
@@ -126,7 +156,7 @@ final class Data_Events {
 		$product_id = is_array( $data['platform_data']['product_id'] ) ? $data['platform_data']['product_id'][0] : $data['platform_data']['product_id'];
 
 		$data['action']       = self::FORM_SUBMISSION_SUCCESS;
-		$data['action_type']  = Checkout_Data::get_action_type( $product_id );
+		$data['action_type']  = Checkout_Data::get_action_type( $product_id, $order );
 		$data['product_id']   = $product_id;
 		$data['product_type'] = Checkout_Data::get_product_type( $product_id );
 		$data['recurrence']   = Checkout_Data::get_purchase_recurrence( $product_id );

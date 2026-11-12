@@ -2,10 +2,6 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-emails {
-	.dataviews__view-actions {
-		margin-bottom: 16px;
-	}
-
 	// DataViews v14 hides the per-card actions menu (kebab) by default and
 	// reveals it only on hover. Override so it's always visible at the
 	// top-right of each card's media tile. Matches the user-discoverability

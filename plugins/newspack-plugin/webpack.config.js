@@ -91,6 +91,7 @@ const entry = {
 	'content-gate-block-visibility': resolveSource( 'src', 'content-gate', 'editor', 'block-visibility' ),
 	'content-gate-post-settings': resolveSource( 'src', 'content-gate', 'editor', 'post-settings' ),
 	'content-banner': resolveSource( 'src', 'content-gate', 'content-banner' ),
+	'content-gifting-editor': resolveSource( 'src', 'content-gate', 'editor', 'gifting-sharing-button' ),
 	wizards: resolveSource( 'src', 'wizards', 'index' ),
 	'newspack-ui': resolveSource( 'src', 'newspack-ui', 'index' ),
 	bylines: resolveSource( 'src', 'bylines', 'index' ),
@@ -130,7 +131,10 @@ if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',
 	// newspack-blocks' PHP doesn't enqueue commons, so keep its entries self-contained.
-	chunks: chunk => chunk.canBeInitial() && ! Object.hasOwn( bundledBlocksEntries, chunk.name ),
+	chunks: chunk =>
+		chunk.canBeInitial() &&
+		! Object.hasOwn( bundledBlocksEntries, chunk.name ) &&
+		! [ 'overlay-menu-block', 'overlay-search-block' ].includes( chunk.name ),
 	minChunks: 2,
 };
 

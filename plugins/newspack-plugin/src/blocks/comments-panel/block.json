@@ -7,6 +7,7 @@
 	"description": "A button that opens a panel containing the post's comments. Intended for single post templates.",
 	"keywords": [ "comments", "panel", "overlay", "drawer", "discussion" ],
 	"textdomain": "newspack-plugin",
+	"usesContext": [ "postId" ],
 	"supports": {
 		"html": false,
 		"anchor": true,

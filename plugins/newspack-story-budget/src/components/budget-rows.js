@@ -22,7 +22,7 @@ import { moreVertical, chevronUp, chevronDown, dragHandle } from '@wordpress/ico
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import { BUDGET_STATUS } from './budgets';
 import BudgetNameField from './budget-field/budget-field-name';
-import BudgetAutoArchiveDateField from './budget-field/budget-field-auto-archive-date';
+import BudgetAutoArchiveDateField, { formatAutoArchiveDate } from './budget-field/budget-field-auto-archive-date';
 
 const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 	const [ draggedItem, setDraggedItem ] = useState( null );
@@ -240,11 +240,7 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 													{ budget.archive_at && (
 														<Text size="small" variant="muted">
 															{ __( 'Auto-archive set for ', 'newspack-story-budget' ) }
-															{ new Date( budget.archive_at ).toLocaleDateString( 'en-US', {
-																year: 'numeric',
-																month: 'long',
-																day: 'numeric',
-															} ) }
+															{ formatAutoArchiveDate( budget.archive_at ) }
 														</Text>
 													) }
 												</VStack>

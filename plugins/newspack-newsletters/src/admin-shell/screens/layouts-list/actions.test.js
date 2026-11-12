@@ -65,9 +65,10 @@ describe( 'layouts list actions', () => {
 		expect( byId( 'duplicate' ).isEligible ).toBeUndefined();
 	} );
 
-	it( 'Delete supports bulk and is destructive', () => {
+	// A bulk action makes DataViews add a Select all row above the grid.
+	it( 'Delete acts on one layout at a time and is destructive', () => {
 		const action = byId( 'delete-permanently' );
-		expect( action.supportsBulk ).toBe( true );
+		expect( action.supportsBulk ).toBeFalsy();
 		expect( action.isDestructive ).toBe( true );
 	} );
 

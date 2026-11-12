@@ -74,6 +74,16 @@ final class Modal_Checkout {
 	];
 
 	/**
+	 * Order meta key marking an order as placed through the modal checkout.
+	 *
+	 * Modal origin is otherwise only knowable from the request that creates the
+	 * order, and a wallet request can arrive with its referer query stripped,
+	 * while payment can complete in a later request with no modal signal at
+	 * all. Tracking and the thank-you redirect read this marker instead.
+	 */
+	const ORDER_META_KEY = '_newspack_modal_checkout';
+
+	/**
 	 * Cart item keys the in-modal quantity form carries over when it re-adds the
 	 * product at a new quantity.
 	 *
@@ -92,6 +102,7 @@ final class Modal_Checkout {
 		'gate_post_id',
 		'newspack_popup_id',
 		'prompt_title',
+		'newspack_modal_checkout_url',
 		...self::CONTEXTUAL_PROMPT_KEYS,
 	];
 
@@ -235,6 +246,9 @@ final class Modal_Checkout {
 		add_action( 'wp_ajax_abandon_modal_checkout', [ __CLASS__, 'process_abandon_checkout' ] );
 		add_action( 'wp_ajax_nopriv_abandon_modal_checkout', [ __CLASS__, 'process_abandon_checkout' ] );
 		add_action( 'wp_loaded', [ __CLASS__, 'process_checkout_action' ], 21 );
+		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'mark_order' ], 10, 4 );
+		// Donations are added to the cart by newspack-plugin, through this filter.
+		add_filter( 'newspack_donations_cart_item_data', [ __CLASS__, 'amend_cart_item_data' ] );
 
 		add_filter( 'wp_redirect', [ __CLASS__, 'pass_url_param_on_redirect' ] );
 		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
@@ -298,6 +312,8 @@ final class Modal_Checkout {
 		add_filter( 'jetpack_active_modules', [ __CLASS__, 'jetpack_active_modules' ] );
 		add_filter( 'woocommerce_checkout_update_order_review_expired', [ __CLASS__, 'is_not_modal_checkout_filter' ] );
 		add_filter( 'woocommerce_checkout_registration_enabled', [ __CLASS__, 'is_modal_checkout_filter' ] );
+		add_filter( 'wc_stripe_express_checkout_params', [ __CLASS__, 'set_express_checkout_button_radius' ] );
+		add_filter( 'wcpay_express_checkout_js_params', [ __CLASS__, 'set_express_checkout_button_radius' ] );
 
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
@@ -341,6 +357,96 @@ final class Modal_Checkout {
 			$cart_item_data['newspack_modal_checkout_url'] = \home_url( \add_query_arg( null, null ) );
 		}
 		return $cart_item_data;
+	}
+
+	/**
+	 * Mark an order as placed through the modal checkout while WooCommerce
+	 * builds its line items, which the classic and the Store API checkout both
+	 * do.
+	 *
+	 * The cart stamp outlives the request that added the item, so it marks a
+	 * wallet order whose referer query was stripped. The request check covers
+	 * modal checkouts whose cart was filled without the stamp. WooCommerce saves
+	 * the order after its line items, so the meta is only set here.
+	 *
+	 * The decision covers the whole cart, and an order with nothing modal left
+	 * loses its marker. The Store API reuses a draft order from an earlier
+	 * submission (`DraftOrderTrait::is_valid_draft_order()`) and, when the cart
+	 * has changed since, rebuilds its line items from the current cart
+	 * (`OrderController::update_line_items_from_cart()`), which may no longer
+	 * hold anything from the modal.
+	 *
+	 * WooCommerce Subscriptions builds a new subscription's line items through
+	 * the same hook and from the same cart. The subscription is left unmarked:
+	 * the marker records a purchase, and renewal and resubscribe orders take
+	 * their meta from the subscription.
+	 *
+	 * @param \WC_Order_Item_Product $item          Order line item.
+	 * @param string                 $cart_item_key Cart item key.
+	 * @param array                  $values        Cart item data.
+	 * @param \WC_Order              $order         Order being built.
+	 */
+	public static function mark_order( $item, $cart_item_key, $values, $order ) {
+		if ( ! is_a( $order, 'WC_Order' ) || is_a( $order, 'WC_Subscription' ) ) {
+			return;
+		}
+		if ( ! empty( $values['newspack_modal_checkout_url'] ) || self::is_modal_checkout_origin() || self::cart_has_modal_checkout_stamp() ) {
+			$order->update_meta_data( self::ORDER_META_KEY, 1 );
+		} else {
+			$order->delete_meta_data( self::ORDER_META_KEY );
+		}
+	}
+
+	/**
+	 * Whether any item in the current cart carries the modal stamp.
+	 *
+	 * @return bool
+	 */
+	private static function cart_has_modal_checkout_stamp() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return false;
+		}
+		foreach ( \WC()->cart->get_cart() as $cart_item ) {
+			if ( ! empty( $cart_item['newspack_modal_checkout_url'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Carry an existing cart item's modal stamp into the data it is re-added
+	 * with.
+	 *
+	 * The in-modal price change empties the cart and re-adds the item, and its
+	 * request carries no modal signal, so amend_cart_item_data() cannot stamp
+	 * the new item. Without this, a reader who changes the amount and then pays
+	 * by wallet under a strict Referrer-Policy is not recognized as modal.
+	 *
+	 * @param array $cart_item_data Data the item is about to be re-added with.
+	 * @param array $cart_item      The cart item being replaced.
+	 *
+	 * @return array
+	 */
+	public static function carry_modal_checkout_stamp( $cart_item_data, $cart_item ) {
+		if ( ! empty( $cart_item['newspack_modal_checkout_url'] ) ) {
+			$cart_item_data['newspack_modal_checkout_url'] = $cart_item['newspack_modal_checkout_url'];
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * Whether an order was placed through the modal checkout.
+	 *
+	 * The marker can be set from a client-controlled referer, so this gates
+	 * analytics and presentation decisions only — never authorization.
+	 *
+	 * @param mixed $order Order object; anything else is not a modal order.
+	 *
+	 * @return bool
+	 */
+	public static function is_modal_checkout_order( $order ) {
+		return is_a( $order, 'WC_Order' ) && (bool) $order->get_meta( self::ORDER_META_KEY );
 	}
 
 	/**
@@ -1046,6 +1152,7 @@ final class Modal_Checkout {
 
 			$cart_item_data['nyp'] = $price;
 			$cart_item_data['base_price'] = isset( $cart_item['base_price'] ) ? $cart_item['base_price'] : $cart_item['nyp'];
+			$cart_item_data = self::carry_modal_checkout_stamp( $cart_item_data, $cart_item );
 
 			if ( $price < $cart_item_data['base_price'] ) {
 				wp_send_json_error(
@@ -1439,6 +1546,7 @@ final class Modal_Checkout {
 				'newspack_class_prefix' => self::get_class_prefix(),
 				'is_checkout_complete'  => function_exists( 'is_order_received_page' ) && is_order_received_page(),
 				'divider_text'          => esc_html__( 'Or', 'newspack-blocks' ),
+				'error_icon'            => method_exists( '\Newspack\Newspack_UI', 'get_notice_icons' ) ? \Newspack\Newspack_UI_Icons::get_svg( \Newspack\Newspack_UI::get_notice_icons()['error'] ) : '',
 				'is_error'              => ! is_checkout() && ! is_order_received_page(),
 				'labels'                => [
 					'billing_details'  => self::get_modal_checkout_labels( 'billing_details' ),
@@ -1737,6 +1845,11 @@ final class Modal_Checkout {
 				// If template is not checkout or order received we want to render an error and back button in modal checkout context.
 				?>
 				<div class="newspack-ui__notice newspack-ui__notice--error">
+					<?php
+					if ( method_exists( '\Newspack\Newspack_UI', 'print_notice_icon' ) ) {
+						\Newspack\Newspack_UI::print_notice_icon( 'error' );
+					}
+					?>
 					<div>
 						<p>
 							<?php
@@ -2143,12 +2256,61 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Whether the current request is a Store API checkout submission that has
+	 * reached its pre-payment hook, which is where a wallet's redirect URL is
+	 * built.
+	 *
+	 * WooCommerce builds the same order-received URL for the order-received
+	 * page itself, for emails and for order-pay. Limiting the marker fallback
+	 * to this request keeps the modal thank-you out of those pages. Store API
+	 * pay-for-order (`/checkout/<id>`) fires the same hook from the standalone
+	 * order-pay page, which is not inside the modal, so its route is excluded.
+	 *
+	 * @return bool
+	 */
+	private static function is_store_api_checkout_submission() {
+		if ( ! did_action( 'woocommerce_store_api_checkout_order_processed' ) ) {
+			return false;
+		}
+		$rest_route = isset( $GLOBALS['wp']->query_vars['rest_route'] ) ? (string) $GLOBALS['wp']->query_vars['rest_route'] : '';
+		return (bool) preg_match( '#^/wc/store(/v\d+)?/checkout/?$#', $rest_route );
+	}
+
+	/**
+	 * Whether the request's referer names a page, rather than being absent or
+	 * cut back to the site's origin.
+	 *
+	 * A Referrer-Policy that strips the modal's query (strict-origin, origin,
+	 * no-referrer) leaves the origin at most. A referer that kept a path or a
+	 * query, and that is_modal_checkout_origin() did not read as modal, came
+	 * from a page outside the modal, such as the regular checkout page paid
+	 * with a cart the modal stamped earlier. A browser set to trim referers to
+	 * their path is the exception: it sends the modal's own path.
+	 *
+	 * @return bool
+	 */
+	private static function has_page_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$path  = (string) \wp_parse_url( $referer, PHP_URL_PATH );
+		$query = (string) \wp_parse_url( $referer, PHP_URL_QUERY );
+
+		return ( '' !== $path && '/' !== $path ) || '' !== $query;
+	}
+
+	/**
 	 * Return URL for modal checkout "thank you" page.
 	 *
 	 * Origin detection covers the referer so that express-wallet (Apple Pay /
 	 * Google Pay) Store API submissions — JSON bodies with no request params —
 	 * get a decorated return URL and land on the modal thank-you, where the
-	 * front-end GA4 purchase event fires.
+	 * front-end GA4 purchase event fires. A Referrer-Policy can strip that
+	 * referer's query, so a Store API checkout whose referer names no page
+	 * also falls back to the order's modal marker.
 	 *
 	 * @param string   $url The URL to redirect to.
 	 * @param WC_Order $order The order related to the transaction.
@@ -2156,7 +2318,8 @@ final class Modal_Checkout {
 	 * @return string
 	 */
 	public static function woocommerce_get_return_url( $url, $order ) {
-		if ( ! self::is_modal_checkout_origin() || self::has_unsupported_payment_gateway() ) {
+		$is_modal_checkout = self::is_modal_checkout_origin() || ( self::is_store_api_checkout_submission() && self::is_modal_checkout_order( $order ) && ! self::has_page_referer() );
+		if ( ! $is_modal_checkout || self::has_unsupported_payment_gateway() ) {
 			return $url;
 		}
 
@@ -2892,6 +3055,25 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Match the express checkout wallet buttons (Apple Pay, Google Pay) to the Newspack UI button radius.
+	 *
+	 * The buttons are drawn by Stripe inside its own iframes, so CSS can't reach them. The value
+	 * mirrors --newspack-ui-radius-button.
+	 *
+	 * @param mixed $params Express checkout script params from WooCommerce Stripe Gateway or WooPayments.
+	 *
+	 * @return mixed Params with the button radius set on modal checkout requests.
+	 */
+	public static function set_express_checkout_button_radius( $params ) {
+		if ( ! is_array( $params ) || ! self::is_modal_checkout() ) {
+			return $params;
+		}
+		$params['button']           = isset( $params['button'] ) && is_array( $params['button'] ) ? $params['button'] : [];
+		$params['button']['radius'] = 8;
+		return $params;
+	}
+
+	/**
 	 * Does this request originate from the modal checkout?
 	 *
 	 * Superset of is_modal_checkout(): additionally true for Store API JSON
@@ -3073,7 +3255,7 @@ final class Modal_Checkout {
 								<span class="currency"><?php echo esc_html( $currency_symbol ); ?></span>
 								<input type="number" min="0" step=".01" name="price" placeholder="<?php echo esc_attr( $price ); ?>" onwheel="return false" />
 							</label>
-							<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>">
+							<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--secondary" ); ?>">
 								<?php echo esc_html( self::get_modal_checkout_labels( 'checkout_nyp_apply' ) ); ?>
 							</button>
 						</p>
@@ -3159,7 +3341,7 @@ final class Modal_Checkout {
 			<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
 			<p class="input-quantity">
 				<input type="number" id="modal_checkout_quantity" name="quantity" step="1" min="<?php echo esc_attr( $args['min'] ); ?>" <?php echo $args['max'] > 0 ? 'max="' . esc_attr( $args['max'] ) . '"' : ''; ?> value="<?php echo esc_attr( $quantity ); ?>" onwheel="return false" />
-				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--outline" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
+				<button type="submit" class="<?php echo esc_attr( "{$class_prefix}__button {$class_prefix}__button--secondary" ); ?>"><?php esc_html_e( 'Update', 'newspack-blocks' ); ?></button>
 			</p>
 			<p class="result <?php echo esc_attr( "{$class_prefix}__helper-text" ); ?>"><?php echo esc_html( $args['help'] ); ?></p>
 		</form>
@@ -3464,7 +3646,6 @@ final class Modal_Checkout {
 				'checkout_confirm'           => __( 'Complete transaction', 'newspack-blocks' ),
 				'checkout_confirm_variation' => __( 'Purchase', 'newspack-blocks' ),
 				'checkout_edit_billing'      => __( 'Edit billing information', 'newspack-blocks' ),
-				'checkout_cancel'            => __( 'Cancel', 'newspack-blocks' ),
 				'checkout_success'           => __( 'Transaction successful', 'newspack-blocks' ),
 				'checkout_nyp'               => __( "Your contribution directly funds our work. If you're moved to do so, you can opt to pay more than the standard rate.", 'newspack-blocks' ),
 				'checkout_nyp_thankyou'      => __( "Thank you for your generosity! We couldn't do this without you!", 'newspack-blocks' ),

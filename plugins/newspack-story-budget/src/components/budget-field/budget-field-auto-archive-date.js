@@ -14,11 +14,17 @@ import {
 import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '@wordpress/block-editor';
 import { useState } from '@wordpress/element';
 import classnames from 'classnames';
+import { formatSiteDate } from 'newspack-components';
 
 /**
  * Internal dependencies.
  */
 import BudgetField from './budget-field';
+
+// The archive date is a calendar day, stored as midnight UTC on that day, and
+// the picker hands back a local date and time: either way the day is the first
+// ten characters.
+export const formatAutoArchiveDate = dateString => ( dateString ? formatSiteDate( String( dateString ).slice( 0, 10 ) ) : '' );
 
 const BudgetAutoArchiveDateField = ( { budget, onUpdateBudget = () => {} } ) => {
 	const [ isOpen, setIsOpen ] = useState( false );
@@ -36,18 +42,6 @@ const BudgetAutoArchiveDateField = ( { budget, onUpdateBudget = () => {} } ) => 
 		setIsOpen( false );
 	};
 
-	const formatDate = dateString => {
-		if ( ! dateString ) {
-			return '';
-		}
-
-		return new Date( dateString ).toLocaleDateString( 'en-US', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-		} );
-	};
-
 	if ( budget.archived ) {
 		return null;
 	}
@@ -61,7 +55,7 @@ const BudgetAutoArchiveDateField = ( { budget, onUpdateBudget = () => {} } ) => 
 			{ budget.archive_at && (
 				<Text variant="muted" size="small" className="newspack-story-budget__field__auto-archive--set">
 					{ __( 'Auto-archive set for ', 'newspack-story-budget' ) }
-					{ formatDate( budget.archive_at ) }
+					{ formatAutoArchiveDate( budget.archive_at ) }
 				</Text>
 			) }
 			{ ! budget.archive_at && (
@@ -88,7 +82,7 @@ const BudgetAutoArchiveDateField = ( { budget, onUpdateBudget = () => {} } ) => 
 				{ autoArchiveDate && (
 					<div>
 						<Text>{ __( 'Automatically archive on ', 'newspack-story-budget' ) }</Text>
-						<Text weight={ 600 }>{ formatDate( autoArchiveDate ) }</Text>
+						<Text weight={ 600 }>{ formatAutoArchiveDate( autoArchiveDate ) }</Text>
 					</div>
 				) }
 				<HStack expanded spacing={ 2 } justify="end" direction="row-reverse">

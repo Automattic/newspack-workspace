@@ -15,7 +15,7 @@
 		background-position: center;
 		background-repeat: no-repeat;
 		background-size: contain;
-		border: 1px dashed wp-colors.$gray-600;
+		border: var(--wpds-border-width-xs, #{wp-vars.$border-width}) dashed var(--wpds-color-stroke-interactive-neutral-strong, #{wp-colors.$gray-700});
 		border-radius: wp-vars.$radius-small;
 		display: flex;
 		justify-content: center;
@@ -27,8 +27,10 @@
 		}
 		&:not(&--has-image) {
 			.components-button {
+				align-self: stretch;
+				height: auto;
 				justify-content: center;
-				width: calc(100% - 2px);
+				width: 100%;
 			}
 		}
 		&--has-image {

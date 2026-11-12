@@ -34,6 +34,15 @@ class WooCommerce_Update_Payment_Notice {
 	const NOTICE_RECOVERABLE_STATUSES = [ 'on-hold', 'pending' ];
 
 	/**
+	 * My Account endpoints that show the notice. Order pages are left out: an
+	 * unpaid order's page asks for its own payment, and a paid one needs nothing.
+	 * A subscription's page shows only that subscription's notice.
+	 *
+	 * @var string[]
+	 */
+	const NOTICE_ACCOUNT_ENDPOINTS = [ 'edit-account', 'subscriptions', 'view-subscription', 'orders' ];
+
+	/**
 	 * Initialize the class.
 	 */
 	public static function init() {
@@ -56,13 +65,18 @@ class WooCommerce_Update_Payment_Notice {
 			return;
 		}
 
-		// Only display the notice if there are no other notices.
-		if ( ! empty( wc_get_notices() ) ) {
+		if ( ! self::is_notice_endpoint() ) {
 			return;
 		}
 
+		// Fetched first so a notice still queued from an earlier request is marked urgent too.
 		$notices = self::get_notices();
 		if ( empty( $notices ) ) {
+			return;
+		}
+
+		// Only display the notice if there are no other notices.
+		if ( ! empty( wc_get_notices() ) ) {
 			return;
 		}
 
@@ -122,6 +136,7 @@ class WooCommerce_Update_Payment_Notice {
 				$notice,
 				[
 					'id'       => $notice_id,
+					'type'     => 'warning',
 					'autohide' => false,
 				]
 			);
@@ -150,7 +165,12 @@ class WooCommerce_Update_Payment_Notice {
 
 		$notices = [];
 
+		$viewed_subscription_id = \absint( \get_query_var( 'view-subscription' ) );
+
 		foreach ( $subscriptions as $subscription ) {
+			if ( $viewed_subscription_id && $viewed_subscription_id !== (int) $subscription->get_id() ) {
+				continue;
+			}
 			// Only nag for statuses where paying can restore the subscription (NPPM-2926);
 			// see NOTICE_RECOVERABLE_STATUSES for why terminal/has-access statuses are excluded.
 			if ( ! $subscription->has_status( self::NOTICE_RECOVERABLE_STATUSES ) ) {
@@ -229,7 +249,7 @@ class WooCommerce_Update_Payment_Notice {
 			add_filter(
 				'newspack_ui_notice_is_urgent',
 				function( $is_urgent, $printed_notice ) use ( $notice ) {
-					if ( $printed_notice === $notice ) {
+					if ( self::normalize_notice( $printed_notice ) === self::normalize_notice( $notice ) ) {
 						$is_urgent = true;
 					}
 					return $is_urgent;
@@ -243,6 +263,86 @@ class WooCommerce_Update_Payment_Notice {
 	}
 
 	/**
+	 * Reduce a notice to its plain text, so a notice matches the same notice after
+	 * WooCommerce has sanitized its markup.
+	 *
+	 * @param string $notice The notice markup.
+	 *
+	 * @return string The normalized text.
+	 */
+	private static function normalize_notice( $notice ) {
+		return preg_replace( '/\s+/', ' ', trim( html_entity_decode( \wp_strip_all_tags( $notice ), ENT_QUOTES, 'UTF-8' ) ) );
+	}
+
+	/**
+	 * Whether the current My Account endpoint is one that shows the notice.
+	 *
+	 * @return bool
+	 */
+	public static function is_notice_endpoint() {
+		global $wp;
+		$query_vars = $wp->query_vars ?? [];
+		foreach ( self::NOTICE_ACCOUNT_ENDPOINTS as $endpoint ) {
+			if ( isset( $query_vars[ $endpoint ] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a subscription is a recurring donation.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	public static function is_donation_subscription( $subscription ) {
+		$items   = array_values( $subscription->get_items() );
+		$product = empty( $items ) ? null : $items[0]->get_product();
+		return $product && Donations::is_donation_product( $product->get_id() );
+	}
+
+	/**
+	 * The message asking a reader to pay a payable order, on that order's page: what
+	 * the payment restores, after a word on the failed payment when there was one.
+	 *
+	 * @param \WC_Order $order  The order.
+	 * @param string    $amount The amount due, formatted.
+	 *
+	 * @return string The message.
+	 */
+	public static function get_order_payment_message( $order, $amount ) {
+		/* translators: %s: the amount due. */
+		$message      = sprintf( __( 'Pay %s to complete your order.', 'newspack-plugin' ), $amount );
+		$subscription = null;
+		if ( function_exists( 'wcs_order_contains_renewal' ) && function_exists( 'wcs_get_subscriptions_for_renewal_order' ) && \wcs_order_contains_renewal( $order ) ) {
+			$subscriptions = \wcs_get_subscriptions_for_renewal_order( $order );
+			$subscription  = $subscriptions ? reset( $subscriptions ) : null;
+		}
+		if ( $subscription && self::is_donation_subscription( $subscription ) ) {
+			$period = 1 === (int) $subscription->get_billing_interval() ? $subscription->get_billing_period() : '';
+			if ( 'month' === $period ) {
+				/* translators: %s: the amount due. */
+				$message = sprintf( __( 'Pay %s to restart your monthly donation.', 'newspack-plugin' ), $amount );
+			} elseif ( 'year' === $period ) {
+				/* translators: %s: the amount due. */
+				$message = sprintf( __( 'Pay %s to restart your annual donation.', 'newspack-plugin' ), $amount );
+			} else {
+				/* translators: %s: the amount due. */
+				$message = sprintf( __( 'Pay %s to restart your recurring donation.', 'newspack-plugin' ), $amount );
+			}
+		} elseif ( $subscription ) {
+			/* translators: %s: the amount due. */
+			$message = sprintf( __( 'Pay %s to reactivate your subscription.', 'newspack-plugin' ), $amount );
+		}
+		if ( $order->has_status( 'failed' ) ) {
+			$message = __( "This payment didn't go through.", 'newspack-plugin' ) . ' ' . $message;
+		}
+		return $message;
+	}
+
+	/**
 	 * Get the notice message given a subscription.
 	 *
 	 * @param \WC_Subscription $subscription The subscription.
@@ -251,8 +351,7 @@ class WooCommerce_Update_Payment_Notice {
 	 */
 	protected static function get_message( $subscription ) {
 		$product = array_values( $subscription->get_items() )[0]->get_product();
-		$is_donation = Donations::is_donation_product( $product->get_id() );
-		if ( $is_donation ) {
+		if ( self::is_donation_subscription( $subscription ) ) {
 			$message = sprintf(
 				/* translators: %s: donation formatted value */
 				__( 'Your recurring donation of %s has stopped.', 'newspack-plugin' ),

@@ -25,6 +25,25 @@ export const domReady = callback => {
 };
 
 /**
+ * Total time an element's current transitions take to finish, from the computed
+ * transition-duration and transition-delay lists, so scripts follow the motion tokens.
+ *
+ * @param {Element} element Element whose transitions to measure.
+ * @return {number} Longest duration plus delay, in milliseconds.
+ */
+export const getTransitionTime = element => {
+	const style = window.getComputedStyle( element );
+	const toMs = value => {
+		const time = parseFloat( value ) || 0;
+		return value.trim().endsWith( 'ms' ) ? time : time * 1000;
+	};
+	const durations = ( style.transitionDuration || '0s' ).split( ',' ).map( toMs );
+	const delays = ( style.transitionDelay || '0s' ).split( ',' ).map( toMs );
+	const count = Math.max( durations.length, delays.length, ( style.transitionProperty || '' ).split( ',' ).length );
+	return Math.max( 0, ...Array.from( { length: count }, ( _, index ) => durations[ index % durations.length ] + delays[ index % delays.length ] ) );
+};
+
+/**
  * Wire up tab-and-panel switching on a root element.
  *
  * @param {HTMLElement} element            Root element containing the tab list and (optionally) a content area.

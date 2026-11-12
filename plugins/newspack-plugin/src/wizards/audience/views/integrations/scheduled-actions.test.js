@@ -26,11 +26,6 @@ jest.mock( '@wordpress/ui', () => {
 	return { Stack: ( { children } ) => React.createElement( 'div', null, children ) };
 } );
 
-jest.mock( '@wordpress/dataviews', () => {
-	const Part = () => null;
-	return { DataViews: { Search: Part, Filters: Part, Layout: Part, Footer: Part } };
-} );
-
 // Captured rather than rendered: the real DataViews cannot load in this jsdom env.
 jest.mock( '../../../../../packages/components/src', () => {
 	const React = require( 'react' );
@@ -47,7 +42,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 			);
 			return React.createElement( 'table', null, React.createElement( 'tbody', null, rows ) );
 		},
-		StatusIndicator: ( { children } ) => React.createElement( 'span', null, children ),
+		StatusBadge: ( { children } ) => React.createElement( 'span', null, children ),
 		Drawer: {
 			Root: ( { isOpen, children } ) => ( isOpen ? React.createElement( 'div', { role: 'dialog' }, children ) : null ),
 			Header: ( { children } ) => React.createElement( 'div', null, children ),
