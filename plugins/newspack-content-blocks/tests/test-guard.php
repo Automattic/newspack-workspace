@@ -45,13 +45,19 @@ class Newspack_Content_Blocks_Test_Guard extends WP_UnitTestCase {
 
 	/**
 	 * Create a placeholder legacy plugin file under the plugins directory.
+	 *
+	 * @param string $plugin Plugin basename to create.
 	 */
-	private function create_legacy_plugin_file() {
-		$this->fixture_file = WP_PLUGIN_DIR . '/' . self::LEGACY_PLUGIN;
-		if ( ! is_dir( dirname( $this->fixture_file ) ) ) {
-			mkdir( dirname( $this->fixture_file ) );
+	private function create_legacy_plugin_file( $plugin = self::LEGACY_PLUGIN ) {
+		$file = WP_PLUGIN_DIR . '/' . $plugin;
+		if ( file_exists( $file ) ) {
+			$this->markTestSkipped( "A real plugin exists at {$file}; refusing to overwrite or remove it." );
 		}
-		file_put_contents( $this->fixture_file, "<?php\n" );
+		$this->fixture_file = $file;
+		if ( ! is_dir( dirname( $file ) ) ) {
+			mkdir( dirname( $file ) );
+		}
+		file_put_contents( $file, "<?php\n" );
 	}
 
 	/**
@@ -60,6 +66,16 @@ class Newspack_Content_Blocks_Test_Guard extends WP_UnitTestCase {
 	public function test_dormant_when_legacy_plugin_listed_active() {
 		$this->create_legacy_plugin_file();
 		update_option( 'active_plugins', [ self::LEGACY_PLUGIN ] );
+		$this->assertTrue( Guard::is_legacy_plugin_active() );
+	}
+
+	/**
+	 * A newspack-blocks plugin in a non-standard directory keeps the plugin dormant.
+	 */
+	public function test_dormant_when_legacy_plugin_in_nonstandard_directory() {
+		$plugin = 'newspack-blocks-1.2.3/newspack-blocks.php';
+		$this->create_legacy_plugin_file( $plugin );
+		update_option( 'active_plugins', [ $plugin ] );
 		$this->assertTrue( Guard::is_legacy_plugin_active() );
 	}
 

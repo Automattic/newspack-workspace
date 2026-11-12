@@ -99,10 +99,8 @@ class Authors_Controller extends \WP_REST_Controller {
 	 * @return string[]
 	 */
 	private static function get_author_role_slugs() {
-		global $wp_roles;
-
 		$roles = [];
-		foreach ( $wp_roles->roles as $role_slug => $role ) {
+		foreach ( wp_roles()->roles as $role_slug => $role ) {
 			if ( ! empty( $role['capabilities']['edit_posts'] ) ) {
 				$roles[] = [
 					'slug'  => $role_slug,

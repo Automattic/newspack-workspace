@@ -53,11 +53,15 @@ final class Guard {
 	 * @return bool
 	 */
 	private static function will_legacy_plugin_load() {
-		$legacy_plugin = 'newspack-blocks/newspack-blocks.php';
-		$plugins       = (array) \get_option( 'active_plugins', [] );
+		$plugins = (array) \get_option( 'active_plugins', [] );
 		if ( \is_multisite() ) {
 			$plugins = array_merge( $plugins, array_keys( (array) \get_site_option( 'active_sitewide_plugins', [] ) ) );
 		}
-		return in_array( $legacy_plugin, $plugins, true ) && file_exists( WP_PLUGIN_DIR . '/' . $legacy_plugin );
+		foreach ( $plugins as $plugin ) {
+			if ( 'newspack-blocks.php' === basename( $plugin ) && file_exists( WP_PLUGIN_DIR . '/' . $plugin ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

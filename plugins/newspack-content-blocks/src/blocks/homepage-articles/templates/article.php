@@ -44,7 +44,7 @@ call_user_func(
 			'alt'                 => trim( wp_strip_all_tags( get_the_title( $post_id ) ) ),
 		);
 
-		// This global will be used by the newspack_blocks_filter_hpb_srcset filter.
+		// This global will be used by the Newspack_Content_Blocks\Homepage_Articles\maximum_image_width() function (via filter_sizes).
 		global $newspack_blocks_hpb_rendering_context;
 		$newspack_blocks_hpb_rendering_context = [ 'attrs' => $attributes ];
 
