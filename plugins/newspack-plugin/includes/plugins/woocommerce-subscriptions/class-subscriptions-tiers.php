@@ -434,16 +434,25 @@ class Subscriptions_Tiers {
 	/**
 	 * Get the tiers a reader can buy as a new purchase.
 	 *
-	 * Leaves out Name Your Price tiers with no suggested or minimum price, which
-	 * have nothing to charge. This matches the Checkout Button, which renders
-	 * nothing for such a product on its own.
+	 * Leaves out Name Your Price tiers with no suggested or minimum price: with
+	 * no set price, they can open checkout at $0.
 	 *
 	 * @param \WC_Product|null $product Optional grouped or variable subscription product.
 	 *
 	 * @return array<string, \WC_Product[]> Product tiers by frequency.
 	 */
 	public static function get_purchasable_tiers( $product = null ) {
-		$tiers = self::get_tiers_by_frequency( $product );
+		return self::filter_purchasable_tiers( self::get_tiers_by_frequency( $product ) );
+	}
+
+	/**
+	 * Leave out the tiers get_purchasable_tiers() excludes from a list already built.
+	 *
+	 * @param array<string, \WC_Product[]> $tiers Product tiers by frequency.
+	 *
+	 * @return array<string, \WC_Product[]> Product tiers by frequency.
+	 */
+	private static function filter_purchasable_tiers( $tiers ) {
 		foreach ( $tiers as $frequency => $products ) {
 			$products = array_values(
 				array_filter(
@@ -794,7 +803,7 @@ class Subscriptions_Tiers {
 		// A switch keeps every tier, since its amount input starts from what the
 		// reader already pays.
 		$all_tiers = self::get_tiers_by_frequency( $product );
-		$tiers     = $switch_data ? $all_tiers : self::get_purchasable_tiers( $product );
+		$tiers     = $switch_data ? $all_tiers : self::filter_purchasable_tiers( $all_tiers );
 		if ( empty( $tiers ) ) {
 			return;
 		}
@@ -808,7 +817,8 @@ class Subscriptions_Tiers {
 		$user_subscription = null;
 		if ( is_user_logged_in() ) {
 			// Read from every tier, so a reader who holds a tier that is no longer
-			// offered still sees the notice about their subscription.
+			// offered still sees the notice about their subscription, as long as
+			// other tiers are.
 			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $all_tiers );
 		}
 
