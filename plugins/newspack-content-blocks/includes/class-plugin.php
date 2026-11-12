@@ -28,6 +28,7 @@ final class Plugin {
 		'Caching'                  => 'includes/class-caching.php',
 		'Patterns'                 => 'includes/class-patterns.php',
 		'Editor'                   => 'includes/class-editor.php',
+		'The_Events_Calendar'      => 'includes/plugins/class-the-events-calendar.php',
 	];
 
 	/**
