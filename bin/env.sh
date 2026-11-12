@@ -785,10 +785,11 @@ MIGRATE
             else
                 # Remove the worktree DIR by its safe form (the identifier the env
                 # was bound to -- stable even if someone `git checkout`ed a
-                # different branch inside it), then delete the REAL branch
-                # separately: worktree.sh's own `git branch -D <safe>` no-ops
-                # against a slash-named branch (feat/foo vs feat-foo), which
-                # previously left the local ref dangling across create/destroy.
+                # different branch inside it), then, unless --keep-branch, delete
+                # the REAL branch separately: worktree.sh's own
+                # `git branch -D <safe>` no-ops against a slash-named branch
+                # (feat/foo vs feat-foo), which previously left the local ref
+                # dangling across create/destroy.
                 real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
                 if [[ "$keep_branch" == true ]]; then
                     "$NABSPATH/bin/worktree.sh" remove --yes --keep-branch "$wt_repo" "$wt_branch"
