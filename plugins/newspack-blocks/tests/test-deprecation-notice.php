@@ -43,6 +43,8 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 		set_current_screen( 'dashboard' );
 		update_option( 'active_plugins', [] );
 		add_filter( 'newspack_blocks_deprecation_notice_has_bundled_copy', '__return_false' );
+		// The Manager stub class always exists in this file; treat it as not installed unless a test says so.
+		add_filter( 'newspack_blocks_deprecation_notice_manager_installed', '__return_false' );
 	}
 
 	/**
@@ -94,6 +96,17 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 	 */
 	public function test_no_notice_when_manager_connected() {
 		Newspack_Manager::$connected = true;
+		$this->assertNull( Newspack_Blocks_Deprecation_Notice::get_state() );
+		$this->assertSame( '', $this->render() );
+	}
+
+	/**
+	 * No notice when Manager is installed, even if not connected.
+	 */
+	public function test_no_notice_when_manager_installed_but_not_connected() {
+		Newspack_Manager::$connected = false;
+		remove_filter( 'newspack_blocks_deprecation_notice_manager_installed', '__return_false' );
+		$this->assertTrue( class_exists( 'Newspack_Manager' ) );
 		$this->assertNull( Newspack_Blocks_Deprecation_Notice::get_state() );
 		$this->assertSame( '', $this->render() );
 	}

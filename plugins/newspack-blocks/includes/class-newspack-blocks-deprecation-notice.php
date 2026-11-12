@@ -41,6 +41,20 @@ class Newspack_Blocks_Deprecation_Notice {
 	}
 
 	/**
+	 * Whether Newspack Manager is installed, which marks a Newspack platform site.
+	 *
+	 * @return bool
+	 */
+	private static function is_manager_installed() {
+		/**
+		 * Filters whether Newspack Manager is installed. A test seam.
+		 *
+		 * @param bool $is_installed Whether the Newspack_Manager class exists.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_deprecation_notice_manager_installed', class_exists( 'Newspack_Manager' ) );
+	}
+
+	/**
 	 * Whether the Newspack plugin, with the copy of these blocks it bundles, is installed.
 	 *
 	 * @return bool
@@ -60,7 +74,8 @@ class Newspack_Blocks_Deprecation_Notice {
 	 * @return string|null Null for no notice, otherwise 'move' or 'ready'.
 	 */
 	public static function get_state() {
-		if ( ! current_user_can( 'install_plugins' ) || self::is_manager_connected() ) {
+		// Manager installed means a Newspack platform site, connected recently or not.
+		if ( ! current_user_can( 'install_plugins' ) || self::is_manager_installed() || self::is_manager_connected() ) {
 			return null;
 		}
 		if ( ! function_exists( 'is_plugin_active' ) ) {
