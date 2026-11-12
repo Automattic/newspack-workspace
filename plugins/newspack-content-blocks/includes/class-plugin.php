@@ -25,6 +25,8 @@ final class Plugin {
 		'API'                      => 'includes/class-api.php',
 		'REST\Articles_Controller' => 'src/blocks/homepage-articles/class-articles-controller.php',
 		'REST\Authors_Controller'  => 'includes/class-authors-controller.php',
+		'Caching'                  => 'includes/class-caching.php',
+		'Patterns'                 => 'includes/class-patterns.php',
 	];
 
 	/**
