@@ -222,6 +222,7 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 */
 	public function test_price_value_is_escaped() {
 		$output = $this->render( [ 'price' => '5"><script>' ] );
+		$this->assertStringContainsString( 'name="price" value="5&quot;&gt;&lt;script&gt;"', $output );
 		$this->assertStringNotContainsString( '"><script>', $output );
 	}
 
