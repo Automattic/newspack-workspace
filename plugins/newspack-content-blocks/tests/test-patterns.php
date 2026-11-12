@@ -11,9 +11,39 @@
 class PatternsTest extends WP_UnitTestCase { // phpcs:ignore
 
 	/**
-	 * The 31 Content Loop patterns and their category are registered on init.
+	 * Remove any Content Loop patterns registered by earlier tests.
+	 */
+	private function unregister_patterns() {
+		$registry = WP_Block_Patterns_Registry::get_instance();
+		for ( $i = 1; $i <= 31; $i++ ) {
+			if ( $registry->is_registered( 'newspack/homepage-posts-' . $i ) ) {
+				$registry->unregister( 'newspack/homepage-posts-' . $i );
+			}
+		}
+	}
+
+	/**
+	 * Registration is hooked to admin_init only, as in newspack-blocks: nothing is
+	 * registered on frontend, REST or cron requests.
+	 */
+	public function test_patterns_hooked_to_admin_init_not_init() {
+		$callback = [ Newspack_Content_Blocks\Patterns::class, 'register_block_patterns_and_categories' ];
+		$this->assertNotFalse( has_action( 'admin_init', $callback ) );
+		$this->assertFalse( has_action( 'init', $callback ) );
+
+		$this->unregister_patterns();
+		$registry = WP_Block_Patterns_Registry::get_instance();
+		$this->assertFalse( $registry->is_registered( 'newspack/homepage-posts-1' ), 'Not registered by the time init has run.' );
+		Newspack_Content_Blocks\Patterns::register_block_patterns_and_categories();
+		$this->assertTrue( $registry->is_registered( 'newspack/homepage-posts-1' ) );
+	}
+
+	/**
+	 * The 31 Content Loop patterns and their category are registered on admin_init.
 	 */
 	public function test_homepage_posts_patterns_registered() {
+		$this->unregister_patterns();
+		Newspack_Content_Blocks\Patterns::register_block_patterns_and_categories();
 		$registry = WP_Block_Patterns_Registry::get_instance();
 		for ( $i = 1; $i <= 31; $i++ ) {
 			$name = 'newspack/homepage-posts-' . $i;

@@ -25,7 +25,7 @@ class Patterns {
 	 * Add hooks and filters.
 	 */
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_block_patterns_and_categories' ] );
+		add_action( 'admin_init', [ __CLASS__, 'register_block_patterns_and_categories' ] );
 	}
 
 	/**
