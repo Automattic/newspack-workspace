@@ -2040,7 +2040,7 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( [ 50, 50 ], wp_list_pluck( $response->get_data(), 'control_share' ) );
 
 		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/no-such-test' ) )->get_data() );
-		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/Not%20A%20Slug' ) )->get_status() );
+		self::assertSame( 404, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/not.a.slug' ) )->get_status() );
 
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
 		self::assertSame( 403, rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/lookup-test' ) )->get_status() );
@@ -2078,6 +2078,34 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		// Nor does an underscore ID with no stored match borrow the hyphenated test.
 		$this->create_test_variant( 'header-test', 'a' );
 		self::assertSame( [], rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/header_test' ) )->get_data() );
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets reaches the prompts route
+	 * through the encoded form the page sends.
+	 */
+	public function test_test_prompts_route_finds_a_percent_encoded_legacy_test_id() {
+		global $wpdb;
+		$control = $this->create_test_variant( 'legacy-cafe', 'a' );
+		// The current sanitizer can't write this value, so write it as a legacy save left it.
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			$wpdb->postmeta,
+			[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			[
+				'post_id'  => $control,
+				'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			]
+		);
+		wp_cache_delete( $control, 'post_meta' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+
+		$response = rest_do_request( new WP_REST_Request( 'GET', '/newspack-popups/v1/ab-tests/caf%25c3%25a9' ) );
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( [ $control ], wp_list_pluck( $response->get_data(), 'id' ) );
 	}
 
 	/**
