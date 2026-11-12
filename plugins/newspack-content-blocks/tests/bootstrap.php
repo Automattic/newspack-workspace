@@ -49,5 +49,19 @@ if ( ! $autoloader_loaded ) {
 	exit( 1 );
 }
 
+/**
+ * Load test stubs for dependencies not available in the isolated test environment.
+ *
+ * After the autoloader deliberately: each class stub guards on class_exists(), which
+ * can only find a real implementation once autoloading is available. The sponsors
+ * stub defines namespaced functions, which nothing can autoload ahead of it, so it
+ * needs no guard.
+ */
+require_once __DIR__ . '/stubs/class-newspack-tag-labels-stub.php';
+require_once __DIR__ . '/stubs/class-newspack-block-visibility-stub.php';
+require_once __DIR__ . '/stubs/class-newspack-sponsors-stub.php';
+require_once __DIR__ . '/stubs/class-jetpack-memberships-stub.php';
+
 // Start up the WP testing environment.
 require $newspack_content_blocks_tests_dir . '/includes/bootstrap.php';
+require __DIR__ . '/wp-unittestcase-blocks.php';

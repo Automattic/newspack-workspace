@@ -20,7 +20,20 @@ final class Plugin {
 	 *
 	 * @var array<string, string>
 	 */
-	const FILES = [];
+	const FILES = [
+		'Blocks' => 'includes/class-blocks.php',
+	];
+
+	/**
+	 * Plain files that define namespaced functions rather than a class, as paths
+	 * relative to the plugin root. Required, in order, after FILES.
+	 *
+	 * @var string[]
+	 */
+	const INCLUDES = [
+		'src/blocks/homepage-articles/view.php',
+		'src/blocks/carousel/view.php',
+	];
 
 	/**
 	 * Whether the plugin has loaded.
@@ -51,6 +64,10 @@ final class Plugin {
 			require_once NEWSPACK_CONTENT_BLOCKS_PLUGIN_DIR . $file;
 			$class = __NAMESPACE__ . '\\' . $class;
 			$class::init();
+		}
+
+		foreach ( self::INCLUDES as $file ) {
+			require_once NEWSPACK_CONTENT_BLOCKS_PLUGIN_DIR . $file;
 		}
 	}
 }
