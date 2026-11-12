@@ -239,11 +239,11 @@ function render_callback( $attributes ) {
 		// The same rule for a picker: it leaves out unpriced Name Your Price tiers,
 		// so a product with no other tiers has nothing to offer.
 		if (
-			$is_variable
+			( $is_variable || $product->is_type( 'grouped' ) )
 			&& ! $variation_id
 			&& method_exists( '\Newspack\Subscriptions_Tiers', 'get_purchasable_tiers' )
-			&& ! empty( \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $product ) )
 			&& empty( \Newspack\Subscriptions_Tiers::get_purchasable_tiers( $product ) )
+			&& ! empty( \Newspack\Subscriptions_Tiers::get_tiers_by_frequency( $product ) )
 		) {
 			return '';
 		}

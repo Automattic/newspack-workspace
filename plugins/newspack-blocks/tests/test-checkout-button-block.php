@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/class-newspack-donations-stub.php';
 require_once __DIR__ . '/class-newspack-group-subscription-seats-stub.php';
+require_once __DIR__ . '/class-newspack-subscriptions-tiers-stub.php';
 require_once dirname( __DIR__ ) . '/src/blocks/checkout-button/view.php';
 
 /**
@@ -21,6 +22,16 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		parent::set_up();
 		\Newspack\Donations::$stub_donation_product_ids = [];
 		\Newspack\Donations::$stub_calls                = [];
+		\Newspack\Subscriptions_Tiers::$stub_tiers             = [];
+		\Newspack\Subscriptions_Tiers::$stub_purchasable_tiers = [];
+	}
+
+	/**
+	 * Clear product fixtures.
+	 */
+	public function tear_down() {
+		unset( $GLOBALS['newspack_blocks_test_products'] );
+		parent::tear_down();
 	}
 
 	/**
@@ -373,5 +384,42 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$container->getAttribute( 'class' ),
 			'The bracketed className value should remain inside the class attribute.'
 		);
+	}
+
+	/**
+	 * A product whose picker would offer no tiers renders no button, even when
+	 * the product itself has a price.
+	 *
+	 * @dataProvider picker_products
+	 *
+	 * @param string $type        Product type.
+	 * @param bool   $is_variable The block's is_variable attribute.
+	 */
+	public function test_picker_with_no_purchasable_tiers_renders_nothing( $type, $is_variable ) {
+		$GLOBALS['newspack_blocks_test_products'] = [
+			11 => new WC_Product( 11, $type, [ 22 ], '10' ),
+		];
+		\Newspack\Subscriptions_Tiers::$stub_tiers = [ 'month' => [ new WC_Product( 22, 'subscription', [], '' ) ] ];
+
+		$output = $this->render(
+			[
+				'product'     => '11',
+				'is_variable' => $is_variable,
+			]
+		);
+
+		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * Products that open the tier picker.
+	 *
+	 * @return array
+	 */
+	public function picker_products() {
+		return [
+			'variable subscription' => [ 'variable-subscription', true ],
+			'grouped'               => [ 'grouped', false ],
+		];
 	}
 }
