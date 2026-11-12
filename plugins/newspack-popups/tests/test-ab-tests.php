@@ -1592,6 +1592,147 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Start a test on a new inline prompt with the goal `link_click` and a 70/30
+	 * split, as an administrator, and publish its version B so readers are split.
+	 *
+	 * @return array The started test, as start_test() returns it.
+	 */
+	private function start_running_test() {
+		$prompt_id = $this->createPopup( null, [ 'placement' => 'inline' ] );
+		$this->start_rest_as( 'administrator' );
+		$started = Newspack_Popups_AB_Tests::start_test( $prompt_id, 'Running ' . $prompt_id, 'link_click', 70 );
+		self::assertIsArray( $started );
+		wp_update_post(
+			[
+				'ID'          => $started['version_b']['id'],
+				'post_status' => 'publish',
+			]
+		);
+		$started['prompt_id'] = $prompt_id;
+		return $started;
+	}
+
+	/**
+	 * Once B is published, a tab opened after that, current by every other
+	 * measure, still can't change the goal or split. The rest of its save goes through.
+	 */
+	public function test_a_running_tests_goal_and_split_stay_put_from_a_current_tab() {
+		$prompt_id = $this->start_running_test()['prompt_id'];
+		$tab       = $this->open_tab( $prompt_id );
+
+		$response = $this->save_from_tab(
+			$prompt_id,
+			$tab,
+			[
+				'title' => 'Edited while running',
+				'meta'  => [
+					Newspack_Popups_AB_Tests::META_GOAL => 'donation',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => 60,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+		self::assertSame( 'Edited while running', get_the_title( $prompt_id ) );
+	}
+
+	/**
+	 * A REST client that sends only the goal carries no stale-tab signal, and is
+	 * still refused the change while the test runs.
+	 */
+	public function test_a_running_tests_goal_stays_put_from_a_save_that_sends_only_the_goal() {
+		$prompt_id = $this->start_running_test()['prompt_id'];
+
+		$response = $this->save_from_tab( $prompt_id, [], [ 'meta' => [ Newspack_Popups_AB_Tests::META_GOAL => 'donation' ] ] );
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+	}
+
+	/**
+	 * Pausing B stops the split, so the goal and split can change again.
+	 */
+	public function test_a_paused_tests_goal_and_split_change() {
+		$started = $this->start_running_test();
+		wp_update_post(
+			[
+				'ID'          => $started['version_b']['id'],
+				'post_status' => 'draft',
+			]
+		);
+		$tab = $this->open_tab( $started['prompt_id'] );
+
+		$response = $this->save_from_tab(
+			$started['prompt_id'],
+			$tab,
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_GOAL => 'donation',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => 60,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $started['prompt_id'], 'donation', 60 );
+	}
+
+	/**
+	 * Publishing A while B is live starts the split with that save, so the goal
+	 * and split sent with it are written.
+	 */
+	public function test_the_save_that_publishes_a_writes_the_goal_and_split() {
+		$started = $this->start_running_test();
+		wp_update_post(
+			[
+				'ID'          => $started['prompt_id'],
+				'post_status' => 'draft',
+			]
+		);
+		$tab = $this->open_tab( $started['prompt_id'] );
+
+		$response = $this->save_from_tab(
+			$started['prompt_id'],
+			$tab,
+			[
+				'status' => 'publish',
+				'meta'   => [
+					Newspack_Popups_AB_Tests::META_GOAL => 'donation',
+					Newspack_Popups_AB_Tests::META_CONTROL_SHARE => 60,
+				],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'publish', get_post_status( $started['prompt_id'] ) );
+		$this->assert_goal_and_share( $started['prompt_id'], 'donation', 60 );
+	}
+
+	/**
+	 * A user who can't change the test, saving a running test's prompt with a
+	 * different goal, gets the save through without it instead of a refusal.
+	 */
+	public function test_a_restricted_users_save_on_a_running_test_keeps_the_goal_and_split() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->start_running_test()['prompt_id'];
+		$tab       = $this->open_tab( $prompt_id, 'editor' );
+
+		$response = $this->save_from_tab(
+			$prompt_id,
+			$tab,
+			[
+				'title' => 'Edited by a restricted editor while running',
+				'meta'  => [ Newspack_Popups_AB_Tests::META_GOAL => 'donation' ],
+			]
+		);
+
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		$this->assert_goal_and_share( $prompt_id, 'link_click', 70 );
+		self::assertSame( 'Edited by a restricted editor while running', get_the_title( $prompt_id ) );
+	}
+
+	/**
 	 * A user who can't change the test gets a stale tab's save through, without
 	 * its goal and split, instead of a refusal over values they never touched.
 	 */
