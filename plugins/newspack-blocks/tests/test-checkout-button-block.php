@@ -201,6 +201,31 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A `price` attribute should render a hidden price field, so the custom
+	 * price reaches the checkout request (NPPM-3880).
+	 */
+	public function test_price_attribute_emits_hidden_field() {
+		$output = $this->render( [ 'price' => '50' ] );
+		$this->assertStringContainsString( '<input type="hidden" name="price" value="50" />', $output );
+	}
+
+	/**
+	 * With no price attribute, or an empty one, no price field should be rendered.
+	 */
+	public function test_no_price_attribute_emits_no_field() {
+		$this->assertStringNotContainsString( 'name="price"', $this->render() );
+		$this->assertStringNotContainsString( 'name="price"', $this->render( [ 'price' => '' ] ) );
+	}
+
+	/**
+	 * The price value must be escaped for an HTML attribute.
+	 */
+	public function test_price_value_is_escaped() {
+		$output = $this->render( [ 'price' => '5"><script>' ] );
+		$this->assertStringNotContainsString( '"><script>', $output );
+	}
+
+	/**
 	 * A `quantity` attribute above 1 should render a hidden quantity field.
 	 */
 	public function test_quantity_attribute_emits_hidden_field() {

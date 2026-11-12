@@ -191,6 +191,12 @@ function render_callback( $attributes ) {
 	if ( '' !== $coupon ) {
 		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
 	}
+	// Pass the block's custom price to the checkout request, which applies it
+	// to Name Your Price products (clamped to the product's min/max). Without
+	// it the modal falls back to the suggested price, or $0 (NPPM-3880).
+	if ( ! empty( $attributes['price'] ) ) {
+		$hidden_fields .= '<input type="hidden" name="price" value="' . esc_attr( $attributes['price'] ) . '" />';
+	}
 	// Only emitted above 1: the server already defaults to a single seat, and a
 	// reader-editable field inside the modal wins over this default anyway.
 	if ( $quantity > 1 ) {
