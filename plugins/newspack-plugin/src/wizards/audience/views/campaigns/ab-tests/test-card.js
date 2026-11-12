@@ -151,9 +151,13 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue =
 
 	// The card's first load waits in the tab's queue. A refresh, or the reload
 	// once the test ends, is one request the user just caused, so it goes
-	// straight out. A load whose card has gone, or whose test has ended since,
-	// writes nothing: skipped if its turn hasn't come, ignored once it is out.
-	const load = ( refresh, isCancelled = () => false, queued = false ) => {
+	// straight out. Only the card's latest load writes: one whose card has gone,
+	// or that a later load replaced, writes nothing, whether its turn hasn't
+	// come or its request is already out.
+	const latestLoad = useRef( 0 );
+	const load = ( refresh, isGone = () => false, queued = false ) => {
+		const loadId = ++latestLoad.current;
+		const isCancelled = () => isGone() || loadId !== latestLoad.current;
 		setLoading( true );
 		setError( null );
 		setWasRefresh( refresh );

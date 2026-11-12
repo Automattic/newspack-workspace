@@ -317,7 +317,7 @@ final class Newspack_Popups_API {
 	 *
 	 * The one ID this can't recover is one that stores a literal %25 before two
 	 * hex digits, through ?rest_route=: the value alone can't say whether PHP
-	 * already decoded it, so that ID still finds no test there.
+	 * already decoded it, so there it resolves to a different ID.
 	 *
 	 * @param mixed $value Test ID from the route.
 	 * @return string
