@@ -255,10 +255,10 @@ final class Newspack_Popups_Segmentation {
 		// This feature is opt-in: without an explicitly configured field, do nothing.
 		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', '' );
 		// This setting is a comma-delimited list of name fragments used for substring
-		// matching at login (see merge_fields_indicate_donor()). Building a query-param merge tag
-		// instead needs a single exact ESP merge tag — a multi-value list can't map to
-		// one — so use the first entry. The value must be the exact merge tag (not a
-		// display label or partial name) for the ESP to substitute it.
+		// matching at login (see merge_fields_indicate_donor()). Building a query-param
+		// merge tag instead needs a single exact ESP merge tag — a multi-value list
+		// can't map to one — so use the first entry. The value must be the exact merge
+		// tag (not a display label or partial name) for the ESP to substitute it.
 		$donor_merge_field = trim( explode( ',', (string) $donor_merge_field )[0] );
 		if ( empty( $donor_merge_field ) ) {
 			return $url;
