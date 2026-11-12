@@ -11,10 +11,11 @@
 #      the two are not always the same (super-cool-ad-inserter's domain is
 #      `scaip`), and extracting with the wrong domain yields a template holding
 #      only the file-header strings while looking perfectly healthy.
-#   2. Where the unit ships .po translations (newspack-blocks and the classic
-#      newspack-theme), folds the new template into each .po with msgmerge,
-#      rebuilds the .mo with msgfmt, and regenerates the JS translation JSON
-#      with `wp i18n make-json --no-purge` (no-purge so translations for JS
+#   2. Where the unit ships .po translations (newspack-plugin, newspack-blocks
+#      and the classic newspack-theme), folds the new template into each .po
+#      with msgmerge, rebuilds the .mo with msgfmt, and, for units that load
+#      script translations, regenerates the JS translation JSON with
+#      `wp i18n make-json --no-purge` (no-purge so translations for JS
 #      files absent from this build survive for the next run, mirroring the
 #      legacy workflow and newspack-blocks/bin/update-translations.sh).
 #   3. Reverts units whose only change is header churn. Regenerating always
@@ -45,8 +46,8 @@
 #   --strict   Exit 1 if any unit failed to regenerate or was skipped.
 #
 # Requires php and wp (WP-CLI) on PATH unless --dry-run, plus msgmerge and
-# msgfmt for the two units that ship .po files (newspack-blocks and the classic
-# newspack-theme). On macOS: `brew install wp-cli gettext`, and gettext is
+# msgfmt for the units that ship .po files (newspack-plugin, newspack-blocks and
+# the classic newspack-theme). On macOS: `brew install wp-cli gettext`, and gettext is
 # keg-only so its bin directory needs adding to PATH.
 
 set -euo pipefail
@@ -110,8 +111,8 @@ if ! $DRY_RUN; then
 	# wp is invoked as `php <path>` below and needs a real file. php is checked
 	# because this monorepo runs PHP in Docker, so a host without it is the
 	# normal developer setup, and every unit would otherwise fail in turn.
-	# gettext is checked in generate_unit instead: only the two units shipping
-	# .po files need it.
+	# gettext is checked in generate_unit instead: only the units shipping .po
+	# files need it.
 	for tool in php wp; do
 		if ! type -P "$tool" > /dev/null; then
 			echo "ERROR: '$tool' not found on PATH (PHP and WP-CLI are required; see i18n.yml for the CI install)" >&2
@@ -142,6 +143,16 @@ resolve_unit() {
 	# inert: WordPress resolves translation JSON by md5 of the enqueued script
 	# path, so a file keyed to a source path is simply never opened.
 	UNIT_EXCLUDE="release"
+
+	# newspack-plugin never registers script translations, so WordPress opens
+	# none of its JSON. Its .po also references content-hashed bundles
+	# (dist/<name>.<hash>.js): make-json would write a new JSON file for every
+	# new hash and, with --no-purge, never remove the old one, so each release
+	# would commit another batch of files nothing reads.
+	UNIT_MAKE_JSON=true
+	if [ "$unit" = "plugins/newspack-plugin" ]; then
+		UNIT_MAKE_JSON=false
+	fi
 
 	if [ "$unit" = "themes/newspack-theme" ]; then
 		# The classic theme is nested one level down; the package root holds
@@ -259,7 +270,9 @@ generate_unit() {
 			msgmerge --quiet "$base" "$(basename "$UNIT_POT")" -o "$base.tmp"
 			mv "$base.tmp" "$base"
 			msgfmt "$base" -o "${base%.po}.mo"
-			php -d memory_limit=512M -d xdebug.max_nesting_level=512 "$wp_bin" i18n make-json --no-purge "$base" .
+			if $UNIT_MAKE_JSON; then
+				php -d memory_limit=512M -d xdebug.max_nesting_level=512 "$wp_bin" i18n make-json --no-purge "$base" .
+			fi
 		)
 	done
 }
