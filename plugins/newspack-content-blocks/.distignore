@@ -46,6 +46,8 @@ node_modules
 /bin
 /src/**/*.js
 /src/**/*.scss
+/src/**/*.ts
+/src/**/*.tsx
 /release
 .cache
 codecov

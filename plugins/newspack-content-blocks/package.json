@@ -37,15 +37,20 @@
 		"*.scss": "npm run lint:scss:staged",
 		"*.php": "npm run lint:php:staged"
 	},
+	"dependencies": {
+		"classnames": "^2.5.1",
+		"lodash": "^4.17.21",
+		"newspack-colors": "workspace:*",
+		"newspack-icons": "workspace:*",
+		"newspack-motion": "workspace:*",
+		"redux": "^5.0.0",
+		"redux-saga": "^1.5.0",
+		"swiper": "12.2.0"
+	},
 	"devDependencies": {
-		"classnames": "^2.5.0",
-		"clsx": "^2.1.0",
-		"lodash": "^4.17.0",
+		"@types/lodash": "^4.17.23",
 		"newspack-components": "workspace:*",
-		"newspack-scripts": "workspace:*",
-		"react-dom": "^18.0.0",
-		"react-router-dom": "^5.3.4",
-		"redux": "^5.0.0"
+		"newspack-scripts": "workspace:*"
 	},
 	"repository": {
 		"type": "git",

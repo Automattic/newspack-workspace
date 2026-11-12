@@ -1,0 +1,507 @@
+/* eslint-disable jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus */
+
+/**
+ * External dependencies
+ */
+import { isEqual } from 'lodash';
+import classnames from 'classnames';
+import { prefersReducedMotion } from 'newspack-motion';
+
+/**
+ * WordPress dependencies
+ */
+import { __ } from '@wordpress/i18n';
+import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
+// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+import { dateI18n, __experimentalGetSettings } from '@wordpress/date';
+import { Component, createRef, Fragment, RawHTML, useRef } from '@wordpress/element';
+import {
+	PanelBody,
+	Placeholder,
+	RangeControl,
+	Spinner,
+	ToggleControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControl as ToggleGroupControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
+} from '@wordpress/components';
+import { withDispatch, withSelect } from '@wordpress/data';
+import { compose } from '@wordpress/compose';
+import { decodeEntities } from '@wordpress/html-entities';
+
+/**
+ * Internal dependencies
+ */
+import QueryControls from '../../components/query-controls';
+import { PostTypesPanel, PostStatusesPanel } from '../../components/editor-panels';
+import createSwiper from './create-swiper';
+import { getBylineHTML, formatSponsorLogos, formatSponsorByline, getPostStatusLabel } from '../../shared/js/utils';
+import { preventPreviewNavigation } from '../../shared/js/inert-preview';
+// Use same posts store as Homepage Posts block.
+import { postsBlockSelector, postsBlockDispatch, shouldReflow } from '../homepage-articles/utils';
+
+// Max number of slides that can be shown at once.
+const MAX_NUMBER_OF_SLIDES = 6;
+
+const SlideThumbnail = ( { post, imageFit } ) =>
+	post.newspack_featured_image_src ? (
+		<img className={ `image-fit-${ imageFit }` } src={ post.newspack_featured_image_src.large } alt="" />
+	) : (
+		<div className="wp-block-newspack-blocks-carousel__placeholder" />
+	);
+
+class Edit extends Component {
+	constructor( props ) {
+		super( props );
+
+		this.btnPlayRef = createRef();
+		this.btnPauseRef = createRef();
+		this.btnNextRef = createRef();
+		this.btnPrevRef = createRef();
+		this.paginationRef = createRef();
+
+		this.state = {
+			swiperInitialized: false,
+		};
+	}
+
+	componentDidMount() {
+		this.initializeSwiper( 0 );
+		this.props.triggerReflow();
+	}
+
+	componentDidUpdate( prevProps ) {
+		const isVisible = 0 < this.props.carouselRef.current.offsetWidth && 0 < this.props.carouselRef.current.offsetHeight;
+
+		// Bail early if the component is hidden.
+		if ( ! isVisible ) {
+			return false;
+		}
+
+		// If the swiper hasn't been initialized yet, initialize it.
+		if ( ! this.state.swiperInitialized ) {
+			return this.initializeSwiper( 0 );
+		}
+
+		if ( shouldReflow( prevProps, this.props ) ) {
+			this.props.triggerReflow();
+		}
+
+		const { attributes, latestPosts } = this.props;
+
+		if ( ! isEqual( prevProps.latestPosts, latestPosts ) || ! isEqual( prevProps.attributes, attributes ) ) {
+			let initialSlide = 0;
+
+			if ( this.swiperInstance ) {
+				if ( latestPosts && this.swiperInstance.realIndex < latestPosts.length ) {
+					initialSlide = this.swiperInstance.realIndex;
+				}
+				this.setState( { swiperInitialized: false } );
+				this.swiperInstance.destroy( true, true );
+			}
+
+			this.initializeSwiper( initialSlide );
+		}
+	}
+
+	componentWillUnmount() {
+		this.props.triggerReflow();
+	}
+
+	initializeSwiper( initialSlide ) {
+		const { latestPosts } = this.props;
+
+		if ( latestPosts ) {
+			const { aspectRatio, autoplay, delay, slidesPerView } = this.props.attributes;
+			const swiperInstance = createSwiper(
+				{
+					block: this.props.carouselRef.current, // Editor uses the same wrapper for block and swiper container.
+					container: this.props.carouselRef.current,
+					next: this.btnNextRef.current,
+					prev: this.btnPrevRef.current,
+					play: this.btnPlayRef.current,
+					pause: this.btnPauseRef.current,
+					pagination: this.paginationRef.current,
+				},
+				{
+					aspectRatio,
+					autoplay,
+					delay: delay * 1000,
+					initialSlide,
+					slidesPerView: slidesPerView <= latestPosts.length ? slidesPerView : latestPosts.length,
+				}
+			);
+
+			// Swiper won't be initialized unless the component is visible in the viewport.
+			if ( swiperInstance ) {
+				this.swiperInstance = swiperInstance;
+				this.setState( { swiperInitialized: true } );
+			}
+		}
+	}
+
+	render() {
+		const { attributes, setAttributes, latestPosts, isUIDisabled, blockProps } = this.props;
+		const {
+			aspectRatio,
+			authors,
+			autoplay,
+			categories,
+			includeSubcategories,
+			categoryJoinType,
+			customTaxonomies,
+			delay,
+			hideControls,
+			imageFit,
+			postsToShow,
+			postType,
+			showCategory,
+			showTagLabels,
+			showDate,
+			showAuthor,
+			showAvatar,
+			showCaption,
+			showCredit,
+			showTitle,
+			slidesPerView,
+			specificMode,
+			specificPosts,
+			tags,
+		} = attributes;
+		const classes = classnames(
+			blockProps.className,
+			'wpnbpc', // Shortened version of the default classname.
+			'slides-per-view-' + slidesPerView,
+			'swiper',
+			{
+				'wp-block-newspack-blocks-carousel__autoplay-playing': autoplay && ! prefersReducedMotion(),
+				'newspack-block--disabled': isUIDisabled,
+				'hide-controls': hideControls,
+			}
+		);
+		const dateFormat = __experimentalGetSettings().formats.date;
+		const hasNoPosts = latestPosts && ! latestPosts.length;
+		const hasOnePost = latestPosts && latestPosts.length === 1;
+		const maxPosts = latestPosts ? Math.min( postsToShow, latestPosts.length ) : postsToShow;
+		const aspectRatioOptions = [
+			{
+				value: 1,
+				label: /* translators: label for square aspect ratio option */ __( 'Square', 'newspack-content-blocks' ),
+				shortName: /* translators: abbreviation for 1:1 aspect ratio */ __( '1:1', 'newspack-content-blocks' ),
+			},
+			{
+				value: 0.75,
+				label: /* translators: label for 4:3 aspect ratio option */ __( '4:3', 'newspack-content-blocks' ),
+				shortName: /* translators: abbreviation for 4:3 aspect ratio */ __( '4:3', 'newspack-content-blocks' ),
+			},
+			{
+				value: 0.5625,
+				label: /* translators: label for 16:9 aspect ratio option */ __( '16:9', 'newspack-content-blocks' ),
+				shortName: /* translators: abbreviation for 16:9 aspect ratio */ __( '16:9', 'newspack-content-blocks' ),
+			},
+			{
+				value: 4 / 3,
+				label: /* translators: label for 3:4 aspect ratio option */ __( '3:4', 'newspack-content-blocks' ),
+				shortName: /* translators: abbreviation for 3:4 aspect ratio */ __( '3:4', 'newspack-content-blocks' ),
+			},
+			{
+				value: 16 / 9,
+				label: /* translators: label for 9:16 aspect ratio option */ __( '9:16', 'newspack-content-blocks' ),
+				shortName: /* translators: abbreviation for 9:16 aspect ratio */ __( '9:16', 'newspack-content-blocks' ),
+			},
+		];
+
+		return (
+			<Fragment>
+				<InspectorControls>
+					<PanelBody title={ __( 'Settings', 'newspack-content-blocks' ) } className="newspack-block__panel is-content">
+						{ postsToShow && (
+							<QueryControls
+								numberOfItems={ postsToShow }
+								onNumberOfItemsChange={ value => setAttributes( { postsToShow: value ? value : 1 } ) }
+								authors={ authors }
+								onAuthorsChange={ value => setAttributes( { authors: value } ) }
+								categories={ categories }
+								onCategoriesChange={ value => setAttributes( { categories: value } ) }
+								includeSubcategories={ includeSubcategories }
+								onIncludeSubcategoriesChange={ value => setAttributes( { includeSubcategories: value } ) }
+								categoryJoinType={ categoryJoinType }
+								onCategoryJoinTypeChange={ value => setAttributes( { categoryJoinType: value } ) }
+								tags={ tags }
+								onTagsChange={ value => setAttributes( { tags: value } ) }
+								onCustomTaxonomiesChange={ value => setAttributes( { customTaxonomies: value } ) }
+								customTaxonomies={ customTaxonomies }
+								specificMode={ specificMode }
+								onSpecificModeChange={ () => setAttributes( { specificMode: true } ) }
+								onLoopModeChange={ () => setAttributes( { specificMode: false } ) }
+								specificPosts={ specificPosts }
+								onSpecificPostsChange={ _specificPosts => setAttributes( { specificPosts: _specificPosts } ) }
+								postType={ postType }
+								includedPostStatuses={ attributes.includedPostStatuses }
+								allowDedupeCurrentValue={ ! attributes.deduplicate }
+								onAllowDedupeChange={ value => setAttributes( { deduplicate: ! value } ) }
+							/>
+						) }
+					</PanelBody>
+					<PanelBody title={ __( 'Display', 'newspack-content-blocks' ) }>
+						<ToggleControl
+							label={ __( 'Hide Controls', 'newspack-content-blocks' ) }
+							help={ __( 'Remove navigation indicators from view.', 'newspack-content-blocks' ) }
+							checked={ hideControls }
+							onChange={ _hideControls => {
+								setAttributes( { hideControls: _hideControls } );
+							} }
+						/>
+						<ToggleControl
+							label={ __( 'Autoplay', 'newspack-content-blocks' ) }
+							help={ __( 'Automatically advance through slides.', 'newspack-content-blocks' ) }
+							checked={ autoplay }
+							onChange={ _autoplay => {
+								setAttributes( { autoplay: _autoplay } );
+							} }
+						/>
+						{ autoplay && (
+							<RangeControl
+								label={ __( 'Transition delay', 'newspack-content-blocks' ) }
+								value={ delay }
+								onChange={ _delay => {
+									setAttributes( { delay: _delay } );
+								} }
+								min={ 1 }
+								max={ 20 }
+								help={ __( 'Set the waiting time between automatic slide transitions in seconds.', 'newspack-content-blocks' ) }
+								__next40pxDefaultSize
+							/>
+						) }
+						{ latestPosts && 1 < latestPosts.length && (
+							<RangeControl
+								label={ __( 'Slides per view', 'newspack-content-blocks' ) }
+								value={ slidesPerView <= latestPosts.length ? slidesPerView : latestPosts.length }
+								onChange={ _slidesPerView => {
+									setAttributes( { slidesPerView: _slidesPerView } );
+								} }
+								min={ 1 }
+								max={
+									specificMode ? Math.min( MAX_NUMBER_OF_SLIDES, latestPosts.length ) : Math.min( MAX_NUMBER_OF_SLIDES, maxPosts )
+								}
+								help={ __( 'Choose how many slides appear on screen simultaneously.', 'newspack-content-blocks' ) }
+								__next40pxDefaultSize
+							/>
+						) }
+					</PanelBody>
+					<PanelBody title={ __( 'Featured Image', 'newspack-content-blocks' ) } className="newspack-block__panel">
+						<ToggleGroupControl
+							label={ __( 'Aspect ratio', 'newspack-content-blocks' ) }
+							help={ __( 'All slides will share the same aspect ratio, for consistency.', 'newspack-content-blocks' ) }
+							value={ String( aspectRatio ) }
+							onChange={ value => setAttributes( { aspectRatio: parseFloat( value ) } ) }
+							isBlock
+							__next40pxDefaultSize
+						>
+							{ aspectRatioOptions.map( option => (
+								<ToggleGroupControlOption key={ option.value } label={ option.shortName } value={ String( option.value ) } />
+							) ) }
+						</ToggleGroupControl>
+						<ToggleGroupControl
+							label={ __( 'Fit', 'newspack-content-blocks' ) }
+							help={
+								'cover' === imageFit
+									? __( 'The image will fill the entire slide and will be cropped if necessary.', 'newspack-content-blocks' )
+									: __( 'The image will be resized to fit inside the slide without being cropped.', 'newspack-content-blocks' )
+							}
+							value={ imageFit }
+							onChange={ value => setAttributes( { imageFit: value } ) }
+							isBlock
+							__next40pxDefaultSize
+						>
+							<ToggleGroupControlOption label={ __( 'Cover', 'newspack-content-blocks' ) } value="cover" />
+							<ToggleGroupControlOption label={ __( 'Contain', 'newspack-content-blocks' ) } value="contain" />
+						</ToggleGroupControl>
+						<ToggleControl
+							label={ __( 'Show caption', 'newspack-content-blocks' ) }
+							checked={ showCaption }
+							onChange={ () => setAttributes( { showCaption: ! showCaption } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show credit', 'newspack-content-blocks' ) }
+							checked={ showCredit }
+							onChange={ () => setAttributes( { showCredit: ! showCredit } ) }
+						/>
+					</PanelBody>
+					<PanelBody title={ __( 'Post Meta', 'newspack-content-blocks' ) }>
+						<ToggleControl
+							label={ __( 'Show title', 'newspack-content-blocks' ) }
+							checked={ showTitle }
+							onChange={ () => setAttributes( { showTitle: ! showTitle } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show date', 'newspack-content-blocks' ) }
+							checked={ showDate }
+							onChange={ () => setAttributes( { showDate: ! showDate } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show category', 'newspack-content-blocks' ) }
+							checked={ showCategory }
+							onChange={ () => setAttributes( { showCategory: ! showCategory } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show tag labels', 'newspack-content-blocks' ) }
+							checked={ showTagLabels }
+							onChange={ () => setAttributes( { showTagLabels: ! showTagLabels } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show author', 'newspack-content-blocks' ) }
+							checked={ showAuthor }
+							onChange={ () => setAttributes( { showAuthor: ! showAuthor } ) }
+						/>
+						<ToggleControl
+							label={ __( 'Show avatar', 'newspack-content-blocks' ) }
+							checked={ showAvatar }
+							onChange={ () => setAttributes( { showAvatar: ! showAvatar } ) }
+							disabled={ ! showAuthor }
+						/>
+					</PanelBody>
+					<PostTypesPanel attributes={ attributes } setAttributes={ setAttributes } />
+					<PostStatusesPanel attributes={ attributes } setAttributes={ setAttributes } />
+				</InspectorControls>
+				<div { ...blockProps } className={ classes } onClickCapture={ preventPreviewNavigation }>
+					{ hasNoPosts && (
+						<Placeholder className="component-placeholder__align-center">
+							<div style={ { margin: 'auto' } }>{ __( 'Sorry, no posts were found.' ) }</div>
+						</Placeholder>
+					) }
+					{ ( ! this.state.swiperInitialized || ! latestPosts ) && (
+						<Placeholder icon={ <Spinner /> } className="component-placeholder__align-center" />
+					) }
+					{ latestPosts && (
+						<Fragment>
+							{ autoplay && (
+								<Fragment>
+									<button className="swiper-button swiper-button-pause" ref={ this.btnPauseRef } />
+									<button className="swiper-button swiper-button-play" ref={ this.btnPlayRef } />
+								</Fragment>
+							) }
+							<div className="swiper-wrapper">
+								{ latestPosts.map( post => (
+									<article
+										className={ `post-has-image swiper-slide ${ post.post_type } ${ post.newspack_article_classes || '' }` }
+										key={ post.id }
+									>
+										{ getPostStatusLabel( post ) }
+										<figure className="post-thumbnail">
+											{ /* post_link is empty when the post has no public URL, and
+											     carousel/view.php renders the thumbnail unlinked in that case. */ }
+											{ post.post_link ? (
+												<a href={ post.post_link } rel="bookmark">
+													<SlideThumbnail post={ post } imageFit={ imageFit } />
+												</a>
+											) : (
+												<SlideThumbnail post={ post } imageFit={ imageFit } />
+											) }
+										</figure>
+										{ ( post.newspack_post_sponsors ||
+											showCategory ||
+											( showTagLabels && post.newspack_tag_labels ) ||
+											showTitle ||
+											showAuthor ||
+											showDate ||
+											showCaption ||
+											showCredit ) && (
+											<div className="entry-wrapper">
+												{ ( post.newspack_post_sponsors || ( showCategory && 0 < post.newspack_category_info.length ) ) && (
+													<div className={ 'cat-links' + ( post.newspack_post_sponsors ? ' sponsor-label' : '' ) }>
+														{ post.newspack_post_sponsors && (
+															<span className="flag">{ post.newspack_post_sponsors[ 0 ].flag }</span>
+														) }
+														{ showCategory &&
+															( ! post.newspack_post_sponsors || post.newspack_sponsors_show_categories ) && (
+																<RawHTML>{ decodeEntities( post.newspack_category_info ) }</RawHTML>
+															) }
+													</div>
+												) }
+												{ showTagLabels && post.newspack_tag_labels && (
+													<div className="newspack-tag-labels tag-labels">
+														{ post.newspack_tag_labels.map( ( newspack_tag_label, index ) => {
+															return newspack_tag_label.link ? (
+																<a
+																	key={ index }
+																	href={ newspack_tag_label.link }
+																	className="newspack-tag-label tag-label flag"
+																>
+																	{ newspack_tag_label.flag }
+																</a>
+															) : (
+																<span key={ index } className="newspack-tag-label tag-label flag">
+																	{ newspack_tag_label.flag }
+																</span>
+															);
+														} ) }
+													</div>
+												) }
+												{ showTitle && (
+													<h3 className="entry-title">
+														{ post.post_link ? (
+															<a href={ post.post_link }>{ decodeEntities( post.title.rendered.trim() ) }</a>
+														) : (
+															decodeEntities( post.title.rendered.trim() )
+														) }
+													</h3>
+												) }
+												<div className="entry-meta">
+													{ post.newspack_post_sponsors && (
+														<span
+															className={ `entry-sponsors ${
+																post.newspack_sponsors_show_author ? 'plus-author' : ''
+															}` }
+														>
+															{ formatSponsorLogos( post.newspack_post_sponsors ) }
+															{ formatSponsorByline( post.newspack_post_sponsors ) }
+														</span>
+													) }
+													{ showAuthor &&
+														! post.newspack_listings_hide_author &&
+														( ! post.newspack_post_sponsors || post.newspack_sponsors_show_author ) && (
+															<RawHTML className="byline-container">{ getBylineHTML( post, showAvatar ) }</RawHTML>
+														) }
+													{ showDate && (
+														<time className="entry-date published" key="pub-date">
+															{ dateI18n( dateFormat, post.date ) }
+														</time>
+													) }
+													{ ( showCaption || showCredit ) && post.newspack_featured_image_caption && (
+														<div
+															className="entry-caption"
+															dangerouslySetInnerHTML={ {
+																__html: post.newspack_featured_image_caption,
+															} }
+														/>
+													) }
+												</div>
+											</div>
+										) }
+									</article>
+								) ) }
+							</div>
+							{ ! hasNoPosts && ! hasOnePost && (
+								<>
+									<button className="swiper-button swiper-button-prev" ref={ this.btnPrevRef } />
+									<button className="swiper-button swiper-button-next" ref={ this.btnNextRef } />
+									<div className="swiper-pagination swiper-pagination-bullets" ref={ this.paginationRef } />
+								</>
+							) }
+						</Fragment>
+					) }
+				</div>
+			</Fragment>
+		);
+	}
+}
+
+const EditWithBlockProps = props => {
+	const carouselRef = useRef( undefined );
+	const blockProps = useBlockProps( { ref: carouselRef } );
+	return <Edit { ...props } blockProps={ blockProps } carouselRef={ carouselRef } />;
+};
+
+export default compose( [ withSelect( postsBlockSelector ), withDispatch( postsBlockDispatch ) ] )( EditWithBlockProps );

@@ -27,6 +27,7 @@ final class Plugin {
 		'REST\Authors_Controller'  => 'includes/class-authors-controller.php',
 		'Caching'                  => 'includes/class-caching.php',
 		'Patterns'                 => 'includes/class-patterns.php',
+		'Editor'                   => 'includes/class-editor.php',
 	];
 
 	/**
