@@ -57,6 +57,7 @@ class Newspack_Test_Content_Blocks_Activation extends WP_UnitTestCase {
 	public function tear_down() {
 		remove_all_filters( 'newspack_content_blocks_activation_pre_result' );
 		delete_option( Content_Blocks_Activation::OPTION );
+		delete_option( Content_Blocks_Activation::LOCK_OPTION );
 		update_option( 'active_plugins', [] );
 		$this->remove_plugin( 'newspack-blocks' );
 		$this->remove_plugin( 'newspack-content-blocks' );
@@ -248,6 +249,64 @@ class Newspack_Test_Content_Blocks_Activation extends WP_UnitTestCase {
 		);
 		Content_Blocks_Activation::maybe_run();
 		$this->assertSame( 'done', Content_Blocks_Activation::get_status()['status'] );
+	}
+
+	/**
+	 * A fresh lock held by another request blocks the attempt.
+	 */
+	public function test_fresh_lock_blocks_attempt() {
+		$this->activate_legacy();
+		add_option( Content_Blocks_Activation::LOCK_OPTION, time(), '', 'no' );
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( '', Content_Blocks_Activation::get_status()['status'] );
+		$this->assertFalse( is_plugin_active( self::CONTENT ) );
+		$this->assertNotFalse( get_option( Content_Blocks_Activation::LOCK_OPTION ) );
+	}
+
+	/**
+	 * A stale lock is taken over.
+	 */
+	public function test_stale_lock_is_taken_over() {
+		$this->activate_legacy();
+		add_option( Content_Blocks_Activation::LOCK_OPTION, time() - Content_Blocks_Activation::LOCK_TTL - 1, '', 'no' );
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( 'done', Content_Blocks_Activation::get_status()['status'] );
+		$this->assertFalse( get_option( Content_Blocks_Activation::LOCK_OPTION ) );
+	}
+
+	/**
+	 * The lock is released after success and after a WP_Error.
+	 */
+	public function test_lock_released_after_success_and_error() {
+		$this->activate_legacy();
+		add_filter(
+			'newspack_content_blocks_activation_pre_result',
+			function () {
+				$this->assertNotFalse( get_option( Content_Blocks_Activation::LOCK_OPTION ) );
+				return new WP_Error( 'boom', 'Boom.' );
+			}
+		);
+		Content_Blocks_Activation::maybe_run();
+		$this->assertFalse( get_option( Content_Blocks_Activation::LOCK_OPTION ) );
+
+		remove_all_filters( 'newspack_content_blocks_activation_pre_result' );
+		$state         = Content_Blocks_Activation::get_status();
+		$state['time'] = time() - 2 * HOUR_IN_SECONDS;
+		update_option( Content_Blocks_Activation::OPTION, $state );
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( 'done', Content_Blocks_Activation::get_status()['status'] );
+		$this->assertFalse( get_option( Content_Blocks_Activation::LOCK_OPTION ) );
+	}
+
+	/**
+	 * The admin path does no plugin scan once the step is final.
+	 */
+	public function test_admin_path_skips_plugin_scan_when_done() {
+		update_option( Content_Blocks_Activation::OPTION, [ 'status' => 'done', 'time' => time(), 'attempts' => 0, 'error' => '' ] ); // phpcs:ignore
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		wp_clean_plugins_cache(); // get_plugins() repopulates this cache when it scans.
+		Content_Blocks_Activation::maybe_run_admin();
+		$this->assertFalse( wp_cache_get( 'plugins', 'plugins' ) );
 	}
 
 	/**

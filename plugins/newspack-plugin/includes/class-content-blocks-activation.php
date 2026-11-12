@@ -31,6 +31,16 @@ class Content_Blocks_Activation {
 	const SLUG = 'newspack-content-blocks';
 
 	/**
+	 * Option used as an atomic lock around an attempt (add_option fails if the row exists).
+	 */
+	const LOCK_OPTION = 'newspack_content_blocks_activation_lock';
+
+	/**
+	 * Seconds after which a lock is considered stale and taken over.
+	 */
+	const LOCK_TTL = 5 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -54,10 +64,47 @@ class Content_Blocks_Activation {
 		if ( ! current_user_can( 'activate_plugins' ) ) {
 			return;
 		}
+		// Cheap check first: this runs on every admin page load.
+		if ( ! self::should_run( self::get_status() ) ) {
+			return;
+		}
 		if ( ! self::is_installed() && ! current_user_can( 'install_plugins' ) ) {
 			return;
 		}
 		self::maybe_run();
+	}
+
+	/**
+	 * Whether the step still has work to do for a given state.
+	 *
+	 * @param array $state State from get_status().
+	 * @return bool
+	 */
+	private static function should_run( $state ) {
+		if ( in_array( $state['status'], [ 'done', 'skipped' ], true ) ) {
+			return false;
+		}
+		return ! (
+			in_array( $state['status'], [ 'failed', 'not_installable' ], true )
+			&& $state['time'] + self::retry_after( $state['attempts'] ) > time()
+		);
+	}
+
+	/**
+	 * Take the lock. A lock older than the TTL is stale and is taken over.
+	 *
+	 * @return bool True if acquired.
+	 */
+	private static function acquire_lock() {
+		if ( add_option( self::LOCK_OPTION, time(), '', 'no' ) ) {
+			return true;
+		}
+		wp_cache_delete( self::LOCK_OPTION, 'options' );
+		if ( (int) get_option( self::LOCK_OPTION ) + self::LOCK_TTL > time() ) {
+			return false;
+		}
+		delete_option( self::LOCK_OPTION );
+		return (bool) add_option( self::LOCK_OPTION, time(), '', 'no' );
 	}
 
 	/**
@@ -128,17 +175,31 @@ class Content_Blocks_Activation {
 	 * the activation result without touching the plugin or the network.
 	 */
 	public static function maybe_run() {
-		$state = self::get_status();
-		if ( in_array( $state['status'], [ 'done', 'skipped' ], true ) ) {
+		if ( ! self::should_run( self::get_status() ) ) {
 			return;
 		}
-		if (
-			in_array( $state['status'], [ 'failed', 'not_installable' ], true )
-			&& $state['time'] + self::retry_after( $state['attempts'] ) > time()
-		) {
+		if ( ! self::acquire_lock() ) {
 			return;
 		}
+		try {
+			// Re-read under the lock: another request may have finished meanwhile.
+			wp_cache_delete( self::OPTION, 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			$state = self::get_status();
+			if ( self::should_run( $state ) ) {
+				self::run( $state );
+			}
+		} finally {
+			delete_option( self::LOCK_OPTION );
+		}
+	}
 
+	/**
+	 * The attempt itself, called with the lock held.
+	 *
+	 * @param array $state State from get_status().
+	 */
+	private static function run( $state ) {
 		if ( ! function_exists( 'is_plugin_active' ) || ! function_exists( 'get_plugins' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
