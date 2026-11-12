@@ -255,7 +255,7 @@ final class Newspack_Popups_Segmentation {
 		// This feature is opt-in: without an explicitly configured field, do nothing.
 		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', '' );
 		// This setting is a comma-delimited list of name fragments used for substring
-		// matching at login (see reader_logged_in()). Building a query-param merge tag
+		// matching at login (see merge_fields_indicate_donor()). Building a query-param merge tag
 		// instead needs a single exact ESP merge tag — a multi-value list can't map to
 		// one — so use the first entry. The value must be the exact merge tag (not a
 		// display label or partial name) for the ESP to substitute it.
@@ -481,19 +481,22 @@ final class Newspack_Popups_Segmentation {
 	 * case because Mailchimp returns merge tags in uppercase while publishers type
 	 * the setting by hand.
 	 *
-	 * @param array  $merge_fields      The contact's merge fields, keyed by merge tag.
-	 * @param string $donor_merge_field The donor merge field setting.
+	 * Values are not always strings: Mailchimp returns an address field as an
+	 * array, which never counts as a donor value.
+	 *
+	 * @param array<string, mixed> $merge_fields      The contact's merge fields, keyed by merge tag.
+	 * @param string               $donor_merge_field The donor merge field setting.
 	 * @return bool
 	 */
 	public static function merge_fields_indicate_donor( array $merge_fields, string $donor_merge_field ): bool {
 		$fragments = array_filter( array_map( 'trim', explode( ',', $donor_merge_field ) ), 'strlen' );
 		foreach ( $merge_fields as $field_name => $field_value ) {
-			if ( ! self::is_donor_merge_field_value( $field_value ) ) {
-				continue;
-			}
 			foreach ( $fragments as $fragment ) {
 				if ( false !== stripos( (string) $field_name, $fragment ) ) {
-					return true;
+					if ( is_scalar( $field_value ) && self::is_donor_merge_field_value( $field_value ) ) {
+						return true;
+					}
+					break;
 				}
 			}
 		}
@@ -502,8 +505,8 @@ final class Newspack_Popups_Segmentation {
 
 	/**
 	 * When a reader logs in and the connected ESP is Mailchimp, check their donation status.
-	 * If they have a non-empty value in a merge field which matches the newspack_popups_mc_donor_merge_field
-	 * setting, then they should be segmented as a donor.
+	 * A reader whose donor merge field (see merge_fields_indicate_donor()) holds a donor
+	 * value is segmented as a donor.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
 	 * @param array $data      Data associated with the event.
@@ -535,7 +538,7 @@ final class Newspack_Popups_Segmentation {
 
 		if ( isset( $contacts['exact_matches']['members'][0] ) ) {
 			$contact           = $contacts['exact_matches']['members'][0];
-			$donor_merge_field = Newspack_Popups_Settings::get_setting( 'newspack_popups_mc_donor_merge_field' );
+			$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', Newspack_Popups_Settings::DEFAULT_DONOR_MERGE_FIELD );
 
 			if ( self::merge_fields_indicate_donor( (array) $contact['merge_fields'], (string) $donor_merge_field ) ) {
 				if ( method_exists( '\Newspack\Logger', 'log' ) ) {
