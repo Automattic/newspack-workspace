@@ -335,6 +335,33 @@ final class Newspack_Popups_AB_Tests {
 		if ( $existing && '' !== (string) get_term_meta( $existing->term_id, self::TERM_META_STARTED, true ) ) {
 			return;
 		}
+		if ( ! self::is_test_running( $test_id ) ) {
+			return;
+		}
+		$term = self::ensure_term( $test_id, $test_id );
+		if ( is_wp_error( $term ) ) {
+			return;
+		}
+		// Unique, which is a read before the insert rather than a lock: two
+		// requests at once can each add a row, and reads return the first.
+		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
+	}
+
+	/**
+	 * Whether readers are being split between a test's versions: the flag is
+	 * on, the test hasn't ended, and its control and at least one challenger
+	 * are published. Results count from then on.
+	 *
+	 * This is the dashboard's rule, not the editor panel's, which also waits
+	 * for every other prompt in the test to be published.
+	 *
+	 * @param string $test_id Test ID as stored.
+	 * @return bool
+	 */
+	private static function is_test_running( $test_id ) {
+		if ( '' === $test_id || ! self::is_enabled() || null !== self::get_ended_record( $test_id ) ) {
+			return false;
+		}
 		$live = get_posts(
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
@@ -345,20 +372,9 @@ final class Newspack_Popups_AB_Tests {
 				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- The Test ID lives in meta.
 			]
 		);
+		update_meta_cache( 'post', $live );
 		$letters = array_map( fn( $id ) => (string) get_post_meta( $id, self::META_VARIANT, true ), $live );
-		if ( ! in_array( 'a', $letters, true ) || empty( array_intersect( array_diff( self::VALID_VARIANTS, [ 'a' ] ), $letters ) ) ) {
-			return;
-		}
-		if ( null !== self::get_ended_record( $test_id ) ) {
-			return;
-		}
-		$term = self::ensure_term( $test_id, $test_id );
-		if ( is_wp_error( $term ) ) {
-			return;
-		}
-		// Unique, which is a read before the insert rather than a lock: two
-		// requests at once can each add a row, and reads return the first.
-		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
+		return in_array( 'a', $letters, true ) && ! empty( array_intersect( array_diff( self::VALID_VARIANTS, [ 'a' ] ), $letters ) );
 	}
 
 	/**
@@ -585,7 +601,8 @@ final class Newspack_Popups_AB_Tests {
 	 * so a tab opened before one of those actions would otherwise undo it: take
 	 * version A out of the test it just joined, or put an ended test back. The
 	 * revision is dropped the same way. Such a tab's goal and split are dropped
-	 * too, for every user, and the rest of its save goes through.
+	 * too, for every user, and the rest of its save goes through. So are any
+	 * save's goal and split while the test is running, from a current tab too.
 	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
@@ -601,8 +618,11 @@ final class Newspack_Popups_AB_Tests {
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
 
 		// A tab opened before the test started, resumed or ended still holds the
-		// goal and split from then, and would put them back over the test's.
-		if ( $post_id && self::is_stale_ab_save( $post_id, $meta ) ) {
+		// goal and split from then, and would put them back over the test's. And
+		// once readers are split, no REST save changes them, from any tab or client:
+		// the results already counted were measured against them.
+		$sends_goal_or_split = array_key_exists( self::META_GOAL, $meta ) || array_key_exists( self::META_CONTROL_SHARE, $meta );
+		if ( $post_id && $sends_goal_or_split && ( self::is_stale_ab_save( $post_id, $meta ) || self::is_test_running( trim( (string) get_post_meta( $post_id, self::META_TEST_ID, true ) ) ) ) ) {
 			unset( $meta[ self::META_GOAL ], $meta[ self::META_CONTROL_SHARE ] );
 		}
 
