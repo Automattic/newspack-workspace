@@ -285,6 +285,40 @@ describe( 'A/B Tests tab', () => {
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/run/stats?refresh=1' } ) );
 	} );
 
+	it( 'loads one card’s results at a time, and a refresh skips the queue', async () => {
+		const list = listResponse( [
+			test( 'one', { a: prompt( 1 ), b: prompt( 2 ) }, { started_at: '2026-10-01 00:00:00' } ),
+			test( 'two', { a: prompt( 3 ), b: prompt( 4 ) }, { started_at: '2026-10-01 00:00:00' } ),
+		] );
+		const pending = [];
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( path === '/newspack-popups/v1/ab-tests' ) {
+				return Promise.resolve( list );
+			}
+			return new Promise( resolve => pending.push( { path, resolve } ) );
+		} );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test one' } );
+		await waitFor( () => expect( pending ).toHaveLength( 1 ) );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( pending ).toHaveLength( 1 );
+
+		const [ first ] = pending;
+		const firstId = first.path.includes( '/one/' ) ? 'one' : 'two';
+		const secondId = 'one' === firstId ? 'two' : 'one';
+		first.resolve( stats );
+		await waitFor( () => expect( pending ).toHaveLength( 2 ) );
+		expect( pending[ 1 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ secondId }/stats` );
+
+		// The second card's load is still out; a refresh of the first doesn't wait for it.
+		const card = cardFor( `Test ${ firstId }` );
+		await within( card ).findByText( '2.69%' );
+		fireEvent.click( within( card ).getByRole( 'button', { name: `Test actions: Test ${ firstId }` } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Refresh Results' } ) );
+		await waitFor( () => expect( pending ).toHaveLength( 3 ) );
+		expect( pending[ 2 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ firstId }/stats?refresh=1` );
+	} );
+
 	it( 'says readers see both duplicates only when the extra prompt is published', async () => {
 		const duplicate = { ...prompt( 6, { status: 'draft', status_label: 'Draft' } ), letter: 'b' };
 		mockRoutes(

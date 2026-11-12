@@ -56,8 +56,9 @@ const getMissingVersionHint = variants =>
  * @param {Function} props.onRenamed Called with the test ID and its new name.
  * @param {Function} props.onEnded   Called with the ended test the end route returns.
  * @param {boolean}  props.isTarget  Whether the page was opened, or the test just ended, to show this test.
+ * @param {Function} props.enqueue   Runs the card's first results request in the tab's queue.
  */
-const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
+const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue = run => run() } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -148,27 +149,41 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 		headingRef.current?.focus( { preventScroll: true } );
 	}, [ isTarget ] );
 
-	const load = refresh => {
+	// A refresh is one request the user asked for, so it skips the queue the
+	// card's first load waits in. A load whose card has gone, or whose test has
+	// ended since it was queued, is skipped when its turn comes.
+	const load = ( refresh, isCancelled = () => false ) => {
 		setLoading( true );
 		setError( null );
 		setWasRefresh( refresh );
-		apiFetch( { path: `${ REST_BASE }/${ encodeURIComponent( test.test_id ) }/stats${ refresh ? '?refresh=1' : '' }` } )
-			.then( response => {
-				setStats( response );
-				if ( refresh ) {
-					speak( __( 'Results loaded.', 'newspack-plugin' ) );
-				}
-			} )
-			.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) ) )
-			.finally( () => setLoading( false ) );
+		const request = () => {
+			if ( isCancelled() ) {
+				return Promise.resolve();
+			}
+			return apiFetch( { path: `${ REST_BASE }/${ encodeURIComponent( test.test_id ) }/stats${ refresh ? '?refresh=1' : '' }` } )
+				.then( response => {
+					setStats( response );
+					if ( refresh ) {
+						speak( __( 'Results loaded.', 'newspack-plugin' ) );
+					}
+				} )
+				.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) ) )
+				.finally( () => setLoading( false ) );
+		};
+		return refresh ? request() : enqueue( request );
 	};
 
 	// Again once the test ends: its results now stop at the day it ended, not
 	// today, so the counts already on the card no longer match.
 	useEffect( () => {
-		if ( canLoadStats ) {
-			load( false );
+		if ( ! canLoadStats ) {
+			return;
 		}
+		let cancelled = false;
+		load( false, () => cancelled );
+		return () => {
+			cancelled = true;
+		};
 	}, [ isEnded ] );
 
 	let mainAction = null;
