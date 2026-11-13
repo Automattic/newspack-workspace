@@ -326,12 +326,17 @@ class Comment_Restriction {
 	/**
 	 * Whether a comment type is a reader comment, the only kind this restricts.
 	 *
-	 * @param string $comment_type Comment type; empty for a plain comment.
+	 * Any empty value counts, "0" and an empty array included, because that is
+	 * how wp_insert_comment() decides to store a comment as a plain one. The type
+	 * need not be a string: the REST controller passes its `type` parameter
+	 * through unchecked when it is empty.
+	 *
+	 * @param mixed $comment_type Comment type; empty for a plain comment.
 	 *
 	 * @return bool
 	 */
-	private static function is_reader_comment_type( string $comment_type ): bool {
-		return in_array( $comment_type, [ '', 'comment' ], true );
+	private static function is_reader_comment_type( mixed $comment_type ): bool {
+		return empty( $comment_type ) || 'comment' === $comment_type;
 	}
 }
 Comment_Restriction::init();
