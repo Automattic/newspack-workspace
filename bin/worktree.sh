@@ -200,6 +200,12 @@ case $1 in
                 skip_confirm=true
             elif [[ "$arg" == "--keep-branch" ]]; then
                 keep_branch=true
+            elif [[ "$arg" == -* ]]; then
+                # Refused rather than kept as a positional: before the branch it
+                # would fill the ignored legacy repo slot, so a mistyped
+                # --keep-branch would delete the branch it was meant to keep.
+                echo "Unknown option: $arg"
+                exit 1
             else
                 args+=("$arg")
             fi

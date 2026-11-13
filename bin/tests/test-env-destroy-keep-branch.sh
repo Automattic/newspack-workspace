@@ -90,6 +90,24 @@ else
 	ok "$desc"
 fi
 
+# A mistyped flag before the branch would land in the ignored legacy repo slot,
+# so the branch it was meant to keep would be deleted.
+new_sandbox wt-typo
+make_worktree feat/typo
+before=$(sha_of feat/typo)
+status=0
+out=$(run_worktree remove --keep-brnach feat/typo --yes) || status=$?
+desc="remove --keep-brnach feat/typo --yes is refused and keeps the branch"
+if [[ "$status" -ne 1 || "$out" != *"Unknown option: --keep-brnach"* ]]; then
+	fail "$desc — want exit 1 naming the option, got $status: $out"
+elif [[ ! -d "$SANDBOX/worktrees/feat-typo" ]]; then
+	fail "$desc — the worktree was removed"
+elif [[ "$(sha_of feat/typo)" != "$before" ]]; then
+	fail "$desc — refs/heads/feat/typo is gone or moved"
+else
+	ok "$desc"
+fi
+
 # destroy also reaches Docker, /etc/hosts and the shared database. These stubs
 # answer success and run nothing, so a case can only change the sandbox.
 STUB="$WORK/stub"
