@@ -118,7 +118,7 @@ class Newspack_Blocks_Deprecation_Notice {
 	 */
 	private static function get_message( $state ) {
 		if ( self::STATE_READY === $state ) {
-			return esc_html__( 'Newspack Content Blocks and the Newspack plugin are both active now, so you can deactivate Newspack Blocks.', 'newspack-blocks' );
+			return esc_html__( 'Newspack Blocks is being retired, and its blocks now ship in other plugins: Content Loop and Carousel in Newspack Content Blocks, and Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button in the Newspack plugin. Both are active, so you can deactivate Newspack Blocks. Pages that use these blocks keep working.', 'newspack-blocks' );
 		}
 		return sprintf(
 			/* translators: 1: link to download Newspack Content Blocks. 2: link to download the Newspack plugin. */

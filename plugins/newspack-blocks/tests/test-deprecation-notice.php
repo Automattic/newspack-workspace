@@ -127,7 +127,9 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 	public function test_ready_state_when_both_active() {
 		$this->activate_replacements();
 		$this->assertSame( 'ready', Newspack_Blocks_Deprecation_Notice::get_state() );
-		$this->assertStringContainsString( 'you can deactivate Newspack Blocks', $this->render() );
+		$html = $this->render();
+		$this->assertStringContainsString( 'its blocks now ship in other plugins', $html );
+		$this->assertStringContainsString( 'you can deactivate Newspack Blocks', $html );
 	}
 
 	/**
