@@ -21,19 +21,12 @@ const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: bool
 		<EmptyState.Root>
 			<EmptyState.Header
 				icon={ isNewsletter ? emailPremium : contentLocked }
-				title={ sprintf(
-					// translators: %s is the type of content to restrict.
-					__( 'Get started with %s', 'newspack-plugin' ),
-					isNewsletter ? __( 'premium newsletters', 'newspack-plugin' ) : __( 'access control', 'newspack-plugin' )
-				) }
+				title={ isNewsletter ? __( 'No premium newsletters yet', 'newspack-plugin' ) : __( 'No content gates yet', 'newspack-plugin' ) }
 				description={
 					isNewsletter
-						? __(
-								'Set up premium newsletters to manage which lists readers can sign up for. Start by selecting which lists to restrict, then configure access through registered and/or paid options.',
-								'newspack-plugin'
-						  )
+						? __( 'Restrict newsletter lists to paying readers. Pick the lists, then choose who gets access.', 'newspack-plugin' )
 						: __(
-								'Set up gates to manage what content readers can access across your site. Start by selecting which content to restrict, then configure access through registered and/or paid options (including metered rules).',
+								'Gates control who can read which content. Pick what to restrict, then require registration, payment, or both.',
 								'newspack-plugin'
 						  )
 				}

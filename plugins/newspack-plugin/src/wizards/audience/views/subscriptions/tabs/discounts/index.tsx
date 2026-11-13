@@ -273,10 +273,10 @@ function SubscriberDiscounts() {
 					<Stack direction="column" align="center">
 						<EmptyState.Root>
 							<EmptyState.Icon icon={ termCount } />
-							<EmptyState.Title>{ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Title>{ __( 'No discounts yet', 'newspack-plugin' ) }</EmptyState.Title>
 							<EmptyState.Description>
 								{ __(
-									'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
+									'Give subscribers a discount on selected products. Each rule sets the subscriptions, the products, and the amount off.',
 									'newspack-plugin'
 								) }
 							</EmptyState.Description>
