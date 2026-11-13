@@ -153,6 +153,7 @@ class Newspack_Blocks_Deprecation_Notice {
 			/* translators: 1: link to download Newspack Content Blocks. 2: link to download the Newspack plugin. */
 			esc_html__( 'Newspack Blocks is being retired. Content Loop and Carousel are moving to %1$s, and Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button are moving into %2$s. Install and activate both, then deactivate Newspack Blocks.', 'newspack-blocks' ),
 			$content_blocks_link,
+			/* translators: link text that fills %2$s in the sentence above. */
 			'<a href="' . esc_url( self::NEWSPACK_PLUGIN_DOWNLOAD_URL ) . '">' . esc_html__( 'the Newspack plugin', 'newspack-blocks' ) . '</a>'
 		);
 	}

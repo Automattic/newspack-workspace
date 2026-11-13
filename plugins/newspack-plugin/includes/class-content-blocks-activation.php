@@ -32,8 +32,9 @@ class Content_Blocks_Activation {
 
 	/**
 	 * Option used as a lock around an attempt. Not strictly exclusive under a persistent
-	 * object cache, which is acceptable: the attempt is recorded before activating, and
-	 * activating twice is harmless.
+	 * object cache, which is acceptable: running twice is recoverable. A second activation
+	 * is a no-op, and a second install fails on the existing directory, records `failed`,
+	 * and the next retry finds the plugin and records `done`.
 	 */
 	const LOCK_OPTION = 'newspack_content_blocks_activation_lock';
 
@@ -204,7 +205,7 @@ class Content_Blocks_Activation {
 				'attempts' => $attempts,
 				'error'    => $error,
 			],
-			false
+			true // Read on every admin and cron request.
 		);
 	}
 

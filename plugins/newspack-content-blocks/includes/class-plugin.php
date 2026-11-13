@@ -15,7 +15,8 @@ defined( 'ABSPATH' ) || exit;
 final class Plugin {
 	/**
 	 * Files to load, in load order, as class name (in this namespace) => file path
-	 * relative to the plugin root. `init()` is called on each class that has one. A sub-namespace is written in the key, e.g. `REST\Foo`.
+	 * relative to the plugin root. `init()` is called on each class that has one. A
+	 * sub-namespace is written in the key, e.g. `REST\Foo`.
 	 *
 	 * @var array<string, string>
 	 */
