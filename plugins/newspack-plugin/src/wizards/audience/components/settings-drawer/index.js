@@ -2,6 +2,8 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { Notice } from '@wordpress/components';
+import { useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { Icon, megaphone } from '@wordpress/icons';
 
@@ -23,8 +25,14 @@ const PromptSettingsDrawer = ( { isOpen, prompt, disabled, onClose, updatePopup 
 	const [ promptConfig, setPromptConfig ] = hooks.useObjectState( prompt );
 	const { excluded_categories: excludedCategories = [], excluded_tags: excludedTags = [] } = promptConfig.options || {};
 
+	const [ saveError, setSaveError ] = useState( null );
+
 	const handleSave = () => {
-		updatePopup( promptConfig ).then( onClose );
+		// Cleared first so a second refusal with the same message is announced again.
+		setSaveError( null );
+		updatePopup( promptConfig )
+			.then( onClose )
+			.catch( error => setSaveError( decodeEntities( error?.message || __( 'The prompt could not be saved.', 'newspack-plugin' ) ) ) );
 	};
 
 	return (
@@ -149,6 +157,12 @@ const PromptSettingsDrawer = ( { isOpen, prompt, disabled, onClose, updatePopup 
 				/>
 			</Drawer.Content>
 			<Drawer.Footer>
+				{ /* In the pinned footer, not the scrolling body, so it shows beside Save however far the form is scrolled. */ }
+				{ saveError && (
+					<Notice className="newspack-campaigns__settings-error" status="error" isDismissible={ false }>
+						{ saveError }
+					</Notice>
+				) }
 				<Drawer.Action variant="secondary" closes>
 					{ __( 'Cancel', 'newspack-plugin' ) }
 				</Drawer.Action>
