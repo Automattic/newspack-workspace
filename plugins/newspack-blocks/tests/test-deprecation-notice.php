@@ -43,6 +43,7 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 		set_current_screen( 'dashboard' );
 		update_option( 'active_plugins', [] );
 		add_filter( 'newspack_blocks_deprecation_notice_has_bundled_copy', '__return_false' );
+		add_filter( 'newspack_blocks_deprecation_notice_has_newspack_plugin', '__return_false' );
 		// The Manager stub class always exists in this file; treat it as not installed unless a test says so.
 		add_filter( 'newspack_blocks_deprecation_notice_manager_installed', '__return_false' );
 	}
@@ -51,6 +52,7 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 	 * Tear down.
 	 */
 	public function tear_down() {
+		unset( $_POST['nonce'], $_POST['state'], $_REQUEST['nonce'] );
 		Newspack_Manager::$connected = false;
 		set_current_screen( 'front' );
 		parent::tear_down();
@@ -138,6 +140,24 @@ class Newspack_Blocks_Test_Deprecation_Notice extends WP_UnitTestCase {
 	public function test_move_state_when_content_blocks_active_without_newspack_plugin() {
 		$this->activate_replacements( false );
 		$this->assertSame( 'move', Newspack_Blocks_Deprecation_Notice::get_state() );
+	}
+
+	/**
+	 * The move notice asks only for what's missing when the Newspack plugin is active.
+	 */
+	public function test_move_copy_with_newspack_plugin() {
+		remove_filter( 'newspack_blocks_deprecation_notice_has_newspack_plugin', '__return_false' );
+		add_filter( 'newspack_blocks_deprecation_notice_has_newspack_plugin', '__return_true' );
+		$html = $this->render();
+		$this->assertStringContainsString( 'update the Newspack plugin', $html );
+		$this->assertStringNotContainsString( Newspack_Blocks_Deprecation_Notice::NEWSPACK_PLUGIN_DOWNLOAD_URL, $html );
+
+		remove_filter( 'newspack_blocks_deprecation_notice_has_bundled_copy', '__return_false' );
+		add_filter( 'newspack_blocks_deprecation_notice_has_bundled_copy', '__return_true' );
+		$html = $this->render();
+		$this->assertStringContainsString( 'now ship in the Newspack plugin', $html );
+		$this->assertStringNotContainsString( 'update the Newspack plugin', $html );
+		$this->assertStringContainsString( Newspack_Blocks_Deprecation_Notice::CONTENT_BLOCKS_DOWNLOAD_URL, $html );
 	}
 
 	/**

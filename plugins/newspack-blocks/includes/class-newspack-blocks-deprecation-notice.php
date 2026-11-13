@@ -69,6 +69,20 @@ class Newspack_Blocks_Deprecation_Notice {
 	}
 
 	/**
+	 * Whether the Newspack plugin is active.
+	 *
+	 * @return bool
+	 */
+	private static function has_newspack_plugin() {
+		/**
+		 * Filters whether the Newspack plugin is active. A test seam.
+		 *
+		 * @param bool $has_newspack_plugin Whether NEWSPACK_PLUGIN_VERSION is defined.
+		 */
+		return (bool) apply_filters( 'newspack_blocks_deprecation_notice_has_newspack_plugin', defined( 'NEWSPACK_PLUGIN_VERSION' ) ); // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- the Newspack plugin's own constant, not a site setting.
+	}
+
+	/**
 	 * Which notice to show, if any.
 	 *
 	 * @return string|null Null for no notice, otherwise 'move' or 'ready'.
@@ -120,10 +134,25 @@ class Newspack_Blocks_Deprecation_Notice {
 		if ( self::STATE_READY === $state ) {
 			return esc_html__( 'Newspack Blocks is being retired, and its blocks now ship in other plugins: Content Loop and Carousel in Newspack Content Blocks, and Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button in the Newspack plugin. Both are active, so you can deactivate Newspack Blocks. Pages that use these blocks keep working.', 'newspack-blocks' );
 		}
+		$content_blocks_link = '<a href="' . esc_url( self::CONTENT_BLOCKS_DOWNLOAD_URL ) . '">' . esc_html__( 'Newspack Content Blocks', 'newspack-blocks' ) . '</a>';
+		if ( self::has_newspack_plugin() && self::has_bundled_copy() ) {
+			return sprintf(
+				/* translators: %s: link to download Newspack Content Blocks. */
+				esc_html__( 'Newspack Blocks is being retired. Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button now ship in the Newspack plugin, and Content Loop and Carousel are moving to %s. Install and activate it, then deactivate Newspack Blocks.', 'newspack-blocks' ),
+				$content_blocks_link
+			);
+		}
+		if ( self::has_newspack_plugin() ) {
+			return sprintf(
+				/* translators: %s: link to download Newspack Content Blocks. */
+				esc_html__( 'Newspack Blocks is being retired. Content Loop and Carousel are moving to %s, and Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button are moving into the Newspack plugin. Install and activate Newspack Content Blocks and update the Newspack plugin, then deactivate Newspack Blocks.', 'newspack-blocks' ),
+				$content_blocks_link
+			);
+		}
 		return sprintf(
 			/* translators: 1: link to download Newspack Content Blocks. 2: link to download the Newspack plugin. */
 			esc_html__( 'Newspack Blocks is being retired. Content Loop and Carousel are moving to %1$s, and Author List, Author Profile, Iframe, Video Playlist, Donate and Checkout Button are moving into %2$s. Install and activate both, then deactivate Newspack Blocks.', 'newspack-blocks' ),
-			'<a href="' . esc_url( self::CONTENT_BLOCKS_DOWNLOAD_URL ) . '">' . esc_html__( 'Newspack Content Blocks', 'newspack-blocks' ) . '</a>',
+			$content_blocks_link,
 			'<a href="' . esc_url( self::NEWSPACK_PLUGIN_DOWNLOAD_URL ) . '">' . esc_html__( 'the Newspack plugin', 'newspack-blocks' ) . '</a>'
 		);
 	}
