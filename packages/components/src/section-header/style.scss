@@ -122,13 +122,18 @@
 	&__icon {
 		background-color: var(--wp-admin-theme-color-lighter-10);
 		border-radius: 100%;
+		color: var(--wp-admin-theme-color);
 		display: grid;
 		height: 80px;
 		margin-bottom: 8px !important;
 		width: 80px;
 		place-items: center;
 		svg {
-			fill: var(--wp-admin-theme-color);
+			fill: currentcolor;
+
+			* {
+				vector-effect: none;
+			}
 		}
 	}
 

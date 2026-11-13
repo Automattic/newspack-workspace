@@ -189,4 +189,42 @@ class Test_Collection_Taxonomy extends WP_UnitTestCase {
 		);
 		$this->assertContains( (int) $term->term_id, $terms, 'Reactivated term should be included in queries.' );
 	}
+
+	/**
+	 * Test that the inactive-term filter does not inflate term counts for terms with several meta rows.
+	 *
+	 * @covers \Newspack\Collections\Collection_Taxonomy::filter_inactive_terms
+	 */
+	public function test_inactive_filter_does_not_inflate_term_count() {
+		Collection_Taxonomy::register_hooks();
+
+		foreach ( [ 'first', 'second', 'third' ] as $slug ) {
+			$term = $this->create_test_collection_term(
+				[
+					'name' => "Count Term $slug",
+					'slug' => "count-term-$slug",
+				]
+			);
+			add_term_meta( $term->term_id, 'meta_one', 'a' );
+			add_term_meta( $term->term_id, 'meta_two', 'b' );
+		}
+
+		$inactive = $this->create_test_collection_term(
+			[
+				'name' => 'Count Term inactive',
+				'slug' => 'count-term-inactive',
+			]
+		);
+		Collection_Taxonomy::deactivate_term( $inactive->term_id );
+
+		$args = [
+			'taxonomy'   => Collection_Taxonomy::get_taxonomy(),
+			'hide_empty' => false,
+			'search'     => 'Count Term',
+		];
+
+		$this->assertCount( 3, get_terms( $args ), 'Only active terms should be returned.' );
+		// The regression check: get_terms() dedupes rows, but the count (which feeds X-WP-Total) did not.
+		$this->assertSame( 3, (int) wp_count_terms( $args ), 'Count should match the number of active terms.' );
+	}
 }
