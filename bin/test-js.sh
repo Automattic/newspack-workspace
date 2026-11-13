@@ -84,6 +84,31 @@ else
     # unreachable root would otherwise leave the shell wherever it started and run
     # `pnpm --filter` against that directory instead of the workspace.
     cd "$MONOREPO_ROOT" || exit 1
-    pnpm install
-    pnpm --filter "$PKG" run test
+    if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
+        pnpm install
+        pnpm --filter "$PKG" run test
+        exit $?
+    fi
+
+    # Compact mode for coding agents (set by `n`; see bin/test-php.sh). The
+    # install and test output go to logs/test-js/ and only the summary prints.
+    LOG_DIR="$MONOREPO_ROOT/logs/test-js"
+    mkdir -p "$LOG_DIR"
+    # One directory per run, created atomically: every env mounts the same logs/,
+    # and process IDs repeat across containers. Named after the project directory,
+    # since a scoped package name (@scope/name) carries a slash.
+    RUN_DIR=$(mktemp -d "$LOG_DIR/$(basename "$PROJECT_DIR")-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
+    # mktemp makes it 0700; the host user has to be able to read what a root
+    # container wrote.
+    chmod 755 "$RUN_DIR"
+    LOG="$RUN_DIR/output.log"
+    # Full mode carries on after a failed install and tests whatever node_modules
+    # already holds, so compact mode does too, and reports the failure instead.
+    pnpm install > "$LOG" 2>&1
+    INSTALL_STATUS=$?
+    echo "=== pnpm run test ===" >> "$LOG"
+    pnpm --filter "$PKG" run test >> "$LOG" 2>&1
+    STATUS=$?
+    bash "$SCRIPT_DIR/test-js-summary.sh" "$LOG" "$PROJECT_DIR" "$PKG" "$STATUS" "$MONOREPO_ROOT" "$INSTALL_STATUS"
+    exit $STATUS
 fi
