@@ -143,7 +143,6 @@ abstract class Wizard {
 		}
 
 		Newspack::load_common_assets();
-		wp_enqueue_media();
 
 		// This script is just used for making newspack data available in JS vars.
 		// It should not actually load a JS file.
@@ -191,6 +190,7 @@ abstract class Wizard {
 		}
 
 		if ( Newspack::is_debug_mode() && current_user_can( 'manage_options' ) ) {
+			$urls['components_demo'] = esc_url( admin_url( 'admin.php?page=newspack-components-demo' ) );
 			$urls['setup_wizard']    = esc_url( admin_url( 'admin.php?page=newspack-setup-wizard' ) );
 			$urls['reset_url']       = esc_url(
 				add_query_arg(
