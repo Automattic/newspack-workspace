@@ -35,26 +35,6 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 
-// The real @wordpress/ui is not needed to assert what the prerequisite state renders, so
-// pass through plain elements that keep the heading level and the text.
-jest.mock( '@wordpress/ui', () => {
-	const React = require( 'react' );
-	const passthrough =
-		tag =>
-		( { children } ) =>
-			React.createElement( tag, null, children );
-	return {
-		Stack: passthrough( 'div' ),
-		EmptyState: {
-			Root: passthrough( 'div' ),
-			Icon: () => null,
-			Title: ( { children, render: element } ) => React.cloneElement( element || React.createElement( 'h2' ), null, children ),
-			Description: passthrough( 'p' ),
-			Actions: passthrough( 'div' ),
-		},
-	};
-} );
-
 jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
