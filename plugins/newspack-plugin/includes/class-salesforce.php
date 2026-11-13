@@ -294,7 +294,22 @@ class Salesforce {
 	 * Register admin scripts for Salesforce functionality.
 	 */
 	public static function register_admin_scripts() {
-		if ( 'shop_order' !== get_current_screen()->id || 'shop_order' !== get_post_type() || ! Donations::is_platform_wc() || ! self::is_connected() ) {
+		$screen = get_current_screen();
+		if ( ! $screen || ! Donations::is_platform_wc() || ! self::is_connected() ) {
+			return;
+		}
+
+		$order_id = 0;
+		if ( 'shop_order' === $screen->id && 'shop_order' === get_post_type() ) {
+			// Classic post-based order editor.
+			$order_id = get_the_ID();
+		} elseif ( function_exists( 'wc_get_page_screen_id' ) && \wc_get_page_screen_id( 'shop_order' ) === $screen->id ) {
+			// HPOS order editor: orders aren't posts, so the edited order id comes from the
+			// query string. Its absence means the orders list, which shares this screen id.
+			$order_id = isset( $_GET['id'] ) ? absint( wp_unslash( $_GET['id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		if ( ! $order_id ) {
 			return;
 		}
 
@@ -314,7 +329,7 @@ class Salesforce {
 			'newspack_salesforce_data',
 			[
 				'base_url'       => get_rest_url(),
-				'order_id'       => get_the_id(),
+				'order_id'       => $order_id,
 				'salesforce_url' => $settings['instance_url'],
 				'nonce'          => wp_create_nonce( 'wp_rest' ),
 			]
@@ -1277,7 +1292,7 @@ class Salesforce {
 	/**
 	 * Get a new Salesforce token using a valid refresh token.
 	 *
-	 * @return string The new access token.
+	 * @return string|WP_Error The new access token, or an error if one couldn't be granted.
 	 */
 	private static function refresh_salesforce_token() {
 		$settings = self::get_salesforce_settings();
@@ -1314,19 +1329,29 @@ class Salesforce {
 			]
 		);
 
-		$response_body = json_decode( $salesforce_response['body'] );
-
-		if ( ! empty( $response_body->access_token ) ) {
-
-			// Save tokens.
-			$update_response = self::set_salesforce_settings(
-				[
-					'access_token' => $response_body->access_token,
-				]
-			);
-
-			return $response_body->access_token;
+		if ( is_wp_error( $salesforce_response ) ) {
+			return $salesforce_response;
 		}
+
+		$response_body = json_decode( wp_remote_retrieve_body( $salesforce_response ) );
+
+		if ( empty( $response_body->access_token ) ) {
+			return new \WP_Error(
+				'newspack_salesforce_token_refresh_failed',
+				! empty( $response_body->error_description ) ?
+					$response_body->error_description :
+					__( 'Salesforce did not grant a new access token.', 'newspack' )
+			);
+		}
+
+		// Save the new token.
+		self::set_salesforce_settings(
+			[
+				'access_token' => $response_body->access_token,
+			]
+		);
+
+		return $response_body->access_token;
 	}
 
 	/**
@@ -1384,7 +1409,7 @@ class Salesforce {
 	}
 
 	/**
-	 * Save the synced opportunity IDs as post meta on the given order.
+	 * Save the synced opportunity IDs as order meta on the given order.
 	 *
 	 * @param int   $order_id Order ID.
 	 * @param array $opportunities Array of Opportunity IDs from Salesforce.
@@ -1394,7 +1419,12 @@ class Salesforce {
 		if ( ! $order ) {
 			return;
 		}
-		$order->update_meta_data( $order_id, 'newspack_salesforce_opportunities', $opportunities );
+		// An argument-shifted version of this call (Automattic/newspack-plugin#2711) wrote a
+		// junk row keyed by the order id, with the meta key as its value; scrub it on re-sync.
+		if ( 'newspack_salesforce_opportunities' === $order->get_meta( (string) $order_id, true ) ) {
+			$order->delete_meta_data( (string) $order_id );
+		}
+		$order->update_meta_data( 'newspack_salesforce_opportunities', $opportunities );
 		$order->save();
 	}
 }
