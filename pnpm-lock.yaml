@@ -81,8 +81,8 @@ importers:
         specifier: ^6.21.0
         version: 6.21.0
       '@wordpress/icons':
-        specifier: ^11.0.0
-        version: 11.8.0(@types/react@18.3.31)(react@18.3.1)
+        specifier: ^20.0.0
+        version: 20.0.0(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@wordpress/keycodes':
         specifier: ^4.48.0
         version: 4.48.0
@@ -177,8 +177,8 @@ importers:
         specifier: ^6.21.0
         version: 6.21.0
       '@wordpress/icons':
-        specifier: ^11.0.0
-        version: 11.8.0(@types/react@18.3.31)(react@18.3.1)
+        specifier: ^20.0.0
+        version: 20.0.0(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@wordpress/keycodes':
         specifier: ^4.48.0
         version: 4.48.0
