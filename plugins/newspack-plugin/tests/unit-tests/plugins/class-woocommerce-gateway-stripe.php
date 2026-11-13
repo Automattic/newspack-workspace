@@ -9,7 +9,6 @@ use Newspack\Donations;
 use Newspack\WooCommerce_Gateway_Stripe;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
-require_once __DIR__ . '/../../mocks/newspack-blocks-mocks.php';
 
 /**
  * Tests WooCommerce_Gateway_Stripe dual-gateway guard methods.

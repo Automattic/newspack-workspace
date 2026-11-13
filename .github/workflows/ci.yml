@@ -485,6 +485,11 @@ jobs:
           [ -f "$dir/phpunit.xml" ] && config="$dir/phpunit.xml"
           [ -f "$dir/phpunit.xml.dist" ] && config="$dir/phpunit.xml.dist"
           ./vendor/bin/phpunit -c "$config"
+          # Extra suites that need their own bootstrap, e.g. newspack-plugin's bundled blocks.
+          for extra in "$dir"/phpunit.*.xml.dist; do
+            [ -f "$extra" ] || continue
+            ./vendor/bin/phpunit -c "$extra"
+          done
 
   # ----------------------------------------------------------------------------
   # Summary gate: fail the workflow if any needed job failed.

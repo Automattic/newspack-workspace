@@ -1,0 +1,553 @@
+<?php
+/**
+ * Newspack Blocks Modal Checkout Data.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack_Blocks\Modal_Checkout;
+
+/**
+ * Checkout Data Class.
+ */
+final class Checkout_Data {
+	/**
+	 * Get price string for the price summary card to render in auth flow.
+	 *
+	 * @param string $name       The name.
+	 * @param string $price      The price. Optional. If not provided, the price string will contain 0.
+	 * @param string $frequency  The frequency. Optional. If not provided, the price will be treated as a one-time payment.
+	 * @param int    $product_id Product ID to get additional subscription details. Optional.
+	 * @param int    $quantity   Seats (line-item quantity) purchased. Optional, defaults to 1. Multiplies
+	 *                           the sign-up fee, since WCS charges it per unit; $price is already the
+	 *                           line amount, so it is not multiplied here.
+	 *
+	 * @return string The price string.
+	 */
+	public static function get_price_summary( $name, $price = '', $frequency = '', $product_id = null, $quantity = 1 ) {
+		if ( ! $price ) {
+			$price = '0';
+		}
+
+		if ( function_exists( 'wcs_price_string' ) && function_exists( 'wc_price' ) && function_exists( 'wc_get_product' ) && class_exists( 'WC_Subscriptions_Product' ) ) {
+			if ( $frequency && $frequency !== 'once' ) {
+				// Get additional subscription details if product_id is provided.
+				$subscription_interval = 1;
+				$trial_length          = 0;
+				$trial_period          = '';
+				$initial_amount        = 0;
+
+				if ( $product_id ) {
+					$product = wc_get_product( $product_id );
+					$subscription_interval = \WC_Subscriptions_Product::get_interval( $product );
+					$trial_length = \WC_Subscriptions_Product::get_trial_length( $product );
+					$trial_period = \WC_Subscriptions_Product::get_trial_period( $product );
+					// The sign-up fee is charged per seat, so multiply it by quantity.
+					$initial_amount = \WC_Subscriptions_Product::get_sign_up_fee( $product ) * $quantity;
+
+					if ( empty( $subscription_interval ) ) {
+						$subscription_interval = 1;
+					}
+				}
+
+				$price = wp_strip_all_tags(
+					wcs_price_string(
+						[
+							'recurring_amount'      => $price,
+							'subscription_period'   => $frequency,
+							'subscription_interval' => $subscription_interval,
+							'use_per_slash'         => true,
+							'trial_length'          => $trial_length,
+							'trial_period'          => $trial_period,
+							'initial_amount'        => $initial_amount,
+						]
+					)
+				);
+			} elseif ( $price !== '{{PRICE}}' ) { // Preserve placeholder for templating.
+				$price = wp_strip_all_tags( wc_price( $price ) );
+			}
+		}
+
+		// translators: 1 is the name of the item. 2 is the price of the item.
+		$price_summary = sprintf( __( '%1$s: %2$s', 'newspack-plugin' ), $name, $price );
+
+		/**
+		 * Filters the price summary string that appears in modal checkout.
+		 *
+		 * @param string $price_summary The formatted price summary string.
+		 * @param string $product_id    The product ID, if available.
+		 *
+		 * @return string The filtered price summary string.
+		 */
+		return apply_filters( 'newspack_modal_checkout_price_summary', $price_summary, $product_id );
+	}
+
+	/**
+	 * Returns whether a product is a one time purchase, or recurring and when.
+	 *
+	 * @param string $product_id Product's ID.
+	 *
+	 * @return string The purchase recurrence.
+	 */
+	public static function get_purchase_recurrence( $product_id ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return 'once';
+		}
+		$product = \wc_get_product( $product_id );
+		if ( $product && ( $product->is_type( 'subscription' ) || $product->is_type( 'subscription_variation' ) ) ) {
+			$recurrence = get_post_meta( $product_id, '_subscription_period', true );
+			if ( ! empty( $recurrence ) ) {
+				return $recurrence;
+			}
+		}
+		return 'once';
+	}
+
+	/**
+	 * Returns whether a product ID is associated with a membership.
+	 *
+	 * @param string $product_id Product's ID.
+	 */
+	public static function is_membership_product( $product_id ) {
+		if ( ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
+			return false;
+		}
+		$membership_plans = wc_memberships_get_membership_plans();
+		$plans            = [];
+
+		foreach ( $membership_plans as $plan ) {
+			$subscription_plan  = new \WC_Memberships_Integration_Subscriptions_Membership_Plan( $plan->get_id() );
+			$required_products = $subscription_plan->get_subscription_product_ids();
+			if ( in_array( $product_id, $required_products ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+	/**
+	 * Returns the product type: product, subscription, donation, or membership.
+	 *
+	 * @param string $product_id Product's ID.
+	 */
+	public static function get_product_type( $product_id ) {
+		$product_type = 'product';
+		$recurrence   = self::get_purchase_recurrence( $product_id );
+
+		// Check if it's a subscription product.
+		if ( 'once' !== $recurrence ) {
+			$product_type = 'subscription';
+		}
+
+		// Check if it's a membership product.
+		if ( self::is_membership_product( $product_id ) ) {
+			$product_type = 'membership';
+		}
+
+		// Check if it's a donation product.
+		if ( method_exists( 'Newspack\Donations', 'is_donation_product' ) ) {
+			if ( \Newspack\Donations::is_donation_product( $product_id ) ) {
+				$product_type = 'donation';
+			}
+		}
+
+		return $product_type;
+	}
+
+	/**
+	 * Returns the action type: checkout_button or donation.
+	 *
+	 * @param string    $product_id Product's ID.
+	 * @param \WC_Order $order      Optional order to check if it's a subscription switch.
+	 */
+	public static function get_action_type( $product_id, $order = null ) {
+		$action_type = 'checkout_button';
+
+		// Check if it's a donation product, and update action_type, product_type.
+		if ( method_exists( 'Newspack\Donations', 'is_donation_product' ) ) {
+			if ( \Newspack\Donations::is_donation_product( $product_id ) ) {
+				$action_type = 'donation';
+			}
+		}
+
+		// Check if it's a subscription switch.
+		if ( $order ) {
+			if ( function_exists( 'wcs_order_contains_switch' ) && wcs_order_contains_switch( $order ) ) {
+				$action_type = 'subscription_switch';
+			}
+		} elseif ( method_exists( 'WC_Subscriptions_Switcher', 'cart_contains_switches' ) && \WC_Subscriptions_Switcher::cart_contains_switches( 'any' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$action_type = 'subscription_switch';
+		}
+
+		// Check if the action type is set in the URL.
+		if ( isset( $_GET['action_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$action_type = sanitize_text_field( wp_unslash( $_GET['action_type'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		return $action_type;
+	}
+
+	/**
+	 * Get donate product checkout data.
+	 *
+	 * @param string $frequency The frequency.
+	 * @param int    $amount    The amount.
+	 *
+	 * @return array
+	 */
+	public static function get_donation_checkout_data( $frequency, $amount = null ) {
+		if ( ! method_exists( 'Newspack\Donations', 'get_donation_product' ) ) {
+			return [];
+		}
+		$product_id = \Newspack\Donations::get_donation_product( $frequency );
+		if ( ! $product_id ) {
+			return [];
+		}
+		$product = wc_get_product( $product_id );
+		if ( ! $product ) {
+			return [];
+		}
+		$data = self::get_checkout_data( $product );
+		if ( $amount ) {
+			$data['amount'] = $amount;
+		}
+		return $data;
+	}
+
+	/**
+	 * Recursively get the children of a product, returning only ungrouped children.
+	 *
+	 * @param \WC_Product $product Product object.
+	 * @return array Array of child product IDs.
+	 */
+	public static function get_children( $product ) {
+		$children = [];
+		foreach ( $product->get_children() as $child_id ) {
+			$child = \wc_get_product( $child_id );
+			// Check if the child has children of its own.
+			if ( method_exists( $child, 'get_children' ) && $child->get_children() ) {
+				$children = array_merge( $children, self::get_children( $child ) );
+			} else {
+				$children[] = $child_id;
+			}
+		}
+		return $children;
+	}
+
+	/**
+	 * Build a `data-checkout` HTML attribute for a checkout-data payload.
+	 *
+	 * Centralizes wp_json_encode + esc_attr so the encoding and escaping live in a
+	 * single place and can't be omitted by callers. Mirrors the JS getCheckoutData()
+	 * reader in src/modal-checkout/utils.js.
+	 *
+	 * @param array $data Checkout-data payload (e.g. from get_checkout_data()).
+	 * @return string Escaped attribute, e.g. data-checkout='{...}'.
+	 */
+	public static function data_checkout_attr( array $data ) {
+		return sprintf( "data-checkout='%s'", esc_attr( wp_json_encode( $data ) ) );
+	}
+
+	/**
+	 * Echo a `data-checkout` HTML attribute for a checkout-data payload.
+	 *
+	 * @param array $data Checkout-data payload.
+	 */
+	public static function print_data_checkout_attr( array $data ) {
+		echo self::data_checkout_attr( $data ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- data_checkout_attr() escapes via esc_attr().
+	}
+
+	/**
+	 * Whether a contextual prompt source value read from the cart or the URL
+	 * is shaped the way the rest of the system expects it, so an unrelated
+	 * `contextual_prompt_*` cart item or query arg from another source can't
+	 * make its way into the checkout payload.
+	 *
+	 * The placement and condition allowlists below mirror
+	 * `Newspack_Popups_Contextual_Prompt_Render::PLACEMENTS` and `::CONDITIONS`
+	 * (newspack-popups is not a runtime dependency here; popups may be
+	 * inactive when this runs, so the values are duplicated rather than read
+	 * from that class).
+	 *
+	 * @param string $key   One of `Modal_Checkout::CONTEXTUAL_PROMPT_KEYS`.
+	 * @param mixed  $value The value read from the cart item or `$_GET`.
+	 *
+	 * @return bool
+	 */
+	private static function is_valid_contextual_prompt_value( $key, $value ) {
+		switch ( $key ) {
+			case 'contextual_prompt_post_id':
+				return absint( $value ) > 0;
+			case 'contextual_prompt_placement':
+				return in_array( $value, [ 'top', 'mid', 'end', 'unknown' ], true );
+			case 'contextual_prompt_condition':
+				return in_array( $value, [ 'story_aware', 'generic_control', 'override' ], true );
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Returns checkout data given a product, product variation, cart or order object.
+	 *
+	 * @param \WC_Product|\WC_Product_Variation|\WC_Cart|\WC_Order $source Product, product variation, cart or order object.
+	 *
+	 * @return array
+	 */
+	public static function get_checkout_data( $source ) {
+		$data = [];
+		if ( empty( $source ) ) {
+			return $data;
+		}
+
+		$cart_item    = null;
+		$order        = null;
+		$subscription = null;
+		$referrer     = '';
+		$product_id   = null;
+		$amount       = 0;
+		$quantity     = 1;
+		$variation_id = null;
+		$is_variable  = false;
+		$is_grouped   = false;
+
+		if ( $source instanceof \WC_Product ) {
+			if ( $source->is_type( 'grouped' ) ) {
+				$is_grouped = true;
+				$product_id = $source->get_id();
+				$children   = self::get_children( $source );
+			} elseif ( $source->is_type( 'variable' ) || $source->is_type( 'variable-subscription' ) ) {
+				$is_variable = true;
+				$product_id  = $source->get_id();
+				$children    = self::get_children( $source );
+			} elseif ( $source instanceof \WC_Product_Variation ) {
+				$product_id = $source->get_parent_id();
+				$variation_id = $source->get_id();
+				$amount = $source->get_price();
+			} else {
+				$product_id = $source->get_id();
+				if ( $source->get_parent_id() ) {
+					$product_id   = $source->get_parent_id();
+					$variation_id = $source->get_id();
+				}
+				$amount = $source->get_price();
+			}
+		} elseif ( $source instanceof \WC_Cart ) {
+			$cart_items   = $source->get_cart();
+			$cart_item    = reset( $cart_items ); // Use only the first item in the cart.
+			$product_id   = $cart_item['product_id'];
+			$variation_id = $cart_item['variation_id'];
+			$amount       = $cart_item['data']->get_price();
+			$quantity     = max( 1, (int) ( $cart_item['quantity'] ?? 1 ) );
+			$referrer     = $cart_item['referer'] ?? '';
+		} elseif ( $source instanceof \WC_Order ) {
+			// A subscription's purchase details normally live on the order it was
+			// bought through. A subscription created by hand in wp-admin has no parent
+			// order, and its own line items describe the same purchase, so read those
+			// instead (NPPD-2170).
+			//
+			// The two identities stay separate on purpose. A subscription is not an
+			// order, and reporting its ID as an order ID sends the modal to a
+			// view-order URL built from a subscription ID: a page nothing links to,
+			// which renders the read-only receipt from WooCommerce Subscriptions
+			// rather than anything the reader can act on.
+			if ( $source instanceof \WC_Subscription ) {
+				$subscription = $source;
+				$parent       = $source->get_parent();
+				$order        = $parent ? $parent : null;
+				$items_source = $parent ? $parent : $source;
+			} else {
+				$order        = $source;
+				$items_source = $source;
+			}
+			$order_items = $items_source->get_items();
+			$order_item  = reset( $order_items ); // Use only the first item in the order.
+			if ( ! $order_item ) {
+				// No line item means no purchase to summarise, and the product and
+				// name lookups below would fatal on the resulting null. Return empty,
+				// the same "nothing to checkout" signal as an empty source above.
+				return $data;
+			}
+			$product_id   = $order_item->get_product_id();
+			$variation_id = $order_item->get_variation_id();
+			$amount       = $order_item->get_subtotal(); // Already reflects quantity; do not multiply below.
+			$quantity     = max( 1, (int) $order_item->get_quantity() );
+			$referrer     = $items_source->get_meta( '_newspack_referer' );
+		}
+
+		// If we have no referrer, set it to the current path.
+		if ( ! $referrer ) {
+			global $wp;
+			$referrer = $wp->request;
+		}
+
+		$product_type = self::get_product_type( $product_id );
+		$recurrence   = self::get_purchase_recurrence( $variation_id ? $variation_id : $product_id );
+
+		/**
+		 * Price summary name.
+		 */
+		if ( 'donation' === $product_type ) {
+			$name = __( 'Donate', 'newspack-plugin' );
+		} elseif ( $variation_id ) {
+			$variation = wc_get_product( $variation_id );
+			$name = $variation->get_name();
+		} else {
+			$product = wc_get_product( $product_id );
+			$name = $product->get_name();
+		}
+
+		$data = [
+			'action_type'  => self::get_action_type( $product_id, $order ),
+			'currency'     => function_exists( 'get_woocommerce_currency' ) ? \get_woocommerce_currency() : 'USD',
+			'product_id'   => strval( $product_id ? $product_id : '' ),
+			'product_type' => $product_type,
+			'referrer'     => $referrer ? str_replace( home_url(), '', $referrer ) : '', // Keeps format consistent for Homepage with Donate and Checkout Button blocks.
+		];
+
+		if ( $is_variable ) {
+			$data['is_variable'] = true;
+			$data['variation_ids'] = $children;
+		} elseif ( $is_grouped ) {
+			$data['is_grouped'] = true;
+			$data['child_ids'] = $children;
+		} else {
+			// An order's amount is a line subtotal already scaled by quantity; a
+			// product's or cart item's is a per-unit price, so scale it here instead.
+			// The quantity-1 short circuit is load-bearing: get_price() returns a
+			// string, and multiplying would hand a float to consumers that have only
+			// ever seen the string.
+			$line_amount              = ( $source instanceof \WC_Order || 1 === $quantity ) ? $amount : (float) $amount * $quantity;
+			$data['amount']           = $line_amount;
+			// Only a cart or order line item has a real seat count to report. For a
+			// bare product source the block's hidden field is the source of truth, so
+			// omitting the key — rather than hardcoding 1 — keeps getCheckoutData()'s
+			// JSON-wins merge in utils.js from overwriting it with a stale default.
+			if ( $source instanceof \WC_Cart || $source instanceof \WC_Order ) {
+				$data['quantity'] = $quantity;
+			}
+			// WooCommerce Subscriptions folds the sign-up fee into the unit price when
+			// it prices an order line, so its subtotal already carries the fee for
+			// every unit and the summary must not scale it a second time.
+			$summary_quantity         = $source instanceof \WC_Order ? 1 : $quantity;
+			$data['price_summary']    = self::get_price_summary( $name, $line_amount, $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
+			$data['summary_template'] = self::get_price_summary( $name, '{{PRICE}}', $recurrence, $variation_id ? $variation_id : $product_id, $summary_quantity );
+			$data['recurrence']       = $recurrence;
+		}
+		if ( $variation_id ) {
+			$data['variation_id'] = strval( $variation_id );
+		}
+
+		/**
+		 * Order specific data.
+		 */
+		if ( $order ) {
+			$data['order_id'] = $order->get_id();
+			if ( in_array( $product_type, [ 'subscription', 'membership' ], true ) ) {
+				$subscription_renewal = $order->get_meta( '_subscription_renewal' );
+				if ( $subscription_renewal ) {
+					$data['subscription_renewal'] = $subscription_renewal;
+				}
+				if ( function_exists( 'wcs_get_subscriptions_for_order' ) ) {
+					$subscriptions = wcs_get_subscriptions_for_order( $order );
+					if ( ! empty( $subscriptions ) ) {
+						$data['subscription_ids'] = array_values(
+							array_map(
+								function( $subscription ) {
+									return $subscription->get_id();
+								},
+								$subscriptions
+							)
+						);
+					}
+				}
+			}
+		}
+
+		// A subscription with no parent order has no order to identify itself by, so
+		// name the subscription directly. Without this the modal has nothing to
+		// return the reader to once checkout finishes (NPPD-2170).
+		// Only when there is no parent order to identify the purchase by. With a
+		// parent present the block above owns the key, and widening this would set
+		// subscription_ids for product types it skips — a recurring donation resolves
+		// to `donation`, so it would silently change where those readers land.
+		if ( $subscription && ! $order && empty( $data['subscription_ids'] ) ) {
+			$data['subscription_ids'] = [ $subscription->get_id() ];
+		}
+
+		/**
+		 * Gate and popup data.
+		 */
+		$gate_post_id = null;
+		$newspack_popup_id = null;
+		$prompt_title = null;
+		if ( $order ) {
+			$gate_post_id = $order->get_meta( '_gate_post_id' );
+			$newspack_popup_id = $order->get_meta( '_newspack_popup_id' );
+			$prompt_title = $order->get_meta( '_prompt_title' );
+		} elseif ( $cart_item ) {
+			$gate_post_id = $cart_item['gate_post_id'] ?? null;
+			$newspack_popup_id = $cart_item['newspack_popup_id'] ?? null;
+			$prompt_title = $cart_item['prompt_title'] ?? null;
+		} else {
+			$gate_post_id = filter_input( INPUT_GET, 'gate_post_id', FILTER_SANITIZE_NUMBER_INT );
+			$newspack_popup_id = filter_input( INPUT_GET, 'newspack_popup_id', FILTER_SANITIZE_NUMBER_INT );
+			$prompt_title = filter_input( INPUT_GET, 'prompt_title', FILTER_SANITIZE_SPECIAL_CHARS );
+		}
+		if ( $gate_post_id ) {
+			$data['gate_post_id'] = $gate_post_id;
+		}
+		if ( $newspack_popup_id ) {
+			$data['newspack_popup_id'] = $newspack_popup_id;
+		}
+		if ( $prompt_title ) {
+			$data['prompt_title'] = $prompt_title;
+		}
+
+		/**
+		 * Contextual prompt source: which story, placement and test condition the
+		 * reader donated from. Same three-way resolution as the popup id.
+		 *
+		 * The order branch is trusted as-is: an order's meta was written and
+		 * validated once, at checkout time (see the checkout-create-order-line-item
+		 * handler), so it's not re-validated on every later read. The cart and GET
+		 * branches are reader-controlled input read on every request, so a value
+		 * that doesn't match the shape the rest of the system expects is dropped
+		 * rather than passed through.
+		 */
+		foreach ( \Newspack_Blocks\Modal_Checkout::CONTEXTUAL_PROMPT_KEYS as $key ) {
+			$value = null;
+			if ( $order ) {
+				$value = $order->get_meta( '_newspack_' . $key );
+			} else {
+				if ( $cart_item ) {
+					$value = $cart_item[ $key ] ?? null;
+				} else {
+					$value = filter_input( INPUT_GET, $key, FILTER_SANITIZE_SPECIAL_CHARS );
+				}
+				if ( $value ) {
+					if ( ! self::is_valid_contextual_prompt_value( $key, $value ) ) {
+						$value = null;
+					} elseif ( 'contextual_prompt_post_id' === $key ) {
+						// is_valid_contextual_prompt_value() only checked
+						// absint( $value ) > 0; normalize here so a value like
+						// '12abc' reaches the payload as 12, not that raw string.
+						$value = absint( $value );
+					}
+				}
+			}
+			if ( $value ) {
+				$data[ $key ] = $value;
+			}
+		}
+
+		/**
+		 * Filters the checkout data.
+		 *
+		 * @param array $data The checkout data.
+		 * @param \WC_Product|\WC_Product_Variation|\WC_Cart|\WC_Order $source Product, product variation, cart or order object.
+		 */
+		return apply_filters( 'newspack_modal_checkout_data', $data, $source );
+	}
+}

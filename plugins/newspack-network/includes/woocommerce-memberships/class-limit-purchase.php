@@ -19,7 +19,8 @@ class Limit_Purchase {
 	 */
 	public static function init() {
 		add_filter( 'woocommerce_subscription_is_purchasable', [ __CLASS__, 'restrict_network_subscriptions' ], 10, 2 );
-		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
+		// After Newspack's modal checkout, which replaces the message for any subscription it limits.
+		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 11, 2 );
 
 		// Also limit purchase for logged out users, inferring their IDs from the email.
 		add_action( 'woocommerce_after_checkout_validation', [ __CLASS__, 'validate_network_subscription' ], 10, 2 );
