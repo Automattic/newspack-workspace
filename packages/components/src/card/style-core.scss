@@ -288,6 +288,7 @@
 				color: var(--wp-admin-theme-color);
 			}
 			svg {
+				color: var(--wp-admin-theme-color);
 				fill: var(--wp-admin-theme-color);
 			}
 		}
@@ -323,6 +324,7 @@
 					color: var(--wp-admin-theme-color);
 				}
 				svg {
+					color: var(--wp-admin-theme-color);
 					fill: var(--wp-admin-theme-color);
 				}
 			}
@@ -345,6 +347,7 @@
 		}
 		.newspack-card--core__action,
 		.newspack-card--core__action svg {
+			color: wp-colors.$alert-red;
 			fill: wp-colors.$alert-red;
 		}
 	}

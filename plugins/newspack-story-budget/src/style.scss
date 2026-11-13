@@ -168,6 +168,7 @@ body.toplevel_page_newspack-story-budget {
 			padding: 0 wp-vars.$grid-unit-10;
 		}
 		.newspack-story-budget__table-row-field-error {
+			color: wp-colors.$alert-red;
 			fill: wp-colors.$alert-red;
 		}
 		.newspack-story-budget__field--date {
