@@ -27,10 +27,4 @@ require_once __DIR__ . '/includes/class-plugin.php';
 // registers nothing, so the two never register the same blocks or routes.
 if ( ! \Newspack_Content_Blocks\Guard::is_legacy_plugin_active() ) {
 	\Newspack_Content_Blocks\Plugin::load();
-	add_action(
-		'init',
-		function() {
-			load_plugin_textdomain( 'newspack-content-blocks', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-		}
-	);
 }

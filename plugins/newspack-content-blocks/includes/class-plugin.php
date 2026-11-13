@@ -15,8 +15,7 @@ defined( 'ABSPATH' ) || exit;
 final class Plugin {
 	/**
 	 * Files to load, in load order, as class name (in this namespace) => file path
-	 * relative to the plugin root. `init()` is called on each class that has one; later
-	 * tasks add to this list. A sub-namespace is written in the key, e.g. `REST\Foo`.
+	 * relative to the plugin root. `init()` is called on each class that has one. A sub-namespace is written in the key, e.g. `REST\Foo`.
 	 *
 	 * @var array<string, string>
 	 */
@@ -59,6 +58,13 @@ final class Plugin {
 	}
 
 	/**
+	 * Load translations.
+	 */
+	public static function load_textdomain() {
+		load_plugin_textdomain( 'newspack-content-blocks', false, dirname( plugin_basename( NEWSPACK_CONTENT_BLOCKS_PLUGIN_FILE ) ) . '/languages' );
+	}
+
+	/**
 	 * Load the plugin's files and initialize them. Safe to call more than once.
 	 */
 	public static function load() {
@@ -66,6 +72,8 @@ final class Plugin {
 			return;
 		}
 		self::$is_loaded = true;
+
+		add_action( 'init', [ __CLASS__, 'load_textdomain' ] );
 
 		foreach ( self::FILES as $class => $file ) {
 			require_once NEWSPACK_CONTENT_BLOCKS_PLUGIN_DIR . $file;

@@ -55,7 +55,8 @@ class Newspack_Content_Blocks_Test_Coexistence extends WP_UnitTestCase {
 
 		require_once dirname( __DIR__, 2 ) . '/newspack-blocks/newspack-blocks.php';
 
-		// Its init callbacks never run on this request, so nothing changes.
+		// Loading it late must not fatal on duplicate symbols; init has already fired, so
+		// it registers no blocks of its own on this request.
 		$this->assertSame( $before, $this->registered_newspack_blocks() );
 
 		// Routes registered by both sides must coexist without notices.
