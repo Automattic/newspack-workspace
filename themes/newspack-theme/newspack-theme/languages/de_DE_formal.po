@@ -593,7 +593,7 @@ msgstr ""
 #: inc/customizer.php:476
 msgctxt "header background color"
 msgid "Default"
-msgstr ""
+msgstr "Standard"
 
 #: inc/customizer.php:477
 msgctxt "header background color"

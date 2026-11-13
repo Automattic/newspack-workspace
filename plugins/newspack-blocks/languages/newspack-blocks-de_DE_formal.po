@@ -51,7 +51,7 @@ msgstr "Ungültige Nonce."
 
 #: includes/class-modal-checkout.php:846
 msgid "Complete your purchase"
-msgstr "Schließen Sie Ihren Kauf ab"
+msgstr "Kauf abschließen"
 
 #: includes/class-modal-checkout.php:911
 msgid "Cart has been emptied."
@@ -216,7 +216,7 @@ msgstr "Geschenkempfänger:in"
 #: includes/class-modal-checkout.php:3471
 #: includes/class-modal-checkout.php:3472
 msgid "Complete your transaction"
-msgstr "Transaktion abschließen"
+msgstr "Kauf abschließen"
 
 #: includes/class-modal-checkout.php:3473
 msgctxt "Login modal title when logged out user attempts to checkout."
@@ -242,7 +242,7 @@ msgstr "Dieser Kauf ist ein Geschenk"
 
 #: includes/class-modal-checkout.php:3491
 msgid "Complete transaction"
-msgstr "Transaktion abschließen"
+msgstr "Kauf abschließen"
 
 #: includes/class-modal-checkout.php:3492
 msgid "Purchase"
@@ -361,7 +361,7 @@ msgstr ""
 #: includes/class-newspack-blocks.php:2029 dist/editor.js:52
 #, php-format
 msgid "per %s"
-msgstr ""
+msgstr "pro %s"
 
 #: includes/class-newspack-blocks.php:2060
 msgid " once"
@@ -369,7 +369,7 @@ msgstr ""
 
 #: includes/class-newspack-blocks.php:2063
 msgid " per "
-msgstr ""
+msgstr " pro "
 
 #: includes/modal-checkout/class-checkout-data.php:392 dist/editor.js:52
 #: src/blocks/donate/index.js:31
@@ -1712,7 +1712,7 @@ msgstr ""
 #: dist/editor.js:49
 msgctxt "per `Frequency`"
 msgid "per %s"
-msgstr ""
+msgstr "pro %s"
 
 #: dist/editor.js:52
 msgid "Frequency"
