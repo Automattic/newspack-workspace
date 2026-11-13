@@ -276,7 +276,7 @@ function SubscriberDiscounts() {
 							<EmptyState.Title>{ __( 'No discounts yet', 'newspack-plugin' ) }</EmptyState.Title>
 							<EmptyState.Description>
 								{ __(
-									'Give subscribers a discount on selected products. Each rule sets the subscription, the products, and the amount off.',
+									'Give subscribers a discount on selected products. Each rule sets the subscriptions, the products, and the amount off.',
 									'newspack-plugin'
 								) }
 							</EmptyState.Description>

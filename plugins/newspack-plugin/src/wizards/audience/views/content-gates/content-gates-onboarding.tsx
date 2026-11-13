@@ -24,10 +24,7 @@ const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: bool
 				title={ isNewsletter ? __( 'No premium newsletters yet', 'newspack-plugin' ) : __( 'No content gates yet', 'newspack-plugin' ) }
 				description={
 					isNewsletter
-						? __(
-								'Restrict newsletter lists to registered or paying readers. Pick the lists, then choose who gets access.',
-								'newspack-plugin'
-						  )
+						? __( 'Restrict newsletter lists to paying readers. Pick the lists, then choose who gets access.', 'newspack-plugin' )
 						: __(
 								'Gates control who can read which content. Pick what to restrict, then require registration, payment, or both.',
 								'newspack-plugin'

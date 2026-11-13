@@ -289,7 +289,7 @@ function SubscriberOnlyProducts() {
 							<EmptyState.Title>{ __( 'No restrictions yet', 'newspack-plugin' ) }</EmptyState.Title>
 							<EmptyState.Description>
 								{ __(
-									'Limit selected products to subscribers. Everyone can still see the product and its price; only buying is blocked.',
+									'Limit selected products to subscribers. By default, everyone can still see the product and its price; only buying is blocked.',
 									'newspack-plugin'
 								) }
 							</EmptyState.Description>

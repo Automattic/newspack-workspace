@@ -158,10 +158,7 @@ const ContentGiftingSettings = () => {
 						<EmptyState.Header
 							icon={ gift }
 							title={ __( 'Content gifting is off', 'newspack-plugin' ) }
-							description={ __(
-								'Turn it on to let readers with access share gated articles with non-subscribers.',
-								'newspack-plugin'
-							) }
+							description={ __( 'Turn it on to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
 						/>
 						{ giftingErrors.length > 0 && (
 							<Notice status="error" politeness="polite" isDismissible={ false }>
