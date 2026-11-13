@@ -115,12 +115,10 @@ export default function AdvertisersListScreen() {
 				<Stack direction="column" align="center">
 					<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 						<EmptyState.Icon icon={ store } />
-						<EmptyState.Title render={ <HeadingTag /> }>
-							{ __( 'Get started with advertisers', 'newspack-newsletters' ) }
-						</EmptyState.Title>
+						<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No advertisers yet', 'newspack-newsletters' ) }</EmptyState.Title>
 						<EmptyState.Description>
 							{ __(
-								'Group ads by the advertiser they belong to so you can track and report on each one separately.',
+								'Add the businesses that buy ad space, then see and report on each advertiser’s ads in one place.',
 								'newspack-newsletters'
 							) }
 						</EmptyState.Description>

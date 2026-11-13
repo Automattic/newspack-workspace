@@ -168,10 +168,10 @@ export default function AdsListScreen() {
 			<Stack direction="column" align="center">
 				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 					<EmptyState.Icon icon={ emailAd } />
-					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }</EmptyState.Title>
+					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No newsletter ads yet', 'newspack-newsletters' ) }</EmptyState.Title>
 					<EmptyState.Description>
 						{ __(
-							'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
+							'Run sponsored or house ads in your newsletters. Each ad runs on the dates you set, in the placements or categories you pick.',
 							'newspack-newsletters'
 						) }
 					</EmptyState.Description>

@@ -91,9 +91,9 @@ export default function NewslettersListScreen() {
 			<Stack direction="column" align="center">
 				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
 					<EmptyState.Icon icon={ envelope } />
-					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'Get started with newsletters', 'newspack-newsletters' ) }</EmptyState.Title>
+					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No newsletters yet', 'newspack-newsletters' ) }</EmptyState.Title>
 					<EmptyState.Description>
-						{ __( 'Compose, schedule, and send newsletters to your subscribers via your connected ESP.', 'newspack-newsletters' ) }
+						{ __( 'Write a newsletter here and send it to subscribers through the connected email service.', 'newspack-newsletters' ) }
 					</EmptyState.Description>
 					<EmptyState.Actions>
 						<Button variant="primary" href={ addNewHref }>
