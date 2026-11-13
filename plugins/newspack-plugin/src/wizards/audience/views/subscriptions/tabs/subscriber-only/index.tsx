@@ -12,7 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
@@ -21,7 +21,6 @@ import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/comp
  * Internal dependencies.
  */
 import { Button, CellList, DataViews, formatSiteDate, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
@@ -284,21 +283,23 @@ function SubscriberOnlyProducts() {
 			) }
 			{ ! loading && ! hasRestrictions && (
 				<div className="newspack-subscriber-only__empty">
-					<EmptyState.Root>
-						<EmptyState.Header
-							icon={ people }
-							title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
-							description={ __(
-								'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
-								'newspack-plugin'
-							) }
-						/>
-						<EmptyState.Actions>
-							<Button variant="primary" onClick={ () => setEditing( {} ) }>
-								{ __( 'Add Restriction', 'newspack-plugin' ) }
-							</Button>
-						</EmptyState.Actions>
-					</EmptyState.Root>
+					<Stack direction="column" align="center">
+						<EmptyState.Root>
+							<EmptyState.Icon icon={ people } />
+							<EmptyState.Title>{ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Description>
+								{ __(
+									'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
+									'newspack-plugin'
+								) }
+							</EmptyState.Description>
+							<EmptyState.Actions>
+								<Button variant="primary" onClick={ () => setEditing( {} ) }>
+									{ __( 'Add Restriction', 'newspack-plugin' ) }
+								</Button>
+							</EmptyState.Actions>
+						</EmptyState.Root>
+					</Stack>
 				</div>
 			) }
 

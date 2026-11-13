@@ -43,6 +43,8 @@ describe( 'SegmentsList', () => {
 		renderList( { segments: [] } );
 		expect( screen.getByText( 'No segments yet' ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'searchbox' ) ).not.toBeInTheDocument();
+		expect( screen.getAllByRole( 'link', { name: 'Add Segment' } ) ).toHaveLength( 1 );
+		expect( document.querySelector( '.newspack-page__header-actions' ) ).toBeNull();
 	} );
 
 	it( 'names the toggle and the menu after the segment', () => {

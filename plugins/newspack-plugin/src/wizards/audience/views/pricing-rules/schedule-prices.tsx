@@ -13,16 +13,18 @@ import { useDispatch } from '@wordpress/data';
 import { DataViews as CoreDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { currencyDollar } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { ConfirmDialog, TableCard } from '../../../../../packages/components/src';
 import DataViews from '../../../../../packages/components/src/dataviews';
-import EmptyState from '../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { byCycle, cycleRange, priceSummary } from './schedule-format';
 import SchedulePriceDrawer from './schedule-price-drawer';
+
+const EmptyHeading = 'h3';
 
 interface SchedulePriceRow extends SchedulePriceInput {
 	id: string;
@@ -224,21 +226,23 @@ export default function SchedulePrices( { steps, onChange, publicize, calcTypes,
 			>
 				{ rows.length === 0 ? (
 					<div className="newspack-pricing-rules__schedule-empty">
-						<EmptyState.Root size="small">
-							<EmptyState.Header
-								icon={ currencyDollar }
-								title={ __( 'No prices yet', 'newspack-plugin' ) }
-								description={ __(
-									'Each price applies from its billing cycle until the next takes over. Add the first one to build the schedule.',
-									'newspack-plugin'
-								) }
-							/>
-							<EmptyState.Actions>
-								<Button ref={ addRef } variant="secondary" onClick={ add } __next40pxDefaultSize>
-									{ __( 'Add Price', 'newspack-plugin' ) }
-								</Button>
-							</EmptyState.Actions>
-						</EmptyState.Root>
+						<Stack direction="column" align="center">
+							<EmptyState.Root>
+								<EmptyState.Icon icon={ currencyDollar } />
+								<EmptyState.Title render={ <EmptyHeading /> }>{ __( 'No prices yet', 'newspack-plugin' ) }</EmptyState.Title>
+								<EmptyState.Description>
+									{ __(
+										'Each price applies from its billing cycle until the next takes over. Add the first one to build the schedule.',
+										'newspack-plugin'
+									) }
+								</EmptyState.Description>
+								<EmptyState.Actions>
+									<Button ref={ addRef } variant="secondary" onClick={ add } __next40pxDefaultSize>
+										{ __( 'Add Price', 'newspack-plugin' ) }
+									</Button>
+								</EmptyState.Actions>
+							</EmptyState.Root>
+						</Stack>
 					</div>
 				) : (
 					<div ref={ tableRef } className="newspack-pricing-rules__schedule-table" role="region" aria-labelledby={ titleId }>

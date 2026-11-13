@@ -9,14 +9,13 @@ import { __ } from '@wordpress/i18n';
 import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { Button, Divider, Grid, SectionHeader, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { print } from '../../../../../../packages/icons';
@@ -182,24 +181,26 @@ function Print() {
 			>
 				{ navBlockDialog }
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ print }
-						title={ __( 'Export articles to Adobe InDesign', 'newspack-plugin' ) }
-						description={ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
-					/>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isFetching }
-							disabled={ isFetching }
-							onClick={ () => setModuleEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ print } />
+						<EmptyState.Title>{ __( 'Export articles to Adobe InDesign', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isFetching }
+								disabled={ isFetching }
+								onClick={ () => setModuleEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</WizardsTab>
 		);
 	}

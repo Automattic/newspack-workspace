@@ -13,7 +13,7 @@ import {
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
@@ -21,7 +21,6 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import { Button, Divider, Grid, SectionHeader, useConfirmDialog } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { countdown as countdownIcon } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -214,21 +213,23 @@ const MeteringSettings = () => {
 
 	if ( ! hasMetering ) {
 		return (
-			<EmptyState.Root>
-				<EmptyState.Header
-					icon={ countdownIcon }
-					title={ __( 'No gate uses metering yet', 'newspack-plugin' ) }
-					description={ __( "Metering starts when an active gate turns it on. Set it in a gate's access settings.", 'newspack-plugin' ) }
-				/>
-				<EmptyState.Actions>
-					<Button variant="primary" href="#/edit/new/all">
-						{ __( 'Add Content Gate', 'newspack-plugin' ) }
-					</Button>
-					<Button variant="secondary" href="#/content-gates">
-						{ __( 'View Content Gates', 'newspack-plugin' ) }
-					</Button>
-				</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root>
+					<EmptyState.Icon icon={ countdownIcon } />
+					<EmptyState.Title>{ __( 'No gate uses metering yet', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __( "Metering starts when an active gate turns it on. Set it in a gate's access settings.", 'newspack-plugin' ) }
+					</EmptyState.Description>
+					<EmptyState.Actions>
+						<Button variant="primary" href="#/edit/new/all">
+							{ __( 'Add Content Gate', 'newspack-plugin' ) }
+						</Button>
+						<Button variant="secondary" href="#/content-gates">
+							{ __( 'View Content Gates', 'newspack-plugin' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	}
 

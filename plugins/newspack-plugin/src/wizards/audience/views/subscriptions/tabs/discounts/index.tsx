@@ -15,6 +15,7 @@ import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, View } from '@wordpress/dataviews';
 import { termCount } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
@@ -22,7 +23,6 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  * Internal dependencies.
  */
 import { Button, DataViews, Notice, Waiting } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
@@ -270,21 +270,23 @@ function SubscriberDiscounts() {
 			{ error && <Notice isError noticeText={ error } /> }
 			{ showEmptyState ? (
 				<div className="newspack-subscriber-discounts__empty">
-					<EmptyState.Root>
-						<EmptyState.Header
-							icon={ termCount }
-							title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-							description={ __(
-								'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-								'newspack-plugin'
-							) }
-						/>
-						<EmptyState.Actions>
-							<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
-								{ __( 'Add Discount', 'newspack-plugin' ) }
-							</Button>
-						</EmptyState.Actions>
-					</EmptyState.Root>
+					<Stack direction="column" align="center">
+						<EmptyState.Root>
+							<EmptyState.Icon icon={ termCount } />
+							<EmptyState.Title>{ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Description>
+								{ __(
+									'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
+									'newspack-plugin'
+								) }
+							</EmptyState.Description>
+							<EmptyState.Actions>
+								<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
+									{ __( 'Add Discount', 'newspack-plugin' ) }
+								</Button>
+							</EmptyState.Actions>
+						</EmptyState.Root>
+					</Stack>
 				</div>
 			) : (
 				<DataViews
