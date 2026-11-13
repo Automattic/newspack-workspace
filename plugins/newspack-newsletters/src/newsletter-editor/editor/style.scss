@@ -1,6 +1,9 @@
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
-.post-type-newspack_nl_cpt {
+// The post type body class stays while "Edit original" has a synced pattern
+// open in this page, so the newsletter editor plugin flags that state. Core's
+// publish button is the pattern's only save button there.
+.post-type-newspack_nl_cpt:not(.newspack-newsletters-editing-other-post) {
 	.components-button.editor-post-publish-button__button.is-primary {
 		display: none;
 	}
@@ -8,7 +11,9 @@
 	.editor-post-switch-to-draft {
 		display: none;
 	}
+}
 
+.post-type-newspack_nl_cpt {
 	.newspack-newsletters-buttons-group {
 		display: flex;
 		flex-wrap: wrap;
