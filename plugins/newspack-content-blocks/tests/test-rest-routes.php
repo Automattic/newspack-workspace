@@ -187,5 +187,37 @@ class RestRoutesTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		)->get_data();
 		self::assertSame( [ $guest ], wp_list_pluck( $data, 'id' ) );
 		self::assertSame( 'Gustav Guest', $data[0]['name'] );
+
+		$linked_user  = self::factory()->user->create(
+			[
+				'role'         => 'author',
+				'user_login'   => 'linda-linked',
+				'display_name' => 'Linda Linked',
+			]
+		);
+		$linked_guest = self::factory()->post->create(
+			[
+				'post_type'   => 'guest-author',
+				'post_status' => 'publish',
+				'post_title'  => 'Linda Linked',
+			]
+		);
+		update_post_meta( $linked_guest, 'cap-linked_account', 'linda-linked' );
+		$plain_user = self::factory()->user->create(
+			[
+				'role'         => 'author',
+				'user_login'   => 'linus-plain',
+				'display_name' => 'Linus Plain',
+			]
+		);
+
+		$data = self::request_authors(
+			[
+				'search' => 'lin',
+				'fields' => 'id,name',
+			]
+		)->get_data();
+		self::assertEqualsCanonicalizing( [ $linked_guest, $plain_user ], wp_list_pluck( $data, 'id' ), 'The linked user is listed once, as its guest author.' );
+		self::assertNotContains( $linked_user, wp_list_pluck( $data, 'id' ) );
 	}
 }

@@ -37,12 +37,14 @@ class Authors_Controller extends \WP_REST_Controller {
 	 * Register the routes on `rest_api_init`.
 	 */
 	public static function init() {
-		add_action(
-			'rest_api_init',
-			function() {
-				( new self() )->register_routes();
-			}
-		);
+		add_action( 'rest_api_init', [ __CLASS__, 'register' ] );
+	}
+
+	/**
+	 * Register the routes with a new controller instance.
+	 */
+	public static function register() {
+		( new self() )->register_routes();
 	}
 
 	/**
@@ -174,12 +176,12 @@ class Authors_Controller extends \WP_REST_Controller {
 			$user_args['include'] = $include;
 		}
 		$user_query = new \WP_User_Query( $user_args );
+		$linked     = class_exists( 'CoAuthors_Guest_Authors' ) ? self::get_linked_guest_authors( wp_list_pluck( $user_query->get_results(), 'user_login' ) ) : [];
 		$users      = [];
 		foreach ( $user_query->get_results() as $user ) {
 			// A user linked to a guest author is represented by the guest author.
-			$linked_guest_author = class_exists( 'CoAuthors_Guest_Authors' ) ? Blocks::get_linked_guest_author( $user->user_login ) : false;
-			if ( $linked_guest_author ) {
-				$guest_authors[] = $linked_guest_author;
+			if ( isset( $linked[ $user->user_login ] ) ) {
+				$guest_authors[] = $linked[ $user->user_login ];
 			} else {
 				$users[] = $user;
 			}
@@ -215,6 +217,39 @@ class Authors_Controller extends \WP_REST_Controller {
 		$response = new \WP_REST_Response( $authors );
 		$response->header( 'x-wp-total', $user_query->get_total() + $guest_total );
 		return $response;
+	}
+
+	/**
+	 * Guest authors linked to the given users, in one query.
+	 *
+	 * @param string[] $logins User logins.
+	 * @return \WP_Post[] Guest authors keyed by linked user login.
+	 */
+	private static function get_linked_guest_authors( $logins ) {
+		if ( empty( $logins ) ) {
+			return [];
+		}
+		$linked = [];
+		$posts  = get_posts(
+			[
+				'post_type'      => 'guest-author',
+				'posts_per_page' => count( $logins ),
+				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'     => 'cap-linked_account',
+						'value'   => $logins,
+						'compare' => 'IN',
+					],
+				],
+			]
+		);
+		foreach ( $posts as $guest_author ) {
+			$login = get_post_meta( $guest_author->ID, 'cap-linked_account', true );
+			if ( $login && ! isset( $linked[ $login ] ) ) {
+				$linked[ $login ] = $guest_author;
+			}
+		}
+		return $linked;
 	}
 
 	/**
