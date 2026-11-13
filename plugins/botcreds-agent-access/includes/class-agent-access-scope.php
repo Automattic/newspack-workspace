@@ -372,8 +372,9 @@ class Agent_Access_Scope {
 		// Sanitise each slug.
 		$clean = array();
 		foreach ( $post_types as $slug ) {
-			// Literal route patterns start with / — preserve them as-is.
-			if ( is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] ) {
+			// Full access ('*') and literal route patterns (starting with /)
+			// are not keys, and sanitize_key() would empty or mangle them.
+			if ( '*' === $slug || ( is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] ) ) {
 				$clean[] = $slug;
 				continue;
 			}
