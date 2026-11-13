@@ -6,8 +6,9 @@ import { Button } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { envelope } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
-import { DataViews, EmptyState } from 'newspack-components';
+import { DataViews } from 'newspack-components';
 import { getAdminUrl, getCptSlug } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -63,6 +64,7 @@ export default function NewslettersListScreen() {
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit: setQuickEditItem } ), [ refresh ] );
 
 	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
+	const HeadingTag = getEmptyStateHeading() === 1 ? 'h1' : 'h2';
 
 	useHeaderActions(
 		useMemo(
@@ -86,22 +88,20 @@ export default function NewslettersListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
-				<EmptyState.Header
-					icon={ envelope }
-					heading={ getEmptyStateHeading() }
-					title={ __( 'Get started with newsletters', 'newspack-newsletters' ) }
-					description={ __(
-						'Compose, schedule, and send newsletters to your subscribers via your connected ESP.',
-						'newspack-newsletters'
-					) }
-				/>
-				<EmptyState.Actions>
-					<Button variant="primary" href={ addNewHref }>
-						{ __( 'Add Newsletter', 'newspack-newsletters' ) }
-					</Button>
-				</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+					<EmptyState.Icon icon={ envelope } />
+					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'Get started with newsletters', 'newspack-newsletters' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __( 'Compose, schedule, and send newsletters to your subscribers via your connected ESP.', 'newspack-newsletters' ) }
+					</EmptyState.Description>
+					<EmptyState.Actions>
+						<Button variant="primary" href={ addNewHref }>
+							{ __( 'Add Newsletter', 'newspack-newsletters' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	}
 

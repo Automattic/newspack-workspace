@@ -5,9 +5,10 @@
 import { Button } from '@wordpress/components';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { emailAd } from 'newspack-icons';
 
-import { DataViews, EmptyState } from 'newspack-components';
+import { DataViews } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -140,6 +141,7 @@ export default function AdsListScreen() {
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit } ), [ refresh, openQuickEdit ] );
 
 	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
+	const HeadingTag = getEmptyStateHeading() === 1 ? 'h1' : 'h2';
 
 	useHeaderActions(
 		useMemo(
@@ -163,22 +165,23 @@ export default function AdsListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
-				<EmptyState.Header
-					icon={ emailAd }
-					heading={ getEmptyStateHeading() }
-					title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
-					description={ __(
-						'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
-						'newspack-newsletters'
-					) }
-				/>
-				<EmptyState.Actions>
-					<Button variant="primary" href={ addNewHref }>
-						{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
-					</Button>
-				</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+					<EmptyState.Icon icon={ emailAd } />
+					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __(
+							'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
+							'newspack-newsletters'
+						) }
+					</EmptyState.Description>
+					<EmptyState.Actions>
+						<Button variant="primary" href={ addNewHref }>
+							{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	}
 
