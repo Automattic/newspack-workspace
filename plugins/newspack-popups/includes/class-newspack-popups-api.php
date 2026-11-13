@@ -197,6 +197,12 @@ final class Newspack_Popups_API {
 		}
 
 		if ( Newspack_Popups_AB_Tests::is_enabled() ) {
+			$test_id_arg = [
+				'test_id' => [
+					'type'              => 'string',
+					'sanitize_callback' => [ __CLASS__, 'sanitize_route_test_id' ],
+				],
+			];
 			register_rest_route(
 				'newspack-popups/v1',
 				'/ab-tests',
@@ -237,23 +243,25 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				// Underscores too: the save guard keeps a legacy Test ID as stored.
-				'/ab-tests/(?P<test_id>[a-z0-9_-]+)',
+				// Underscores and percent-encoded octets too: the save guard keeps a
+				// legacy Test ID as stored, and sanitize_route_test_id() explains the %.
+				'/ab-tests/(?P<test_id>(?:[a-z0-9_-]|%[0-9a-f]{2})+)',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_prompts' ],
 					'permission_callback' => [ __CLASS__, 'prompt_editor_permission_callback' ],
+					'args'                => $test_id_arg,
 				]
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				// Underscores too, for the same legacy IDs as the route above.
-				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/stats',
+				// Underscores and percent-encoded octets too, for the same legacy IDs.
+				'/ab-tests/(?P<test_id>(?:[a-z0-9_-]|%[0-9a-f]{2})+)/stats',
 				[
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ __CLASS__, 'api_get_ab_test_stats' ],
 					'permission_callback' => [ __CLASS__, 'permission_callback' ],
-					'args'                => [
+					'args'                => $test_id_arg + [
 						'refresh' => [
 							'type'    => 'boolean',
 							'default' => false,
@@ -263,13 +271,13 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				// Underscores too, so a legacy test the page lists can be renamed.
-				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/name',
+				// Legacy IDs too, so a legacy test the page lists can be renamed.
+				'/ab-tests/(?P<test_id>(?:[a-z0-9_-]|%[0-9a-f]{2})+)/name',
 				[
 					'methods'             => \WP_REST_Server::EDITABLE,
 					'callback'            => [ __CLASS__, 'api_rename_ab_test' ],
 					'permission_callback' => [ __CLASS__, 'rename_ab_test_permission_callback' ],
-					'args'                => [
+					'args'                => $test_id_arg + [
 						'name' => [
 							'type'     => 'string',
 							'required' => true,
@@ -279,12 +287,12 @@ final class Newspack_Popups_API {
 			);
 			register_rest_route(
 				'newspack-popups/v1',
-				'/ab-tests/(?P<test_id>[a-z0-9_-]+)/end',
+				'/ab-tests/(?P<test_id>(?:[a-z0-9_-]|%[0-9a-f]{2})+)/end',
 				[
 					'methods'             => \WP_REST_Server::CREATABLE,
 					'callback'            => [ __CLASS__, 'api_end_ab_test' ],
 					'permission_callback' => [ __CLASS__, 'end_ab_test_permission_callback' ],
-					'args'                => [
+					'args'                => $test_id_arg + [
 						'keep' => [
 							'type'     => 'string',
 							'enum'     => Newspack_Popups_AB_Tests::VALID_VARIANTS,
@@ -294,6 +302,28 @@ final class Newspack_Popups_API {
 				]
 			);
 		}
+	}
+
+	/**
+	 * Undo the page's encoding of the percent signs in a legacy Test ID.
+	 *
+	 * A legacy ID keeps what sanitize_title() couldn't transliterate as
+	 * percent-encoded octets, such as caf%c3%a9. The page encodes the ID for the
+	 * URL, so it arrives as caf%25c3%25a9 through /wp-json/, where WordPress
+	 * doesn't decode the path, and as caf%c3%a9 through ?rest_route=, where PHP
+	 * decodes the query once. Turning %25 back into % before an octet gives the
+	 * stored form either way. A full rawurldecode() would not: it turns
+	 * caf%c3%a9 into café, which sanitize_title() then stores as a different ID.
+	 *
+	 * The one ID this can't recover is one that stores a literal %25 before two
+	 * hex digits, through ?rest_route=: the value alone can't say whether PHP
+	 * already decoded it, so there it resolves to a different ID.
+	 *
+	 * @param mixed $value Test ID from the route.
+	 * @return string
+	 */
+	public static function sanitize_route_test_id( $value ) {
+		return (string) preg_replace( '/%25(?=[0-9a-f]{2})/', '%', (string) $value );
 	}
 
 	/**

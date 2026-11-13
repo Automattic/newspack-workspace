@@ -164,13 +164,13 @@ export const DonationAmounts = ( { hideHeader = false }: { hideHeader?: boolean 
 				} ) }
 				<TextControl
 					label={ __( 'Minimum donation', 'newspack-plugin' ) }
-					help={ __(
+					help={ `${ __(
 						'Set minimum donation amount. Setting a reasonable minimum donation amount can help protect your site from bot attacks.',
 						'newspack-plugin'
-					) }
+					) } ${ __( 'Leave empty to keep the current minimum.', 'newspack-plugin' ) }` }
 					type="number"
 					min={ 1 }
-					value={ minimumDonationFloat }
+					value={ Number.isNaN( minimumDonationFloat ) ? '' : minimumDonationFloat }
 					onChange={ ( value: string ) => changeHandler( [ 'minimumDonation' ] )( value ) }
 					withMargin={ false }
 				/>

@@ -25,6 +25,15 @@ final class Newspack_Popups_AB_Tests {
 
 	const META_KEYS = [ self::META_TEST_ID, self::META_VARIANT, self::META_GOAL, self::META_CONTROL_SHARE ];
 
+	/**
+	 * A random value replaced each time a test starts or resumes on a prompt.
+	 * An editor tab sends back the value it loaded, so a different one marks a
+	 * tab opened before then. Starting and ending change the Test ID, which
+	 * tells too, but resuming keeps it. Kept out of META_KEYS: it is no test
+	 * setting.
+	 */
+	const META_REVISION = 'newspack_popups_ab_revision';
+
 	// Not the whole key: bucket_meta_key() puts the site's table prefix in front.
 	const USER_META_BUCKET_PREFIX = 'newspack_popups_ab_bucket_';
 
@@ -91,10 +100,12 @@ final class Newspack_Popups_AB_Tests {
 		add_filter( 'rest_pre_insert_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'guard_rest_ab_meta' ], 10, 2 );
 
 		// Anything that can add or remove a test invalidates the flag. Scoped to the
-		// prompts CPT and to the test-id meta key: a news site saves posts constantly,
-		// and invalidating on those would reinstate the per-request query this exists
-		// to avoid. Meta hooks are covered separately because update_post_meta() can
-		// set a test id without firing save_post.
+		// prompts CPT and to the meta keys that decide whether a prompt is in a test:
+		// a news site saves posts constantly, and invalidating on those would
+		// reinstate the per-request query this exists to avoid. Meta hooks are
+		// covered separately because update_post_meta() can set a test id without
+		// firing save_post, and the placement keys because get_tests_config() leaves
+		// out a version on an ineligible placement, so moving it changes the answer.
 		add_action( 'save_post_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'invalidate_has_tests' ] );
 		foreach ( [ 'deleted_post', 'trashed_post', 'untrashed_post' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'invalidate_has_tests_for_post' ] );
@@ -105,16 +116,17 @@ final class Newspack_Popups_AB_Tests {
 
 		// A status hook rather than the A/B routes: the Campaigns wizard, batch
 		// publish, wp-admin and cron all publish prompts without going through
-		// them. The meta hooks cover a prompt that joins a test while already
-		// live, which an editor save does after the status change.
+		// them. The meta hooks cover a Test ID or version written straight onto a
+		// live prompt, as WP-CLI or custom code can; starting or resuming a test
+		// is recorded here instead, once both versions are published.
 		add_action( 'transition_post_status', [ __CLASS__, 'record_start_on_publish' ], 10, 3 );
 		foreach ( [ 'added_post_meta', 'updated_post_meta' ] as $hook ) {
 			add_action( $hook, [ __CLASS__, 'record_start_for_meta' ], 10, 3 );
 		}
 
 		// Meta hooks rather than post ones, so one rule covers every way a
-		// prompt leaves a test: End Test clearing its Test ID, an editor clearing
-		// or changing it, and deleting the prompt, whose meta goes with it.
+		// prompt leaves a test: End Test clearing its Test ID and deleting the
+		// prompt, whose meta goes with it.
 		// Not gated on the flag: they only remove the feature's own reader meta,
 		// and a site that turned the flag off still wants it gone.
 		add_action( 'update_post_meta', [ __CLASS__, 'note_leaving_test_id' ], 10, 3 );
@@ -260,14 +272,17 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * Drop the flag when a prompt's test-id meta changes.
+	 * Drop the flag when a prompt's Test ID, placement or Manual only meta
+	 * changes, since all three decide whether get_tests_config() counts it: a
+	 * test whose only challenger it left out records no tests, and moving that
+	 * version back must bring the test back.
 	 *
 	 * @param int    $meta_id   Meta ID.
 	 * @param int    $object_id Post ID.
 	 * @param string $meta_key  Meta key.
 	 */
 	public static function invalidate_has_tests_for_meta( $meta_id, $object_id, $meta_key ) {
-		if ( self::META_TEST_ID === $meta_key ) {
+		if ( in_array( $meta_key, [ self::META_TEST_ID, 'placement', 'manual_only' ], true ) ) {
 			self::invalidate_has_tests_for_post( $object_id );
 		}
 	}
@@ -320,6 +335,33 @@ final class Newspack_Popups_AB_Tests {
 		if ( $existing && '' !== (string) get_term_meta( $existing->term_id, self::TERM_META_STARTED, true ) ) {
 			return;
 		}
+		if ( ! self::is_test_running( $test_id ) ) {
+			return;
+		}
+		$term = self::ensure_term( $test_id, $test_id );
+		if ( is_wp_error( $term ) ) {
+			return;
+		}
+		// Unique, which is a read before the insert rather than a lock: two
+		// requests at once can each add a row, and reads return the first.
+		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
+	}
+
+	/**
+	 * Whether readers are being split between a test's versions: the flag is
+	 * on, the test hasn't ended, and its control and at least one challenger
+	 * are published. Results count from then on.
+	 *
+	 * This is the dashboard's rule, not the editor panel's, which also waits
+	 * for every other prompt in the test to be published.
+	 *
+	 * @param string $test_id Test ID as stored.
+	 * @return bool
+	 */
+	private static function is_test_running( $test_id ) {
+		if ( '' === $test_id || ! self::is_enabled() || null !== self::get_ended_record( $test_id ) ) {
+			return false;
+		}
 		$live = get_posts(
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
@@ -330,20 +372,9 @@ final class Newspack_Popups_AB_Tests {
 				'meta_value'     => $test_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- The Test ID lives in meta.
 			]
 		);
+		update_meta_cache( 'post', $live );
 		$letters = array_map( fn( $id ) => (string) get_post_meta( $id, self::META_VARIANT, true ), $live );
-		if ( ! in_array( 'a', $letters, true ) || empty( array_intersect( array_diff( self::VALID_VARIANTS, [ 'a' ] ), $letters ) ) ) {
-			return;
-		}
-		if ( null !== self::get_ended_record( $test_id ) ) {
-			return;
-		}
-		$term = self::ensure_term( $test_id, $test_id );
-		if ( is_wp_error( $term ) ) {
-			return;
-		}
-		// Unique, which is a read before the insert rather than a lock: two
-		// requests at once can each add a row, and reads return the first.
-		add_term_meta( $term->term_id, self::TERM_META_STARTED, gmdate( 'Y-m-d\TH:i:s\Z' ), true );
+		return in_array( 'a', $letters, true ) && ! empty( array_intersect( array_diff( self::VALID_VARIANTS, [ 'a' ] ), $letters ) );
 	}
 
 	/**
@@ -489,6 +520,19 @@ final class Newspack_Popups_AB_Tests {
 				]
 			)
 		);
+
+		// In REST only so the editor loads it and sends it back; the save guard
+		// drops it from every save.
+		\register_meta(
+			'post',
+			self::META_REVISION,
+			array_merge(
+				$base,
+				[
+					'type' => 'string',
+				]
+			)
+		);
 	}
 
 	/**
@@ -551,6 +595,15 @@ final class Newspack_Popups_AB_Tests {
 	 * route ignores an error from this filter and would record an empty autosave,
 	 * so there the A/B keys are dropped whatever their value.
 	 *
+	 * The Test ID and version are dropped from every save, for every user. They
+	 * belong to starting, resuming and ending a test, which write them directly,
+	 * and no editor control sets them. The editor still sends them back as loaded,
+	 * so a tab opened before one of those actions would otherwise undo it: take
+	 * version A out of the test it just joined, or put an ended test back. The
+	 * revision is dropped the same way. Such a tab's goal and split are dropped
+	 * too, for every user, and the rest of its save goes through. So are any
+	 * save's goal and split while the test is running, from a current tab too.
+	 *
 	 * @param stdClass|WP_Error $prepared_post Post prepared for the database.
 	 * @param WP_REST_Request   $request       Request.
 	 * @return stdClass|WP_Error
@@ -564,59 +617,27 @@ final class Newspack_Popups_AB_Tests {
 		$post_id     = isset( $prepared_post->ID ) ? (int) $prepared_post->ID : 0;
 		$is_autosave = str_ends_with( $request->get_route(), '/autosaves' );
 
-		// A validity rule, not a permission, so it runs before the permission branch
-		// and applies to administrators too. It reads the values the save would
-		// leave in place: a key the request omits keeps its stored value. A
-		// non-scalar reads as empty here; the meta schema refuses it on its own.
-		$stored    = function ( $meta_key ) use ( $post_id ) {
-			return $post_id ? (string) get_post_meta( $post_id, $meta_key, true ) : '';
-		};
-		$effective = function ( $meta_key ) use ( $meta, $stored ) {
-			if ( ! array_key_exists( $meta_key, $meta ) ) {
-				return $stored( $meta_key );
-			}
-			return is_scalar( $meta[ $meta_key ] ) ? (string) $meta[ $meta_key ] : '';
-		};
-		$changes   = function ( $meta_key ) use ( $effective, $stored ) {
-			return $effective( $meta_key ) !== $stored( $meta_key );
-		};
-		// The ID the save would store, so a value the sanitizer empties reads as
-		// clearing the test rather than as a new one.
-		$test_id = self::sanitize_test_id( $effective( self::META_TEST_ID ) );
-		// The rule refuses the save that creates a violation, not every later save
-		// of a prompt already in one. A tested prompt can reach a manual placement
-		// past this guard (the Campaigns wizard writes placement directly, and a
-		// save while the flag is off is not checked), and the editor sends the
-		// whole meta object on every save, so checking the stored state too would
-		// refuse a frequency edit with an error about a field the editor may have
-		// disabled for that user. The editor's notice asks for the fix instead.
-		// An ID sent back as stored is unchanged here as it is for the write below,
-		// even where the current sanitizer would spell it differently.
-		// Only while the flag is on: with it off a stored test has no effect, and
-		// the panel that could clear the Test ID is not registered.
-		if (
-			self::is_enabled()
-			&& ! $is_autosave
-			&& ( ( $changes( self::META_TEST_ID ) && $test_id !== $stored( self::META_TEST_ID ) ) || $changes( 'placement' ) || $changes( 'manual_only' ) )
-			&& '' !== $test_id
-			&& ! self::is_eligible_placement( $effective( 'placement' ), rest_sanitize_boolean( $effective( 'manual_only' ) ) )
-		) {
-			return new WP_Error(
-				'newspack_popups_ab_ineligible_placement',
-				self::is_eligible_placement( $effective( 'placement' ) )
-					? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
-					: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
-				[ 'status' => 400 ]
-			);
+		// A tab opened before the test started, resumed or ended still holds the
+		// goal and split from then, and would put them back over the test's. And
+		// once readers are split, no REST save changes them, from any tab or client:
+		// the results already counted were measured against them.
+		$sends_goal_or_split = array_key_exists( self::META_GOAL, $meta ) || array_key_exists( self::META_CONTROL_SHARE, $meta );
+		if ( $post_id && $sends_goal_or_split && ( self::is_stale_ab_save( $post_id, $meta ) || self::is_test_running( trim( (string) get_post_meta( $post_id, self::META_TEST_ID, true ) ) ) ) ) {
+			unset( $meta[ self::META_GOAL ], $meta[ self::META_CONTROL_SHARE ] );
 		}
 
-		// A Test ID sent back unchanged is left out of the write. Core re-sanitizes
-		// a submitted value before comparing it with the stored one, so an ID stored
-		// under an earlier, looser sanitizer would otherwise be rewritten on one
-		// variant by any save and split its test; only a deliberate edit normalizes it.
-		if ( array_key_exists( self::META_TEST_ID, $meta ) && is_scalar( $meta[ self::META_TEST_ID ] ) && ! $changes( self::META_TEST_ID ) ) {
-			unset( $meta[ self::META_TEST_ID ] );
-			$request->set_param( 'meta', $meta );
+		// Dropped before the permission check below, which would otherwise refuse a
+		// restricted user's save over a stale value the save can't write anyway.
+		unset( $meta[ self::META_TEST_ID ], $meta[ self::META_VARIANT ], $meta[ self::META_REVISION ] );
+		$request->set_param( 'meta', $meta );
+
+		// A validity rule, not a permission, so it runs before the permission branch
+		// and applies to administrators too.
+		if ( ! $is_autosave ) {
+			$placement_error = self::get_placement_change_error( $post_id, array_intersect_key( $meta, array_flip( [ 'placement', 'manual_only' ] ) ) );
+			if ( $placement_error ) {
+				return $placement_error;
+			}
 		}
 
 		if ( self::can_manage_tests( get_current_user_id(), $post_id ) ) {
@@ -648,6 +669,45 @@ final class Newspack_Popups_AB_Tests {
 		$request->set_param( 'meta', $meta );
 
 		return $prepared_post;
+	}
+
+	/**
+	 * Whether a save comes from a tab loaded before the prompt's test last
+	 * started, resumed or ended: the revision or Test ID it sends back differs
+	 * from the stored one. A key the save leaves out says nothing either way,
+	 * so a REST client that sends only the goal is taken at its word.
+	 *
+	 * The Test ID covers ending, which writes no revision, and tests started
+	 * before revisions existed.
+	 *
+	 * @param int   $post_id Prompt post ID.
+	 * @param array $meta    Meta sent with the save.
+	 * @return bool
+	 */
+	private static function is_stale_ab_save( $post_id, $meta ) {
+		foreach ( [ self::META_REVISION, self::META_TEST_ID ] as $meta_key ) {
+			if ( ! array_key_exists( $meta_key, $meta ) ) {
+				continue;
+			}
+			$sent = $meta[ $meta_key ];
+			if ( ! is_scalar( $sent ) && null !== $sent ) {
+				return true;
+			}
+			if ( (string) $sent !== (string) get_post_meta( $post_id, $meta_key, true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Mark a prompt's test settings as changed, so a save from a tab loaded
+	 * before now can't put the old ones back.
+	 *
+	 * @param int $prompt_id Prompt post ID.
+	 */
+	private static function bump_revision( $prompt_id ) {
+		update_post_meta( $prompt_id, self::META_REVISION, wp_generate_uuid4() );
 	}
 
 	/**
@@ -807,7 +867,7 @@ final class Newspack_Popups_AB_Tests {
 			$test_id = (string) $test_id; // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
 			$test    = [
 				'test_id'       => $test_id,
-				'name'          => $names[ $test_id ] ?? $test_id,
+				'name'          => $names[ $test_id ] ?? self::unnamed_test_name( $test_id ),
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,
@@ -1032,7 +1092,26 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' === $test_id ) {
 			return '';
 		}
-		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? $test_id;
+		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? self::unnamed_test_name( $test_id );
+	}
+
+	/**
+	 * The name shown for a test that was never named: its Test ID, readable. A
+	 * legacy ID keeps what sanitize_title() couldn't transliterate as
+	 * percent-encoded octets (caf%c3%a9), which reads as café once decoded.
+	 * Decoded bytes that aren't valid UTF-8, such as an octet sequence cut off
+	 * where sanitize_title() truncated the ID, would break the JSON response, so
+	 * those keep the ID as stored.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string
+	 */
+	private static function unnamed_test_name( $test_id ) {
+		if ( false === strpos( $test_id, '%' ) ) {
+			return $test_id;
+		}
+		$decoded = rawurldecode( $test_id );
+		return '' === wp_check_invalid_utf8( $decoded ) ? $test_id : $decoded;
 	}
 
 	/**
@@ -1323,7 +1402,11 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
-	 * End a running test, keeping one version.
+	 * End a test, keeping one version.
+	 *
+	 * A test that never ran ends the same way: while B is still a draft, or
+	 * after it was deleted, this is how a prompt leaves the test, since an
+	 * editor save can't clear its Test ID.
 	 *
 	 * The order matters, because nothing here is a transaction. The record goes
 	 * first. Core's unique write is a read before the insert, not a lock, so two
@@ -1331,7 +1414,7 @@ final class Newspack_Popups_AB_Tests {
 	 * and only the earliest goes on, before either has drafted anything. Then
 	 * every other prompt in the test goes to draft, which stops the split; a
 	 * draft that fails puts back the ones already drafted and removes the record,
-	 * so the test is still running and can be ended again. Only after every draft
+	 * so the test is as it was and can be ended again. Only after every draft
 	 * do the prompts leave the test, so a fatal in between leaves a test that has
 	 * ended but still lists its prompts, never one that has silently lost its
 	 * record. A fatal partway through the drafts can still leave a version
@@ -1365,22 +1448,17 @@ final class Newspack_Popups_AB_Tests {
 		if ( ! is_string( $keep ) || ! isset( $test['variants'][ $keep ] ) ) {
 			return new WP_Error( 'newspack_popups_ab_keep', __( 'Choose a version this test has.', 'newspack-popups' ), [ 'status' => 400 ] );
 		}
-		$running = isset( $test['variants']['a'] ) && count( $test['variants'] ) > 1;
-		foreach ( $test['variants'] as $variant ) {
-			$running = $running && 'publish' === $variant['status'];
-		}
-		if ( ! $running ) {
-			return new WP_Error( 'newspack_popups_ab_not_running', __( 'Only a running test can be ended.', 'newspack-popups' ), [ 'status' => 409 ] );
-		}
-
 		$term = self::ensure_term( $test_id, $test['name'] );
 		if ( is_wp_error( $term ) ) {
 			return $term;
 		}
-		$record = [
+		// A paused test lists no start, since readers aren't split, but its results
+		// still count from the one recorded when this run started.
+		$started_at = $test['started_at'] ?? ( self::get_recorded_starts( [ $test_id ] )[ $test_id ] ?? null );
+		$record     = [
 			'ended_at'      => gmdate( 'Y-m-d\TH:i:s\Z' ),
 			'kept'          => $keep,
-			'started_at'    => $test['started_at'],
+			'started_at'    => $started_at,
 			'goal'          => $test['goal'],
 			'control_share' => $test['control_share'],
 			'versions'      => array_map(
@@ -1433,7 +1511,7 @@ final class Newspack_Popups_AB_Tests {
 				}
 				delete_term_meta( $term->term_id, self::TERM_META_ENDED, $stored );
 				// A reader request that saw the record may have recorded that the
-				// site has no tests running; the test is running again.
+				// site has no tests running, and the test may be splitting readers again.
 				self::invalidate_has_tests();
 				return is_wp_error( $result ) ? $result : new WP_Error( 'newspack_popups_ab_end_failed', __( 'Could not end the test. Try again.', 'newspack-popups' ), [ 'status' => 500 ] );
 			}
@@ -1675,6 +1753,15 @@ final class Newspack_Popups_AB_Tests {
 		update_post_meta( $version_b, self::META_TEST_ID, $test_id );
 		remove_filter( 'sanitize_post_meta_' . self::META_TEST_ID . '_for_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $keep_stored, PHP_INT_MAX );
 		update_post_meta( $version_b, self::META_VARIANT, 'b' );
+		// duplicate_popup() leaves the end date behind, which Duplicate relies on.
+		// B needs it: when A expires it reverts to draft, and B would run on alone.
+		$end_date = (string) get_post_meta( $prompt->ID, 'expiration_date', true );
+		if ( '' !== $end_date ) {
+			update_post_meta( $version_b, 'expiration_date', $end_date );
+		}
+		// First, so a stale save checked from here on is caught. One checked just
+		// before can still write after these: nothing locks the post.
+		self::bump_revision( $prompt->ID );
 		update_post_meta( $prompt->ID, self::META_VARIANT, 'a' );
 		update_post_meta( $prompt->ID, self::META_GOAL, $goal );
 		update_post_meta( $prompt->ID, self::META_CONTROL_SHARE, self::sanitize_control_share( $control_share ) );
@@ -1888,6 +1975,19 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Whether a saved prompt's stored placement lets it be part of a test.
+	 *
+	 * @param int $prompt_id Prompt ID.
+	 * @return bool
+	 */
+	private static function is_eligible_prompt( $prompt_id ) {
+		return self::is_eligible_placement(
+			get_post_meta( $prompt_id, 'placement', true ),
+			rest_sanitize_boolean( get_post_meta( $prompt_id, 'manual_only', true ) )
+		);
+	}
+
+	/**
 	 * Why a prompt with this placement can't be part of a test.
 	 *
 	 * @param string $placement   Placement value.
@@ -1901,6 +2001,58 @@ final class Newspack_Popups_AB_Tests {
 		return self::is_eligible_placement( $placement )
 			? __( 'Overlays set to Manual only can’t be A/B tested.', 'newspack-popups' )
 			: __( 'Prompts on manual or custom placements can’t be A/B tested.', 'newspack-popups' );
+	}
+
+	/**
+	 * The error for a save that would move a tested prompt where a test can't run.
+	 *
+	 * Shared by the two paths that write a prompt's placement: the editor's REST
+	 * save and Newspack_Popups_Model::set_popup_options(), which the Campaigns
+	 * wizard uses. It refuses a save that changes the placement or Manual only to
+	 * an ineligible result, including a move from one ineligible placement to
+	 * another, but not a save that leaves both as stored. The editor sends the
+	 * whole meta object on every save, so checking the stored state too would
+	 * refuse a frequency edit with an error about a field the editor may have
+	 * disabled for that user. The editor's notice asks for the fix instead, and
+	 * get_tests_config() leaves the prompt out of its test until then. Only while
+	 * the flag is on: with it off a stored test has no effect, and the panel's
+	 * notice is not registered.
+	 *
+	 * @param int   $post_id Prompt ID, or 0 for a prompt not yet saved.
+	 * @param array $values  The save's 'placement' and 'manual_only' values. A key
+	 *                       left out keeps its stored value. A non-scalar placement
+	 *                       reads as empty, since each write path refuses one;
+	 *                       Manual only is read as the wizard stores it.
+	 * @return WP_Error|null
+	 */
+	public static function get_placement_change_error( $post_id, $values ) {
+		if ( ! self::is_enabled() || ! $post_id || '' === (string) get_post_meta( $post_id, self::META_TEST_ID, true ) ) {
+			return null;
+		}
+
+		$stored_placement   = (string) get_post_meta( $post_id, 'placement', true );
+		$stored_manual_only = rest_sanitize_boolean( get_post_meta( $post_id, 'manual_only', true ) );
+		$placement          = $stored_placement;
+		if ( array_key_exists( 'placement', $values ) ) {
+			$placement = is_scalar( $values['placement'] ) ? (string) $values['placement'] : '';
+		}
+		$manual_only = array_key_exists( 'manual_only', $values ) ? rest_sanitize_boolean( $values['manual_only'] ) : $stored_manual_only;
+
+		if ( ( $placement === $stored_placement && $manual_only === $stored_manual_only ) || self::is_eligible_placement( $placement, $manual_only ) ) {
+			return null;
+		}
+
+		return new WP_Error(
+			'newspack_popups_ab_ineligible_placement',
+			self::is_eligible_placement( $placement )
+				? __( 'A/B tests only work on prompts that Newspack places for you. Turn off Manual only.', 'newspack-popups' )
+				: __( 'A/B tests only work on prompts that Newspack places for you. Choose another placement.', 'newspack-popups' ),
+			[
+				'status' => 400,
+				// Without a level, the Campaigns wizard shows the error as unrecoverable.
+				'level'  => 'notice',
+			]
+		);
 	}
 
 	/**
@@ -1990,7 +2142,12 @@ final class Newspack_Popups_AB_Tests {
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
 			return null;
 		}
-		if ( $validate && ! isset( self::get_tests_config()[ $test_id ] ) ) {
+		// A version the config left out, such as one on an ineligible placement in a
+		// test that still runs without it, renders as untested: no reader is ever
+		// bucketed to it, so carrying its test would hide it from everyone. The
+		// prompt's own check covers a second prompt with the same letter, which
+		// keeps that letter in the config.
+		if ( $validate && ( ! self::is_eligible_prompt( $popup_id ) || ! in_array( $variant, self::get_tests_config()[ $test_id ]['variants'] ?? [], true ) ) ) {
 			return null;
 		}
 		return [
@@ -2059,6 +2216,13 @@ final class Newspack_Popups_AB_Tests {
 		foreach ( $prompt_ids as $prompt_id ) {
 			$fields = self::get_popup_ab_fields( $prompt_id );
 			if ( ! $fields ) {
+				continue;
+			}
+			// The save guards refuse a move to an ineligible placement, but a direct
+			// meta write, such as one from WP-CLI, or a save while the flag was off
+			// can still land one there. Leaving the prompt out stops readers being
+			// split around a slot that a block or shortcode places on its own.
+			if ( ! self::is_eligible_prompt( $prompt_id ) ) {
 				continue;
 			}
 			$test_id = $fields['test_id'];

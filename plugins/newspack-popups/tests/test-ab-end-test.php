@@ -111,6 +111,41 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[] $prompt_ids Prompt IDs.
+	 */
+	private function store_percent_encoded_id( $prompt_ids ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets can be ended through the
+	 * encoded form the page sends.
+	 */
+	public function test_percent_encoded_legacy_test_can_be_ended() {
+		$this->sign_in();
+		$ids = $this->create_running_test( 'legacy-cafe' );
+		$this->store_percent_encoded_id( $ids );
+
+		$this->assertSame( 200, $this->end_request( 'caf%25c3%25a9', 'b' )->get_status() );
+		$this->assertSame( 'draft', get_post_status( $ids['a'] ) );
+	}
+
+	/**
 	 * Send an end through the route.
 	 *
 	 * @param string      $test_id Test ID.
@@ -269,16 +304,71 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A test still being set up can't be ended.
+	 * A test still being set up can end without publishing B: A keeps its
+	 * status and both prompts leave the test.
 	 */
-	public function test_draft_test_cannot_be_ended() {
+	public function test_draft_test_ends_keeping_a() {
 		$this->sign_in();
-		$this->create_test_variant( 't', 'a' );
+		$a = $this->create_test_variant( 't', 'a' );
 		$b = $this->create_test_variant( 't', 'b', [ 'post_status' => 'draft' ] );
-		$response = $this->end_request( 't', 'a' );
-		$this->assertSame( 409, $response->get_status() );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( 'publish', get_post_status( $a ) );
 		$this->assertSame( 'draft', get_post_status( $b ) );
-		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		foreach ( [ $a, $b ] as $id ) {
+			$this->assertSame( '', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ), "test ID on prompt $id" );
+		}
+		$this->assertSame( 'ended', $this->rows( 't' )[0]['status'] );
+		$this->assertNull( $this->rows( 't' )[0]['started_at'] );
+	}
+
+	/**
+	 * A test that ran and was then paused keeps its start when it ends, so its
+	 * results still have a window to count from.
+	 */
+	public function test_paused_test_keeps_its_start_when_it_ends() {
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		wp_update_post(
+			[
+				'ID'          => $ids['b'],
+				'post_status' => 'draft',
+			]
+		);
+		$this->assertNull( $this->rows( 't' )[0]['started_at'], 'a paused test lists no start' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$row = $this->rows( 't' )[0];
+		$this->assertSame( 'ended', $row['status'] );
+		$this->assertSame( '2026-10-01T00:00:00Z', $row['started_at'] );
+	}
+
+	/**
+	 * Keeping a draft B never publishes it; A goes to draft with the rest.
+	 */
+	public function test_draft_test_ends_keeping_b_without_publishing_it() {
+		$this->sign_in();
+		$a = $this->create_test_variant( 't', 'a' );
+		$b = $this->create_test_variant( 't', 'b', [ 'post_status' => 'draft' ] );
+
+		$this->assertSame( 200, $this->end_request( 't', 'b' )->get_status() );
+		$this->assertSame( 'draft', get_post_status( $a ) );
+		$this->assertSame( 'draft', get_post_status( $b ) );
+		$this->assertSame( 'b', $this->rows( 't' )[0]['kept'] );
+	}
+
+	/**
+	 * A test with only version A, before B is made or after it is deleted,
+	 * can end too, and A leaves it as it is.
+	 */
+	public function test_test_with_only_version_a_ends() {
+		$this->sign_in();
+		$a = $this->create_test_variant( 't', 'a' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( 'publish', get_post_status( $a ) );
+		$this->assertSame( '', get_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		$this->assertSame( 'ended', $this->rows( 't' )[0]['status'] );
 	}
 
 	/**

@@ -5,6 +5,22 @@
 	cursor: pointer;
 }
 
+// Override editor margins applied by Core to classic themes.
+.editor-styles-wrapper {
+	.wp-block-republication-tracker-tool-republish-button {
+		margin-top: 0;
+		margin-bottom: 0;
+	}
+
+	.wp-block-buttons:has( + .wp-block-republication-tracker-tool-republish-button__license ) {
+		margin-bottom: 0;
+	}
+
+	.wp-block-republication-tracker-tool-republish-button__license {
+		margin-top: 0.5em;
+	}
+}
+
 .wp-block-republication-tracker-tool-republish-button__license {
 	margin-top: 0.5em;
 

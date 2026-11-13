@@ -188,6 +188,7 @@
 
 				.newspack-card--core__icon {
 					background: var(--wpds-color-background-interactive-neutral-strong-disabled, #{wp-colors.$gray-200});
+					color: wp-colors.$gray-700;
 
 					svg {
 						color: wp-colors.$gray-700;

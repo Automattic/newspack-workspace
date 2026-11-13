@@ -13,6 +13,26 @@ export const DASH = '—';
 export const REST_BASE = '/newspack-popups/v1/ab-tests';
 
 /**
+ * A queue that runs one request at a time, in the order they were added.
+ *
+ * The tab loads every card's results when it opens, and a results request that
+ * misses the server's hourly cache asks the stats source for several reports,
+ * so a page of cards all at once can exhaust the source's quota. A task that
+ * fails doesn't stop the ones after it.
+ *
+ * @return {Function} Takes a function that returns a promise, and returns a
+ *                    promise for its result once it has run.
+ */
+export const createRequestQueue = () => {
+	let tail = Promise.resolve();
+	return task => {
+		const run = tail.then( task );
+		tail = run.catch( () => {} );
+		return run;
+	};
+};
+
+/**
  * Card order, and the Status filter's: what needs the publisher first, ended
  * tests last.
  */
@@ -101,22 +121,43 @@ export const getStatusIntent = status => {
 };
 
 /**
+ * A percentage in the page's language, which in wp-admin is the admin's own,
+ * so the decimal mark and the percent sign's place match the translated
+ * sentence around it: "2,69 %" in French, "%2,69" in Turkish. The language
+ * comes from the page, as formatCount() reads it, and the same fallback
+ * applies to locale tags Intl rejects.
+ *
+ * @param {number} percent  Value out of 100.
+ * @param {number} decimals Digits after the decimal mark, always shown.
+ * @param {Object} options  More Intl.NumberFormat options.
+ * @return {string} Formatted.
+ */
+const formatPercent = ( percent, decimals, options = {} ) => {
+	const formatOptions = { style: 'percent', minimumFractionDigits: decimals, maximumFractionDigits: decimals, ...options };
+	const value = Number( percent ) / 100;
+	const lang = ( typeof document !== 'undefined' && document.documentElement.lang ) || '';
+	const subtags = lang.replace( /_/g, '-' ).split( '-' ).filter( Boolean );
+	while ( subtags.length ) {
+		try {
+			return new Intl.NumberFormat( subtags.join( '-' ), formatOptions ).format( value );
+		} catch {
+			subtags.pop();
+		}
+	}
+	return new Intl.NumberFormat( undefined, formatOptions ).format( value );
+};
+
+/**
  * @param {?number} rate Conversions per hundred readers.
  * @return {string} Formatted.
  */
-export const formatRate = rate => ( rate === null || rate === undefined ? DASH : `${ Number( rate ).toFixed( 2 ) }%` );
+export const formatRate = rate => ( rate === null || rate === undefined ? DASH : formatPercent( rate, 2 ) );
 
 /**
  * @param {?number} lift Percent change against A.
- * @return {string} Formatted, always signed.
+ * @return {string} Formatted, signed unless it rounds to zero.
  */
-export const formatLift = lift => {
-	if ( lift === null || lift === undefined ) {
-		return DASH;
-	}
-	const value = Number( lift );
-	return `${ value < 0 ? '-' : '+' }${ Math.abs( value ).toFixed( 1 ) }%`;
-};
+export const formatLift = lift => ( lift === null || lift === undefined ? DASH : formatPercent( lift, 1, { signDisplay: 'exceptZero' } ) );
 
 /**
  * Confidence split into the percentage and its label.
@@ -128,7 +169,7 @@ export const formatLift = lift => {
 export const confidenceParts = ( comparison, labels = {} ) => {
 	const confidence = comparison?.confidence;
 	return {
-		percent: confidence === null || confidence === undefined ? null : `${ Number( confidence ).toFixed( 1 ) }%`,
+		percent: confidence === null || confidence === undefined ? null : formatPercent( confidence, 1 ),
 		label: ( comparison && labels?.[ comparison.label ] ) || '',
 	};
 };
@@ -296,12 +337,12 @@ export const openVersionB = result => {
 };
 
 /**
- * Whether a test can be ended from its card: it is splitting readers now,
- * which is the server's rule too. A Needs Attention test qualifies only while
- * every version is still published.
+ * Whether a test is splitting readers now, so its card leads with End Test.
+ * A Needs Attention test qualifies only while every version is still
+ * published.
  *
  * @param {Object} test The test.
- * @return {boolean} Endable.
+ * @return {boolean} Splitting readers.
  */
 export const canEndTest = test => {
 	const status = getTestStatus( test );
@@ -310,6 +351,17 @@ export const canEndTest = test => {
 	}
 	return Object.values( test.variants ).every( variant => variant.status === 'publish' );
 };
+
+/**
+ * Whether a test that isn't splitting readers can still be ended, from its
+ * card's menu. The server ends any test that hasn't ended, and since an editor
+ * save can't clear a prompt's Test ID, ending is how a prompt leaves a test
+ * that never ran.
+ *
+ * @param {Object} test The test.
+ * @return {boolean} Endable from the menu.
+ */
+export const canEndTestFromMenu = test => getTestStatus( test ) !== 'ended' && Object.keys( test?.variants || {} ).length > 0 && ! canEndTest( test );
 
 /**
  * The version a Reliable result names as the winner, however young the test.

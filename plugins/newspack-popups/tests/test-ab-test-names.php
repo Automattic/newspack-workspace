@@ -48,6 +48,56 @@ class ABTestNamesTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[]  $prompt_ids Prompt IDs.
+	 * @param string $test_id    Test ID to store.
+	 */
+	private function store_percent_encoded_id( $prompt_ids, $test_id = 'caf%c3%a9' ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => $test_id ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * An unnamed legacy test with percent-encoded octets is shown by its decoded
+	 * ID, and one whose octets don't decode to valid UTF-8 by its ID as stored.
+	 */
+	public function test_unnamed_percent_encoded_legacy_test_shows_its_decoded_id() {
+		$this->store_percent_encoded_id( [ $this->create_test_variant( 'legacy-cafe', 'a' ) ] );
+		$this->store_percent_encoded_id( [ $this->create_test_variant( 'legacy-cut', 'a' ) ], 'cut%c3' );
+
+		$this->assertSame( 'café', $this->test_row( 'caf%c3%a9' )['name'] );
+		$this->assertSame( 'café', Newspack_Popups_AB_Tests::get_test_name( 'caf%c3%a9' ) );
+		$this->assertSame( 'cut%c3', $this->test_row( 'cut%c3' )['name'] );
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets can be renamed through the
+	 * encoded form the page sends.
+	 */
+	public function test_percent_encoded_legacy_id_can_be_renamed() {
+		$this->sign_in();
+		$this->store_percent_encoded_id( [ $this->create_test_variant( 'legacy-cafe', 'a' ) ] );
+
+		$response = $this->rename_request( 'caf%25c3%25a9', 'Café test' );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'caf%c3%a9', $response->get_data()['test_id'] );
+		$this->assertSame( 'Café test', Newspack_Popups_AB_Tests::get_test_name( 'caf%c3%a9' ) );
+	}
+
+	/**
 	 * Send a rename through the route.
 	 *
 	 * @param string $test_id Test ID.
