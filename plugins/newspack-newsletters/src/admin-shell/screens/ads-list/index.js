@@ -171,7 +171,7 @@ export default function AdsListScreen() {
 					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No newsletter ads yet', 'newspack-newsletters' ) }</EmptyState.Title>
 					<EmptyState.Description>
 						{ __(
-							'Run sponsored or house ads in your newsletters. Each ad runs on the dates you set, in the placements or categories you pick.',
+							'Run sponsored or house ads in newsletters. Each ad runs on the dates you set, in the placements or categories you pick.',
 							'newspack-newsletters'
 						) }
 					</EmptyState.Description>

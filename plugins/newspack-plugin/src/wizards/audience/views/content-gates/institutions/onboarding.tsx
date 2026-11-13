@@ -20,9 +20,9 @@ const InstitutionsOnboarding = () => {
 			<Stack direction="column" align="center">
 				<EmptyState.Root>
 					<EmptyState.Icon icon={ institution } />
-					<EmptyState.Title>{ __( 'Get started with institutions', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Title>{ __( 'No institutions yet', 'newspack-plugin' ) }</EmptyState.Title>
 					<EmptyState.Description>
-						{ __( 'Create institutions to manage access to your content by email domain, IP range, or reader data.', 'newspack-plugin' ) }
+						{ __( 'Give an organization access to gated content by email domain, IP range, or reader data.', 'newspack-plugin' ) }
 					</EmptyState.Description>
 					<EmptyState.Actions>
 						<Button variant="primary" href="#/institutions/new">

@@ -21,7 +21,7 @@ const getReasons = () => ( {
 	unsupported: {
 		icon: info,
 		title: __( 'Preview unavailable', 'newspack-plugin' ),
-		body: __( 'The pricing engine did not return a preview.', 'newspack-plugin' ),
+		body: __( 'The pricing engine didn’t return a preview.', 'newspack-plugin' ),
 	},
 } );
 

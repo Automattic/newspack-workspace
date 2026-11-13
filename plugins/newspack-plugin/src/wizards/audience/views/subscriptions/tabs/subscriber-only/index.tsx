@@ -286,10 +286,10 @@ function SubscriberOnlyProducts() {
 					<Stack direction="column" align="center">
 						<EmptyState.Root>
 							<EmptyState.Icon icon={ people } />
-							<EmptyState.Title>{ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Title>{ __( 'No restrictions yet', 'newspack-plugin' ) }</EmptyState.Title>
 							<EmptyState.Description>
 								{ __(
-									'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
+									'Limit selected products to subscribers. Everyone can still see the product and its price; only buying is blocked.',
 									'newspack-plugin'
 								) }
 							</EmptyState.Description>

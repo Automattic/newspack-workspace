@@ -17,7 +17,7 @@ describe( 'PricingRulesOnboarding', () => {
 	it( 'names the screen and says what a pricing rule is for', () => {
 		render( <PricingRulesOnboarding /> );
 
-		expect( screen.getByRole( 'heading', { name: 'Get started with pricing rules', level: 2 } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'No pricing rules yet', level: 2 } ) ).toBeInTheDocument();
 		expect( screen.getByText( /adjust product prices automatically/ ) ).toBeInTheDocument();
 	} );
 

@@ -16,10 +16,10 @@ export default function PricingRulesOnboarding() {
 			<Stack direction="column" align="center">
 				<EmptyState.Root>
 					<EmptyState.Icon icon={ currencyDollar } />
-					<EmptyState.Title>{ __( 'Get started with pricing rules', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Title>{ __( 'No pricing rules yet', 'newspack-plugin' ) }</EmptyState.Title>
 					<EmptyState.Description>
 						{ __(
-							'Set up rules that adjust product prices automatically, from intro offers to loyalty pricing and win-back discounts.',
+							'Rules adjust product prices automatically, such as intro offers, loyalty pricing, and win-back discounts.',
 							'newspack-plugin'
 						) }
 					</EmptyState.Description>

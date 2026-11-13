@@ -272,9 +272,9 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 				<EmptyState.Root>
 					<EmptyState.Header
 						icon={ megaphone }
-						title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
+						title={ __( 'Contextual Prompts are off', 'newspack-plugin' ) }
 						description={ __(
-							'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt, pairing a tailored message with your donation call to action.',
+							'Editors can generate donation prompts tailored to each story with AI. Approved copy appears in the story with the donation call to action.',
 							'newspack-plugin'
 						) }
 					/>

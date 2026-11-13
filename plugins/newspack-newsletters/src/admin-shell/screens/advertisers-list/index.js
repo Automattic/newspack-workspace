@@ -117,10 +117,7 @@ export default function AdvertisersListScreen() {
 						<EmptyState.Icon icon={ store } />
 						<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No advertisers yet', 'newspack-newsletters' ) }</EmptyState.Title>
 						<EmptyState.Description>
-							{ __(
-								'Add the businesses that buy ad space, then see and report on each advertiser’s ads in one place.',
-								'newspack-newsletters'
-							) }
+							{ __( 'Add the businesses that buy ad space, then keep each advertiser’s ads together.', 'newspack-newsletters' ) }
 						</EmptyState.Description>
 						<EmptyState.Actions>
 							<Button variant="primary" onClick={ openAdd }>

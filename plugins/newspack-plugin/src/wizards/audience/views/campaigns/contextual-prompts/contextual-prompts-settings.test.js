@@ -77,7 +77,7 @@ describe( 'ContextualPromptsSettings empty state', () => {
 			/>
 		);
 
-		expect( screen.getByText( 'Get started with Contextual Prompts' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Contextual Prompts are off' ) ).toBeInTheDocument();
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable Contextual Prompts' } ) );
 
 		const dialog = screen.getByRole( 'dialog' );

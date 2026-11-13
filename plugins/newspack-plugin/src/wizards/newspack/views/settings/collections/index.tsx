@@ -245,10 +245,10 @@ function Collections() {
 				<Stack direction="column" align="center">
 					<EmptyState.Root>
 						<EmptyState.Icon icon={ collections } />
-						<EmptyState.Title>{ __( 'Organize content into collections', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Title>{ __( 'Collections are off', 'newspack-plugin' ) }</EmptyState.Title>
 						<EmptyState.Description>
 							{ __(
-								'Publish print editions, magazines and other issues as collections, each with its own page and a browsable archive.',
+								'Publish print editions, magazines, and other issues as collections, each with its own page and a browsable archive.',
 								'newspack-plugin'
 							) }
 						</EmptyState.Description>

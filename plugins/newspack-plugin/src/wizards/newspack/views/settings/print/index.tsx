@@ -184,9 +184,9 @@ function Print() {
 				<Stack direction="column" align="center">
 					<EmptyState.Root>
 						<EmptyState.Icon icon={ print } />
-						<EmptyState.Title>{ __( 'Export articles to Adobe InDesign', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Title>{ __( 'InDesign export is off', 'newspack-plugin' ) }</EmptyState.Title>
 						<EmptyState.Description>
-							{ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
+							{ __( 'Editors can export article content in Adobe InDesign Tagged Text format once it’s on.', 'newspack-plugin' ) }
 						</EmptyState.Description>
 						<EmptyState.Actions>
 							<Button
