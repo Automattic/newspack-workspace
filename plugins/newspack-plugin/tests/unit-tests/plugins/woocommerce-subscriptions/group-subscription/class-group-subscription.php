@@ -937,7 +937,8 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$unrelated = $this->create_group_subscription( $this->create_reader_user() );
 		$cancelled = $this->create_group_subscription( $this->create_reader_user() );
 		$matching->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'other.test,example.test' );
-		$unrelated->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'unrelated.test' );
+		// Contains "example.test" as a substring but not as a domain.
+		$unrelated->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'unrelated.test,myexample.test' );
 		$cancelled->update_meta_data( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, 'example.test' );
 		$cancelled->update_status( 'cancelled' );
 
@@ -948,8 +949,10 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 		$wcs_mock_query_log = [];
 		Newspack\Reader_Activation::set_reader_verified( $reader_id );
 
-		// The mock ignores meta_query, so pin that production only loads groups with a domain list.
-		$this->assertSame( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, end( $wcs_mock_query_log )['meta_query'][0]['key'] );
+		// Only groups whose domain list contains the reader's domain are loaded.
+		$domain_clause = end( $wcs_mock_query_log )['meta_query'][0];
+		$this->assertSame( Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY, $domain_clause['key'] );
+		$this->assertSame( [ 'LIKE', 'example.test' ], [ $domain_clause['compare'], $domain_clause['value'] ] );
 		$this->assertTrue( Group_Subscription::user_is_member( $reader_id, $matching ), 'A verified reader joins the group listing their domain.' );
 		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $unrelated ), 'A group listing other domains is untouched.' );
 		$this->assertFalse( Group_Subscription::user_is_member( $reader_id, $cancelled ), 'An inactive group takes no auto-joins.' );

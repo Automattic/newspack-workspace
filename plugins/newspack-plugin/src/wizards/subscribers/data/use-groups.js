@@ -1,63 +1,73 @@
 /**
- * Site-wide group list.
+ * Server-side group list.
  *
- * The group/team subscriptions on a site are few relative to readers, so the
- * endpoint returns them all in one response and the list filters, sorts and
- * paginates client-side (mirroring the prototype). This hook fetches that full
- * set once and returns it with a loading flag.
+ * A site can hold thousands of groups: when its personal plan is itself a team
+ * product, every personal subscription is a group. So, like the subscriber list,
+ * the group list is server-paginated. This hook translates the DataViews `view`
+ * into the groups endpoint's query params and returns one page.
  */
 
 /**
- * WordPress dependencies.
+ * Internal dependencies.
  */
-import { useCallback, useEffect, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
+import { usePagedList } from './use-paged-list';
 
 const PATH = '/newspack/v1/wizard/newspack-subscribers/groups';
 
+// The fields the endpoint can sort on. Any other sort falls back to the created
+// date, so the request stays valid.
+const SORTABLE_FIELDS = [ 'name', 'owner', 'createdAt' ];
+
+// The statuses the endpoint filters on, which the Status filter's `isNot` excludes from.
+const STATUSES = [ 'active', 'pending', 'on-hold', 'cancelled' ];
+
+// One shared empty list, so the Subscription filter's options keep their
+// identity until the first response names the products.
+const NO_PRODUCTS = [];
+
 /**
- * Fetch every group subscription on the site, hydrated for the group list.
+ * Translate the DataViews view into the groups endpoint's query params. The
+ * Status filter maps to `status`, as the statuses it keeps (`is` one, `isNot`
+ * one, or `isAny` several), and the Subscription column (`product`) to `product`.
  *
- * A failed request is reported as `error` rather than collapsing into an empty
- * set, so the screen can tell "this site has no groups" apart from "we could not
- * read them" and offer `reload` as a retry.
- *
- * @return {{ groups: Array, loading: boolean, error: string, reload: Function }} The full group set plus loading/error state.
+ * @param {Object} view The DataViews view.
+ * @return {Object} Query params for the groups endpoint.
  */
-export function useGroups() {
-	const [ groups, setGroups ] = useState( [] );
-	const [ loading, setLoading ] = useState( true );
-	const [ error, setError ] = useState( '' );
-	const [ attempt, setAttempt ] = useState( 0 );
+export const viewToParams = view => {
+	const params = {
+		page: view.page || 1,
+		per_page: view.perPage || 20,
+		orderby: SORTABLE_FIELDS.includes( view.sort?.field ) ? view.sort.field : 'createdAt',
+		order: 'asc' === view.sort?.direction ? 'asc' : 'desc',
+	};
+	const search = ( view.search || '' ).trim();
+	if ( search ) {
+		params.search = search;
+	}
+	const statusFilter = ( view.filters || [] ).find( f => 'status' === f.field );
+	if ( statusFilter?.value?.length ) {
+		const values = [].concat( statusFilter.value );
+		params.status = 'isNot' === statusFilter.operator ? STATUSES.filter( status => ! values.includes( status ) ) : values;
+	}
+	const productFilter = ( view.filters || [] ).find( f => 'product' === f.field );
+	if ( productFilter?.value?.length ) {
+		params.product = productFilter.value;
+	}
+	return params;
+};
 
-	const reload = useCallback( () => setAttempt( n => n + 1 ), [] );
-
-	useEffect( () => {
-		let cancelled = false;
-		setLoading( true );
-		apiFetch( { path: PATH } )
-			.then( response => {
-				if ( ! cancelled ) {
-					setGroups( response?.items || [] );
-					setError( '' );
-				}
-			} )
-			.catch( e => {
-				if ( ! cancelled ) {
-					setGroups( [] );
-					setError( e?.message || __( 'Something went wrong.', 'newspack-plugin' ) );
-				}
-			} )
-			.finally( () => {
-				if ( ! cancelled ) {
-					setLoading( false );
-				}
-			} );
-		return () => {
-			cancelled = true;
-		};
-	}, [ attempt ] );
-
-	return { groups, loading, error, reload };
+/**
+ * Fetch one page of groups for the given view. See usePagedList() for the
+ * loading, `settled` and error contract.
+ *
+ * `products` lists every product behind a group on the site, for the
+ * Subscription filter's options: the page alone would only offer the products
+ * on it.
+ *
+ * @param {Object} view The DataViews view (page, perPage, sort, search, filters).
+ * @return {{ groups: Array, total: number, pages: number, products: string[], loading: boolean, settled: boolean, error: string, reload: Function }} The page.
+ */
+export function useGroups( view ) {
+	const { response, ...state } = usePagedList( PATH, viewToParams( view ) );
+	return { groups: response.items, total: response.total, pages: response.pages, products: response.products || NO_PRODUCTS, ...state };
 }
