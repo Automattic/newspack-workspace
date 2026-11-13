@@ -9,13 +9,13 @@ import { __ } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
 import { ExternalLink } from '@wordpress/components';
 import { siteLogo } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import Brand from './brand';
 import { Card, Button, Notice } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { TAB_PATH } from './constants';
 
 const LEARN_MORE_URL = 'https://help.newspack.com/federated-sites/multi-branded-site/';
@@ -39,27 +39,31 @@ export default function Brands( {
 
 	if ( hasLoaded && ! isFetching && ! brands.length ) {
 		return (
-			<EmptyState.Root>
-				<EmptyState.Header
-					icon={ siteLogo }
-					title={ __( 'Get started with brands', 'newspack-plugin' ) }
-					description={ __( 'Give parts of your site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
-				/>
-				<EmptyState.Actions orientation="column" gap="lg">
-					<Button variant="primary" href={ `#${ TAB_PATH }/new` }>
-						{ __( 'Add Brand', 'newspack-plugin' ) }
-					</Button>
-					<ExternalLink
-						href={ LEARN_MORE_URL }
-						aria-label={
-							/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
-							__( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' )
-						}
-					>
-						{ __( 'Learn more', 'newspack-plugin' ) }
-					</ExternalLink>
-				</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root>
+					<EmptyState.Icon icon={ siteLogo } />
+					<EmptyState.Title>{ __( 'Get started with brands', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __( 'Give parts of your site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
+					</EmptyState.Description>
+					<EmptyState.Actions>
+						<Stack direction="column" gap="lg" align="center">
+							<Button variant="primary" href={ `#${ TAB_PATH }/new` }>
+								{ __( 'Add Brand', 'newspack-plugin' ) }
+							</Button>
+							<ExternalLink
+								href={ LEARN_MORE_URL }
+								aria-label={
+									/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
+									__( 'Learn more about brands (opens in a new tab)', 'newspack-plugin' )
+								}
+							>
+								{ __( 'Learn more', 'newspack-plugin' ) }
+							</ExternalLink>
+						</Stack>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	}
 
