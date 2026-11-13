@@ -136,7 +136,7 @@ container.
 | `className` | `string` | — | Merged onto `newspack-empty-state__header`. |
 | `description` | `React.ReactNode` | — | One or two sentences on what would fill the screen. |
 | `heading` | `1`–`6` | `3` when small, `2` otherwise | HTML heading level. |
-| `icon` | `JSX.Element` | — | From `@wordpress/icons` or `newspack-icons`. |
+| `icon` | `JSX.Element` | — | From `@wordpress/icons` or `newspack-icons`. Fill and outline icons are both tinted to the theme colour. |
 | `title` | `string` | — | **Required.** |
 
 `heading` follows `size` by default but stays yours to set. Heading level is a

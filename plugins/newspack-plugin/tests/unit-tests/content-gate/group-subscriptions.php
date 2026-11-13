@@ -697,6 +697,26 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test generate_invite() returns WP_Error when the email is malformed. The My
+	 * Account form's FILTER_SANITIZE_EMAIL passes an address like this through as-is.
+	 */
+	public function test_generate_invite_malformed_email() {
+		$admin_id  = $this->create_admin_user();
+		$owner_id  = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		wp_set_current_user( $admin_id );
+
+		$result = Group_Subscription_Invite::generate_invite( $group_sub->get_id(), 'not-an-email' );
+
+		$this->assertWPError( $result );
+		$this->assertEquals(
+			'newspack_group_subscription_invite_invalid_email',
+			$result->get_error_code()
+		);
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $group_sub ), 'A malformed address must not be stored as an invite.' );
+	}
+
+	/**
 	 * Test generate_invite() returns WP_Error when the email belongs to an existing member.
 	 */
 	public function test_generate_invite_existing_member() {

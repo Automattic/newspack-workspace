@@ -1,5 +1,6 @@
 @use "sass-utils";
 @use "mixins";
+@use "newspack-motion" as motion;
 
 /*
  * Newspack Theme
@@ -59,6 +60,15 @@ figcaption {
 
 	a {
 		color: inherit;
+		transition: color motion.$duration-color motion.$ease-color;
+	}
+
+	&:not(.has-background *, .has-text-color *, .image-alignbehind *, .wp-block-newspack-blocks-carousel *) a {
+		@include motion.hover {
+			&:hover {
+				color: var(--wp--preset--color--contrast);
+			}
+		}
 	}
 
 	.has-background &,
@@ -240,5 +250,5 @@ footer {
 
 // Fallback for .newspack-ui__notice--error when newspack-ui styles are not loaded.
 .newspack-ui__notice--error {
-	color: var(--newspack-ui-color-error-50, #d63638);
+	color: var(--newspack-ui-color-error-text, var(--wp--custom--color--error-text));
 }

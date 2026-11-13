@@ -63,11 +63,14 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
  * Pick either black or white text, whichever reads better on the given background.
  *
  * Scores pure black and pure white as text against the background and returns
- * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+ * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
  * black. The constants are the SA98G set from apca-w3 0.1.9.
  *
- * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
- * includes/class-newspack-blocks.php.
+ * Keep in sync with: Newspack_Blocks::get_color_for_contrast() in includes/class-newspack-blocks.php,
+ * newspack_get_color_contrast() (newspack-theme), \Newspack\newspack_get_color_contrast() (newspack-plugin),
+ * getContrastColor() in contrast-color.js (packages/components), Newspack_Popups_Model::contrast_text_color()
+ * (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+ * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
  */
 export const getColorForContrast = ( color?: string ): string => {
 	const blackColor = '#000000';
@@ -82,6 +85,39 @@ export const getColorForContrast = ( color?: string ): string => {
 
 	return Math.abs( whiteLc ) > Math.abs( blackLc ) ? whiteColor : blackColor;
 };
+
+/**
+ * Read a minimum donation as a number, or undefined when none is set.
+ *
+ * Blocks saved before minimums were stored as numbers carry them as strings,
+ * so both forms count. Only a missing or unreadable value is "not set", which
+ * leaves the block following the site-wide minimum; reading a real minimum as
+ * unset would drop the block's own.
+ *
+ * @param value Stored or entered minimum.
+ */
+export const getMinimumDonation = ( value: unknown ): number | undefined => {
+	if ( value === undefined || value === null || value === '' ) {
+		return undefined;
+	}
+	const minimum = Number( value );
+	return Number.isFinite( minimum ) ? minimum : undefined;
+};
+
+/**
+ * Attributes that switch a block's manual mode.
+ *
+ * A block follows the site-wide minimum until someone types one of its own.
+ * Switching clears the stored minimum, so a block turned manual starts out
+ * following rather than enforcing one left over from a preset or an earlier
+ * editor. A block without manual mode doesn't use its minimum.
+ *
+ * @param manual Whether the block is manual now.
+ */
+export const toggleManualMode = ( manual?: boolean ): { manual: boolean; minimumDonation: undefined } => ( {
+	manual: ! manual,
+	minimumDonation: undefined,
+} );
 
 export const getMigratedAmount = (
 	frequency: DonationFrequencySlug,

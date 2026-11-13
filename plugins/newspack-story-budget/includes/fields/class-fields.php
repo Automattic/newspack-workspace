@@ -235,6 +235,7 @@ class Fields {
 				'description'        => __( 'The user who published the story online.', 'newspack-story-budget' ),
 				'is_editable'        => false,
 				'is_sortable'        => true,
+				'is_filterable'      => 'yes',
 				'name'               => __( 'Published by', 'newspack-story-budget' ),
 				'post_save_callback' => [ __CLASS__, 'get_published_user' ],
 				'slug'               => 'published_by',
@@ -278,8 +279,9 @@ class Fields {
 			[
 				'description'             => __( 'The status of the post in WordPress.', 'newspack-story-budget' ),
 				'get_value_callback'      => [ __CLASS__, 'get_post_wp_status' ],
+				'options'                 => [ __CLASS__, 'get_post_wp_status_options' ],
 				'is_editable'             => false,
-				'is_filterable'           => 'always',
+				'is_filterable'           => 'yes',
 				'name'                    => __( 'WP Status', 'newspack-story-budget' ),
 				'show_in_table'           => true,
 				'slug'                    => 'wp_status',
@@ -652,11 +654,14 @@ class Fields {
 	}
 
 	/**
-	 * Get the last modified time of the post.
+	 * Get the last modified time of the story: the later of the post's own
+	 * modified time and the last time a story field was saved. Story fields are
+	 * post meta and terms, which don't touch `post_modified`, and bumping it
+	 * would move a published post's public "updated" date for an editorial change.
 	 *
 	 * @param int $post_id The post ID.
 	 *
-	 * @return int The post's last modified time in UNIX format.
+	 * @return int The story's last modified time in UNIX format.
 	 */
 	public static function get_modified_time( $post_id = null ) {
 		if ( ! $post_id ) {
@@ -666,7 +671,10 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return '';
 		}
-		return \get_post_modified_time( 'U', true, $post_id );
+		$post_modified  = (int) \get_post_modified_time( 'U', true, $post_id );
+		$field_modified = (int) \get_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', true );
+		$modified       = max( $post_modified, $field_modified );
+		return $modified ? $modified : '';
 	}
 
 	/**
@@ -782,6 +790,24 @@ class Fields {
 			require_once ABSPATH . 'wp-admin/includes/post.php';
 		}
 		return (bool) \wp_check_post_lock( $post_id );
+	}
+
+	/**
+	 * The WordPress post statuses a story can have, with the labels WordPress
+	 * registers for them.
+	 *
+	 * @return array[] Options with `value` and `label`.
+	 */
+	public static function get_post_wp_status_options() {
+		$options = [];
+		foreach ( Budgets::STORY_POST_STATUSES as $status ) {
+			$status_object = \get_post_status_object( $status );
+			$options[]     = [
+				'value' => $status,
+				'label' => $status_object ? $status_object->label : $status,
+			];
+		}
+		return $options;
 	}
 
 	/**

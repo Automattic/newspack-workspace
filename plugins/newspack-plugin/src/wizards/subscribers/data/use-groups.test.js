@@ -43,6 +43,12 @@ describe( 'viewToParams', () => {
 		} );
 	} );
 
+	it( 'sends the statuses a single-value Status filter keeps', () => {
+		const statusFilter = ( operator, value ) => viewToParams( { ...baseView, filters: [ { field: 'status', operator, value } ] } ).status;
+		expect( statusFilter( 'isNot', 'cancelled' ) ).toEqual( [ 'active', 'pending', 'on-hold' ] );
+		expect( statusFilter( 'is', 'pending' ) ).toEqual( [ 'pending' ] );
+	} );
+
 	it( 'falls back to the created date for a column the server cannot sort', () => {
 		expect( viewToParams( { ...baseView, sort: { field: 'members', direction: 'asc' } } ) ).toMatchObject( {
 			orderby: 'createdAt',

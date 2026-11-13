@@ -81,8 +81,28 @@ class Admin_Shell_Assets {
 				'serviceProvider' => Newspack_Newsletters::service_provider(),
 				// Object-shaped even when empty so the JS side always sees a map.
 				'viewPrefs'       => (object) $view_prefs,
+				'currency'        => self::get_currency(),
 			]
 		);
+	}
+
+	/**
+	 * The store's currency format, for showing ad prices with their currency.
+	 * Null without WooCommerce, where prices show as plain numbers.
+	 *
+	 * @return array|null { symbol, position, decimals, decimalSeparator, thousandSeparator }
+	 */
+	private static function get_currency(): ?array {
+		if ( ! function_exists( 'get_woocommerce_currency_symbol' ) ) {
+			return null;
+		}
+		return [
+			'symbol'            => html_entity_decode( get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8' ),
+			'position'          => get_option( 'woocommerce_currency_pos', 'left' ),
+			'decimals'          => wc_get_price_decimals(),
+			'decimalSeparator'  => wc_get_price_decimal_separator(),
+			'thousandSeparator' => wc_get_price_thousand_separator(),
+		];
 	}
 
 	/**

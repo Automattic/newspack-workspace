@@ -63,21 +63,23 @@ describe( 'choosing a pricing model', () => {
 	it( 'describes the model that is selected, and follows the selection', async () => {
 		await renderForm( { strategies: [ SIMPLE, SCHEDULE ] } );
 
-		expect( screen.getByText( 'One price for matching products. Fixed once the rule is created.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'One price for matching products. You can’t change it after the rule is created.' ) ).toBeInTheDocument();
 
 		await act( async () => {
 			fireEvent.click( screen.getByRole( 'radio', { name: 'Price Schedule' } ) );
 		} );
 
-		expect( screen.getByText( 'Different prices for the purchase and renewals. Fixed once the rule is created.' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'One price for matching products. Fixed once the rule is created.' ) ).not.toBeInTheDocument();
+		expect(
+			screen.getByText( 'Different prices for the purchase and renewals. You can’t change it after the rule is created.' )
+		).toBeInTheDocument();
+		expect( screen.queryByText( 'One price for matching products. You can’t change it after the rule is created.' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'drops the picker when only one model exists, keeping the section itself', async () => {
 		await renderForm( { strategies: [ SIMPLE ] } );
 
 		expect( screen.queryByRole( 'radiogroup', { name: 'Pricing model' } ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( /Fixed once the rule is created/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /^One price for matching products/ ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'Pricing' ) ).toBeInTheDocument();
 		expect( screen.getByLabelText( 'Calculation' ) ).toBeInTheDocument();
 	} );
@@ -94,7 +96,7 @@ describe( 'choosing a pricing model', () => {
 			fireEvent.click( screen.getByRole( 'radio', { name: 'Hidden' } ) );
 		} );
 		expect( screen.queryByLabelText( 'Name shown to reader' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'The adjusted price applies with no explanation to the reader.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Readers see the new price without an explanation.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows the saved model on an existing rule, but refuses to change it', async () => {

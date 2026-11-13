@@ -42,7 +42,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 52 custom icons:
+This package includes 53 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -71,6 +71,7 @@ This package includes 52 custom icons:
 - `emailError` - Email error icon
 - `emailPremium` - Email premium icon
 - `emailSend` - Email send icon
+- `feather` - Feather icon
 - `gift` - Gift icon
 - `hand` - Hand icon
 - `iframe` - Iframe icon

@@ -97,4 +97,67 @@ class Test_Contrast extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '--wp--preset--color--accent-contrast: #ffffff;', $css );
 	}
+
+	/**
+	 * The rest contrast color is whichever of black or white reads better by APCA.
+	 *
+	 * @dataProvider data_rest_contrast
+	 *
+	 * @param string $accent   The accent color.
+	 * @param string $expected The expected rest contrast color.
+	 */
+	public function test_rest_contrast_follows_apca( $accent, $expected ) {
+		$css = $this->get_css(
+			[
+				'accent' => $accent,
+			]
+		);
+
+		$this->assertStringContainsString( '--wp--preset--color--accent-contrast: ' . $expected . ';', $css );
+	}
+
+	/**
+	 * Accents and their rest contrast colors. White reads better by APCA on the
+	 * blue and the orange, though only black reaches 4.5:1 on either.
+	 *
+	 * @return array[]
+	 */
+	public function data_rest_contrast() {
+		return [
+			'mid blue' => [ '#0099cc', '#ffffff' ],
+			'orange'   => [ '#e65100', '#ffffff' ],
+			'yellow'   => [ '#ffcc00', '#000000' ],
+		];
+	}
+
+	/**
+	 * Hover and press text is the rest color: no separate hover property is emitted.
+	 *
+	 * @dataProvider data_hover_keeps_rest
+	 *
+	 * @param string $accent The accent color.
+	 */
+	public function test_hover_text_keeps_rest_color( $accent ) {
+		$css = $this->get_css( [ 'accent' => $accent ] );
+
+		$button = wp_get_global_styles( [ 'elements', 'button' ] );
+		$text   = $button['color']['text'];
+
+		$this->assertSame( $text, $button[':hover']['color']['text'] );
+		$this->assertSame( $text, $button[':active']['color']['text'] );
+		$this->assertStringNotContainsString( 'accent-contrast-hover', $css );
+	}
+
+	/**
+	 * Accents whose darkened fills used to flip the text, and a dark one that never did.
+	 *
+	 * @return array[]
+	 */
+	public function data_hover_keeps_rest() {
+		return [
+			'orange keeps black'   => [ '#ff9800' ],
+			'sky blue keeps black' => [ '#00aaff' ],
+			'red keeps white'      => [ '#d63638' ],
+		];
+	}
 }

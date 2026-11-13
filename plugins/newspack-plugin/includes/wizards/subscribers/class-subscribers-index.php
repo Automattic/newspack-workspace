@@ -26,6 +26,8 @@ defined( 'ABSPATH' ) || exit;
  *   custom name, else the product name, else the group label. The
  *   `newspack_group_subscription_settings` filter is not applied, because SQL
  *   cannot run it.
+ * - `plan_name` follows Subscribers_Wizard::group_plan_name(): the product name,
+ *   else the group's own name. It is what a member's Subscription column shows.
  * - `product` is the name of the canonical product of the first line item, as
  *   WooCommerce_Subscriptions::get_subscription_product_id() resolves it, except
  *   that a first item whose product was deleted is not skipped for the next one.
@@ -235,6 +237,7 @@ final class Subscribers_Index {
 				{$store['customer']} AS customer_id,
 				COALESCE( NULLIF( {$meta( $prefix . 'name' )}, '' ), NULLIF( TRIM( {$product} ), '' ), {$label_sql} ) AS name,
 				{$product} AS product,
+				COALESCE( NULLIF( TRIM( {$product} ), '' ), TRIM( COALESCE( NULLIF( {$meta( $prefix . 'name' )}, '' ), {$label_sql} ) ) ) AS plan_name,
 				IF( {$meta( $comp_key )} IN ( 'yes', '1', 'true' ), 1, 0 ) AS complimentary
 			FROM {$store['from']}
 			LEFT JOIN ( " . self::first_product_sql( $ids ) . " ) fp ON fp.order_id = {$id_col}
@@ -252,6 +255,7 @@ final class Subscribers_Index {
 	 *     @type string[] $statuses      Mapped statuses: active, pending, on-hold, cancelled.
 	 *     @type string[] $products      Exact product names, compared trimmed.
 	 *     @type string[] $names         Exact group names, compared trimmed.
+	 *     @type string[] $plan_names    Exact plan names, as plan_names() lists them.
 	 *     @type bool     $complimentary Only groups carrying the complimentary stamp.
 	 * }
 	 *
@@ -267,9 +271,10 @@ final class Subscribers_Index {
 			$clauses[] = $wpdb->prepare( '( g.name LIKE %s OR g.product LIKE %s OR u.display_name LIKE %s OR u.user_email LIKE %s )', $like, $like, $like, $like );
 		}
 		$columns = [
-			'statuses' => 'g.mapped_status',
-			'products' => 'CAST( TRIM( g.product ) AS BINARY )',
-			'names'    => 'CAST( TRIM( g.name ) AS BINARY )',
+			'statuses'   => 'g.mapped_status',
+			'products'   => 'CAST( TRIM( g.product ) AS BINARY )',
+			'names'      => 'CAST( TRIM( g.name ) AS BINARY )',
+			'plan_names' => 'CAST( g.plan_name AS BINARY )',
 		];
 		foreach ( $columns as $key => $column ) {
 			$values = array_values( array_filter( array_map( 'strval', (array) ( $where[ $key ] ?? [] ) ), 'strlen' ) );
@@ -362,18 +367,20 @@ final class Subscribers_Index {
 	}
 
 	/**
-	 * The distinct, trimmed, non-empty group names.
+	 * The distinct, non-empty plan names the groups' members see: the product
+	 * name, else the group's own name, as Subscribers_Wizard::group_plan_name()
+	 * resolves it.
 	 *
 	 * @param int[] $group_ids Candidate group subscription IDs.
 	 *
 	 * @return string[]
 	 */
-	public static function names( array $group_ids ): array {
+	public static function plan_names( array $group_ids ): array {
 		global $wpdb;
 		if ( empty( $group_ids ) ) {
 			return [];
 		}
-		$sql    = 'SELECT DISTINCT CAST( TRIM( g.name ) AS BINARY ) FROM ( ' . self::rows_sql( $group_ids ) . ' ) g';
+		$sql    = 'SELECT DISTINCT CAST( g.plan_name AS BINARY ) FROM ( ' . self::rows_sql( $group_ids ) . ' ) g';
 		$values = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
 		return array_values( array_filter( array_map( 'strval', $values ), 'strlen' ) );
 	}

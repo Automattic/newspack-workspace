@@ -128,13 +128,10 @@
 					background: transparent;
 					color: np-colors.$neutral-900;
 					cursor: pointer;
-					&:focus {
-						color: np-colors.$neutral-600;
-					}
 
 					@media ( hover: hover ) and ( pointer: fine ) {
 						&:hover {
-							color: np-colors.$neutral-600;
+							color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-hover, 85%), transparent);
 						}
 					}
 					svg {

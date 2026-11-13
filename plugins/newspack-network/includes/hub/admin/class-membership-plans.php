@@ -57,7 +57,7 @@ abstract class Membership_Plans {
 					printf(
 						/* translators: last fetch date. */
 						esc_html__( 'Plans were last fetched on %s.', 'newspack-network' ),
-						esc_html( gmdate( 'Y-m-d H:i', (int) $plans_cache['last_updated'] ) )
+						esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $plans_cache['last_updated'] ) )
 					);
 					?>
 					</p>

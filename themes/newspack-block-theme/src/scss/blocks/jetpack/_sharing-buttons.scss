@@ -1,30 +1,90 @@
 @use "../../mixins";
+@use "newspack-motion" as motion;
 
 .wp-block-jetpack-sharing-buttons {
+	--np--sharing-icon--size: 1.5em;
 	gap: var(--wp--custom--spacing--10);
 
 	.jetpack-sharing-button {
 		&__button {
+			--np--sharing-icon--scale: 1;
+			--np--sharing-icon--shift: 0;
 			margin: 0;
 			transition:
-				background 125ms ease-in-out,
-				border-color 125ms ease-in-out,
-				color 125ms ease-in-out,
-				box-shadow 125ms ease-in-out;
+				background motion.$duration-color motion.$ease-color,
+				border-color motion.$duration-color motion.$ease-color,
+				color motion.$duration-color motion.$ease-color,
+				box-shadow motion.$duration-color motion.$ease-color,
+				transform motion.$duration-press motion.$ease-out;
 
 			&.style-icon {
 				line-height: 1;
 				padding: calc(var(--wp--preset--spacing--20) * 0.875);
 				top: 0;
 
-				svg {
-					transition: transform 125ms ease-in-out;
+				&:where(:not(:is(.share-x, .share-threads, .share-share, .share-mail, .share-print, .share-republish, .share-newspack-gift-article):not([style*="background-color"]))) {
+					@include mixins.fill-overlay;
+
+					&:focus-visible::before {
+						inset: 0;
+					}
 				}
 
-				&:hover {
-					svg {
-						transform: scale(1.1111);
+				&:is(.share-x, .share-threads):not([style*="background-color"]) {
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-hover), black);
+						}
 					}
+
+					&:active {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--lighten-pressed), black);
+					}
+				}
+
+				&:is(.share-mail, .share-print):not([style*="background-color"]) {
+					background: var(--wp--preset--color--contrast-3);
+					color: var(--wp--preset--color--base);
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--hover), var(--wp--preset--color--contrast));
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, var(--wp--preset--color--contrast-3) var(--wp--custom--state--pressed), var(--wp--preset--color--contrast));
+					}
+				}
+
+				&:is(.share-share, .share-republish, .share-newspack-gift-article):not([style*="background-color"]) {
+					background: var(--wp--preset--color--accent);
+					color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--hover), var(--wp--custom--button--mix));
+							color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+						}
+					}
+
+					&:active {
+						background: color-mix(in oklab, var(--wp--preset--color--accent) var(--wp--custom--state--pressed), var(--wp--custom--button--mix));
+						color: var(--wp--preset--color--accent-contrast, var(--wp--preset--color--base));
+					}
+				}
+
+				&:active {
+					transform: scale(motion.$press-scale);
+
+					@include motion.reduced-motion {
+						transform: none;
+					}
+				}
+
+				&:focus-visible {
+					@include mixins.focus-fill;
+					transition: transform motion.$duration-press motion.$ease-out;
 				}
 			}
 
@@ -44,13 +104,28 @@
 				min-width: var(--wp--preset--spacing--50);
 				padding: calc(var(--wp--custom--spacing--10) - 1px) calc(var(--wp--preset--spacing--20) - 1px);
 
-				&:hover {
-					background: var(--newspack-ui-color-neutral-5, var(--wp--preset--color--base-2));
-					border-color: var(--newspack-ui-color-neutral-40, var(--wp--preset--color--base-4));
+				@include motion.hover {
+					&:hover {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+						border-color: var(--newspack-ui-color-text-muted, var(--wp--preset--color--contrast-2));
+					}
+				}
+
+				&:active {
+					background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover), var(--newspack-ui-color-neutral-0, var(--wp--preset--color--base)));
+					transform: scale(motion.$press-scale);
+
+					@include motion.reduced-motion {
+						transform: none;
+					}
 				}
 
 				&:focus-visible {
 					@include mixins.focus-edge(currentcolor);
+					transition:
+						background motion.$duration-color motion.$ease-color,
+						color motion.$duration-color motion.$ease-color,
+						transform motion.$duration-press motion.$ease-out;
 				}
 			}
 		}
@@ -58,26 +133,53 @@
 		&__service-label {
 			margin: 0;
 		}
+
+		&__button svg {
+			--np--sharing-icon--gutter: calc(var(--np--sharing-icon--size) * (1 - var(--np--sharing-icon--scale)) / 2);
+			--np--sharing-icon--nudge: calc(var(--np--sharing-icon--size) * var(--np--sharing-icon--scale) * var(--np--sharing-icon--shift));
+			--np--sharing-icon--margin: var(--np--sharing-icon--gutter) calc(var(--np--sharing-icon--gutter) - var(--np--sharing-icon--nudge)) var(--np--sharing-icon--gutter) calc(var(--np--sharing-icon--gutter) + var(--np--sharing-icon--nudge));
+			height: calc(var(--np--sharing-icon--size) * var(--np--sharing-icon--scale));
+			margin: var(--np--sharing-icon--margin);
+			overflow: visible;
+			width: calc(var(--np--sharing-icon--size) * var(--np--sharing-icon--scale));
+		}
+
+		&__button.share-threads {
+			--np--sharing-icon--scale: 0.8125;
+		}
+
+		&__button.share-share {
+			--np--sharing-icon--scale: 0.875;
+			--np--sharing-icon--shift: -0.0625;
+		}
+
+		&__button.share-nextdoor {
+			--np--sharing-icon--scale: 0.875;
+		}
+
+		&__button.share-print {
+			--np--sharing-icon--scale: 0.90625;
+		}
+
+		&__button.share-republish,
+		&__button.share-newspack-gift-article {
+			--np--sharing-icon--scale: 1.125;
+		}
+
+		&__button.share-mail,
+		&__button.share-bluesky {
+			--np--sharing-icon--scale: 0.9375;
+		}
 	}
 
 	&.has-normal-icon-size,
 	&.has-large-icon-size,
 	&.has-huge-icon-size {
+		--np--sharing-icon--size: var(--wp--preset--spacing--40);
 		gap: var(--wp--preset--spacing--20);
-
-		svg {
-			height: var(--wp--preset--spacing--40);
-			width: var(--wp--preset--spacing--40);
-		}
 
 		.style-icon {
 			padding: var(--wp--custom--spacing--15);
-
-			&:hover {
-				svg {
-					transform: scale(1.0833);
-				}
-			}
 		}
 	}
 
@@ -95,18 +197,7 @@
 	}
 
 	&.has-huge-icon-size {
-		svg {
-			height: var(--wp--preset--spacing--50);
-			width: var(--wp--preset--spacing--50);
-		}
-
-		.style-icon {
-			&:hover {
-				svg {
-					transform: scale(1.125);
-				}
-			}
-		}
+		--np--sharing-icon--size: var(--wp--preset--spacing--50);
 
 		.style-icon-text,
 		.style-text {

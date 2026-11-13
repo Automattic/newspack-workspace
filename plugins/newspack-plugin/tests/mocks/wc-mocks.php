@@ -835,16 +835,74 @@ class WC_Product {
 		$this->meta[ $key ] = $value;
 	}
 	/**
+	 * Drop a meta value in memory, as WC_Data::delete_meta_data() does before a save().
+	 *
+	 * @param string $key Meta key.
+	 */
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
+	}
+	/**
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 * Fires the before-save action WC_Data::save() fires, so code that adjusts a
+	 * product as it is saved runs here too.
 	 *
 	 * @return int The product ID.
 	 */
 	public function save() {
+		do_action( 'woocommerce_before_product_object_save', $this, null );
 		global $products_database;
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();
+	}
+	/**
+	 * Setters Donations::update_donation_product() calls on an existing product.
+	 * They store into the same data the getters above read, so a test can run
+	 * that method against mock products and read the results back.
+	 *
+	 * @param string $value Product name.
+	 */
+	public function set_name( $value ) {
+		$this->data['name'] = $value;
+	}
+	public function set_regular_price( $value ) {
+		$this->data['regular_price'] = $value;
+	}
+	public function set_children( $value ) {
+		$this->data['children'] = $value;
+	}
+	public function set_status( $value ) {
+		$this->data['status'] = $value;
+	}
+	public function set_virtual( $value ) {
+		$this->data['virtual'] = $value;
+	}
+	public function set_downloadable( $value ) {
+		$this->data['downloadable'] = $value;
+	}
+	public function set_catalog_visibility( $value ) {
+		$this->data['catalog_visibility'] = $value;
+	}
+	public function set_sold_individually( $value ) {
+		$this->data['sold_individually'] = $value;
+	}
+}
+
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * Minimal stand-in for WooCommerce's wc_format_decimal(): normalizes a numeric
+	 * value to a string without trailing zeros, which is all the donation code needs.
+	 *
+	 * @param mixed $number Number to format.
+	 * @return string
+	 */
+	function wc_format_decimal( $number ) {
+		if ( '' === $number || null === $number ) {
+			return '';
+		}
+		return (string) ( 0 + $number );
 	}
 }
 
@@ -1011,6 +1069,9 @@ class WC_Order {
 		// Real WC returns 0 for a guest order; a fixture built without a
 		// customer must read the same way when another suite's query walks it.
 		return $this->data['customer_id'] ?? 0;
+	}
+	public function get_user() {
+		return $this->get_customer_id() ? get_user_by( 'id', $this->get_customer_id() ) : false;
 	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';

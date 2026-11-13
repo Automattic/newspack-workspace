@@ -5,8 +5,13 @@
 /**
  * WordPress dependencies.
  */
-import { dateI18n, gmdateI18n, getSettings, humanTimeDiff } from '@wordpress/date';
+import { dateI18n, humanTimeDiff } from '@wordpress/date';
 import { __, _n, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies.
+ */
+import { formatSiteDate } from '../../../packages/components/src/dataviews/format-date';
 
 // "2 days ago" — defers to core's localized relative-time formatting (the same
 // helper wp-admin uses) rather than a bespoke ladder.
@@ -20,17 +25,9 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 export const fmtRelative = date => ( date ? humanTimeDiff( date ) : '' );
 
 // Calendar-date presentation, using the publisher's WordPress date format. The
-// wizard stores dates as date-only strings (YYYY-MM-DD) with no time or zone, so
-// they are anchored at UTC midnight and formatted in UTC: this keeps the shown
-// day stable no matter the viewer's timezone (a browser ahead of the site's zone
-// would otherwise roll a bare date back to the previous day).
-export const fmtDate = value => {
-	if ( ! value ) {
-		return '';
-	}
-	const anchored = /^\d{4}-\d{2}-\d{2}$/.test( value ) ? `${ value }T00:00:00+00:00` : value;
-	return gmdateI18n( getSettings().formats.date, anchored );
-};
+// wizard stores dates as date-only strings (YYYY-MM-DD), which formatSiteDate
+// keeps on the same calendar day whatever the viewer's timezone.
+export const fmtDate = formatSiteDate;
 
 // Fallback dash for an empty value, matching the list columns (e.g. "Last seen —").
 export const orDash = value => value || '—';

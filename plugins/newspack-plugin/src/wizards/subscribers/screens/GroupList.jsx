@@ -26,18 +26,19 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import RefreshOverlay from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
-import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
-import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel, groupNameLabel } from '../labels';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
+
+const FIT_COLUMNS = [ 'status' ];
 
 const { useHistory } = Router;
 
@@ -48,15 +49,14 @@ const DEFAULT_VIEW = {
 	sort: { field: 'createdAt', direction: 'desc' },
 	search: '',
 	// `product` is visible by default because it is the only place a group's
-	// subscription is reachable — see the name field below for why the title
+	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
-	fields: [ 'owner', 'product', 'members', 'status', 'createdAt' ],
-	// Hide cancelled groups by default: they add noise with little value. Still
-	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
-	// A group awaiting its first payment sits in `pending`, so it stays visible.
-	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
+	fields: [ 'status', 'product', 'members', 'createdAt' ],
+	// Hide cancelled groups by default: they add noise with little value.
+	// Clearing the Status filter brings them back.
+	filters: [ { field: 'status', operator: 'isNot', value: 'cancelled' } ],
 	layout: {},
-	titleField: 'name',
+	titleField: 'owner',
 };
 
 export default function GroupList() {
@@ -77,19 +77,6 @@ export default function GroupList() {
 		}
 	};
 
-	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
-	// with the avatar placeholder and each avatar fills in as it resolves.
-	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
-	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
-	const avatars = useMemo( () => {
-		const byId = {};
-		groups.forEach( g => {
-			const email = g.owner?.email;
-			byId[ g.id ] = email ? avatarsByEmail[ email ] : undefined;
-		} );
-		return byId;
-	}, [ groups, avatarsByEmail ] );
-
 	// Subscription filter options: every product behind a group on the site, as
 	// the endpoint lists them, not /plans, which also lists individual plans that
 	// match no group.
@@ -98,22 +85,23 @@ export default function GroupList() {
 	const fields = useMemo(
 		() => [
 			{
-				id: 'name',
-				label: groupNameLabel(),
+				id: 'owner',
+				label: __( 'Owner', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				// The group's own name; the endpoint already falls back to the
-				// product name for a group that was never renamed.
-				getValue: ( { item } ) => item.plan || '',
+				getValue: ( { item } ) => item.owner?.name || '',
+				// Owners tell groups apart where group names repeat, so the owner leads.
+				// The group's name sits under it only when it was renamed: an unnamed
+				// group takes its subscription's name, which the next column shows.
+				//
 				// This is the DataViews title field, which ColumnPrimary wraps in an
-				// ItemClickWrapper: a role="button" whose own Enter/Space handler
-				// fires onClickItem regardless of where the key originated, so a link
-				// nested here resolves to two destinations at once, and ARIA treats
-				// descendants of role="button" as presentational. The subscription's
-				// link lives in the `product` column below, outside the wrapper.
+				// ItemClickWrapper: a role="button" whose own Enter/Space handler fires
+				// onClickItem regardless of where the key originated, so a link nested
+				// here would resolve to two destinations at once. The subscription's
+				// link lives in the `product` column instead.
 				render: ( { item } ) => (
 					<div data-group-id={ item.id }>
 						<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
-							<span>{ item.plan || '—' }</span>
+							<span>{ item.owner?.name || '—' }</span>
 							{ item.seatRequest && (
 								<Badge intent="medium">
 									{ item.seatRequest.status === 'awaiting-payment'
@@ -122,38 +110,9 @@ export default function GroupList() {
 								</Badge>
 							) }
 						</HStack>
+						{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
 					</div>
 				),
-				enableSorting: true,
-			},
-			{
-				id: 'owner',
-				label: __( 'Owner', 'newspack-plugin' ),
-				enableGlobalSearch: true,
-				getValue: ( { item } ) => item.owner?.name || '',
-				// The secondary line is the owner's email, mirroring the subscriber
-				// list's title cell.
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<div>{ item.owner ? item.owner.name : '—' }</div>
-							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return details;
-					}
-					return (
-						<HStack spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatars[ item.id ] ? (
-								<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
 				enableSorting: true,
 			},
 			{
@@ -193,23 +152,21 @@ export default function GroupList() {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'isAny' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
 				// The endpoint sorts by name, owner and created date only.
 				enableSorting: false,
-				render: ( { item } ) => (
-					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
-				),
+				render: ( { item } ) => <StatusBadge status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusBadge>,
 			},
 			{
 				id: 'createdAt',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.createdAt,
-				render: ( { item } ) => <span>{ fmtDate( item.createdAt ) }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ fmtDate( item.createdAt ) }</span>,
 				enableSorting: true,
 			},
 		],
-		[ avatars, productElements ]
+		[ productElements ]
 	);
 
 	// Whole-row click → the group's detail screen (DataViews only wires up the
@@ -294,6 +251,8 @@ export default function GroupList() {
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ groupCountLabel }
 				data={ groups }
 				fields={ fields }
 				view={ view }

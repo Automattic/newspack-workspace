@@ -5,7 +5,7 @@
 /**
  * Internal dependencies.
  */
-import type { BaseRule } from '../../types';
+import type { BaseRule, RuleNames } from '../../types';
 
 /** A subscriber discount rule. */
 export interface DiscountRule extends BaseRule {
@@ -32,6 +32,7 @@ export interface DiscountCurrency {
 /** Everything the tab renders from; every write returns this shape. */
 export interface DiscountsPayload {
 	rules: DiscountRule[];
+	names: RuleNames;
 	settings: DiscountSettings;
 	currency: DiscountCurrency;
 }

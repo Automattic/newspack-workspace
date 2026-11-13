@@ -39,6 +39,13 @@ class Admin_Shell_Preferences {
 	const ROUTE         = 'admin-shell/preferences';
 	const USER_META_KEY_PREFIX = 'newspack_newsletters_admin_view_prefs_';
 
+	/**
+	 * Stored with every saved screen so a one-time migration of older saves
+	 * never runs again over a view the user has since arranged.
+	 */
+	const PREFS_VERSION_KEY = 'prefs_version';
+	const PREFS_VERSION     = 3;
+
 	const SCREEN_KEYS = [ 'newsletters-list', 'ads-list', 'advertisers-list', 'layouts-list' ];
 
 	/**
@@ -232,6 +239,7 @@ class Admin_Shell_Preferences {
 		}
 
 		$screen_key = $request->get_param( 'screen' );
+		$sanitized[ self::PREFS_VERSION_KEY ] = self::PREFS_VERSION;
 		update_user_meta( get_current_user_id(), self::get_user_meta_key( $screen_key ), $sanitized );
 
 		return rest_ensure_response( self::get_preferences() );
@@ -262,12 +270,52 @@ class Admin_Shell_Preferences {
 			if ( ! is_array( $raw ) ) {
 				continue;
 			}
+			if ( 'newsletters-list' === $screen_key ) {
+				$raw = self::migrate_newsletters_list_prefs( $raw );
+			}
 			$sanitized = self::sanitize_prefs( $raw );
 			if ( ! empty( $sanitized ) ) {
 				$prefs[ $screen_key ] = $sanitized;
 			}
 		}
 		return $prefs;
+	}
+
+	/**
+	 * Bring the Newsletters list's saved column order up to date, once.
+	 *
+	 * Version 1 moved Author to the front of the saved columns. Version 2 moves
+	 * it from there to just before Send list, or to the end when Send list is
+	 * hidden, to match the default order. A view the user has arranged since,
+	 * with Author anywhere but first, keeps its order, and only the position of
+	 * `author` ever changes. Version 3 switches a saved comfortable density to
+	 * balanced, the list's new default.
+	 *
+	 * @param array $raw Stored preferences for the Newsletters list.
+	 * @return array The preferences, migrated and saved when they were older.
+	 */
+	private static function migrate_newsletters_list_prefs( array $raw ): array {
+		$version = (int) ( $raw[ self::PREFS_VERSION_KEY ] ?? 0 );
+		if ( $version >= self::PREFS_VERSION ) {
+			return $raw;
+		}
+		if ( $version < 2 && isset( $raw['fields'] ) && is_array( $raw['fields'] ) && in_array( 'author', $raw['fields'], true ) ) {
+			$others = array_values( array_diff( $raw['fields'], [ 'author' ] ) );
+			if ( $version < 1 ) {
+				$raw['fields'] = array_merge( [ 'author' ], $others );
+			}
+			if ( 'author' === reset( $raw['fields'] ) ) {
+				$position      = array_search( 'send_list', $others, true );
+				$position      = false === $position ? count( $others ) : $position;
+				$raw['fields'] = array_merge( array_slice( $others, 0, $position ), [ 'author' ], array_slice( $others, $position ) );
+			}
+		}
+		if ( isset( $raw['layout']['density'] ) && 'comfortable' === $raw['layout']['density'] ) {
+			$raw['layout']['density'] = 'balanced';
+		}
+		$raw[ self::PREFS_VERSION_KEY ] = self::PREFS_VERSION;
+		update_user_meta( get_current_user_id(), self::get_user_meta_key( 'newsletters-list' ), $raw );
+		return $raw;
 	}
 
 	/**

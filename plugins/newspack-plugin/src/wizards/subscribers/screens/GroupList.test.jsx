@@ -49,8 +49,6 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
 
-jest.mock( '../data/use-avatars', () => ( { SHOW_AVATARS: false, useAvatars: () => ( { avatars: {}, loading: false } ) } ) );
-
 let headerCalls = [];
 
 register(
@@ -270,5 +268,19 @@ describe( 'the group list query', () => {
 
 		const subscriptionField = dataViewsProps.fields.find( field => field.id === 'product' );
 		expect( subscriptionField.elements.map( element => element.value ) ).toEqual( [ 'Campus Site License', 'Team Annual' ] );
+	} );
+
+	it( 'asks for every status but cancelled until the Status filter is cleared', async () => {
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( lastQuery().status ).toEqual( [ 'active', 'pending', 'on-hold' ] );
+
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, filters: [] } );
+		} );
+		expect( lastQuery().status ).toBeUndefined();
 	} );
 } );

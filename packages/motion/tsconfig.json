@@ -1,0 +1,10 @@
+{
+	"extends": "newspack-scripts/config/tsconfig.json",
+	"compilerOptions": {
+		"checkJs": true
+	},
+	"include": [
+		"index.js",
+		"index.d.ts"
+	]
+}

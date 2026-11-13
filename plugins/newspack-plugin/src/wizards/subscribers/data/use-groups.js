@@ -18,10 +18,13 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/groups';
 // date, so the request stays valid.
 const SORTABLE_FIELDS = [ 'name', 'owner', 'createdAt' ];
 
+// The statuses the endpoint filters on, which the Status filter's `isNot` excludes from.
+const STATUSES = [ 'active', 'pending', 'on-hold', 'cancelled' ];
+
 /**
  * Translate the DataViews view into the groups endpoint's query params. The
- * `status` filter maps to `status`, and the Subscription column (`product`)
- * to `product`.
+ * Status filter maps to `status`, as the statuses it keeps (`is` one, `isNot`
+ * one, or `isAny` several), and the Subscription column (`product`) to `product`.
  *
  * @param {Object} view The DataViews view.
  * @return {Object} Query params for the groups endpoint.
@@ -37,11 +40,14 @@ export const viewToParams = view => {
 	if ( search ) {
 		params.search = search;
 	}
-	for ( const field of [ 'status', 'product' ] ) {
-		const filter = ( view.filters || [] ).find( f => field === f.field );
-		if ( filter?.value?.length ) {
-			params[ field ] = filter.value;
-		}
+	const statusFilter = ( view.filters || [] ).find( f => 'status' === f.field );
+	if ( statusFilter?.value?.length ) {
+		const values = [].concat( statusFilter.value );
+		params.status = 'isNot' === statusFilter.operator ? STATUSES.filter( status => ! values.includes( status ) ) : values;
+	}
+	const productFilter = ( view.filters || [] ).find( f => 'product' === f.field );
+	if ( productFilter?.value?.length ) {
+		params.product = productFilter.value;
 	}
 	return params;
 };

@@ -1,0 +1,48 @@
+{
+	"name": "newspack-motion",
+	"version": "0.0.0",
+	"description": "Shared motion tokens for Newspack projects: easing curves, durations and reduced-motion helpers",
+	"main": "index.js",
+	"module": "index.js",
+	"types": "index.d.ts",
+	"sass": "_index.scss",
+	"style": "_index.scss",
+	"sideEffects": false,
+	"keywords": [
+		"wordpress",
+		"newspack",
+		"motion",
+		"animation",
+		"design-tokens",
+		"scss",
+		"sass"
+	],
+	"author": "Newspack",
+	"license": "GPL-2.0-or-later",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "packages/motion"
+	},
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-workspace/issues"
+	},
+	"homepage": "https://github.com/Automattic/newspack-workspace/tree/main/packages/motion",
+	"files": [
+		"_index.scss",
+		"index.js",
+		"index.d.ts",
+		"MOTION.md",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"devDependencies": {
+		"newspack-scripts": "workspace:*"
+	},
+	"scripts": {
+		"test": "newspack-scripts test",
+		"typescript:check": "newspack-scripts typescript-check"
+	}
+}

@@ -13,6 +13,10 @@ edges works: a DataViews table, a plain `<table>`, an embed.
 import { TableCard } from 'newspack-components';
 ```
 
+## When to use it
+
+Every DataViews list that isn't on a full-width page goes in a `TableCard`. A shared `DataViews` inside the card switches to the card's padding on its own; see the [DataViews README](../dataviews/README.md).
+
 ## Usage
 
 ```jsx
@@ -25,7 +29,7 @@ const titleId = useId();
 <TableCard
 	title={ __( 'Price Schedule', 'newspack-plugin' ) }
 	titleId={ titleId }
-	actions={ <Button variant="secondary">{ __( 'Add Price', 'newspack-plugin' ) }</Button> }
+	actions={ <Button variant="tertiary" size="compact">{ __( 'Add Price', 'newspack-plugin' ) }</Button> }
 >
 	<div role="region" aria-labelledby={ titleId }>
 		<DataViews … />
@@ -46,7 +50,14 @@ const titleId = useId();
   under the `SectionHeader` (`h2`) most wizard screens use.
 - `actions` — controls rendered in the card header: opposite the title when
   there is one, end-aligned on their own otherwise. A header renders when
-  either `title` or `actions` is renderable (same falsy rules as `title`).
+  `title`, `description` or `actions` is renderable (same falsy rules as `title`).
+- `description` — a line under the title, inside the header, such as a status
+  note. The title and description stack 4px apart (`Stack` gap `xs`), with the
+  actions centred beside them. Pass it styled; the card adds no type styles.
+- `separator` — a line between the header and the table, which then starts
+  right under it. On by default whenever the card has a header (a `title`,
+  `description` or `actions`), so a list never runs into the content above it;
+  a card with no header gets no line. Pass `separator={ false }` to leave it out.
 - `before` / `after` — content rendered inside the card padding, above and
   below the table: stats rows, notes, footer actions. Slot children stretch to
   the card's full content width; wrap a lone control in a `Stack` from
@@ -64,16 +75,17 @@ Whether the table touches the card's top and bottom edges is decided by
 upstream `:first-child`/`:last-child` rules, and absent slots render no DOM
 node, so the shape follows from which props are passed:
 
-- No `title`, no `actions`, no `before`, no `after` — the table is flush to
+- No `title`, no `description`, no `actions`, no `before`, no `after` — the table is flush to
   all four card edges.
-- `title` or `actions` present — a header sits above; the table is inset from
-  the top by the card's header→content gap token (upstream's
+- `title`, `description` or `actions` present — a header sits above, with a
+  separator line under it unless `separator={ false }`. Without the line, the
+  table is inset from the top by the card's header→content gap token (upstream's
   `.header + .content` rule zeroes the content's own top padding and reconciles
   the header's bottom padding to that gap with a compensating margin).
 - `before` / `after` present — the slot sits in the padding and the table no
   longer touches that edge.
 
-A slot that appears conditionally (a See More button only when the table is
+A slot that appears conditionally (a "Show N more" button only when the table is
 long) therefore changes the card's shape with the condition. That can be the
 right call — a card with a footer control legitimately looks different from one
 without — but make it deliberately, knowing a data-size threshold can flip it.
@@ -91,10 +103,9 @@ bumping past it, re-check:
 - `Card.Title`'s default rendering (a `div`; this component swaps in a heading
   via `render`) and the global-CSS-defense rules that keep wp-admin's heading
   styles from restyling it.
-- That the card padding is still 24px — callers pad their outer table columns
-  with `$grid-unit-30` to match it, and the two values drift independently.
-- Every consumer, visually: the Price Schedule card (the one product surface
-  with a header — title, heading render, and the actions row), the impact table
-  (headerless; rendered by both the rule editor and the list page's catalog
-  panel), and the components-demo section, which is the cheapest place to
-  eyeball a bump.
+- That the card padding is still 24px — a Newspack `DataViews` inside the card
+  keeps the 24px list gutter to match it, and the two values drift independently.
+- Every consumer, visually: Group detail's Members and Invitations cards, the
+  rule editor's Price Schedule and Affected Products cards, the Pricing Rules
+  list's Affected Products modal (a card with no header), and the
+  components-demo section, which is the cheapest place to eyeball a bump.

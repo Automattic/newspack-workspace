@@ -16,6 +16,17 @@
 		align-self: start;
 	}
 
+	&__segments {
+		min-width: 0;
+	}
+
+	&__segment {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	&__goal-section {
 		display: flex;
 		flex-direction: column;
@@ -72,41 +83,8 @@
 		width: 100%;
 	}
 
-	&__impact-table {
-		.dataviews-view-table tr {
-			th:first-child,
-			td:first-child {
-				padding-left: wp-vars.$grid-unit-10;
-
-				.dataviews-view-table-header-button {
-					margin-left: 0;
-				}
-			}
-
-			th:last-child,
-			td:last-child {
-				padding-right: wp-vars.$grid-unit-10;
-			}
-		}
-	}
-
-	&__impact-table--framed,
-	&__schedule-table {
-		.dataviews-view-table tr {
-			th:first-child,
-			td:first-child {
-				padding-left: wp-vars.$grid-unit-30;
-
-				.dataviews-view-table-header-button {
-					margin-left: 0;
-				}
-			}
-
-			th:last-child,
-			td:last-child {
-				padding-right: wp-vars.$grid-unit-30;
-			}
-		}
+	&__price-steps {
+		white-space: nowrap;
 	}
 
 	&__impact-table,
@@ -129,10 +107,6 @@
 	}
 
 	&__schedule-table {
-		.dataviews-view-table colgroup col:not(.dataviews-view-table__col-actions) {
-			width: auto;
-		}
-
 		.dataviews-view-table tr .dataviews-item-actions .components-button {
 			opacity: 1;
 
@@ -214,6 +188,7 @@
 
 				.newspack-card--core__icon {
 					background: var(--wpds-color-background-interactive-neutral-strong-disabled, #{wp-colors.$gray-200});
+					color: wp-colors.$gray-700;
 
 					svg {
 						fill: wp-colors.$gray-700;
