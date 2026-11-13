@@ -35,8 +35,26 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 
-// The heading and description come from the real EmptyState, which reaches Grid by path
-// rather than through this barrel, so Grid is not stubbed here.
+// The real @wordpress/ui is not needed to assert what the prerequisite state renders, so
+// pass through plain elements that keep the heading level and the text.
+jest.mock( '@wordpress/ui', () => {
+	const React = require( 'react' );
+	const passthrough =
+		tag =>
+		( { children } ) =>
+			React.createElement( tag, null, children );
+	return {
+		Stack: passthrough( 'div' ),
+		EmptyState: {
+			Root: passthrough( 'div' ),
+			Icon: () => null,
+			Title: ( { children, render: element } ) => React.cloneElement( element || React.createElement( 'h2' ), null, children ),
+			Description: passthrough( 'p' ),
+			Actions: passthrough( 'div' ),
+		},
+	};
+} );
+
 jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
@@ -124,6 +142,12 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		render( <Guarded /> );
 
 		expect( screen.getByText( 'Premium newsletters need accounts.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'keeps the prerequisite title as a level 2 heading', () => {
+		render( <AudienceManagementRequired description={ GATES_COPY } setupUrl={ SETUP_URL } /> );
+
+		expect( screen.getByRole( 'heading', { level: 2, name: PREREQUISITE_HEADING } ) ).toBeInTheDocument();
 	} );
 
 	it( 'omits the action rather than rendering a dead link when the URL is missing', () => {
