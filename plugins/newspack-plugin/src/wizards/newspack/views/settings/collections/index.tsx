@@ -17,14 +17,13 @@ import {
 import { useDispatch } from '@wordpress/data';
 import { Fragment, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { cleanForSlug } from '@wordpress/url';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import {
 	Button,
 	Divider,
@@ -243,27 +242,29 @@ function Collections() {
 		return (
 			<WizardsTab isFetching={ isBusy }>
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ collections }
-						title={ __( 'Organize content into collections', 'newspack-plugin' ) }
-						description={ __(
-							'Publish print editions, magazines and other issues as collections, each with its own page and a browsable archive.',
-							'newspack-plugin'
-						) }
-					/>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isBusy }
-							disabled={ isBusy }
-							onClick={ () => setModuleEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ collections } />
+						<EmptyState.Title>{ __( 'Organize content into collections', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __(
+								'Publish print editions, magazines and other issues as collections, each with its own page and a browsable archive.',
+								'newspack-plugin'
+							) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isBusy }
+								disabled={ isBusy }
+								onClick={ () => setModuleEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</WizardsTab>
 		);
 	}

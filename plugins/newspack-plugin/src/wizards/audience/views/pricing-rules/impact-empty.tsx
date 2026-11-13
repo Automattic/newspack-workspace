@@ -8,12 +8,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { box, info } from '@wordpress/icons';
-import { Card } from '@wordpress/ui';
-
-/**
- * Internal dependencies
- */
-import EmptyState from '../../../../../packages/components/src/empty-state';
+import { Card, EmptyState, Stack } from '@wordpress/ui';
 
 export type ImpactEmptyReason = 'no-products' | 'unsupported';
 
@@ -38,18 +33,17 @@ interface ImpactEmptyProps {
 
 export default function ImpactEmpty( { reason, headingLevel = 3 }: ImpactEmptyProps ) {
 	const { icon, title, body } = getReasons()[ reason ];
+	const HeadingTag = headingLevel === 2 ? 'h2' : 'h3';
 	return (
 		<Card.Root className="newspack-pricing-rules__empty">
 			<Card.Content>
-				<EmptyState.Root size="small">
-					<EmptyState.Header
-						icon={ icon }
-						title={ title }
-						description={ body }
-						heading={ headingLevel }
-						className="newspack-pricing-rules__empty-header"
-					/>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ icon } />
+						<EmptyState.Title render={ <HeadingTag /> }>{ title }</EmptyState.Title>
+						<EmptyState.Description>{ body }</EmptyState.Description>
+					</EmptyState.Root>
+				</Stack>
 			</Card.Content>
 		</Card.Root>
 	);
