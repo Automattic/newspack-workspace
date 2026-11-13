@@ -3,7 +3,8 @@
  * flight, or one that never landed, has no count to publish: "(0)" would assert
  * the site has no groups.
  *
- * Its search and Subscription filter run client-side over the loaded groups.
+ * Its search, filters and paging run on the server: the list sends its view as
+ * query params and renders the page that comes back.
  */
 
 /**
@@ -16,6 +17,7 @@ import { render, act, screen, fireEvent } from '@testing-library/react';
  */
 import { createReduxStore, register } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { getQueryArgs } from '@wordpress/url';
 import { speak } from '@wordpress/a11y';
 
 /**
@@ -31,8 +33,8 @@ jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_STORE_NAMESPACE: 'test/group-list' } ) );
 
 // DataViews renders nothing, but records its props so a test can drive the view
-// and read the rows filterSortAndPaginate produced, which stays real. The list
-// reads the router at module scope, so the proxy has to answer here too.
+// and read the rows the list hands it. The list reads the router at module
+// scope, so the proxy has to answer here too.
 let dataViewsProps;
 jest.mock( '../../../../packages/components/src', () => ( {
 	DataViews: props => {
@@ -75,6 +77,9 @@ const group = id => ( {
 	editUrl: '',
 } );
 
+/** A groups endpoint response holding exactly these groups. */
+const page = ( items, products = [] ) => ( { items, total: items.length, pages: 1, products } );
+
 /** The leaf of the last header payload that named the section. */
 const publishedSection = () => {
 	const named = headerCalls.filter( data => data.sectionName );
@@ -90,7 +95,7 @@ describe( 'the group list header count', () => {
 	} );
 
 	it( 'publishes the count once the groups land', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ), group( 2 ) ] } );
+		apiFetch.mockResolvedValue( page( [ group( 1 ), group( 2 ) ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
@@ -112,7 +117,7 @@ describe( 'the group list header count', () => {
 		expect( publishedSection().count ).toBeUndefined();
 
 		await act( async () => {
-			land( { items: [ group( 1 ) ] } );
+			land( page( [ group( 1 ) ] ) );
 		} );
 
 		expect( publishedSection().count ).toBe( 1 );
@@ -129,14 +134,14 @@ describe( 'the group list header count', () => {
 	} );
 
 	it( 'inflects the spoken count phrase', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ) ] } );
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
 		expect( publishedSection().countLabel ).toBe( '1 Group' );
 
 		headerCalls = [];
-		apiFetch.mockResolvedValue( { items: [ group( 1 ), group( 2 ) ] } );
+		apiFetch.mockResolvedValue( page( [ group( 1 ), group( 2 ) ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
@@ -151,7 +156,7 @@ describe( 'the group list width override', () => {
 	} );
 
 	it( 'leaves the section width alone once the groups land', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ) ] } );
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
@@ -188,7 +193,7 @@ describe( 'the GroupList load-failure announcement', () => {
 	} );
 
 	it( 'says nothing when the read succeeds', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ) ] } );
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
@@ -226,55 +231,44 @@ describe( 'the GroupList retry affordance', () => {
 	} );
 } );
 
-describe( 'the group list search', () => {
+describe( 'the group list query', () => {
 	beforeEach( () => {
 		headerCalls = [];
 		apiFetch.mockReset();
 	} );
 
-	const searchFor = async term => {
-		await act( async () => {
-			dataViewsProps.onChangeView( { ...dataViewsProps.view, search: term } );
-		} );
-		return dataViewsProps.data.map( item => item.id );
-	};
+	const lastQuery = () => getQueryArgs( apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ].path );
 
-	it( 'matches the owner name, owner email, group name and subscription', async () => {
-		apiFetch.mockResolvedValue( {
-			items: [
-				{ ...group( 1 ), owner: { name: 'Ada Lovelace', email: 'ada@example.test' } },
-				{ ...group( 2 ), owner: { name: 'Grace Hopper', email: 'grace@navy.example.test' } },
-				{ ...group( 3 ), plan: 'Harbor Newsroom' },
-				{ ...group( 4 ), product: 'Campus Site License' },
-			],
-		} );
+	it( 'sends the search, filters and page to the server and renders its page', async () => {
+		apiFetch.mockResolvedValue( { items: [ group( 7 ) ], total: 41, pages: 3, products: [] } );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
 
-		expect( await searchFor( 'lovelace' ) ).toEqual( [ 1 ] );
-		expect( await searchFor( 'navy.example' ) ).toEqual( [ 2 ] );
-		expect( await searchFor( 'harbor' ) ).toEqual( [ 3 ] );
-		expect( await searchFor( 'campus' ) ).toEqual( [ 4 ] );
+		await act( async () => {
+			dataViewsProps.onChangeView( {
+				...dataViewsProps.view,
+				search: 'harbor',
+				page: 2,
+				filters: [ { field: 'product', operator: 'isAny', value: [ 'Campus Site License' ] } ],
+			} );
+		} );
+
+		const query = lastQuery();
+		expect( query.search ).toBe( 'harbor' );
+		expect( query.page ).toBe( '2' );
+		expect( query.product ).toEqual( [ 'Campus Site License' ] );
+		expect( dataViewsProps.data.map( item => item.id ) ).toEqual( [ 7 ] );
+		expect( dataViewsProps.paginationInfo ).toEqual( { totalItems: 41, totalPages: 3 } );
 	} );
 
-	// The fixture's group name and product differ, so this fails if the filter
-	// is keyed on the group name.
-	it( 'filters the Subscription column by product, not group name', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ), { ...group( 2 ), product: 'Campus Site License' } ] } );
+	it( 'offers every group product as a Subscription option, not only those on the page', async () => {
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ], [ 'Campus Site License', 'Team Annual' ] ) );
 		await act( async () => {
 			render( <GroupList /> );
 		} );
 
 		const subscriptionField = dataViewsProps.fields.find( field => field.id === 'product' );
-		expect( subscriptionField.elements.map( element => element.value ) ).toEqual( [ 'Team Annual', 'Campus Site License' ] );
-
-		await act( async () => {
-			dataViewsProps.onChangeView( {
-				...dataViewsProps.view,
-				filters: [ ...dataViewsProps.view.filters, { field: 'product', operator: 'isAny', value: [ 'Campus Site License' ] } ],
-			} );
-		} );
-		expect( dataViewsProps.data.map( item => item.id ) ).toEqual( [ 2 ] );
+		expect( subscriptionField.elements.map( element => element.value ) ).toEqual( [ 'Campus Site License', 'Team Annual' ] );
 	} );
 } );

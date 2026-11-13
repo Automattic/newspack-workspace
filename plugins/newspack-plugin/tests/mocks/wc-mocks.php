@@ -2926,8 +2926,18 @@ function wcs_get_orders_with_meta_query( $args ) {
 		return $wcs_mock_orders_with_meta_query_result;
 	}
 	// Default: page the mock subscriptions database honoring limit/offset,
-	// mirroring wc_get_orders' paginate => true return shape.
-	$ids    = array_keys( $subscriptions_database );
+	// mirroring wc_get_orders' paginate => true return shape. Meta query clauses
+	// comparing with `=` (the default) are honored; other compares are ignored.
+	$ids = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		foreach ( $args['meta_query'] ?? [] as $clause ) {
+			if ( is_array( $clause ) && isset( $clause['key'], $clause['value'] ) && '=' === ( $clause['compare'] ?? '=' )
+				&& (string) $subscription->get_meta( $clause['key'], true ) !== (string) $clause['value'] ) {
+				continue 2;
+			}
+		}
+		$ids[] = $id;
+	}
 	$total  = count( $ids );
 	$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
 	$limit  = isset( $args['limit'] ) && (int) $args['limit'] > 0 ? (int) $args['limit'] : $total;
@@ -3014,3 +3024,112 @@ class WC_Webhook {
 function wc_get_webhook( $id ) {
 	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }
+
+/**
+ * Mirror of the mock subscriptions into WooCommerce's HPOS order tables.
+ *
+ * Code that answers subscription questions in SQL (Subscribers_Index)
+ * cannot see the in-memory $subscriptions_database. While $wcs_mock_hpos_enabled
+ * is set, any query touching the order tables first rewrites them from the mock
+ * database, so such code reads what the test set up. The tables are created when this file loads, outside the test
+ * transaction, so they are real tables: MySQL cannot reference a temporary table
+ * twice in one query. Rows written inside a test roll back with it.
+ */
+function wc_mocks_create_order_tables() {
+	global $wpdb;
+	$charset = $wpdb->get_charset_collate();
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wc_orders ( id bigint(20) unsigned NOT NULL, type varchar(20), status varchar(20), customer_id bigint(20) unsigned, date_created_gmt datetime, PRIMARY KEY (id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wc_orders_meta ( id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_id bigint(20) unsigned, meta_key varchar(255), meta_value longtext, PRIMARY KEY (id), KEY order_id (order_id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_order_items ( order_item_id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_item_name text, order_item_type varchar(200), order_id bigint(20) unsigned, PRIMARY KEY (order_item_id), KEY order_id (order_id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_order_itemmeta ( meta_id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_item_id bigint(20) unsigned, meta_key varchar(255), meta_value longtext, PRIMARY KEY (meta_id), KEY order_item_id (order_item_id) ) {$charset}" );
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+}
+
+/**
+ * Rewrite the mirrored order tables from $subscriptions_database.
+ */
+function wc_mocks_sync_order_tables() {
+	global $wpdb, $subscriptions_database;
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	// DELETE, not TRUNCATE: TRUNCATE commits the test's open transaction.
+	foreach ( [ 'wc_orders', 'wc_orders_meta', 'woocommerce_order_items', 'woocommerce_order_itemmeta' ] as $table ) {
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}{$table}" );
+	}
+	foreach ( (array) $subscriptions_database as $id => $subscription ) {
+		if ( ! $subscription instanceof WC_Subscription ) {
+			continue;
+		}
+		$created = $subscription->get_date_created();
+		$wpdb->insert(
+			$wpdb->prefix . 'wc_orders',
+			[
+				'id'               => (int) $id,
+				'type'             => 'shop_subscription',
+				// Post statuses WooCommerce does not prefix, such as trash, keep their own name.
+				'status'           => in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ? $subscription->get_status() : 'wc-' . $subscription->get_status(),
+				'customer_id'      => (int) $subscription->get_customer_id(),
+				'date_created_gmt' => gmdate( 'Y-m-d H:i:s', $created ? $created->getTimestamp() : time() ),
+			]
+		);
+		$meta = $subscription->meta;
+		// The gifting stub keeps recipients in a static map; real WCS stores them as this meta.
+		if ( class_exists( 'WCS_Gifting' ) && isset( WCS_Gifting::$recipients[ $id ] ) ) {
+			$meta['_recipient_user'] = WCS_Gifting::$recipients[ $id ];
+		}
+		foreach ( $meta as $key => $value ) {
+			$wpdb->insert(
+				$wpdb->prefix . 'wc_orders_meta',
+				[
+					'order_id'   => (int) $id,
+					'meta_key'   => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value' => maybe_serialize( $value ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			);
+		}
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			$wpdb->insert(
+				$wpdb->prefix . 'woocommerce_order_items',
+				[
+					'order_item_type' => 'line_item',
+					'order_id'        => (int) $id,
+				]
+			);
+			$item_id = (int) $wpdb->insert_id;
+			$product = [
+				'_product_id'   => (int) $item->get_product_id(),
+				'_variation_id' => method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0,
+			];
+			foreach ( $product as $key => $value ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'woocommerce_order_itemmeta',
+					[
+						'order_item_id' => $item_id,
+						'meta_key'      => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+						'meta_value'    => (string) $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					]
+				);
+			}
+		}
+	}
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+}
+
+wc_mocks_create_order_tables();
+add_filter(
+	'query',
+	function ( $query ) {
+		global $wpdb, $wcs_mock_hpos_enabled;
+		static $syncing = false;
+		if ( empty( $wcs_mock_hpos_enabled ) || $syncing || ( false === strpos( $query, $wpdb->prefix . 'wc_orders' ) && false === strpos( $query, $wpdb->prefix . 'woocommerce_order_item' ) ) ) {
+			return $query;
+		}
+		$syncing = true;
+		wc_mocks_sync_order_tables();
+		$syncing = false;
+		return $query;
+	}
+);

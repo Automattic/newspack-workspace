@@ -80,7 +80,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		// The group index reads the mock subscriptions through the mirrored HPOS tables.
+		$wcs_mock_hpos_enabled = true;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -100,7 +102,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * Tear down: reset databases and delete users.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		$wcs_mock_hpos_enabled = false;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -596,16 +599,18 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Group memberships are hydrated with role, plan and status; the owner reads as
-	 * owner and a plain member reads as member. Group subs do not leak into the
-	 * individual `subscriptions` array.
+	 * Each row's groups carry role, plan and status. The owner reads as owner, a
+	 * plain member as member, and a reader holding only the manager meta as manager.
+	 * Group subs do not leak into the individual `subscriptions` array.
 	 */
 	public function test_hydrates_group_roles() {
 		$this->login_admin();
 		$owner_id  = $this->create_reader( 'Owner' );
-		$member_id = $this->create_reader( 'Member' );
-		$sub       = $this->create_group_subscription( $owner_id );
+		$member_id  = $this->create_reader( 'Member' );
+		$manager_id = $this->create_reader( 'Manager' );
+		$sub        = $this->create_group_subscription( $owner_id );
 		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $sub->get_id() );
+		add_user_meta( $manager_id, Group_Subscription::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $sub->get_id() );
 
 		$items = $this->dispatch()->get_data()['items'];
 		$by_id = [];
@@ -622,6 +627,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $by_id[ $member_id ]['groups'] );
 		$this->assertSame( 'member', $by_id[ $member_id ]['groups'][0]['role'] );
+
+		$this->assertCount( 1, $by_id[ $manager_id ]['groups'] );
+		$this->assertSame( 'manager', $by_id[ $manager_id ]['groups'][0]['role'] );
 	}
 
 	/**
@@ -1444,45 +1452,6 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
 		$this->assertContains( $expired, $cancelled_ids, 'An expired subscription displays as cancelled, so Cancelled must match it.' );
-	}
-
-	/**
-	 * The status filter scans subscriptions a chunk at a time. The walk has to
-	 * advance: wcs_get_subscriptions() strips a `paged` argument before building
-	 * its query, so paging with it silently re-scans the first chunk forever —
-	 * readers past the chunk boundary vanish from the results, and (worse) a
-	 * reader whose only live plan sits past it is wrongly reported as churned.
-	 *
-	 * Seeds one full chunk of active filler, then two readers whose live plans can
-	 * only be found in the second chunk, so a walk that doesn't advance fails both
-	 * assertions rather than merely returning fewer rows.
-	 */
-	public function test_status_filter_scan_advances_past_the_first_chunk() {
-		$this->login_admin();
-
-		// Filler subscriptions are owned by customer IDs with no user behind them:
-		// the scan only reads get_customer_id(), and skipping 500 user inserts keeps
-		// this test cheap. They fill the first chunk of the live-status scan.
-		for ( $i = 0; $i < \Newspack\Subscribers_Wizard::FILTER_SCAN_CHUNK; $i++ ) {
-			$this->create_individual_subscription( 900000 + $i, 'active' );
-		}
-
-		// Only subscription is active and sits in the second chunk.
-		$late_active = $this->create_reader( 'LateActive' );
-		$this->create_individual_subscription( $late_active, 'active' );
-
-		// Cancelled plan in reach, live plan past the boundary. The Cancelled filter
-		// means fully churned, so finding the live plan is what excludes them — miss
-		// it and a paying reader is reported as churned.
-		$late_mixed = $this->create_reader( 'LateMixed' );
-		$this->create_individual_subscription( $late_mixed, 'cancelled' );
-		$this->create_individual_subscription( $late_mixed, 'active' );
-
-		$active_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
-		$this->assertContains( $late_active, $active_ids, 'A reader whose only subscription sits past the first chunk still matches Active.' );
-
-		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
-		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
 	}
 
 	/**

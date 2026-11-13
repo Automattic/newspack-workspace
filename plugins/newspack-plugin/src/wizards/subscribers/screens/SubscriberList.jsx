@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
+import { useEffect, useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -29,6 +29,7 @@ import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../..
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
+import RefreshOverlay from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
@@ -578,18 +579,7 @@ export default function SubscriberList() {
 				search
 				inlineFilters
 			/>
-			{ /* In the document body, so no ancestor of the list can pin the fixed
-			     overlay to itself or stack popovers above it. Cancelling the press
-			     keeps focus where it was: moving it would close an open filter
-			     popover and pull focus out of the search box. */ }
-			{ isRefreshing &&
-				createPortal(
-					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
-					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
-						<Waiting />
-					</div>,
-					document.body
-				) }
+			{ isRefreshing && <RefreshOverlay /> }
 		</div>
 	);
 }

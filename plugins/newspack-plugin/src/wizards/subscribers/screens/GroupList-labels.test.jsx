@@ -72,7 +72,7 @@ describe( 'the group list header under a publisher’s own noun', () => {
 	} );
 
 	it( 'speaks the publisher’s noun alongside the heading', async () => {
-		apiFetch.mockResolvedValue( { items: [ group( 1 ), group( 2 ) ] } );
+		apiFetch.mockResolvedValue( { items: [ group( 1 ), group( 2 ) ], total: 2, pages: 1 } );
 		await act( async () => {
 			render( <GroupList /> );
 		} );

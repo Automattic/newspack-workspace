@@ -2,11 +2,10 @@
 /**
  * L0 — Group list (DataViews, full-width).
  *
- * Admin-facing list of every group/team subscription on the site. Unlike the
- * subscriber list, the group set is small enough to load in full and filter,
- * sort and paginate client-side. Filterable by status and subscription,
- * sortable, and searchable by group name, owner name, owner email and
- * subscription.
+ * Admin-facing list of every group/team subscription on the site. A site can
+ * hold thousands of groups, so the list is server-paginated like the subscriber
+ * list: the endpoint filters by status and subscription, sorts, and searches by
+ * group name, owner name, owner email and subscription.
  *
  * A row is a group, so clicking it opens that group's detail screen inside the
  * wizard. The product name in the Subscription column keeps its own link to the
@@ -21,7 +20,6 @@
 import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge } from '@wordpress/ui';
 
@@ -32,6 +30,7 @@ import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../..
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
+import RefreshOverlay from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
@@ -66,7 +65,7 @@ export default function GroupList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const { groups, loading: groupsLoading, error, reload } = useGroups();
+	const { groups, total, pages, products, loading: groupsLoading, settled, error, reload } = useGroups( view );
 
 	// A row is a group, so it opens that group's detail screen in the wizard. The
 	// owner's own screen is reachable from the group detail rather than from here
@@ -91,13 +90,10 @@ export default function GroupList() {
 		return byId;
 	}, [ groups, avatarsByEmail ] );
 
-	// Subscription filter options come from the loaded groups, which are the full
-	// set, not from /plans: that endpoint also lists individual plans, which match
-	// no group. Distinct, in first-seen order.
-	const productElements = useMemo(
-		() => [ ...new Set( groups.map( g => g.product ).filter( Boolean ) ) ].map( n => ( { value: n, label: n } ) ),
-		[ groups ]
-	);
+	// Subscription filter options: every product behind a group on the site, as
+	// the endpoint lists them, not /plans, which also lists individual plans that
+	// match no group.
+	const productElements = useMemo( () => products.map( n => ( { value: n, label: n } ) ), [ products ] );
 
 	const fields = useMemo(
 		() => [
@@ -179,6 +175,9 @@ export default function GroupList() {
 				label: __( 'Members', 'newspack-plugin' ),
 				// The endpoint returns the owner-inclusive member count directly.
 				getValue: ( { item } ) => item.members,
+				// The count comes from each group's people, which the endpoint reads
+				// per row on the page it returns, so it cannot sort the whole list by it.
+				enableSorting: false,
 				// A seat limit of 0 means the group is uncapped, so there is no
 				// denominator to show against the count.
 				render: ( { item } ) => (
@@ -189,7 +188,6 @@ export default function GroupList() {
 							  sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
 					</span>
 				),
-				enableSorting: true,
 			},
 			{
 				id: 'status',
@@ -197,6 +195,8 @@ export default function GroupList() {
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.status,
+				// The endpoint sorts by name, owner and created date only.
+				enableSorting: false,
 				render: ( { item } ) => (
 					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
 				),
@@ -210,19 +210,6 @@ export default function GroupList() {
 			},
 		],
 		[ avatars, productElements ]
-	);
-
-	// The owner's email shows under their name, so search matches it too. It has
-	// no column of its own, so it joins the search as a query-only field rather
-	// than going into `fields`, where DataViews would offer it as a column.
-	const queryFields = useMemo(
-		() => [ ...fields, { id: 'ownerEmail', enableGlobalSearch: true, getValue: ( { item } ) => item.owner?.email || '' } ],
-		[ fields ]
-	);
-
-	const { data: processedData, paginationInfo } = useMemo(
-		() => filterSortAndPaginate( groups, view, queryFields ),
-		[ groups, view, queryFields ]
 	);
 
 	// Whole-row click → the group's detail screen (DataViews only wires up the
@@ -251,8 +238,6 @@ export default function GroupList() {
 		}
 	};
 
-	const total = paginationInfo?.totalItems ?? 0;
-
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	// Before paint: this carries the width override, and an error arrives outside a
 	// React event, so a passive effect would paint full-bleed for one frame first.
@@ -273,7 +258,10 @@ export default function GroupList() {
 
 	const { retryRef, retry } = useRetryFocus( { settled: ! groupsLoading, failed: Boolean( error ), reload } );
 
-	if ( groupsLoading ) {
+	// Only the load that has nothing to show blanks the screen. Search, filters and
+	// sorting are refetches, and unmounting DataViews for them would take the
+	// search box's focus with it. See the subscriber list, which does the same.
+	if ( groupsLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -297,21 +285,28 @@ export default function GroupList() {
 		);
 	}
 
+	// A refetch with rows showing covers the screen with a spinner (see
+	// RefreshOverlay). With no rows to cover, DataViews' own spinner stands in for
+	// the empty state.
+	const isRefreshing = groupsLoading && groups.length > 0;
+
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			<DataViews
-				data={ processedData }
+				data={ groups }
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
-				paginationInfo={ paginationInfo }
+				isLoading={ groupsLoading && ! isRefreshing }
+				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openGroup }
 				search
 				inlineFilters
 			/>
+			{ isRefreshing && <RefreshOverlay /> }
 		</div>
 	);
 }
