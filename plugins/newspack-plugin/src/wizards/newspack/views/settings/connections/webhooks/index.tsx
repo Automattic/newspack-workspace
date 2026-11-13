@@ -9,7 +9,7 @@ import { __ } from '@wordpress/i18n';
 import { useEffect, useRef, useState, Fragment } from '@wordpress/element';
 import { ExternalLink, Notice, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { connection } from '@wordpress/icons';
-import { Card as UICard } from '@wordpress/ui';
+import { Card as UICard, EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -19,9 +19,11 @@ import EndpointActionsCard from './endpoint-actions-card';
 import EndpointActionsModals from './endpoint-actions-modals';
 import { useWizardApiFetch } from '../../../../../hooks/use-wizard-api-fetch';
 import { Card, Button, SectionHeader } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
 
 const LEARN_MORE_URL = 'https://help.newspack.com/plugins-and-themes/third-party-services-integrations/webhooks/';
+
+// Subordinate to the section header, which is already a level 3.
+const HeadingTag = 'h4';
 
 const defaultEndpoint: Endpoint = {
 	url: '',
@@ -131,36 +133,41 @@ function Webhooks() {
 				) : (
 					<UICard.Root>
 						<UICard.Content>
-							<EmptyState.Root size="small">
-								<EmptyState.Header
-									icon={ connection }
-									// Subordinate to the section header above, which is already a level 3.
-									heading={ 4 }
-									title={ __( 'No endpoints yet', 'newspack-plugin' ) }
-									description={ __( 'Add an endpoint to start sending reader activity data.', 'newspack-plugin' ) }
-								/>
-								<EmptyState.Actions orientation="column" gap="lg">
-									<Button
-										ref={ addRef }
-										variant="primary"
-										onClick={ () => {
-											claimFocus.current = true;
-											setActionHandler( 'new' );
-										} }
-									>
-										{ __( 'Add Endpoint', 'newspack-plugin' ) }
-									</Button>
-									<ExternalLink
-										href={ LEARN_MORE_URL }
-										aria-label={
-											/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
-											__( 'Learn more about webhooks (opens in a new tab)', 'newspack-plugin' )
-										}
-									>
-										{ __( 'Learn more', 'newspack-plugin' ) }
-									</ExternalLink>
-								</EmptyState.Actions>
-							</EmptyState.Root>
+							<Stack direction="column" align="center">
+								<EmptyState.Root>
+									<EmptyState.Icon icon={ connection } />
+									<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No endpoints yet', 'newspack-plugin' ) }</EmptyState.Title>
+									<EmptyState.Description>
+										{ __(
+											'Add an endpoint to send reader activity from this site to another service as it happens.',
+											'newspack-plugin'
+										) }
+									</EmptyState.Description>
+									<EmptyState.Actions>
+										<Stack direction="column" gap="lg" align="center">
+											<Button
+												ref={ addRef }
+												variant="primary"
+												onClick={ () => {
+													claimFocus.current = true;
+													setActionHandler( 'new' );
+												} }
+											>
+												{ __( 'Add Endpoint', 'newspack-plugin' ) }
+											</Button>
+											<ExternalLink
+												href={ LEARN_MORE_URL }
+												aria-label={
+													/* translators: accessibility text. Names the link's destination for screen readers; keep the new-tab clause, which replaces the one the link would otherwise announce. */
+													__( 'Learn more about webhooks (opens in a new tab)', 'newspack-plugin' )
+												}
+											>
+												{ __( 'Learn more', 'newspack-plugin' ) }
+											</ExternalLink>
+										</Stack>
+									</EmptyState.Actions>
+								</EmptyState.Root>
+							</Stack>
 						</UICard.Content>
 					</UICard.Root>
 				) ) }
