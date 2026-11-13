@@ -1259,9 +1259,8 @@ msgid ""
 msgstr ""
 
 #: dist/editor.js:26 src/components/specific-posts-control.js:29
-#, fuzzy
 msgid "Reorder Content"
-msgstr "Inhalt"
+msgstr ""
 
 #: dist/editor.js:26 src/components/specific-posts-control.js:61
 msgid "Content"
@@ -1688,9 +1687,8 @@ msgid ""
 msgstr ""
 
 #: dist/editor.js:46 src/blocks/checkout-button/edit.js:432
-#, fuzzy
 msgid "Default seats"
-msgstr "Standard"
+msgstr ""
 
 #. Translators: %s is the frequency (e.g. per month, per year).
 #: dist/editor.js:49

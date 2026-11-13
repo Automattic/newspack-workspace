@@ -2,7 +2,8 @@ name: i18n
 
 # On-demand regeneration of WordPress translation files: every unit's .pot
 # template, plus the derived .po/.mo/.json files where a unit ships
-# translations (newspack-blocks and the classic newspack-theme). Changes land
+# translations (newspack-plugin, newspack-blocks and the classic
+# newspack-theme). Changes land
 # via a PR to the dispatched branch.
 #
 # This is the manual half of the i18n setup. The automatic half lives in
