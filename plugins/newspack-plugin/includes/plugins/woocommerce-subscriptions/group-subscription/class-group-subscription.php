@@ -259,10 +259,20 @@ class Group_Subscription {
 	 * A group with no free seat is skipped: update_members() refuses the add, and the
 	 * reader is left out rather than pushing the group over its limit.
 	 *
+	 * The query loads only the groups whose domain list contains the reader's domain
+	 * as a substring, since this runs on a reader's request and a site can hold
+	 * thousands of groups. The substring match over-includes ("ample.test" inside
+	 * "example.test"), so each candidate is checked exactly below.
+	 *
 	 * @param \WP_User $user The reader who just verified their email address.
 	 */
 	public static function auto_join_by_email_domain( $user ) {
 		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return;
+		}
+		$email  = (string) $user->user_email;
+		$domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
+		if ( '' === $domain || false === strpos( $email, '@' ) ) {
 			return;
 		}
 		$subscriptions = \wcs_get_subscriptions(
@@ -272,8 +282,8 @@ class Group_Subscription {
 				'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => Group_Subscription_Settings::EMAIL_DOMAINS_META_KEY,
-						'value'   => '',
-						'compare' => '!=',
+						'value'   => $domain,
+						'compare' => 'LIKE',
 					],
 				],
 			]

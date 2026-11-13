@@ -15,12 +15,12 @@
 import { __ } from '@wordpress/i18n';
 import { ExternalLink } from '@wordpress/components';
 import { people } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Button } from '../../../../packages/components/src';
-import EmptyState from '../../../../packages/components/src/empty-state';
 import Router from '../../../../packages/components/src/proxied-imports/router';
 
 const { Redirect } = Router;
@@ -68,21 +68,27 @@ const AudienceManagementRequired = ( {
 	learnMoreLabel?: string;
 } ) => {
 	return (
-		<EmptyState.Root>
-			<EmptyState.Header icon={ people } title={ __( 'Set up Audience Management first', 'newspack-plugin' ) } description={ description } />
-			<EmptyState.Actions orientation="column" gap="lg">
-				{ /* Rendered only with a real destination: a primary CTA pointing at href=""
-				     reloads this same screen, which is worse than offering no button. */ }
-				{ setupUrl && (
-					<Button variant="primary" href={ setupUrl }>
-						{ __( 'Set up Audience Management', 'newspack-plugin' ) }
-					</Button>
-				) }
-				<ExternalLink href={ learnMoreUrl } aria-label={ learnMoreLabel }>
-					{ __( 'Learn more', 'newspack-plugin' ) }
-				</ExternalLink>
-			</EmptyState.Actions>
-		</EmptyState.Root>
+		<Stack direction="column" align="center">
+			<EmptyState.Root>
+				<EmptyState.Icon icon={ people } />
+				<EmptyState.Title>{ __( 'Set up Audience Management first', 'newspack-plugin' ) }</EmptyState.Title>
+				<EmptyState.Description>{ description }</EmptyState.Description>
+				<EmptyState.Actions>
+					<Stack direction="column" gap="lg" align="center">
+						{ /* Rendered only with a real destination: a primary CTA pointing at href=""
+						     reloads this same screen, which is worse than offering no button. */ }
+						{ setupUrl && (
+							<Button variant="primary" href={ setupUrl }>
+								{ __( 'Set up Audience Management', 'newspack-plugin' ) }
+							</Button>
+						) }
+						<ExternalLink href={ learnMoreUrl } aria-label={ learnMoreLabel }>
+							{ __( 'Learn more', 'newspack-plugin' ) }
+						</ExternalLink>
+					</Stack>
+				</EmptyState.Actions>
+			</EmptyState.Root>
+		</Stack>
 	);
 };
 

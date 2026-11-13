@@ -1314,25 +1314,7 @@ class Group_Subscription_Settings {
 		$meta_key = self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
 
 		// 1. Subscription IDs with group enabled meta set directly.
-		// Uses wcs_get_subscriptions which properly handles meta_query in both
-		// CPT and HPOS modes (via wcs_get_orders_with_meta_query internally).
-		$enabled_ids = [];
-		if ( function_exists( 'wcs_get_subscriptions' ) ) {
-			$enabled_ids = array_keys(
-				\wcs_get_subscriptions(
-					[
-						'subscriptions_per_page' => -1,
-						'subscription_status'    => 'any',
-						'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-							[
-								'key'   => $meta_key,
-								'value' => 'yes',
-							],
-						],
-					]
-				)
-			);
-		}
+		$enabled_ids = self::subscription_ids_with_meta( $meta_key, 'yes' );
 
 		// 2. Subscription IDs whose product has group subscriptions enabled.
 		$product_ids = \get_posts( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_posts_get_posts
@@ -1366,23 +1348,7 @@ class Group_Subscription_Settings {
 
 		// 3. Remove subscriptions that explicitly opted out via an 'enabled = no' override.
 		// A subscription's own meta takes precedence over product inheritance.
-		$opted_out_ids = [];
-		if ( ! empty( $product_sub_ids ) && function_exists( 'wcs_get_subscriptions' ) ) {
-			$opted_out_ids = array_keys(
-				\wcs_get_subscriptions(
-					[
-						'subscriptions_per_page' => -1,
-						'subscription_status'    => 'any',
-						'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-							[
-								'key'   => $meta_key,
-								'value' => 'no',
-							],
-						],
-					]
-				)
-			);
-		}
+		$opted_out_ids = empty( $product_sub_ids ) ? [] : self::subscription_ids_with_meta( $meta_key, 'no' );
 
 		$product_sub_ids = array_diff( $product_sub_ids, $opted_out_ids );
 
@@ -1391,6 +1357,40 @@ class Group_Subscription_Settings {
 		\set_transient( self::GROUP_SUBSCRIPTION_IDS_TRANSIENT, $result, 5 * MINUTE_IN_SECONDS );
 
 		return $result;
+	}
+
+	/**
+	 * IDs of the subscriptions, in any subscription status, carrying a meta value.
+	 *
+	 * Returns IDs only. A site can hold thousands of group subscriptions, and
+	 * loading each as a WC_Subscription to read its ID runs the request out of
+	 * memory. wcs_get_orders_with_meta_query() applies the meta query in both the
+	 * HPOS and the posts order stores.
+	 *
+	 * @param string $meta_key   Meta key.
+	 * @param string $meta_value Meta value.
+	 *
+	 * @return int[]
+	 */
+	private static function subscription_ids_with_meta( string $meta_key, string $meta_value ): array {
+		if ( ! function_exists( 'wcs_get_orders_with_meta_query' ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
+			return [];
+		}
+		$ids = \wcs_get_orders_with_meta_query(
+			[
+				'type'       => 'shop_subscription',
+				'status'     => array_keys( \wcs_get_subscription_statuses() ),
+				'limit'      => -1,
+				'return'     => 'ids',
+				'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					[
+						'key'   => $meta_key,
+						'value' => $meta_value,
+					],
+				],
+			]
+		);
+		return array_map( 'intval', (array) $ids );
 	}
 
 	/**
