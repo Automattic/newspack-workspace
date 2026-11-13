@@ -41,7 +41,6 @@ class Wizards {
 	 */
 	public static function init_wizards() {
 		self::$wizards = [
-			'components-demo'         => new Components_Demo(),
 			// v2 Information Architecture.
 			'newspack-dashboard'      => new Newspack_Dashboard(),
 			'setup'                   => new Setup_Wizard(),
