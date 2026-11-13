@@ -138,7 +138,10 @@ function Webhooks() {
 									<EmptyState.Icon icon={ connection } />
 									<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No endpoints yet', 'newspack-plugin' ) }</EmptyState.Title>
 									<EmptyState.Description>
-										{ __( 'Add an endpoint to start sending reader activity data.', 'newspack-plugin' ) }
+										{ __(
+											'Add an endpoint to send reader activity from this site to another service as it happens.',
+											'newspack-plugin'
+										) }
 									</EmptyState.Description>
 									<EmptyState.Actions>
 										<Stack direction="column" gap="lg" align="center">

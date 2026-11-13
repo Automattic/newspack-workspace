@@ -42,9 +42,9 @@ export default function Brands( {
 			<Stack direction="column" align="center">
 				<EmptyState.Root>
 					<EmptyState.Icon icon={ siteLogo } />
-					<EmptyState.Title>{ __( 'Get started with brands', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Title>{ __( 'No brands yet', 'newspack-plugin' ) }</EmptyState.Title>
 					<EmptyState.Description>
-						{ __( 'Give parts of your site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
+						{ __( 'Give sections of the site their own name, logo, colors, and menus.', 'newspack-plugin' ) }
 					</EmptyState.Description>
 					<EmptyState.Actions>
 						<Stack direction="column" gap="lg" align="center">
