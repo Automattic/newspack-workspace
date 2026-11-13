@@ -21,6 +21,10 @@ const SORTABLE_FIELDS = [ 'name', 'owner', 'createdAt' ];
 // The statuses the endpoint filters on, which the Status filter's `isNot` excludes from.
 const STATUSES = [ 'active', 'pending', 'on-hold', 'cancelled' ];
 
+// One shared empty list, so the Subscription filter's options keep their
+// identity until the first response names the products.
+const NO_PRODUCTS = [];
+
 /**
  * Translate the DataViews view into the groups endpoint's query params. The
  * Status filter maps to `status`, as the statuses it keeps (`is` one, `isNot`
@@ -65,5 +69,5 @@ export const viewToParams = view => {
  */
 export function useGroups( view ) {
 	const { response, ...state } = usePagedList( PATH, viewToParams( view ) );
-	return { groups: response.items, total: response.total, pages: response.pages, products: response.products || [], ...state };
+	return { groups: response.items, total: response.total, pages: response.pages, products: response.products || NO_PRODUCTS, ...state };
 }

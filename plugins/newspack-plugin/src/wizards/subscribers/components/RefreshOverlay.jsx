@@ -1,7 +1,8 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal } from '@wordpress/element';
+import { createPortal, useEffect, useRef } from '@wordpress/element';
+import { speak } from '@wordpress/a11y';
 
 /**
  * Internal dependencies.
@@ -28,4 +29,24 @@ export default function RefreshOverlay() {
 		</div>,
 		document.body
 	);
+}
+
+/**
+ * Announce the new result count once a refetch settles.
+ *
+ * The overlay's spinner has no accessible name, so without this a screen
+ * reader user typing in the search box hears nothing while the list changes.
+ * It speaks once per refetch, not on every keystroke.
+ *
+ * @param {boolean} isRefreshing Whether a refetch is in flight over a shown list.
+ * @param {string}  message      The count to announce, e.g. "12 subscribers".
+ */
+export function useAnnounceRefresh( isRefreshing, message ) {
+	const wasRefreshing = useRef( false );
+	useEffect( () => {
+		if ( wasRefreshing.current && ! isRefreshing ) {
+			speak( message, 'polite' );
+		}
+		wasRefreshing.current = isRefreshing;
+	}, [ isRefreshing, message ] );
 }

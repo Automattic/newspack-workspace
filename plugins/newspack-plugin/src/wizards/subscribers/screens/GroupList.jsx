@@ -30,7 +30,7 @@ import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../pac
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
-import RefreshOverlay from '../components/RefreshOverlay';
+import RefreshOverlay, { useAnnounceRefresh } from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
@@ -218,6 +218,13 @@ export default function GroupList() {
 	// Only the load that has nothing to show blanks the screen. Search, filters and
 	// sorting are refetches, and unmounting DataViews for them would take the
 	// search box's focus with it. See the subscriber list, which does the same.
+	//
+	// A refetch with rows showing covers the screen with a spinner (see
+	// RefreshOverlay). With no rows to cover, DataViews' own spinner stands in for
+	// the empty state.
+	const isRefreshing = groupsLoading && groups.length > 0;
+	useAnnounceRefresh( isRefreshing, groupCountLabel( total ) );
+
 	if ( groupsLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
@@ -241,11 +248,6 @@ export default function GroupList() {
 			/>
 		);
 	}
-
-	// A refetch with rows showing covers the screen with a spinner (see
-	// RefreshOverlay). With no rows to cover, DataViews' own spinner stands in for
-	// the empty state.
-	const isRefreshing = groupsLoading && groups.length > 0;
 
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events

@@ -3092,9 +3092,10 @@ function wc_get_webhook( $id ) {
  * Code that answers subscription questions in SQL (Subscribers_Index)
  * cannot see the in-memory $subscriptions_database. While $wcs_mock_hpos_enabled
  * is set, any query touching the order tables first rewrites them from the mock
- * database, so such code reads what the test set up. The tables are created when this file loads, outside the test
- * transaction, so they are real tables: MySQL cannot reference a temporary table
- * twice in one query. Rows written inside a test roll back with it.
+ * database, so such code reads what the test set up. The tables are created
+ * when this file loads, outside the test transaction, so they are real tables:
+ * MySQL cannot reference a temporary table twice in one query. Rows written
+ * inside a test roll back with it.
  */
 function wc_mocks_create_order_tables() {
 	global $wpdb;

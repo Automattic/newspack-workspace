@@ -511,7 +511,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @return \WP_REST_Response
 	 */
-	public function api_get_groups( \WP_REST_Request $request ) {
+	public function api_get_groups( \WP_REST_Request $request ): \WP_REST_Response {
 		$this->reset_request_caches();
 		$per_page  = (int) $request->get_param( 'per_page' );
 		$group_ids = $this->group_subscription_ids();
@@ -2104,7 +2104,9 @@ class Subscribers_Wizard extends Wizard {
 				foreach ( array_map( 'absint', (array) get_user_meta( $user_id, $meta_key, false ) ) as $subscription_id ) {
 					if ( $subscription_id && ! isset( $subscriptions[ $subscription_id ] ) ) {
 						$subscription = \wcs_get_subscription( $subscription_id );
-						if ( $subscription ) {
+						// Member and manager meta outlives a trashed group; the Teams tab
+						// and the filters leave those statuses out, so the row does too.
+						if ( $subscription && ! in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ) {
 							$subscriptions[ $subscription_id ] = $subscription;
 						}
 					}
@@ -2578,23 +2580,36 @@ class Subscribers_Wizard extends Wizard {
 		// Group plans, matched by the name their members see (group_plan_name()).
 		// Members inherit their group's status, so a cancelled group is cancelled for
 		// every one of them.
-		$group_ids     = $this->group_subscription_ids();
-		$live_groups   = Subscribers_Index::ids_where(
-			$group_ids,
-			[
-				'plan_names' => $plan_names,
-				'statuses'   => [ 'active', 'pending', 'on-hold' ],
-			]
+		//
+		// The submitted names went through sanitize_text_field(), and /plans lists
+		// raw names, so match each raw name by its sanitized form before the exact
+		// SQL comparison. A name with a tab or a `<` still finds its Team.
+		$group_ids       = $this->group_subscription_ids();
+		$raw_group_names = array_values(
+			array_filter(
+				Subscribers_Index::plan_names( $group_ids ),
+				fn( $name ) => in_array( sanitize_text_field( $name ), $plan_names, true )
+			)
 		);
-		$closed_groups = Subscribers_Index::ids_where(
-			$group_ids,
-			[
-				'plan_names' => $plan_names,
-				'statuses'   => [ 'cancelled' ],
-			]
-		);
-		$ids           = Subscribers_Index::people( $live_groups );
-		$cancelled_ids = Subscribers_Index::people( $closed_groups );
+		// An empty list would leave the index unfiltered and match every group.
+		if ( $raw_group_names ) {
+			$live_groups   = Subscribers_Index::ids_where(
+				$group_ids,
+				[
+					'plan_names' => $raw_group_names,
+					'statuses'   => [ 'active', 'pending', 'on-hold' ],
+				]
+			);
+			$closed_groups = Subscribers_Index::ids_where(
+				$group_ids,
+				[
+					'plan_names' => $raw_group_names,
+					'statuses'   => [ 'cancelled' ],
+				]
+			);
+			$ids           = Subscribers_Index::people( $live_groups );
+			$cancelled_ids = Subscribers_Index::people( $closed_groups );
+		}
 
 		// Individual plans, matched by product name → holders of subscriptions for
 		// that product, read in SQL.

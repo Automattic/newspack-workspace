@@ -632,6 +632,21 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A trashed group keeps its members' meta, but the Teams tab and the filters
+	 * treat it as no group, so the member's row must not list it either.
+	 */
+	public function test_a_trashed_group_is_not_on_its_members_rows() {
+		$this->login_admin();
+		$owner_id  = $this->create_reader( 'TrashOwner' );
+		$member_id = $this->create_reader( 'TrashMember' );
+		$sub       = $this->create_group_subscription( $owner_id, 5, 'trash' );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $sub->get_id() );
+
+		$items = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+		$this->assertSame( [], $items[ $member_id ]['groups'] );
+	}
+
+	/**
 	 * A plain individual subscription is hydrated into `subscriptions` with its
 	 * mapped status, and does not appear as a group.
 	 */
@@ -1651,6 +1666,24 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$expected = [ $owner, $member ];
 		sort( $expected );
 		$this->assertSame( $expected, $matched );
+	}
+
+	/**
+	 * The plan filter sanitizes the names it receives, and /plans lists raw ones.
+	 * A product name that sanitizing changes (here, a run of spaces) must still
+	 * filter back to its Team.
+	 */
+	public function test_a_plan_name_that_sanitizing_changes_round_trips() {
+		$this->login_admin();
+		$owner  = $this->create_reader( 'SpacedOwner' );
+		$member = $this->create_reader( 'SpacedMember' );
+		$group  = $this->create_group_subscription( $owner, 5, 'active', 'Night  Desk' );
+		add_user_meta( $member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$this->assertContains( 'Night  Desk', $this->dispatch_plans()->get_data()['items'] );
+		$expected = [ $owner, $member ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'plan' => [ 'Night  Desk' ] ] ) );
 	}
 
 	/**

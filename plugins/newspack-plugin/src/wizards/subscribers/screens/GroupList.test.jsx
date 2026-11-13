@@ -24,7 +24,7 @@ import { speak } from '@wordpress/a11y';
  * Internal dependencies
  */
 import GroupList from './GroupList';
-import { groupLoadFailedLabel } from '../labels';
+import { groupCountLabel, groupLoadFailedLabel } from '../labels';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
@@ -197,6 +197,22 @@ describe( 'the GroupList load-failure announcement', () => {
 		} );
 
 		expect( speak ).not.toHaveBeenCalled();
+	} );
+
+	it( 'announces the new count once a search refetch settles, and only then', async () => {
+		apiFetch.mockResolvedValue( page( [ group( 1 ), group( 2 ) ] ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+		expect( speak ).not.toHaveBeenCalled();
+
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, search: 'harbor' } );
+		} );
+
+		expect( speak ).toHaveBeenCalledTimes( 1 );
+		expect( speak ).toHaveBeenCalledWith( groupCountLabel( 1 ), 'polite' );
 	} );
 } );
 
