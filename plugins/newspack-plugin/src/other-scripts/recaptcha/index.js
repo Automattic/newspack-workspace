@@ -1,10 +1,20 @@
 /* globals jQuery, grecaptcha, newspack_recaptcha_data */
 
-import { addErrorMessage, addHiddenV3Field, destroyV3Field, domReady, getIntersectionObserver, refreshV2Widget, removeErrorMessages } from './utils';
+import {
+	addErrorMessage,
+	addHiddenV3Field,
+	destroyV3Field,
+	domReady,
+	getIntersectionObserver,
+	getV3Token,
+	refreshV2Widget,
+	removeErrorMessages,
+} from './utils';
 import './style.scss';
 
 window.newspack_grecaptcha = window.newspack_grecaptcha || {
 	destroy: destroyV3Field,
+	getV3Token,
 	render,
 	version: newspack_recaptcha_data.version,
 };
