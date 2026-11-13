@@ -442,6 +442,43 @@ importers:
         specifier: workspace:*
         version: link:../../packages/scripts
 
+  plugins/newspack-content-blocks:
+    dependencies:
+      classnames:
+        specifier: ^2.5.1
+        version: 2.5.1
+      lodash:
+        specifier: ^4.17.21
+        version: 4.18.1
+      newspack-colors:
+        specifier: workspace:*
+        version: link:../../packages/colors
+      newspack-icons:
+        specifier: workspace:*
+        version: link:../../packages/icons
+      newspack-motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
+      redux:
+        specifier: ^5.0.0
+        version: 5.0.1
+      redux-saga:
+        specifier: ^1.5.0
+        version: 1.5.0
+      swiper:
+        specifier: 12.2.0
+        version: 12.2.0
+    devDependencies:
+      '@types/lodash':
+        specifier: ^4.17.23
+        version: 4.17.24
+      newspack-components:
+        specifier: workspace:*
+        version: link:../../packages/components
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../../packages/scripts
+
   plugins/newspack-listings:
     dependencies:
       newspack-components:

@@ -27,6 +27,7 @@ class Plugin_Manager {
 		'pwa',
 		'google-site-kit',
 		'newspack-blocks',
+		'newspack-content-blocks',
 		'wp-parsely',
 		'perfmatters',
 	];
@@ -113,6 +114,14 @@ class Plugin_Manager {
 				'PluginURI'   => \esc_url( 'https://newspack.com' ),
 				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
 				'Download'    => 'https://newspack.com/downloads/newspack-blocks/latest',
+			],
+			'newspack-content-blocks'     => [
+				'Name'        => \esc_html__( 'Newspack Content Blocks', 'newspack-plugin' ),
+				'Description' => \esc_html__( 'Content Loop and Carousel blocks.', 'newspack-plugin' ),
+				'Author'      => \esc_html__( 'Automattic', 'newspack-plugin' ),
+				'PluginURI'   => \esc_url( 'https://newspack.com' ),
+				'AuthorURI'   => \esc_url( 'https://automattic.com' ),
+				'Download'    => 'https://newspack.com/downloads/newspack-content-blocks/latest',
 			],
 			'newspack-content-converter'  => [
 				'Name'        => \esc_html__( 'Newspack Content Converter', 'newspack-plugin' ),
