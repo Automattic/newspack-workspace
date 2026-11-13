@@ -233,7 +233,9 @@ class Authors_Controller extends \WP_REST_Controller {
 		$posts  = get_posts(
 			[
 				'post_type'      => 'guest-author',
-				'posts_per_page' => count( $logins ),
+				// No limit: two guest authors linked to one login would otherwise take a slot
+				// from another user's. The IN list already caps this at MAX_PER_PAGE logins.
+				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
 						'key'     => 'cap-linked_account',
