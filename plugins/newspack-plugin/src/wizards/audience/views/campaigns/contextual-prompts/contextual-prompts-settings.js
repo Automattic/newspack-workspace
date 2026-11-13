@@ -29,12 +29,12 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { megaphone } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
@@ -269,22 +269,28 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 				{ /* Sibling, not a child: the error is about the settings request, so it takes
 				     the tab's full width rather than the empty state's centred column. */ }
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ megaphone }
-						title={ __( 'Contextual Prompts are off', 'newspack-plugin' ) }
-						description={ __(
-							'Editors can generate donation prompts tailored to each story with AI. Approved copy appears in the story with the donation call to action.',
-							'newspack-plugin'
-						) }
-					/>
-					<EmptyState.Actions orientation="column">
-						<Button variant="primary" disabled={ ! canManage } onClick={ () => setModalOpen( true ) }>
-							{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
-						</Button>
-						{ ! canManage && <p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p> }
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ megaphone } />
+						<EmptyState.Title>{ __( 'Contextual Prompts are off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __(
+								'Editors can generate donation prompts tailored to each story with AI. Approved copy appears in the story with the donation call to action.',
+								'newspack-plugin'
+							) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Stack direction="column" gap="lg" align="center">
+								<Button variant="primary" disabled={ ! canManage } onClick={ () => setModalOpen( true ) }>
+									{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
+								</Button>
+								{ ! canManage && (
+									<p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p>
+								) }
+							</Stack>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 				{ modalOpen && (
 					<Modal
 						title={ __( 'Enable Contextual Prompts?', 'newspack-plugin' ) }
