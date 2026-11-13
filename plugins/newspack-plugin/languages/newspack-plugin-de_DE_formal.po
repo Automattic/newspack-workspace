@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack 6.56.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
-"POT-Creation-Date: 2026-11-13T09:26:07+00:00\n"
+"POT-Creation-Date: 2026-11-13T11:01:28+00:00\n"
 "PO-Revision-Date: 2026-11-12 12:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: German (Formal)\n"
@@ -59,7 +59,7 @@ msgid "The accessibility statement page could not be created."
 msgstr ""
 
 #: includes/advanced-settings/class-accessibility-statement-page.php:455
-#: includes/class-default-templates.php:229 includes/class-recaptcha.php:177
+#: includes/class-default-templates.php:229 includes/class-recaptcha.php:179
 #: includes/data-events/class-api.php:106 includes/emails/class-emails.php:1292
 #: includes/oauth/class-google-login.php:80
 #: includes/subscriber-commerce/class-subscriber-discounts-admin.php:172
@@ -894,8 +894,17 @@ msgstr ""
 msgid "Updated"
 msgstr ""
 
+#: includes/class-recaptcha.php:164 dist/other-scripts/recaptcha.js:1
+#: src/other-scripts/recaptcha/index.js:68
+msgid ""
+"There was an error connecting with reCAPTCHA. Please reload the page and try "
+"again."
+msgstr ""
+"Bei der Verbindung mit reCAPTCHA ist ein Fehler aufgetreten. Bitte laden Sie "
+"die Seite neu und versuchen Sie es erneut."
+
 #. translators: 1: Privacy Policy URL, 2: Terms of Service URL.
-#: includes/class-recaptcha.php:395
+#: includes/class-recaptcha.php:397
 #, php-format
 msgid ""
 "This site is protected by reCAPTCHA and the Google <a href=\"%1$s\" "
@@ -907,18 +916,18 @@ msgstr ""
 "target=\"_blank\">Datenschutzerklärung</a> sowie die <a href=\"%2$s\" "
 "rel=\"external\" target=\"_blank\">Nutzungsbedingungen</a> von Google."
 
-#: includes/class-recaptcha.php:413
+#: includes/class-recaptcha.php:415
 msgid "Could not complete this request. Please try again later."
 msgstr ""
 "Die Anfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es später "
 "erneut."
 
-#: includes/class-recaptcha.php:413
+#: includes/class-recaptcha.php:415
 msgid "Please complete the challenge to continue."
 msgstr "Bitte lösen Sie die Sicherheitsabfrage, um fortzufahren."
 
 #. Translators: error message for reCaptcha.
-#: includes/class-recaptcha.php:471
+#: includes/class-recaptcha.php:473
 #, php-format
 msgid "Error: %s"
 msgstr "Fehler: %s"
@@ -7616,6 +7625,14 @@ msgstr ""
 "Bitte beachten Sie, dass die Kontolöschung endgültig ist und Ihr Konto nicht "
 "wiederhergestellt werden kann."
 
+#: includes/plugins/woocommerce/my-account/templates/v1/form-edit-address.php:21
+msgid "Save billing address"
+msgstr "Rechnungsadresse speichern"
+
+#: includes/plugins/woocommerce/my-account/templates/v1/form-edit-address.php:21
+msgid "Save shipping address"
+msgstr "Lieferadresse speichern"
+
 #. translators: %s: singular group label (e.g. "group", "team").
 #: includes/plugins/woocommerce/my-account/templates/v1/group-picker.php:38
 #, php-format
@@ -8020,6 +8037,10 @@ msgstr ""
 #, php-format
 msgid "%s name"
 msgstr ""
+
+#: includes/plugins/woocommerce/my-account/templates/v1/my-account.php:23
+msgid "Skip to content"
+msgstr "Zum Inhalt springen"
 
 #: includes/plugins/woocommerce/my-account/templates/v1/my-subscriptions.php:26
 #: includes/plugins/woocommerce/my-account/templates/v1/my-subscriptions.php:44
@@ -24126,7 +24147,7 @@ msgstr ""
 
 #: dist/newspack-wizards.df6ede7f68c88ad756a6.js:44 dist/setup.js:7
 msgid "Footer"
-msgstr ""
+msgstr "Fußzeile"
 
 #: dist/newspack-wizards.df6ede7f68c88ad756a6.js:44 dist/setup.js:7
 msgid "Personalize the footer of your site."
@@ -24735,14 +24756,6 @@ msgstr ""
 #: src/other-scripts/post-date-editor/index.js:51
 msgid "Show last updated date"
 msgstr ""
-
-#: dist/other-scripts/recaptcha.js:1 src/other-scripts/recaptcha/index.js:66
-msgid ""
-"There was an error connecting with reCAPTCHA. Please reload the page and try "
-"again."
-msgstr ""
-"Bei der Verbindung mit reCAPTCHA ist ein Fehler aufgetreten. Bitte laden Sie "
-"die Seite neu und versuchen Sie es erneut."
 
 #: dist/other-scripts/salesforce.js:1 src/other-scripts/salesforce/index.js:23
 msgid "Not synced"

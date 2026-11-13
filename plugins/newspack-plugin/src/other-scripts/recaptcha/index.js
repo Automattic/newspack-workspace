@@ -63,7 +63,9 @@ function renderV2Widget( form, onSuccess = null, onError = null ) {
 			grecaptcha.execute( form.getAttribute( 'data-recaptcha-widget-id' ) );
 			form.setAttribute( 'data-recaptcha-retry-count', retryCount + 1 );
 		} else {
-			const message = wp.i18n.__( 'There was an error connecting with reCAPTCHA. Please reload the page and try again.', 'newspack-plugin' );
+			const message =
+				newspack_recaptcha_data.error ||
+				wp.i18n.__( 'There was an error connecting with reCAPTCHA. Please reload the page and try again.', 'newspack-plugin' );
 			if ( onError ) {
 				onError( message );
 			} else {

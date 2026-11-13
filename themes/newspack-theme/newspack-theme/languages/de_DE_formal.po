@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack 1.0.0-alpha.24\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-theme\n"
-"POT-Creation-Date: 2026-09-28T17:19:52+00:00\n"
+"POT-Creation-Date: 2026-11-13T09:54:55+00:00\n"
 "PO-Revision-Date: 2025-03-12 09:09-0700\n"
 "Last-Translator: \n"
 "Language-Team: German (Formal)\n"
@@ -283,7 +283,7 @@ msgstr ""
 
 #: functions.php:358 template-parts/footer/footer-widgets.php:10
 msgid "Footer"
-msgstr "Footer"
+msgstr "Fußzeile"
 
 #: functions.php:360
 msgid "Add widgets here to appear in your footer."
@@ -325,11 +325,11 @@ msgstr "Suche schließen"
 
 #: functions.php:472
 msgid "Expand Comments"
-msgstr ""
+msgstr "Kommentare ausklappen"
 
 #: functions.php:473 inc/customizer.php:1216
 msgid "Collapse Comments"
-msgstr ""
+msgstr "Kommentare einklappen"
 
 #: functions.php:474
 msgid "Show details"
@@ -341,7 +341,7 @@ msgstr "Details ausblenden"
 
 #: functions.php:476 inc/template-functions.php:516
 msgid "Open dropdown menu"
-msgstr ""
+msgstr "Dropdown-Menü öffnen"
 
 #: functions.php:477 inc/template-functions.php:517
 msgid "Close dropdown menu"
@@ -1063,7 +1063,7 @@ msgstr ""
 
 #: inc/newspack-sponsors.php:28 inc/newspack-sponsors.php:279
 msgid "Learn More"
-msgstr ""
+msgstr "Mehr erfahren"
 
 #: inc/newspack-sponsors.php:29 template-parts/header/desktop-sidebar.php:14
 #: template-parts/header/desktop-sidebar.php:20
@@ -1379,6 +1379,3 @@ msgstr ""
 #: js/dist/post-summary.js:1
 msgid "Article Summary"
 msgstr ""
-
-#~ msgid "Payment info"
-#~ msgstr "Zahlungsinformationen"
