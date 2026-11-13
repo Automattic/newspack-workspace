@@ -16,7 +16,6 @@ Comprehensive developer guidelines for working with the Newspack Components pack
 - [Component Patterns](#component-patterns) *(for contributors)*
 - [Component Development Guidelines](#component-development-guidelines)
 - [Related Packages](#related-packages)
-- [Testing](#testing)
 
 ## Purpose
 
@@ -772,7 +771,7 @@ When adding new interactive components, preserve focus visibility and use the sa
 - **[@wordpress/components](https://www.npmjs.com/package/@wordpress/components)** – WordPress component library (fallback when Newspack components don’t exist)
 - **[@wordpress/base-styles](https://www.npmjs.com/package/@wordpress/base-styles)** – WordPress Design System styles and colors
 
-**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/). The **Components Demo** (`/wp-admin/admin.php?page=newspack-components-demo`) is the live reference for how Newspack components look and behave; use it to confirm spacing and hierarchy when building new screens. It no longer catalogues `Notice`; the Action Card examples are the place to see one rendered.
+**Design resources:** For layout, components, and spacing, refer to the [WordPress Figma Library](https://www.figma.com/community/file/1149596986784498103/wordpress-design-library) and the [Block Editor Handbook](https://developer.wordpress.org/block-editor/reference-guides/components/).
 
 ## Component Patterns
 
@@ -926,12 +925,3 @@ When creating new components:
 10. **Use WordPress design system** – Leverage WordPress colors and the same spacing values as existing components.
 11. **Export from index.js** – Add component to `packages/components/src/index.js`.
 12. **Document usage** – Add JSDoc comments and update this guide.
-13. **Components Demo** - If the component is complex or would benefit from demo examples, add it to the [Components Demo page](#testing).
-
-## Testing
-
-Components can be tested using the Components Demo page:
-
-- **URL:** `/wp-admin/admin.php?page=newspack-components-demo`
-- **Location:** `src/wizards/componentsDemo/index.js`
-- **Purpose:** Visual testing and documentation of component usage

@@ -175,7 +175,6 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-wizard-section.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-setup-wizard.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-wizards-admin-header.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-content-gate-preferences.php';
@@ -195,7 +194,6 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-privacy-section.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-setup-wizard.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
 
 		// Listings Wizard.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-listings-wizard.php';

@@ -31,6 +31,7 @@ class Media_Partners {
 		add_action( 'create_partner', [ __CLASS__, 'save_partner_meta_fields' ] );
 		add_action( 'init', [ __CLASS__, 'add_partners_shortcode' ] );
 		add_action( 'admin_init', [ __CLASS__, 'handle_settings_update' ] );
+		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_media_library' ] );
 		add_filter( 'the_content', [ __CLASS__, 'add_content_partner_logo' ] );
 		add_action( 'apple_news_do_fetch_exporter', [ __CLASS__, 'apple_news_do_fetch_exporter' ] );
 	}
@@ -122,6 +123,17 @@ class Media_Partners {
 		return [
 			'attribution_message' => __( 'This story also appeared in', 'newspack-plugin' ),
 		];
+	}
+
+	/**
+	 * Load the media library on the Media Partner screens, for the logo picker.
+	 */
+	public static function enqueue_media_library() {
+		$screen = get_current_screen();
+		if ( ! $screen || 'partner' !== $screen->taxonomy || ! in_array( $screen->base, [ 'edit-tags', 'term' ], true ) ) {
+			return;
+		}
+		wp_enqueue_media();
 	}
 
 	/**
