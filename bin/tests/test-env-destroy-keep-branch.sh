@@ -208,19 +208,24 @@ status=0
 out=$(run_destroy demo --keep-branch) || status=$?
 expect_kept "destroy demo --keep-branch keeps both branches of a two-worktree env" "$status" "$out" "feat/one=$one" "two=$two"
 
+# One branch per deletion site: env.sh deletes the slashed one, worktree.sh the plain one.
 new_env_sandbox env-default
-make_env demo feat/drop-me
+make_env demo feat/drop-me dropplain
 status=0
 out=$(run_destroy demo) || status=$?
-desc="destroy demo with no flag still deletes the branch"
+desc="destroy demo with no flag still deletes both branches"
 if [[ "$status" -ne 0 ]]; then
 	fail "$desc — want exit 0, got $status: $out"
 elif [[ -n "$(sha_of feat/drop-me)" ]]; then
 	fail "$desc — refs/heads/feat/drop-me survived"
+elif [[ -n "$(sha_of dropplain)" ]]; then
+	fail "$desc — refs/heads/dropplain survived"
 else
 	ok "$desc"
 fi
 
+# This case and the --help one pass without the change too: they guard parsing
+# that destroy already had and the new option loop must not break.
 new_env_sandbox env-flag-first
 make_env demo feat/flag-first
 status=0
