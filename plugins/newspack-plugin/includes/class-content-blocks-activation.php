@@ -31,7 +31,9 @@ class Content_Blocks_Activation {
 	const SLUG = 'newspack-content-blocks';
 
 	/**
-	 * Option used as an atomic lock around an attempt (add_option fails if the row exists).
+	 * Option used as a lock around an attempt. Not strictly exclusive under a persistent
+	 * object cache, which is acceptable: the attempt is recorded before activating, and
+	 * activating twice is harmless.
 	 */
 	const LOCK_OPTION = 'newspack_content_blocks_activation_lock';
 
@@ -45,14 +47,16 @@ class Content_Blocks_Activation {
 	 */
 	public static function init() {
 		add_action( 'admin_init', [ __CLASS__, 'maybe_run_admin' ] );
-		add_action(
-			'wp_loaded',
-			function () {
-				if ( wp_doing_cron() ) {
-					self::maybe_run();
-				}
-			}
-		);
+		add_action( 'wp_loaded', [ __CLASS__, 'maybe_run_cron' ] );
+	}
+
+	/**
+	 * Run from cron requests.
+	 */
+	public static function maybe_run_cron() {
+		if ( wp_doing_cron() ) {
+			self::maybe_run();
+		}
 	}
 
 	/**
@@ -81,8 +85,13 @@ class Content_Blocks_Activation {
 	 * @return bool
 	 */
 	private static function should_run( $state ) {
-		if ( in_array( $state['status'], [ 'done', 'skipped' ], true ) ) {
+		if ( 'done' === $state['status'] ) {
 			return false;
+		}
+		// Skipped because newspack-blocks was inactive; it may have been activated since,
+		// e.g. by the setup wizard after this step first ran on a fresh install.
+		if ( 'skipped' === $state['status'] ) {
+			return self::is_newspack_blocks_active();
 		}
 		return ! (
 			in_array( $state['status'], [ 'failed', 'not_installable' ], true )
@@ -105,6 +114,38 @@ class Content_Blocks_Activation {
 		}
 		delete_option( self::LOCK_OPTION );
 		return (bool) add_option( self::LOCK_OPTION, time(), '', 'no' );
+	}
+
+	/**
+	 * Whether newspack-blocks is active, in whatever directory it was installed
+	 * (a GitHub zip unpacks to a versioned one).
+	 *
+	 * @return bool
+	 */
+	private static function is_newspack_blocks_active() {
+		$plugins = (array) get_option( 'active_plugins', [] );
+		if ( is_multisite() ) {
+			$plugins = array_merge( $plugins, array_keys( (array) get_site_option( 'active_sitewide_plugins', [] ) ) );
+		}
+		foreach ( $plugins as $plugin ) {
+			if ( 'newspack-blocks.php' === basename( $plugin ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether files can be written without credentials. Installing from a background
+	 * request can't prompt for FTP or SSH details, and the upgrader fails hard without them.
+	 *
+	 * @return bool
+	 */
+	private static function can_write_files() {
+		if ( ! function_exists( 'get_filesystem_method' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		return 'direct' === get_filesystem_method();
 	}
 
 	/**
@@ -204,7 +245,7 @@ class Content_Blocks_Activation {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 
-		if ( ! is_plugin_active( 'newspack-blocks/newspack-blocks.php' ) ) {
+		if ( ! self::is_newspack_blocks_active() ) {
 			self::record( 'skipped' );
 			return;
 		}
@@ -213,7 +254,7 @@ class Content_Blocks_Activation {
 			return;
 		}
 
-		if ( ! self::is_installed() && ! Plugin_Manager::can_install_plugins() ) {
+		if ( ! self::is_installed() && ( ! Plugin_Manager::can_install_plugins() || ! self::can_write_files() ) ) {
 			self::record( 'not_installable', (int) $state['attempts'] );
 			return;
 		}

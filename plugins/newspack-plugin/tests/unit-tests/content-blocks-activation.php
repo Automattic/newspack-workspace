@@ -107,6 +107,45 @@ class Newspack_Test_Content_Blocks_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A skipped site is picked up once newspack-blocks becomes active, as on a fresh
+	 * install where the setup wizard installs newspack-blocks after this step first ran.
+	 */
+	public function test_skipped_reruns_once_newspack_blocks_active() {
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( 'skipped', Content_Blocks_Activation::get_status()['status'] );
+		$this->activate_legacy();
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( 'done', Content_Blocks_Activation::get_status()['status'] );
+		$this->assertTrue( is_plugin_active( self::CONTENT ) );
+	}
+
+	/**
+	 * Counts newspack-blocks as active from a versioned directory, as a GitHub zip unpacks.
+	 */
+	public function test_newspack_blocks_in_versioned_directory() {
+		update_option( 'active_plugins', [ 'newspack-blocks-1.2.3/newspack-blocks.php' ] );
+		Content_Blocks_Activation::maybe_run();
+		$this->assertSame( 'done', Content_Blocks_Activation::get_status()['status'] );
+	}
+
+	/**
+	 * Not installable when the plugin is missing and writing files would need credentials.
+	 */
+	public function test_not_installable_without_direct_filesystem() {
+		$this->remove_plugin( 'newspack-content-blocks' );
+		wp_clean_plugins_cache();
+		$this->activate_legacy();
+		$method = function () {
+			return 'ftpext';
+		};
+		add_filter( 'filesystem_method', $method );
+		Content_Blocks_Activation::maybe_run();
+		remove_filter( 'filesystem_method', $method );
+		$this->assertSame( 'not_installable', Content_Blocks_Activation::get_status()['status'] );
+		$this->assertFalse( is_dir( WP_PLUGIN_DIR . '/newspack-content-blocks' ) );
+	}
+
+	/**
 	 * Activates an installed plugin.
 	 */
 	public function test_activates_when_installed() {
