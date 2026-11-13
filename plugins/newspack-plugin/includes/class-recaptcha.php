@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 final class Recaptcha {
 	const SCRIPT_HANDLE      = 'newspack-recaptcha';
 	const SCRIPT_HANDLE_API  = 'newspack-recaptcha-api';
+	const CHECKOUT_BLOCK_SCRIPT_HANDLE = 'newspack-recaptcha-checkout-block';
 	const OPTIONS_PREFIX     = 'newspack_recaptcha_';
 	const SUPPORTED_VERSIONS = [ 'v3', 'v2_invisible' ]; // Note: add 'v2_checkbox' here and in the Connections UI to add support for the Checkbox flavor of reCAPTCHA v2.
 
@@ -35,6 +36,10 @@ final class Recaptcha {
 
 		// Verify reCAPTCHA on checkout submission.
 		\add_action( 'woocommerce_checkout_process', [ __CLASS__, 'verify_recaptcha_on_checkout' ] );
+
+		// Supply a token to the Store API checkout, which WooCommerce_Store_API_Checkout_Protection verifies.
+		\add_action( 'woocommerce_blocks_enqueue_checkout_block_scripts_after', [ __CLASS__, 'enqueue_checkout_block_script' ] );
+		\add_action( 'woocommerce_blocks_enqueue_cart_block_scripts_after', [ __CLASS__, 'enqueue_checkout_block_script' ] );
 
 		// Verify reCAPTCHA when adding new payment method.
 		\add_filter( 'woocommerce_add_payment_method_form_is_valid', [ __CLASS__, 'verify_recaptcha_on_add_payment_method' ] );
@@ -165,6 +170,37 @@ final class Recaptcha {
 				]
 			);
 		}
+	}
+
+	/**
+	 * Enqueue the script that gets a token for the Store API checkout.
+	 *
+	 * A block theme renders its blocks before `wp_enqueue_scripts`, so this can run
+	 * before the script it depends on is registered.
+	 */
+	public static function enqueue_checkout_block_script() {
+		if ( ! \did_action( 'wp_enqueue_scripts' ) ) {
+			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_checkout_block_script' ], 20 );
+			return;
+		}
+		if ( ! self::should_verify_checkout() || ! \wp_script_is( self::SCRIPT_HANDLE_API, 'registered' ) ) {
+			return;
+		}
+		\wp_enqueue_script(
+			self::CHECKOUT_BLOCK_SCRIPT_HANDLE,
+			Newspack::plugin_url() . '/dist/other-scripts/recaptcha-checkout-block.js',
+			[ self::SCRIPT_HANDLE_API, 'wp-api-fetch' ],
+			Newspack::asset_version( 'other-scripts/recaptcha-checkout-block' ),
+			true
+		);
+		\wp_localize_script(
+			self::CHECKOUT_BLOCK_SCRIPT_HANDLE,
+			'newspack_recaptcha_checkout_data',
+			[
+				'site_key' => self::get_site_key(),
+				'version'  => self::get_setting( 'version' ),
+			]
+		);
 	}
 
 	/**
@@ -404,16 +440,20 @@ final class Recaptcha {
 	 * Verify a REST API request using reCAPTCHA.
 	 * Should work for all versions of reCAPTCHA.
 	 *
+	 * @param string|null $token The token to verify. Null reads it from the submitted form.
+	 *
 	 * @return boolean|WP_Error True if the request passes the CAPTCHA test, or WP_Error.
 	 */
-	public static function verify_captcha() {
+	public static function verify_captcha( $token = null ) {
 		if ( ! self::can_use_captcha() ) {
 			return true;
 		}
 
 		$version = self::get_setting( 'version' );
 		$generic_error = 'v3' === $version ? __( 'Could not complete this request. Please try again later.', 'newspack-plugin' ) : __( 'Please complete the challenge to continue.', 'newspack-plugin' );
-		$token         = isset( $_POST['g-recaptcha-response'] ) ? sanitize_text_field( wp_unslash( $_POST['g-recaptcha-response'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( null === $token ) {
+			$token = isset( $_POST['g-recaptcha-response'] ) ? sanitize_text_field( wp_unslash( $_POST['g-recaptcha-response'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
 		if ( empty( $token ) ) {
 			return new \WP_Error(
 				'newspack_recaptcha_invalid_token',
@@ -424,8 +464,8 @@ final class Recaptcha {
 		$captcha_verify = \wp_safe_remote_post(
 			\add_query_arg(
 				[
-					'secret'   => self::get_site_secret(),
-					'response' => $token,
+					'secret'   => rawurlencode( self::get_site_secret() ),
+					'response' => rawurlencode( $token ),
 				],
 				'https://www.google.com/recaptcha/api/siteverify'
 			)
@@ -574,14 +614,20 @@ final class Recaptcha {
 	}
 
 	/**
+	 * Whether reCAPTCHA should be verified on checkout.
+	 *
+	 * @return bool
+	 */
+	public static function should_verify_checkout() {
+		$url = \home_url( \add_query_arg( null, null ) );
+		return apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), $url, 'checkout' );
+	}
+
+	/**
 	 * Verify reCAPTCHA on checkout submission.
 	 */
 	public static function verify_recaptcha_on_checkout() {
-		$url                   = \home_url( \add_query_arg( null, null ) );
-		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), $url, 'checkout' );
-		$version               = self::get_setting( 'version' );
-
-		if ( ! $should_verify_captcha ) {
+		if ( ! self::should_verify_checkout() ) {
 			return;
 		}
 		$check = self::verify_captcha();

@@ -95,4 +95,102 @@ class Test_Recaptcha extends WP_UnitTestCase {
 			'reCAPTCHA api.js should not be enqueued when reCAPTCHA is disabled.'
 		);
 	}
+
+	/**
+	 * Mock Google's response, passing only the token "good".
+	 */
+	private function mock_siteverify() {
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) {
+				return [
+					'body'     => wp_json_encode(
+						[
+							'success' => false !== strpos( $url, 'response=good' ),
+							'score'   => 0.9,
+						]
+					),
+					'response' => [ 'code' => 200 ],
+				];
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * With no argument the token comes from the form, as every existing caller expects.
+	 */
+	public function test_verify_captcha_defaults_to_the_form_token() {
+		$this->enable_recaptcha();
+		$this->mock_siteverify();
+		$_POST['g-recaptcha-response'] = 'good';
+
+		$result = Recaptcha::verify_captcha();
+		unset( $_POST['g-recaptcha-response'] );
+
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * The token travels in the siteverify query string, so it must be URL-encoded there.
+	 */
+	public function test_verify_captcha_encodes_the_token_for_siteverify() {
+		$this->enable_recaptcha();
+		$seen = '';
+		add_filter(
+			'pre_http_request',
+			function ( $preempt, $args, $url ) use ( &$seen ) {
+				$seen = $url;
+				return [
+					'body'     => wp_json_encode(
+						[
+							'success' => true,
+							'score'   => 0.9,
+						]
+					),
+					'response' => [ 'code' => 200 ],
+				];
+			},
+			10,
+			3
+		);
+
+		Recaptcha::verify_captcha( 'a b&response=good' );
+
+		$this->assertStringContainsString( 'response=a%20b%26response%3Dgood', $seen );
+	}
+
+	/**
+	 * A token passed in is the only one judged, even when empty.
+	 */
+	public function test_verify_captcha_prefers_the_given_token() {
+		$this->enable_recaptcha();
+		$this->mock_siteverify();
+		$_POST['g-recaptcha-response'] = 'good';
+
+		$given_bad   = Recaptcha::verify_captcha( 'bad' );
+		$given_empty = Recaptcha::verify_captcha( '' );
+		unset( $_POST['g-recaptcha-response'] );
+
+		$this->assertWPError( $given_bad );
+		$this->assertWPError( $given_empty );
+		$this->assertTrue( Recaptcha::verify_captcha( 'good' ) );
+	}
+
+	/**
+	 * The Checkout block script loads only where the server will ask for its token.
+	 */
+	public function test_checkout_block_script_follows_the_server_decision() {
+		$this->enable_recaptcha();
+		do_action( 'wp_enqueue_scripts' );
+
+		add_filter( 'newspack_recaptcha_verify_captcha', '__return_false' );
+		Recaptcha::enqueue_checkout_block_script();
+		remove_filter( 'newspack_recaptcha_verify_captcha', '__return_false' );
+		$this->assertFalse( wp_script_is( Recaptcha::CHECKOUT_BLOCK_SCRIPT_HANDLE, 'enqueued' ) );
+
+		Recaptcha::enqueue_checkout_block_script();
+		$this->assertTrue( wp_script_is( Recaptcha::CHECKOUT_BLOCK_SCRIPT_HANDLE, 'enqueued' ) );
+	}
 }
