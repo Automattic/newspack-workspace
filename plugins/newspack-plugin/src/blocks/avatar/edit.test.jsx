@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
  * Internal dependencies
  */
 import Edit from './edit';
-import { useUserAvatar, usePostAuthors } from './hooks';
+import { useUserAvatar, usePostAuthors, useDefaultAvatar } from './hooks';
 import { useCustomByline } from '../../shared/hooks/use-custom-byline';
 
 jest.mock( './hooks', () => ( {
@@ -100,5 +100,38 @@ describe( 'Avatar Edit', () => {
 
 		expect( screen.getByRole( 'img' ) ).toBeInTheDocument();
 		expect( screen.queryByRole( 'img', { name: 'No avatar available' } ) ).not.toBeInTheDocument();
+	} );
+
+	describe( 'inside Author Profile', () => {
+		const nestedProps = author => ( { ...defaultProps, context: { ...defaultProps.context, 'newspack-blocks/author': author } } );
+
+		beforeEach( () => {
+			usePostAuthors.mockReturnValue( [] );
+			useUserAvatar.mockReturnValue( null );
+			useCustomByline.mockReturnValue( {
+				bylineActive: false,
+				bylineContent: '',
+			} );
+			useDefaultAvatar.mockReturnValue( 'https://example.com/default-avatar.png' );
+		} );
+
+		it( 'should render the default avatar when the author has none', () => {
+			render( <Edit { ...nestedProps( { id: 5, name: 'Jane Doe' } ) } /> );
+
+			expect( screen.getByRole( 'img', { name: 'Jane Doe' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'should render a placeholder instead of the default avatar when default avatars are hidden', () => {
+			render( <Edit { ...nestedProps( { id: 5, name: 'Jane Doe', avatarHideDefault: true } ) } /> );
+
+			expect( screen.getByRole( 'img', { name: 'No avatar available' } ) ).toBeInTheDocument();
+			expect( screen.queryByRole( 'img', { name: 'Jane Doe' } ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'should render the author avatar when default avatars are hidden', () => {
+			render( <Edit { ...nestedProps( { id: 5, name: 'Jane Doe', avatar: 'https://example.com/jane.jpg', avatarHideDefault: true } ) } /> );
+
+			expect( screen.getByRole( 'img', { name: 'Jane Doe' } ) ).toBeInTheDocument();
+		} );
 	} );
 } );

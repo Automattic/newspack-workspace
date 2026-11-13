@@ -108,6 +108,7 @@ if ( typeof registerBlockBindingsSource === 'function' ) {
 import { SingleAuthor } from './single-author';
 import { AuthorDisplaySettings } from '../shared/author';
 import { AuthorContext } from './context';
+import { getAuthorContextValue } from './context-value';
 
 /**
  * External dependencies
@@ -805,13 +806,16 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		// The useEffect handles cleanup when component unmounts.
 		window.__newspackAuthorsByBlock[ clientId ] = previewAuthor;
 
+		// Like the front end, tell inner blocks whether default avatars are hidden.
+		const authorContextValue = getAuthorContextValue( previewAuthor, avatarHideDefault );
+
 		const nestedBlockProps = {
 			...blockProps,
 			className: `${ blockProps.className } wp-block-newspack-blocks-author-profile is-nested-mode`,
 		};
 
 		return (
-			<AuthorContext.Provider value={ previewAuthor }>
+			<AuthorContext.Provider value={ authorContextValue }>
 				<div { ...nestedBlockProps }>
 					{ inspectorControls }
 					{ blockControls }
