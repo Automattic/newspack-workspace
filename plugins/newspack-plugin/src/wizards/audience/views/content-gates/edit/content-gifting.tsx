@@ -15,7 +15,7 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
@@ -23,7 +23,6 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import { Button, Divider, Grid, SectionHeader, SelectControl, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import { gift } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -153,31 +152,31 @@ const ContentGiftingSettings = () => {
 		return (
 			<>
 				{ confirmDialog }
-				<EmptyState.Root>
-					<Stack direction="column" align="center" gap="lg">
-						<EmptyState.Header
-							icon={ gift }
-							title={ __( 'Content gifting is off', 'newspack-plugin' ) }
-							description={ __( 'Turn it on to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
-						/>
-						{ giftingErrors.length > 0 && (
-							<Notice status="error" politeness="polite" isDismissible={ false }>
-								{ giftingErrors.join( ', ' ) }
-							</Notice>
-						) }
-					</Stack>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isFetching }
-							disabled={ isFetching || giftingErrors.length > 0 }
-							onClick={ () => setEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				{ giftingErrors.length > 0 && (
+					<Notice className="newspack-content-gifting__prerequisites" status="error" politeness="polite" isDismissible={ false }>
+						{ giftingErrors.join( ', ' ) }
+					</Notice>
+				) }
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ gift } />
+						<EmptyState.Title>{ __( 'Content gifting is off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Turn it on to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isFetching }
+								disabled={ isFetching || giftingErrors.length > 0 }
+								onClick={ () => setEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</>
 		);
 	}
