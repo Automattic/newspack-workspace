@@ -658,6 +658,8 @@ While an integration is broken, its contact-sync failures don't page either: ret
 
 To disable the schedule on a specific site, add `'newspack_integration_health_check'` to the `NEWSPACK_CRON_DISABLE` constant array. An ESP account that is disabled, unpaid or rejects the site's credentials is reported from contact sync at most once an hour per integration, at warning severity while the check runs. Without the check, that hourly report pages instead, as it also does when the check's cron has stopped running for longer than `Alert_Manager::HEALTH_STREAK_MAX_GAP`.
 
+The check only reads from the account, so an account that refuses contact writes but still answers that read passes it. A report made while the integration has no current health record therefore waits for the integration's next check: a failure leaves the account problem to the health record, and a pass pages for the refused push, once. The wait is kept in the `newspack_integration_refused_pushes` option, and one older than `Alert_Manager::HEALTH_STREAK_MAX_GAP` is dropped without paging.
+
 ---
 
 ## My Account Endpoints
