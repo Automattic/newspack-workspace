@@ -111,6 +111,41 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[] $prompt_ids Prompt IDs.
+	 */
+	private function store_percent_encoded_id( $prompt_ids ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets can be ended through the
+	 * encoded form the page sends.
+	 */
+	public function test_percent_encoded_legacy_test_can_be_ended() {
+		$this->sign_in();
+		$ids = $this->create_running_test( 'legacy-cafe' );
+		$this->store_percent_encoded_id( $ids );
+
+		$this->assertSame( 200, $this->end_request( 'caf%25c3%25a9', 'b' )->get_status() );
+		$this->assertSame( 'draft', get_post_status( $ids['a'] ) );
+	}
+
+	/**
 	 * Send an end through the route.
 	 *
 	 * @param string      $test_id Test ID.
