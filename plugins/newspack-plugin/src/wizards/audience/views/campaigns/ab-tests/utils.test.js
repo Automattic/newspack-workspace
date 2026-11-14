@@ -262,7 +262,16 @@ describe( 'getRecommendation', () => {
 describe( 'getVerdict', () => {
 	const published = { status: 'publish' };
 	const twoVersions = { variants: { a: published, b: published } };
-	const result = ( { label = 'reliable', rates = { a: 1.9, b: 2.69 }, young = false, anonymous = false, days = 20, readers = 8000 } = {} ) => ( {
+	const result = ( {
+		label = 'reliable',
+		rates = { a: 1.9, b: 2.69 },
+		young = false,
+		anonymous = false,
+		days = 20,
+		readers = 8000,
+		confidence = 99,
+		estimate = null,
+	} = {} ) => ( {
 		source: { state: 'ok' },
 		variants: Object.fromEntries(
 			Object.entries( rates ).map( ( [ letter, rate ] ) => [
@@ -273,7 +282,7 @@ describe( 'getVerdict', () => {
 		comparisons: Object.fromEntries(
 			Object.keys( rates )
 				.filter( letter => letter !== 'a' )
-				.map( letter => [ letter, { confidence: 99, label } ] )
+				.map( letter => [ letter, { confidence, label, estimate } ] )
 		),
 		flags: { young_test: young, high_anonymous: anonymous, days_running: days },
 	} );
@@ -295,11 +304,53 @@ describe( 'getVerdict', () => {
 	} );
 
 	it( 'names no winner on an early signal, and adds the logged-out caution only when it applies', () => {
-		const early = getVerdict( twoVersions, 'running', result( { label: 'directional', rates: { a: 2.98, b: 3.83 } } ) );
+		const early = getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 88.2, rates: { a: 2.98, b: 3.83 } } ) );
 		expect( early.answer ).toBe( 'No winner yet. B is ahead, 3.83% against 2.98%.' );
-		expect( early.detail ).toBe( 'More readers are needed.' );
+		expect( early.detail ).toBe(
+			'Early signal: 88.2% confident B is better than A. A reliable result needs 95% confidence. More readers are needed.'
+		);
 		const anonymous = getVerdict( twoVersions, 'running', result( { label: 'collecting', anonymous: true } ) );
-		expect( anonymous.detail ).toBe( 'More readers are needed. Some may have seen both versions on different devices.' );
+		expect( anonymous.detail ).toBe( 'More readers are needed. Some readers may have seen both versions on different devices.' );
+	} );
+
+	it( 'names an Early signal the same way when A leads, using the dashboard’s label and threshold', () => {
+		const copy = { labels: { directional: 'Leaning' }, thresholds: { reliable: 95 } };
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 91.4, rates: { a: 3.1, b: 2.4 } } ), copy );
+		expect( verdict.detail ).toMatch( /^Leaning: 91\.4% confident A is better than B\. A reliable result needs 95% confidence\./ );
+	} );
+
+	it( 'estimates readers and days to a reliable result past an Early signal', () => {
+		const estimate = { directional: null, reliable: { readers: 2912, days: 9 } };
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 88.2, estimate } ) );
+		expect( verdict.detail ).toBe(
+			'Early signal: 88.2% confident B is better than A. A reliable result needs 95% confidence. About 2,900 more readers, or about 9 days at the current pace, to reach a reliable result.'
+		);
+	} );
+
+	it( 'estimates both steps before an Early signal, then the logged-out caution', () => {
+		const estimate = { directional: { readers: 1018, days: 3 }, reliable: { readers: 3888, days: 12 } };
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', confidence: 63.2, estimate, anonymous: true } ) );
+		expect( verdict.detail ).toBe(
+			'About 1,000 more readers, or about 3 days, to reach an Early signal, and about 3,900, or about 12 days, to reach a reliable result. Some readers may have seen both versions on different devices.'
+		);
+	} );
+
+	it( 'says a slow test may not get there rather than giving a long estimate', () => {
+		const slow = { directional: { readers: 368, days: 5 }, reliable: { readers: 3662, days: 46 } };
+		expect( getVerdict( twoVersions, 'running', result( { label: 'collecting', estimate: slow } ) ).detail ).toBe(
+			'About 370 more readers, or about 5 days at the current pace, to reach an Early signal. This test may not reach a reliable result at its current traffic.'
+		);
+		const slower = { directional: { readers: 9100, days: 40 }, reliable: { readers: 40000, days: 170 } };
+		expect( getVerdict( twoVersions, 'running', result( { label: 'collecting', estimate: slower } ) ).detail ).toBe(
+			'This test may not reach a reliable result at its current traffic.'
+		);
+	} );
+
+	it( 'gives one day at least, in the singular', () => {
+		const estimate = { directional: null, reliable: { readers: 1, days: 1 } };
+		expect( getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 94.9, estimate } ) ).detail ).toMatch(
+			/About 1 more reader, or about 1 day at the current pace, to reach a reliable result\.$/
+		);
 	} );
 
 	it( 'says when two versions are even', () => {
@@ -344,9 +395,14 @@ describe( 'getVerdict', () => {
 		expect( getVerdict( ended, 'ended', null ).detail ).toBeNull();
 	} );
 
-	it( 'names A the winner when every challenger is reliably worse', () => {
+	it( 'says the challenger didn’t beat A when it is reliably worse, rather than calling A a winner', () => {
 		const verdict = getVerdict( twoVersions, 'running', result( { rates: { a: 2.69, b: 1.9 } } ) );
-		expect( verdict.answer ).toBe( 'A wins. 2.69% of readers who saw A converted, against 1.90% for B.' );
+		expect( verdict.answer ).toBe( "B didn't beat A. B converted 1.90% of readers, against 2.69% for A." );
+		expect( verdict.detail ).toBeNull();
+		const three = { variants: { a: published, b: published, c: published } };
+		expect( getVerdict( three, 'running', result( { rates: { a: 2.69, b: 1.9, c: 2.1 } } ) ).answer ).toBe(
+			'No version beat A. The closest, C, converted 2.10% of readers, against 2.69% for A.'
+		);
 	} );
 
 	it( 'agrees with the End Test recommendation on whether there is a winner', () => {
