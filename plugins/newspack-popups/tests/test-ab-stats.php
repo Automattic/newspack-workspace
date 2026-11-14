@@ -73,6 +73,41 @@ class ABStatsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The z statistic is the one behind confidence(), with the same nulls.
+	 */
+	public function test_z_matches_confidence() {
+		$this->assertNull( Newspack_Popups_AB_Stats::z( 29, 10, 100, 10 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::z( 100, 0, 100, 0 ) );
+		$this->assertSame( 0.0, Newspack_Popups_AB_Stats::z( 1000, 50, 1000, 50 ) );
+		$this->assertEqualsWithDelta( 0.6966, Newspack_Popups_AB_Stats::z( 400, 8, 400, 11 ), 0.0001 );
+	}
+
+	/**
+	 * At 2.00% against 2.75% on 800 readers, the readers still to go scale with
+	 * (target z / current z)², worked by hand: 368 to 80%, 3,662 to 95%.
+	 */
+	public function test_readers_to_each_label() {
+		$this->assertSame( 368, Newspack_Popups_AB_Stats::readers_to( 'directional', 400, 8, 400, 11 ) );
+		$this->assertSame( 3662, Newspack_Popups_AB_Stats::readers_to( 'reliable', 400, 8, 400, 11 ) );
+		// The same whichever arm is ahead.
+		$this->assertSame( 368, Newspack_Popups_AB_Stats::readers_to( 'directional', 400, 11, 400, 8 ) );
+	}
+
+	/**
+	 * No estimate once a label is reached, without a confidence figure, when
+	 * the rates are level, or for an unknown label.
+	 */
+	public function test_readers_to_has_no_estimate_when_there_is_nothing_to_project() {
+		// 88.4%: past an Early signal, short of Reliable.
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'directional', 1000, 19, 1000, 27 ) );
+		$this->assertSame( 1800, Newspack_Popups_AB_Stats::readers_to( 'reliable', 1000, 19, 1000, 27 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'reliable', 1000, 19, 1000, 32 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'reliable', 29, 1, 100, 5 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'reliable', 1000, 50, 1000, 50 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'certain', 400, 8, 400, 11 ) );
+	}
+
+	/**
 	 * Labels change at exactly 80 and 95.
 	 */
 	public function test_labels_at_the_thresholds() {
