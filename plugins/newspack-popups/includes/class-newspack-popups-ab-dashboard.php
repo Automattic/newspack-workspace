@@ -535,7 +535,10 @@ final class Newspack_Popups_AB_Dashboard {
 	 * readers across both arms and in days at the pair's pace so far.
 	 *
 	 * The pace divides by every day in the window, including the newest ones
-	 * whose counts are still settling, so the days err long rather than short.
+	 * whose counts are still settling, which lengthens the days. Distinct
+	 * readers grow more slowly than days, since returning readers count once,
+	 * which shortens them. Which wins depends on the site, so the days are a
+	 * rough guide in either direction.
 	 *
 	 * @param array $control    Merged control variant.
 	 * @param array $challenger Merged challenger variant.
