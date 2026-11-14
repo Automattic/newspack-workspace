@@ -157,14 +157,14 @@ $criteria = [
 	],
 	'active_subscriptions'     => [
 		'name'               => __( 'Has active subscription(s)', 'newspack-popups' ),
-		'description'        => __( 'If the reader is an active subscriber to non-donation products.', 'newspack-popups' ),
+		'description'        => __( 'If the reader is an active subscriber to non-donation products (gift recipients and group members count as subscribers; buying a gift for someone else does not).', 'newspack-popups' ),
 		'category'           => 'reader_revenue',
 		'matching_function'  => 'list__in',
 		'matching_attribute' => 'active_subscriptions',
 	],
 	'not_active_subscriptions' => [
 		'name'               => __( 'Does not have active subscription(s)', 'newspack-popups' ),
-		'description'        => __( 'If the reader is NOT an active subscriber to non-donation products.', 'newspack-popups' ),
+		'description'        => __( 'If the reader is NOT an active subscriber to non-donation products (gift recipients and group members count as subscribers; buying a gift for someone else does not).', 'newspack-popups' ),
 		'category'           => 'reader_revenue',
 		'matching_function'  => 'list__not_in',
 		'matching_attribute' => 'active_subscriptions',
