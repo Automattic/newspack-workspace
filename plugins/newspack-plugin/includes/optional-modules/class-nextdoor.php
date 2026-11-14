@@ -211,6 +211,7 @@ class Nextdoor {
 			// Nextdoor page info.
 			'page_id'          => '',
 			'publication_url'  => '',
+			'country'          => '',
 
 			// User configs.
 			'allowed_roles'    => [ 'administrator' ],
@@ -320,6 +321,44 @@ class Nextdoor {
 		}
 
 		return $roles;
+	}
+
+	/**
+	 * Get the regional Nextdoor API base URL for a given country code.
+	 *
+	 * Nextdoor operates region-specific API servers; calling the wrong region
+	 * returns "Invalid input: country" during account creation.
+	 *
+	 * @see https://developer.nextdoor.com/reference/displaying-availability
+	 *
+	 * @param string|null $country ISO 3166-1 alpha-2 country code. If null, the
+	 *                             country saved in settings is used.
+	 * @return string API base URL (no trailing slash).
+	 */
+	public static function get_api_base_url( $country = null ) {
+		if ( null === $country || '' === $country ) {
+			$settings = self::get_settings();
+			$country  = ! empty( $settings['country'] ) ? $settings['country'] : 'US';
+		}
+
+		$country = strtoupper( trim( (string) $country ) );
+
+		$hosts = [
+			'US' => 'https://nextdoor.com',
+			'CA' => 'https://ca.nextdoor.com',
+			'AU' => 'https://au.nextdoor.com',
+		];
+
+		/**
+		 * Filter the map of ISO 3166-1 alpha-2 country codes to Nextdoor API base URLs.
+		 *
+		 * @see https://developer.nextdoor.com/reference/displaying-availability
+		 *
+		 * @param array $hosts Map of country code to API base URL.
+		 */
+		$hosts = apply_filters( 'newspack_nextdoor_api_hosts', $hosts );
+
+		return isset( $hosts[ $country ] ) ? $hosts[ $country ] : $hosts['US'];
 	}
 
 	/**
