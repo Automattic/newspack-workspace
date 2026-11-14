@@ -543,11 +543,19 @@ const roundReaders = readers => {
 };
 
 /**
- * @param {number} readers Readers.
+ * @param {number} count Readers, or views when the source counts events.
+ * @param {string} unit  'readers' or 'events'.
  * @return {string} Such as "2,900 more readers".
  */
-const moreReaders = readers => {
-	const rounded = roundReaders( readers );
+const moreCount = ( count, unit ) => {
+	const rounded = roundReaders( count );
+	if ( unit === 'events' ) {
+		return sprintf(
+			// Translators: %s is a number of views.
+			_n( '%s more view', '%s more views', rounded, 'newspack-plugin' ),
+			formatCount( rounded )
+		);
+	}
 	return sprintf(
 		// Translators: %s is a number of readers.
 		_n( '%s more reader', '%s more readers', rounded, 'newspack-plugin' ),
@@ -571,15 +579,14 @@ const dayCount = days =>
  * and days to a reliable result, and to an Early signal while it has none.
  *
  * @param {?Object} estimate A comparison's `estimate`.
- * @param {Object}  copy     The list route's `labels`.
+ * @param {string}  unit     What the source counted: 'readers' or 'events'.
  * @return {?string} The sentence, or null without an estimate to give.
  */
-export const getEstimateText = ( estimate, copy = {} ) => {
+export const getEstimateText = ( estimate, unit = 'readers' ) => {
 	const { directional, reliable } = estimate || {};
 	if ( ! reliable?.days || ( directional && ! directional.days ) ) {
 		return null;
 	}
-	const label = copy.labels?.directional || __( 'Early signal', 'newspack-plugin' );
 	const early = directional && directional.days <= MAX_ESTIMATE_DAYS ? directional : null;
 	if ( reliable.days > MAX_ESTIMATE_DAYS ) {
 		const lowTraffic = __( 'This test may not reach a reliable result at its current traffic.', 'newspack-plugin' );
@@ -587,28 +594,29 @@ export const getEstimateText = ( estimate, copy = {} ) => {
 			return lowTraffic;
 		}
 		return `${ sprintf(
-			// Translators: %1$s is a number of readers such as "1,000 more readers", %2$s a number of days such as "3 days", %3$s a confidence label such as "Early signal".
-			__( 'About %1$s, or about %2$s at the current pace, to reach an %3$s.', 'newspack-plugin' ),
-			moreReaders( early.readers ),
-			dayCount( early.days ),
-			label
+			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days".
+			__( 'About %1$s, or about %2$s at the current pace, to reach an Early signal.', 'newspack-plugin' ),
+			moreCount( early.readers, unit ),
+			dayCount( early.days )
 		) } ${ lowTraffic }`;
 	}
 	if ( early ) {
 		return sprintf(
-			// Translators: %1$s is a number of readers such as "1,000 more readers", %2$s a number of days such as "3 days", %3$s a confidence label such as "Early signal", %4$s a number such as "2,900", %5$s a number of days.
-			__( 'About %1$s, or about %2$s, to reach an %3$s, and about %4$s, or about %5$s, to reach a reliable result.', 'newspack-plugin' ),
-			moreReaders( early.readers ),
+			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days", %3$s a number such as "2,900", %4$s a number of days.
+			__(
+				'About %1$s, or about %2$s at the current pace, to reach an Early signal, and about %3$s, or about %4$s, to reach a reliable result.',
+				'newspack-plugin'
+			),
+			moreCount( early.readers, unit ),
 			dayCount( early.days ),
-			label,
 			formatCount( roundReaders( reliable.readers ) ),
 			dayCount( reliable.days )
 		);
 	}
 	return sprintf(
-		// Translators: %1$s is a number of readers such as "2,900 more readers", %2$s a number of days such as "9 days".
+		// Translators: %1$s is a number of readers or views such as "2,900 more readers", %2$s a number of days such as "9 days".
 		__( 'About %1$s, or about %2$s at the current pace, to reach a reliable result.', 'newspack-plugin' ),
-		moreReaders( reliable.readers ),
+		moreCount( reliable.readers, unit ),
 		dayCount( reliable.days )
 	);
 };
@@ -756,15 +764,16 @@ export const getVerdict = ( test, status, stats, copy = {} ) => {
 	const leader = counted.reduce( ( top, letter ) => ( rates[ letter ] > rates[ top ] ? letter : top ) );
 	const other = getCounterpart( leader, counted, rates );
 	const comparison = getPairComparison( leader, other, usable.comparisons );
+	// Rates that read as even name no leader, so nothing is said to be ahead.
+	const even = rates[ leader ] === rates[ other ];
 	const detail = [
-		getEarlySignalText( { leader, other, comparison }, copy ),
-		( rates[ leader ] !== rates[ other ] && getEstimateText( comparison?.estimate, copy ) ) ||
-			__( 'More readers are needed.', 'newspack-plugin' ),
+		! even && getEarlySignalText( { leader, other, comparison }, copy ),
+		( ! even && getEstimateText( comparison?.estimate, usable.source?.unit ) ) || __( 'More readers are needed.', 'newspack-plugin' ),
 		usable.flags?.high_anonymous ? __( 'Some readers may have seen both versions on different devices.', 'newspack-plugin' ) : null,
 	]
 		.filter( Boolean )
 		.join( ' ' );
-	if ( rates[ leader ] === rates[ other ] ) {
+	if ( even ) {
 		const [ first, second ] = [ leader, other ].sort();
 		return {
 			answer: sprintf(

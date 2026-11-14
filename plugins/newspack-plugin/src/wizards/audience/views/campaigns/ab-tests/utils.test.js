@@ -271,8 +271,9 @@ describe( 'getVerdict', () => {
 		readers = 8000,
 		confidence = 99,
 		estimate = null,
+		unit = 'readers',
 	} = {} ) => ( {
-		source: { state: 'ok' },
+		source: { state: 'ok', unit },
 		variants: Object.fromEntries(
 			Object.entries( rates ).map( ( [ letter, rate ] ) => [
 				letter,
@@ -331,7 +332,14 @@ describe( 'getVerdict', () => {
 		const estimate = { directional: { readers: 1018, days: 3 }, reliable: { readers: 3888, days: 12 } };
 		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', confidence: 63.2, estimate, anonymous: true } ) );
 		expect( verdict.detail ).toBe(
-			'About 1,000 more readers, or about 3 days, to reach an Early signal, and about 3,900, or about 12 days, to reach a reliable result. Some readers may have seen both versions on different devices.'
+			'About 1,000 more readers, or about 3 days at the current pace, to reach an Early signal, and about 3,900, or about 12 days, to reach a reliable result. Some readers may have seen both versions on different devices.'
+		);
+	} );
+
+	it( 'counts views rather than readers when the source could only count views', () => {
+		const estimate = { directional: null, reliable: { readers: 2912, days: 9 } };
+		expect( getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 88.2, estimate, unit: 'events' } ) ).detail ).toMatch(
+			/ About 2,900 more views, or about 9 days at the current pace, to reach a reliable result\.$/
 		);
 	} );
 
@@ -356,6 +364,13 @@ describe( 'getVerdict', () => {
 	it( 'says when two versions are even', () => {
 		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', rates: { a: 2, b: 2 } } ) );
 		expect( verdict.answer ).toBe( 'No winner yet. A and B are even, at 2.00%.' );
+	} );
+
+	it( 'names no Early signal or estimate when the shown rates are even', () => {
+		const estimate = { directional: null, reliable: { readers: 2912, days: 9 } };
+		const verdict = getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 81, estimate, rates: { a: 2, b: 2 } } ) );
+		expect( verdict.answer ).toBe( 'No winner yet. A and B are even, at 2.00%.' );
+		expect( verdict.detail ).toBe( 'More readers are needed.' );
 	} );
 
 	it( 'says it is too early, with faint bars, before any reader is counted', () => {
