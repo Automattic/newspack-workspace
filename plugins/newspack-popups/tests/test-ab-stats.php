@@ -108,6 +108,16 @@ class ABStatsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A raw 79.997% shows as 80.0%, an Early signal, so no estimate to one
+	 * appears beside it, though its z sits just short of the target.
+	 */
+	public function test_readers_to_judges_the_label_on_the_shown_figure() {
+		$this->assertSame( 80.0, Newspack_Popups_AB_Stats::confidence( 700, 33, 700, 40 ) );
+		$this->assertLessThan( 0.8416, Newspack_Popups_AB_Stats::z( 700, 33, 700, 40 ) );
+		$this->assertNull( Newspack_Popups_AB_Stats::readers_to( 'directional', 700, 33, 700, 40 ) );
+	}
+
+	/**
 	 * Labels change at exactly 80 and 95.
 	 */
 	public function test_labels_at_the_thresholds() {
