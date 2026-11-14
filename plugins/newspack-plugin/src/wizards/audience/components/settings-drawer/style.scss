@@ -14,3 +14,9 @@
 		margin: 0;
 	}
 }
+
+// The footer is a wrapping row; a full-width notice takes a row of its own above the buttons.
+.newspack-campaigns__settings-error {
+	flex-basis: 100%;
+	margin: 0;
+}
