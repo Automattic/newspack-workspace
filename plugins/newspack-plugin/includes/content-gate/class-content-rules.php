@@ -20,6 +20,13 @@ class Content_Rules {
 	const PUBLISHED_AGE_RULE = 'published_age';
 
 	/**
+	 * Slug of the archive rule that matches the archive page of a post type.
+	 *
+	 * @var string
+	 */
+	const POST_TYPE_ARCHIVES_RULE = 'post_type_archives';
+
+	/**
 	 * Post meta key for a post's own time window, which replaces the duration of every
 	 * published-age rule that judges the post. Each rule keeps its own direction.
 	 *
@@ -69,6 +76,11 @@ class Content_Rules {
 				'default'     => [],
 				'description' => $taxonomy['description'],
 			];
+			// The route respects a custom rest_base; the token field prefers it over a guess.
+			$endpoint = \rest_get_route_for_taxonomy_items( $taxonomy['slug'] );
+			if ( $endpoint ) {
+				$content_rules[ $taxonomy['slug'] ]['endpoint'] = $endpoint;
+			}
 		}
 
 		$content_rules[ self::PUBLISHED_AGE_RULE ] = [
@@ -94,6 +106,50 @@ class Content_Rules {
 	}
 
 	/**
+	 * Describe the rules stored on gates that the editor doesn't offer.
+	 *
+	 * A gate can hold a rule for a taxonomy that isn't on the offered list (for
+	 * example one created by the Memberships migration), or for one that no longer
+	 * exists. The editor needs a name and a term endpoint to show these.
+	 *
+	 * @param array $gates Gates, as returned by Content_Gate::get_gates().
+	 *
+	 * @return array[] Rule definitions keyed by slug. Unregistered slugs are flagged `unavailable`.
+	 */
+	public static function get_unoffered_content_rules( array $gates ): array {
+		// The newsletter rule's slug is named here rather than read from
+		// get_premium_newsletter_rules(), which asks the ESP for its lists.
+		$known = array_merge( array_keys( self::get_content_rules() ), [ 'newsletters' ] );
+		$extra = [];
+		foreach ( $gates as $gate ) {
+			foreach ( $gate['content_rules'] ?? [] as $rule ) {
+				$slug = $rule['slug'] ?? '';
+				if ( ! is_string( $slug ) || '' === $slug || in_array( $slug, $known, true ) || isset( $extra[ $slug ] ) ) {
+					continue;
+				}
+				$taxonomy = \get_taxonomy( $slug );
+				if ( ! $taxonomy ) {
+					$extra[ $slug ] = [
+						'name'        => $slug,
+						'default'     => [],
+						'unavailable' => true,
+					];
+					continue;
+				}
+				$extra[ $slug ] = [
+					'name'    => $taxonomy->labels->name,
+					'default' => [],
+				];
+				$endpoint       = \rest_get_route_for_taxonomy_items( $slug );
+				if ( $endpoint ) {
+					$extra[ $slug ]['endpoint'] = $endpoint;
+				}
+			}
+		}
+		return $extra;
+	}
+
+	/**
 	 * Get premium newsletter content rules.
 	 *
 	 * @return array The premium newsletter content rules.
@@ -115,6 +171,80 @@ class Content_Rules {
 				'include_only' => true,
 			],
 		];
+	}
+
+	/**
+	 * Get the archive rules a gate can hold.
+	 *
+	 * These are separate from content rules: they decide whether a gate covers an
+	 * archive page, not which posts it restricts.
+	 *
+	 * @return array The archive rules, keyed by slug.
+	 */
+	public static function get_archive_rules(): array {
+		return [
+			self::POST_TYPE_ARCHIVES_RULE => [
+				'name'    => __( 'Archive pages', 'newspack-plugin' ),
+				'options' => Content_Restriction_Control::get_available_archive_post_types(),
+				'default' => [],
+			],
+		];
+	}
+
+	/**
+	 * Get the archive rules for a gate.
+	 *
+	 * @param int $post_id Gate post ID.
+	 *
+	 * @return array The archive rules, without any that have an empty value.
+	 */
+	public static function get_gate_archive_rules( int $post_id ): array {
+		$rules = \get_post_meta( $post_id, 'archive_rules', true );
+		if ( ! is_array( $rules ) ) {
+			return [];
+		}
+		return array_values(
+			array_filter(
+				$rules,
+				function( $rule ) {
+					return is_array( $rule ) && ! empty( $rule['value'] );
+				}
+			)
+		);
+	}
+
+	/**
+	 * Update the archive rules for a gate.
+	 *
+	 * @param int   $post_id Gate post ID.
+	 * @param array $rules   Array of archive rules.
+	 */
+	public static function update_gate_archive_rules( int $post_id, array $rules ): void {
+		\update_post_meta( $post_id, 'archive_rules', $rules );
+	}
+
+	/**
+	 * Whether a gate's archive rules cover the archive page of any of the post types.
+	 *
+	 * Only post types offered right now count, so a stored choice for a post type
+	 * that is switched off does nothing until it is offered again.
+	 *
+	 * @param array    $archive_rules The gate's archive rules.
+	 * @param string[] $post_types    Post types of the archive page being viewed.
+	 *
+	 * @return bool
+	 */
+	public static function gate_matches_archive( array $archive_rules, array $post_types ): bool {
+		$offered = wp_list_pluck( Content_Restriction_Control::get_available_archive_post_types(), 'value' );
+		foreach ( $archive_rules as $rule ) {
+			if ( self::POST_TYPE_ARCHIVES_RULE !== ( $rule['slug'] ?? '' ) || ! is_array( $rule['value'] ?? null ) ) {
+				continue;
+			}
+			if ( array_intersect( $rule['value'], $post_types, $offered ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

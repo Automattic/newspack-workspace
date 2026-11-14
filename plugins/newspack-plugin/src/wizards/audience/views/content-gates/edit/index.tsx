@@ -30,11 +30,12 @@ import {
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import ArchiveRules from './archive-rules';
 import ContentRules from './content-rules';
 import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
-import { getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
+import { filterArchiveRules, getEditGateLayoutUrl, getGatesSubTitle, getGateStatus, getGateStatusBadgeIntent } from '../utils';
 import { getGateSummarySections } from '../gate-summary';
 import { useAccessRuleOptions } from '../use-access-rule-options';
 import SavePanel from './save-panel';
@@ -52,7 +53,12 @@ type ContentGateEditProps = {
 	isNewsletter?: boolean;
 };
 
-const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' | undefined => {
+const getContentTypeFromRules = ( rules: GateContentRule[], archiveRules: GateArchiveRule[] = [] ): 'all' | 'custom' | undefined => {
+	// Archive pages are offered only under "Choose specific content". A choice the site no
+	// longer offers doesn't count, so it can't open the gate on a row with nothing to show.
+	if ( filterArchiveRules( archiveRules, true ).length > 0 ) {
+		return 'custom';
+	}
 	if ( rules.length === 0 ) {
 		return undefined;
 	}
@@ -103,6 +109,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		status: defaultGateStatus,
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
+		archive_rules: [],
 		// Only premium newsletter gates carry these settings.
 		...( isNewsletter ? { auto_signup: 'default' as const, hide_lists: false } : {} ),
 		registration: {
@@ -136,6 +143,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ isRenaming, setIsRenaming ] = useState< boolean >( false );
 	const [ isDeleting, setIsDeleting ] = useState< boolean >( false );
 	const [ contentRules, setContentRules ] = useState< GateContentRule[] >( gate.content_rules );
+	const [ archiveRules, setArchiveRules ] = useState< GateArchiveRule[] >( gate.archive_rules ?? [] );
 	const [ contentRulesMatch, setContentRulesMatch ] = useState< 'all' | 'any' >( gate.content_rules_match || 'all' );
 	const [ autoSignup, setAutoSignup ] = useState< AutoSignupMode >( gate.auto_signup ?? 'default' );
 	const [ hideLists, setHideLists ] = useState< boolean >( gate.hide_lists ?? false );
@@ -153,6 +161,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates ?? [] );
 	const savedCustomRules = useRef< GateContentRule[] >( gate.content_rules );
+	const savedArchiveRules = useRef< GateArchiveRule[] >( gate.archive_rules ?? [] );
 	// The stored gate as last copied into the form, serialized for comparison.
 	const syncedGate = useRef< string | null >( null );
 
@@ -166,6 +175,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		isNew ||
 		title !== gate.title ||
 		JSON.stringify( contentRules ) !== JSON.stringify( gate.content_rules ) ||
+		JSON.stringify( archiveRules ) !== JSON.stringify( gate.archive_rules ?? [] ) ||
 		contentRulesMatch !== ( gate.content_rules_match || 'all' ) ||
 		autoSignup !== ( gate.auto_signup ?? 'default' ) ||
 		hideLists !== ( gate.hide_lists ?? false ) ||
@@ -203,6 +213,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
+				archive_rules: archiveRules,
 				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,
@@ -236,7 +247,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				}
 			);
 		},
-		[ gate, contentRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
+		[ gate, contentRules, archiveRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
 	);
 
 	const handleSave = useCallback(
@@ -254,6 +265,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				title,
 				content_rules: contentRules,
 				content_rules_match: contentRulesMatch,
+				archive_rules: archiveRules,
 				...( isNewsletter ? { auto_signup: autoSignup, hide_lists: hideLists } : {} ),
 				registration,
 				custom_access: customAccess,
@@ -285,7 +297,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				}
 			);
 		},
-		[ gate, contentRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
+		[ gate, contentRules, archiveRules, contentRulesMatch, autoSignup, hideLists, registration, customAccess, status, title ]
 	);
 
 	const handleSaveButtonClick = useCallback( () => {
@@ -441,6 +453,11 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			setTitle( '' );
 			setContentRules( DEFAULT_GATE.content_rules );
 			setContentRulesMatch( 'all' );
+			setArchiveRules( [] );
+			// The editor can stay mounted across this reset, so drop the rules set aside for the
+			// previous gate, or choosing specific content would bring them back.
+			savedCustomRules.current = DEFAULT_GATE.content_rules;
+			savedArchiveRules.current = [];
 			setAutoSignup( 'default' );
 			setHideLists( false );
 			setRegistration( DEFAULT_GATE.registration );
@@ -462,15 +479,21 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
 		setContentRulesMatch( matchedGate.content_rules_match || 'all' );
+		setArchiveRules( matchedGate.archive_rules ?? [] );
 		setAutoSignup( matchedGate.auto_signup ?? 'default' );
 		setHideLists( matchedGate.hide_lists ?? false );
 		savedCustomRules.current = matchedGate.content_rules;
+		savedArchiveRules.current = matchedGate.archive_rules ?? [];
 		setRegistration( matchedGate.registration );
 		setCustomAccess( matchedGate.custom_access );
 		setStatus( matchedGate.status );
-		setContentType( getContentTypeFromRules( matchedGate.content_rules ) );
+		setContentType( getContentTypeFromRules( matchedGate.content_rules, matchedGate.archive_rules ) );
 		resetError();
 	}, [ gates, id, isDeleting, isFetching, isSaving, isNew ] );
+
+	// Offer the row only where the site has archive pages to gate.
+	const showArchiveRow =
+		! isNewsletter && Object.values( window.newspackAudienceContentGates?.available_archive_rules ?? {} ).some( rule => rule.options?.length );
 
 	const hasUnusableAgeRule = contentRules.some(
 		rule => PUBLISHED_AGE_RULE === rule.slug && ! isUsableAgeDuration( normalizeAgeDuration( rule.value ) )
@@ -487,7 +510,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					isFetching ||
 					! isDirty ||
 					! title ||
-					! contentRules.length ||
+					( ! contentRules.length && ! archiveRules.length ) ||
 					hasUnusableAgeRule ||
 					( ! registration.active && ! customAccess.active ) ||
 					( ! registration.active &&
@@ -561,6 +584,22 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 	}, [ contentType ] );
 
+	// "Restrict all posts" never gates archive pages, so choosing it sets every archive choice
+	// aside, including any the site doesn't offer right now, and choosing specific content again
+	// restores them. Only a click does this: opening a saved gate leaves its choices as stored.
+	const chooseContentType = ( next: 'all' | 'custom' ) => {
+		if ( next === contentType ) {
+			return;
+		}
+		if ( next === 'all' ) {
+			savedArchiveRules.current = archiveRules;
+			setArchiveRules( [] );
+		} else {
+			setArchiveRules( savedArchiveRules.current );
+		}
+		setContentType( next );
+	};
+
 	// Display API errors as notices.
 	useEffect( () => {
 		if ( errorMessage ) {
@@ -585,6 +624,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						{
 							...gate,
 							content_rules: contentRules,
+							archive_rules: archiveRules,
 							auto_signup: autoSignup,
 							hide_lists: hideLists,
 							registration,
@@ -679,8 +719,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						) }
 						icon={ isNewsletter ? envelope : postList }
 						isActive={ contentType === 'all' }
-						onEnable={ () => setContentType( 'all' ) }
-						onHeaderClick={ () => setContentType( 'all' ) }
+						onEnable={ () => chooseContentType( 'all' ) }
+						onHeaderClick={ () => chooseContentType( 'all' ) }
 					/>
 					<CardSettingsGroup
 						title={ sprintf(
@@ -695,10 +735,15 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						) }
 						icon={ settings }
 						isActive={ contentType === 'custom' }
-						onEnable={ () => setContentType( 'custom' ) }
-						onHeaderClick={ () => setContentType( 'custom' ) }
+						onEnable={ () => chooseContentType( 'custom' ) }
+						onHeaderClick={ () => chooseContentType( 'custom' ) }
 					>
-						<ContentRules rules={ contentRules } onChange={ setContentRules } isNewsletter={ isNewsletter } />
+						<ContentRules
+							rules={ contentRules }
+							onChange={ setContentRules }
+							isNewsletter={ isNewsletter }
+							archiveRow={ showArchiveRow && <ArchiveRules rules={ archiveRules } onChange={ setArchiveRules } /> }
+						/>
 						<CardDivider />
 						<MatchLogicToggle
 							value={ contentRulesMatch }

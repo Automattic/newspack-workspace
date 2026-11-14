@@ -124,6 +124,12 @@ type GateContentRule = {
 	exclusion?: boolean;
 };
 
+// Archive pages a gate stands in for. `value` holds post type slugs.
+type GateArchiveRule = {
+	slug: string;
+	value: string[];
+};
+
 type GateStatus = 'publish' | 'draft' | 'pending' | 'future' | 'private' | 'trash';
 
 // How a premium newsletter gate decides whether to add readers to its lists:
@@ -139,6 +145,7 @@ type Gate = {
 	collapse?: boolean;
 	content_rules: GateContentRule[];
 	content_rules_match: 'all' | 'any';
+	archive_rules?: GateArchiveRule[];
 	registration: Registration;
 	custom_access: CustomAccess;
 	// Premium newsletter gates only. Absence means 'default' and false.

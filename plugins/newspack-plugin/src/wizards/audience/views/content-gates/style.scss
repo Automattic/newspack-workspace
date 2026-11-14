@@ -111,6 +111,13 @@
 	margin-top: calc(-1 * var(--newspack-page-dataviews-offset, #{wp-vars.$grid-unit-20}));
 }
 
+.newspack-content-gate__archive-rules {
+	border: 0;
+	margin: 0;
+	min-width: 0;
+	padding: 0;
+}
+
 .newspack-countdown-banner__fields {
 	border: 0;
 	margin: 0;

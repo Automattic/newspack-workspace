@@ -151,6 +151,31 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 			self::$is_service_provider_configured = true;
 		}
 
+		/**
+		 * How many times get_esp_lists() has been called. In production each call
+		 * asks the ESP, so tests can assert a code path makes none.
+		 *
+		 * @var int
+		 */
+		public static $esp_lists_calls = 0;
+
+		/**
+		 * What get_esp_lists() returns. Set a WP_Error to simulate the ESP failing.
+		 *
+		 * @var array|\WP_Error
+		 */
+		public static $esp_lists_fixture = [];
+
+		/**
+		 * The configured ESP's lists. Empty unless a test sets $esp_lists_fixture.
+		 *
+		 * @return array|\WP_Error
+		 */
+		public static function get_esp_lists() {
+			++self::$esp_lists_calls;
+			return self::$esp_lists_fixture;
+		}
+
 		public static function service_provider() {
 			return get_option( 'newspack_newsletters_service_provider', false );
 		}

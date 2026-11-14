@@ -101,6 +101,11 @@ declare global {
 			api: string;
 			available_access_rules: AccessRules;
 			available_content_rules: ContentRules;
+			// Rules stored on gates that the editor doesn't offer. `unavailable` marks a
+			// slug that no longer resolves to a registered taxonomy.
+			extra_content_rules?: Record< string, ContentRule & { unavailable?: boolean } >;
+			// Archive pages a gate can be shown on, keyed by archive rule slug.
+			available_archive_rules?: Record< string, ContentRule >;
 			edit_gate_layout_url: string;
 			// wp_localize_script() stringifies booleans ('1'/''); the wizard writes real booleans back.
 			presave_checks_enabled: boolean | string;

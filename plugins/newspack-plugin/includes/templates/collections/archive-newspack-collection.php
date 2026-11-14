@@ -9,6 +9,7 @@
  * @phpcs:disable WordPress.Security.NonceVerification.Recommended
  */
 
+use Newspack\Collections\Gate_Integration;
 use Newspack\Collections\Query_Helper;
 use Newspack\Collections\Settings;
 use Newspack\Collections\Template_Helper;
@@ -29,7 +30,10 @@ do_action( 'newspack_collections_archive_start' );
 	<main id="main" class="site-main">
 
 		<?php
-		if ( have_posts() ) :
+		// A gate covering the archive takes the place of the intro, filters, list, and navigation.
+		$is_archive_gated = Gate_Integration::maybe_render_archive_gate();
+
+		if ( ! $is_archive_gated && have_posts() ) :
 			global $wp_query;
 
 			$selected_year    = isset( $_GET[ Settings::YEAR_QUERY_PARAM ] ) ? sanitize_text_field( $_GET[ Settings::YEAR_QUERY_PARAM ] ) : '';
@@ -118,7 +122,7 @@ do_action( 'newspack_collections_archive_start' );
 				the_posts_navigation();
 			}
 
-		else :
+		elseif ( ! $is_archive_gated ) :
 			get_template_part( 'template-parts/content/content', 'none' );
 
 		endif;

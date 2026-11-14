@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
@@ -41,6 +41,9 @@ window.newspackAudienceContentGates = {
 	presave_checks_enabled: false,
 	default_gate_status: 'draft',
 	available_access_rules: {},
+	available_archive_rules: {
+		post_type_archives: { name: 'Archive pages', default: [], options: [ { value: 'newspack_collection', label: 'Collections' } ] },
+	},
 	edit_gate_layout_url: 'https://example.test/wp-admin/post.php',
 };
 const Edit = require( './index' ).default;
@@ -49,7 +52,15 @@ const Edit = require( './index' ).default;
 const mockStoredRules = [ [ { slug: 'subscription', value: [ 50 ] } ] ];
 const mockEditedRules = [ [ { slug: 'subscription', value: [ 51 ] } ] ];
 
-jest.mock( './content-rules', () => () => null );
+jest.mock(
+	'./content-rules',
+	() =>
+		( { archiveRow } ) =>
+			archiveRow || null
+);
+jest.mock( './archive-rules', () => ( { onChange } ) => (
+	<button onClick={ () => onChange( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] ) }>Pick Collections</button>
+) );
 jest.mock( './registration', () => () => null );
 jest.mock( './custom-access', () => ( { customAccess, onChange } ) => (
 	<>
@@ -176,6 +187,164 @@ describe( 'Content gate editor', () => {
 		await act( async () => {} );
 
 		expect( headerAction( 'Set to Active' ) ).toBeDefined();
+	} );
+} );
+
+describe( 'Archive rules', () => {
+	const ARCHIVE_ONLY_GATE = {
+		...STORED_GATE,
+		content_rules: [],
+		archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ],
+	};
+
+	it( 'enables Save for a gate with archive rules and no content rules', async () => {
+		await renderEdit();
+		await act( async () => {
+			dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+				slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+				data: { gates: [ ARCHIVE_ONLY_GATE ], config: {} },
+			} );
+		} );
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
+		expect( headerAction( 'Save' ).disabled ).toBe( false );
+	} );
+
+	it( 'sends archive_rules in the save payload', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	it( 'keeps unsaved archive pages through a switch to Restrict all posts and back', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	it( 'forgets the previous gate’s archive pages when the editor resets to a blank gate', async () => {
+		const archiveGate = { ...STORED_GATE, archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] };
+		apiFetch.mockImplementation( ( { method = 'GET', data } ) =>
+			Promise.resolve( method === 'GET' ? { gates: [ archiveGate ], config: {} } : data.gate )
+		);
+		dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+			data: { gates: [ archiveGate ], config: {} },
+		} );
+		const renderAt = params => (
+			<MemoryRouter>
+				<Edit match={ { params } } updateGatesData={ updateGatesData } />
+			</MemoryRouter>
+		);
+		const { rerender } = render( renderAt( { id: String( archiveGate.id ) } ) );
+		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Pick Collections' } ) ).toBeInTheDocument() );
+
+		// A gate ID that no longer exists, reached without leaving the editor, resets it to a blank gate.
+		await act( async () => rerender( renderAt( { id: '99' } ) ) );
+		await act( async () => rerender( renderAt( { id: 'new', type: 'all' } ) ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [] );
+	} );
+
+	it( 'keeps unsaved archive pages when Choose specific content is clicked again', async () => {
+		await renderEdit();
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+		fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] );
+	} );
+
+	describe( 'on a gate that restricts all posts and archive pages', () => {
+		// gone_cpt stands for an archive the site no longer offers, such as a module switched off.
+		const ALL_POSTS_AND_ARCHIVE_GATE = {
+			...STORED_GATE,
+			archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection', 'gone_cpt' ] } ],
+		};
+		const renderArchiveGate = async () => {
+			await renderEdit();
+			await act( async () => {
+				dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+					slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+					data: { gates: [ ALL_POSTS_AND_ARCHIVE_GATE ], config: {} },
+				} );
+			} );
+		};
+
+		it( 'opens on Choose specific content, where the archive pages are offered', async () => {
+			await renderArchiveGate();
+			expect( screen.getByRole( 'button', { name: 'Pick Collections' } ) ).toBeInTheDocument();
+		} );
+
+		it( 'leaves every archive page out of the save once Restrict all posts is chosen', async () => {
+			await renderArchiveGate();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+			await runHeaderAction( 'Save' );
+
+			expect( savedGate().archive_rules ).toEqual( [] );
+		} );
+
+		it( 'restores the archive pages on switching back to Choose specific content', async () => {
+			await renderArchiveGate();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Restrict all posts' } ) );
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+
+			// Nothing left to save means the form matches the stored gate again.
+			expect( headerAction( 'Save' ).disabled ).toBe( true );
+		} );
+	} );
+
+	it( 'opens a gate with an archive choice the site no longer offers without changing it', async () => {
+		const unofferedRules = [ { slug: 'post_type_archives', value: [ 'gone_cpt' ] } ];
+		const dormantGate = { ...STORED_GATE, archive_rules: unofferedRules };
+		// Stored from the first render, so opening the gate is what runs the editor's setup.
+		apiFetch.mockImplementation( ( { method = 'GET', data } ) =>
+			Promise.resolve( method === 'GET' ? { gates: [ dormantGate ], config: {} } : data.gate )
+		);
+		dispatch( WIZARD_STORE_NAMESPACE ).setAPIDataForWizard( {
+			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
+			data: { gates: [ dormantGate ], config: {} },
+		} );
+		await renderEdit();
+		expect( screen.queryByRole( 'button', { name: 'Pick Collections' } ) ).toBeNull();
+		expect( headerAction( 'Save' ).disabled ).toBe( true );
+
+		await runHeaderAction( 'Rename' );
+		fireEvent.change( screen.getByRole( 'textbox', { name: /gate name/i } ), { target: { value: 'Edited title' } } );
+		await runHeaderAction( 'Save' );
+
+		expect( savedGate().archive_rules ).toEqual( unofferedRules );
+	} );
+
+	describe( 'with pre-save checks on', () => {
+		beforeEach( () => {
+			window.newspackAudienceContentGates.presave_checks_enabled = true;
+		} );
+		afterEach( () => {
+			window.newspackAudienceContentGates.presave_checks_enabled = false;
+		} );
+
+		it( 'lists unsaved archive pages in the confirmation summary', async () => {
+			await renderEdit();
+			fireEvent.click( screen.getByRole( 'heading', { name: 'Choose specific content' } ) );
+			fireEvent.click( screen.getByRole( 'button', { name: 'Pick Collections' } ) );
+			await runHeaderAction( 'Save' );
+
+			const panel = within( screen.getByRole( 'dialog' ) );
+			expect( panel.getByRole( 'heading', { name: 'Archive pages' } ) ).toBeInTheDocument();
+			expect( panel.getByText( 'Collections' ) ).toBeInTheDocument();
+		} );
 	} );
 } );
 

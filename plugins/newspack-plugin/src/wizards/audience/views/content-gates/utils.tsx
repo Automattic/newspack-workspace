@@ -437,3 +437,32 @@ export const getGatesSubTitle = ( isNewsletter = false ) =>
 				'newspack-plugin'
 		  )
 		: __( 'Choose which content to restrict and how readers get access to it.', 'newspack-plugin' );
+
+/**
+ * Resolve a content rule's config. Offered rules win; rules that are only stored on a
+ * gate (not offered by the editor) come from `extra_content_rules`.
+ *
+ * @param slug The rule slug.
+ */
+export const getContentRuleConfig = ( slug: string ): ( ContentRule & { unavailable?: boolean } ) | undefined => {
+	const globals = window.newspackAudienceContentGates;
+	return globals?.available_content_rules?.[ slug ] ?? globals?.extra_content_rules?.[ slug ];
+};
+
+/**
+ * A gate's archive rules, narrowed to the values the site offers right now or to the rest.
+ * A value the site stops offering, such as the Collections archive while that module is off,
+ * stays stored so the choice returns with the module, but it doesn't switch the row on.
+ *
+ * @param rules   The gate's archive rules.
+ * @param offered True for the values the site offers, false for the others.
+ */
+export const filterArchiveRules = ( rules: GateArchiveRule[] = [], offered: boolean ): GateArchiveRule[] => {
+	const available = window.newspackAudienceContentGates?.available_archive_rules ?? {};
+	return rules
+		.map( rule => {
+			const values = ( available[ rule.slug ]?.options ?? [] ).map( option => option.value );
+			return { ...rule, value: rule.value.filter( value => values.includes( value ) === offered ) };
+		} )
+		.filter( rule => rule.value.length > 0 );
+};

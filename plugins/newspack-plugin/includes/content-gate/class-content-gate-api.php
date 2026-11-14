@@ -63,6 +63,19 @@ class Content_Gate_API {
 				],
 			],
 		],
+		'archive_rules'       => [
+			'type'  => 'array',
+			'items' => [
+				'type'       => 'object',
+				'properties' => [
+					'slug'  => [ 'type' => 'string' ],
+					'value' => [
+						'type'  => 'array',
+						'items' => [ 'type' => 'string' ],
+					],
+				],
+			],
+		],
 		'registration'        => [
 			'type'       => 'object',
 			'properties' => [
@@ -165,8 +178,15 @@ class Content_Gate_API {
 	/**
 	 * Sanitize the gate.
 	 *
-	 * TODO: Handle errors from the remaining sanitization methods (content rules other
-	 * than the published-age rule, metering) the way custom access errors already propagate.
+	 * An error from the content rules or archive rules, as from the registration and
+	 * custom access settings, fails the save, but only for a caller who can manage
+	 * gates. Sanitization runs ahead of the route's `permission_callback`, so any other
+	 * caller gets the gate without the offending setting, and the request fails on
+	 * permissions. A save that switches a gate off with its content rules unchanged
+	 * keeps the stored ones, even one that can't be read, so the gate can still be
+	 * turned off.
+	 *
+	 * TODO: Handle errors from metering sanitization the same way.
 	 *
 	 * @param array            $gate    The gate.
 	 * @param \WP_REST_Request $request Optional. The request being sanitized, as WP passes it
@@ -176,8 +196,9 @@ class Content_Gate_API {
 	 *                                  first, and the ID there is caller-supplied and can name
 	 *                                  a different gate.
 	 *
-	 * @return array|\WP_Error The sanitized gate, or an error when an access rule or a
-	 *                         published-age content rule holds an invalid value.
+	 * @return array|\WP_Error The sanitized gate, or, for a caller who can manage gates, an
+	 *                         error when a content rule, archive rule or access rule holds
+	 *                         a value it can't save.
 	 */
 	public static function sanitize_gate( $gate, $request = null ) {
 		$gate_id   = self::get_route_gate_id( $request );
@@ -201,8 +222,20 @@ class Content_Gate_API {
 			// unreadable rule can still be turned off. Any other save carrying one fails.
 			if ( ! is_wp_error( $sanitized_content_rules ) ) {
 				$sanitized['content_rules'] = $sanitized_content_rules;
-			} elseif ( 'publish' === ( $gate['status'] ?? 'publish' ) || ! self::content_rules_are_unchanged( $gate['content_rules'], $gate_id ) ) {
+			} elseif ( self::caller_can_manage_gates() && ( 'publish' === ( $gate['status'] ?? 'publish' ) || ! self::content_rules_are_unchanged( $gate['content_rules'], $gate_id ) ) ) {
 				return $sanitized_content_rules;
+			}
+			// Otherwise content_rules stays out, leaving the stored rules alone. For a
+			// caller who can't manage gates, that's because sanitization runs ahead of the
+			// route's `permission_callback`, and the error names a slug, which would tell
+			// them whether a taxonomy is registered; the request fails on permissions.
+		}
+		if ( isset( $gate['archive_rules'] ) ) {
+			$sanitized_archive_rules = self::sanitize_archive_rules( $gate['archive_rules'] );
+			if ( ! is_wp_error( $sanitized_archive_rules ) ) {
+				$sanitized['archive_rules'] = $sanitized_archive_rules;
+			} elseif ( self::caller_can_manage_gates() ) {
+				return $sanitized_archive_rules;
 			}
 		}
 		if ( isset( $gate['registration'] ) ) {
@@ -595,6 +628,42 @@ class Content_Gate_API {
 	}
 
 	/**
+	 * Sanitize a gate's archive rules.
+	 *
+	 * Values are not checked against the post types offered now, so a choice for a
+	 * post type that is switched off survives a save and applies again once it is
+	 * offered.
+	 *
+	 * @param mixed $rules The archive rules in the request.
+	 *
+	 * @return array|\WP_Error The sanitized rules, or an error for a malformed or unknown rule.
+	 */
+	public static function sanitize_archive_rules( $rules ) {
+		if ( ! is_array( $rules ) ) {
+			return new \WP_Error( 'invalid_archive_rule', __( 'Archive rules must be a list.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		$sanitized = [];
+		foreach ( $rules as $rule ) {
+			if ( ! is_array( $rule ) ) {
+				return new \WP_Error( 'invalid_archive_rule', __( 'Each archive rule must be an object.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$slug = $rule['slug'] ?? '';
+			if ( ! is_string( $slug ) || ! isset( Content_Rules::get_archive_rules()[ $slug ] ) ) {
+				return new \WP_Error( 'invalid_archive_rule_slug', __( 'That archive rule isn\'t available.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$value = $rule['value'] ?? [];
+			if ( ! is_array( $value ) ) {
+				return new \WP_Error( 'invalid_archive_rule', __( 'An archive rule\'s value must be a list.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$sanitized[] = [
+				'slug'  => $slug,
+				'value' => array_values( array_filter( array_map( 'sanitize_key', $value ) ) ),
+			];
+		}
+		return $sanitized;
+	}
+
+	/**
 	 * Whether a save posts back the content rules the gate already stores.
 	 *
 	 * @param mixed $content_rules The content rules in the request.
@@ -800,8 +869,8 @@ class Content_Gate_API {
 	 * @param array  $rules The rules.
 	 * @param string $type The type of rules to sanitize.
 	 *
-	 * @return array|\WP_Error The sanitized rules, or an error when an access rule or a
-	 *                         published-age content rule holds an invalid value.
+	 * @return array|\WP_Error The sanitized rules, or an error when an access rule holds an
+	 *                         invalid value or a content rule can't be read.
 	 */
 	public static function sanitize_rules( $rules, $type = 'access' ) {
 		if ( ! is_array( $rules ) ) {
@@ -817,12 +886,12 @@ class Content_Gate_API {
 		$sanitized_rules = [];
 		foreach ( $rules as $rule ) {
 			$sanitized = self::sanitize_content_rule( $rule );
-			if ( ! is_wp_error( $sanitized ) ) {
-				$sanitized_rules[] = $sanitized;
-			} elseif ( Content_Rules::PUBLISHED_AGE_RULE === ( $rule['slug'] ?? '' ) ) {
-				// Dropping an age rule would widen an AND gate from the archive to every post.
+			if ( is_wp_error( $sanitized ) ) {
+				// Dropping a rule would change what the gate covers without the operator asking,
+				// so the save fails instead.
 				return $sanitized;
 			}
+			$sanitized_rules[] = $sanitized;
 		}
 		return $sanitized_rules;
 	}
@@ -1021,13 +1090,28 @@ class Content_Gate_API {
 	/**
 	 * Sanitize content rule.
 	 *
+	 * A slug that isn't on the offered list is kept when it names a registered taxonomy,
+	 * since the Memberships migration writes rules for any taxonomy straight to post meta
+	 * and a later save must not lose them. The premium newsletter rule (`newsletters`) is
+	 * kept too, recognized by its slug so a save never asks the ESP for its lists. Any
+	 * other slug fails, naming it, so the operator can remove it. For the post types
+	 * rule, a post type that isn't registered right now is kept too, while a registered
+	 * one that isn't offered fails. Any other rule with options fails on a value that
+	 * isn't offered.
+	 *
 	 * @param array $content_rule The content rule.
 	 *
-	 * @return mixed|\WP_Error The sanitized content rule or error if invalid.
+	 * @return array|\WP_Error The sanitized content rule or error if invalid.
 	 */
 	public static function sanitize_content_rule( $content_rule ) {
+		$content_rule = is_array( $content_rule ) ? $content_rule : [];
+		$slug         = isset( $content_rule['slug'] ) && is_scalar( $content_rule['slug'] ) ? sanitize_text_field( (string) $content_rule['slug'] ) : '';
+		if ( '' === $slug ) {
+			return self::unavailable_content_rule_error( $slug );
+		}
 		// Include-only: the rule's own comparison sets the direction, so it never carries `exclusion`.
-		if ( Content_Rules::PUBLISHED_AGE_RULE === ( $content_rule['slug'] ?? '' ) ) {
+		// Ahead of the non-array value check below, so a malformed value gets this rule's own message.
+		if ( Content_Rules::PUBLISHED_AGE_RULE === $slug ) {
 			$value = Content_Rules::sanitize_published_age_value( $content_rule['value'] ?? null );
 			if ( is_wp_error( $value ) ) {
 				return $value;
@@ -1037,27 +1121,49 @@ class Content_Gate_API {
 				'value' => $value,
 			];
 		}
-
-		$rules                = Content_Rules::get_content_rules();
-		$newsletter_rules     = Content_Rules::get_premium_newsletter_rules();
-		$newsletter_rules_arr = ( is_array( $newsletter_rules ) && ! is_wp_error( $newsletter_rules ) ) ? $newsletter_rules : [];
-		$rules                = array_merge( $rules, $newsletter_rules_arr );
-		$slug                 = sanitize_text_field( $content_rule['slug'] );
-
-		if ( empty( $slug ) || ! isset( $rules[ $slug ] ) ) {
-			return new \WP_Error( 'invalid_content_rule_slug', __( 'Invalid content rule slug.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		if ( isset( $content_rule['value'] ) && ! is_array( $content_rule['value'] ) ) {
+			return new \WP_Error( 'invalid_content_rule_value', __( 'Invalid content rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
-		$rule = $rules[ $slug ];
+		$rules = Content_Rules::get_content_rules();
+
+		if ( ! isset( $rules[ $slug ] ) ) {
+			// The premium newsletter rule is named here rather than read from
+			// get_premium_newsletter_rules(), which asks the ESP for its lists, so a save
+			// behaves the same whether or not they load. It has no options to check.
+			// Any other slug is kept only if the taxonomy is registered.
+			if ( 'newsletters' !== $slug && ! get_taxonomy( $slug ) ) {
+				return self::unavailable_content_rule_error( $slug );
+			}
+			$rules[ $slug ] = [];
+		}
+
+		$rule  = $rules[ $slug ];
+		$input = $content_rule['value'] ?? [];
+		$value = array_values( array_filter( array_map( 'sanitize_text_field', $input ) ) );
 		if ( ! empty( $rule['options'] ) ) {
 			$allowed = array_column( $rule['options'], 'value' );
-			$invalid = array_diff( $content_rule['value'], $allowed );
+			$invalid = array_diff( $value, $allowed );
+			if ( 'post_types' === $slug ) {
+				// A post type that isn't registered right now is kept: it matches no post
+				// being read, and applies again if it comes back, as when the Collections
+				// module is turned off and on. One that is registered but not offered is refused.
+				$invalid = array_filter( $invalid, 'post_type_exists' );
+			}
 			if ( ! empty( $invalid ) ) {
-				return new \WP_Error( 'invalid_content_rule_value', __( 'Invalid content rule value.', 'newspack-plugin' ), [ 'status' => 400 ] );
+				return new \WP_Error(
+					'invalid_content_rule_value',
+					sprintf(
+						/* translators: 1: content rule name, 2: comma-separated values. */
+						__( 'The content rule "%1$s" includes values that aren\'t available on this site: %2$s.', 'newspack-plugin' ),
+						$rule['name'] ?? $slug,
+						implode( ', ', $invalid )
+					),
+					[ 'status' => 400 ]
+				);
 			}
 		}
 
-		$value     = array_values( array_filter( array_map( 'sanitize_text_field', $content_rule['value'] ) ) );
 		$exclusion = isset( $content_rule['exclusion'] ) ? boolval( $content_rule['exclusion'] ) : false;
 
 		$sanitized_rule = [
@@ -1069,6 +1175,25 @@ class Content_Gate_API {
 		}
 
 		return $sanitized_rule;
+	}
+
+	/**
+	 * The error for a content rule whose slug isn't offered and isn't a registered taxonomy.
+	 *
+	 * @param string $slug The rule slug.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function unavailable_content_rule_error( $slug ) {
+		return new \WP_Error(
+			'invalid_content_rule_slug',
+			sprintf(
+				/* translators: %s: content rule slug. */
+				__( 'The content rule "%s" isn\'t available on this site. Remove it to save the gate.', 'newspack-plugin' ),
+				$slug
+			),
+			[ 'status' => 400 ]
+		);
 	}
 
 	/**

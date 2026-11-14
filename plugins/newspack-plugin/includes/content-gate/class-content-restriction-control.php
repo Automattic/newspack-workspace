@@ -48,6 +48,16 @@ class Content_Restriction_Control {
 	private static $term_descendants_map = [];
 
 	/**
+	 * Request-scoped cache of the gate covering the archive page being viewed,
+	 * keyed by user ID. Kept apart from the post-keyed maps above, so an archive
+	 * verdict can never be read back as a post's. Holds `null` for a reader the
+	 * archive is open to.
+	 *
+	 * @var array<int,array|null>
+	 */
+	private static $archive_gate_map = [];
+
+	/**
 	 * Post meta key for exempting a post from access control restrictions.
 	 *
 	 * @var string
@@ -181,6 +191,39 @@ class Content_Restriction_Control {
 			'newspack_content_gate_supported_taxonomies',
 			$available_taxonomies
 		);
+	}
+
+	/**
+	 * Get the post types whose archive page can be gated.
+	 *
+	 * Nothing is offered unless a plugin adds its post type with the
+	 * `newspack_content_gate_supported_archive_post_types` filter. Only registered
+	 * post types that have an archive page are kept.
+	 *
+	 * @return array[] List of `[ 'value' => post type slug, 'label' => name ]`.
+	 */
+	public static function get_available_archive_post_types() {
+		/**
+		 * Filters the post types whose archive page a content gate can restrict.
+		 *
+		 * @param string[] $post_types Post type slugs. Empty by default.
+		 */
+		$post_types = apply_filters( 'newspack_content_gate_supported_archive_post_types', [] );
+		$available  = [];
+		foreach ( is_array( $post_types ) ? $post_types : [] as $post_type ) {
+			if ( ! is_string( $post_type ) ) {
+				continue;
+			}
+			$object = \get_post_type_object( $post_type );
+			if ( ! $object || empty( $object->has_archive ) ) {
+				continue;
+			}
+			$available[] = [
+				'value' => $post_type,
+				'label' => $object->labels->name,
+			];
+		}
+		return $available;
 	}
 
 	/**
@@ -574,6 +617,79 @@ class Content_Restriction_Control {
 			'restricted'     => $is_restricted,
 			'gate_layout_id' => $is_restricted ? $gate_layout_id : null,
 		];
+	}
+
+	/**
+	 * The gate that covers the post type archive page being viewed, for a reader.
+	 *
+	 * The archive counterpart of {@see self::is_post_restricted()}, with its reader
+	 * guards (Memberships, gating switched on, accounts that skip access checks) and
+	 * its first-match rule: of the published gates whose archive rules name this
+	 * archive, the highest-priority one decides alone. Archive rules are separate
+	 * from content rules, so a gate covers an archive only when a publisher has
+	 * opted that archive in.
+	 *
+	 * An archive gate is a hard wall: metering doesn't apply, and the archive's
+	 * feed isn't gated.
+	 *
+	 * @param int|null $user_id Reader to check. Defaults to the current user.
+	 *
+	 * @return array|null {
+	 *     The gate that refuses the reader, or null when the archive is open to them.
+	 *
+	 *     @type int $gate_id        Gate ID.
+	 *     @type int $gate_layout_id The layout to show the reader.
+	 * }
+	 */
+	public static function get_archive_gate( ?int $user_id = null ): ?array {
+		// Cheap, so they run on every call rather than from the memo. That keeps the
+		// memo to archive pages: a call made before the main query is parsed, when
+		// nothing looks like an archive yet, can't leave a stale null behind.
+		if ( Memberships::is_active() || ! Content_Gate::is_gating_active() || ! is_post_type_archive() || is_feed() ) {
+			return null;
+		}
+
+		$user_id = $user_id ?? get_current_user_id();
+		if ( ! array_key_exists( $user_id, self::$archive_gate_map ) ) {
+			self::$archive_gate_map[ $user_id ] = self::resolve_archive_gate( $user_id );
+		}
+		return self::$archive_gate_map[ $user_id ];
+	}
+
+	/**
+	 * Find the gate that refuses a reader on the post type archive being viewed.
+	 *
+	 * @param int $user_id Reader to check; 0 for a logged-out visitor.
+	 *
+	 * @return array|null See {@see self::get_archive_gate()}.
+	 */
+	private static function resolve_archive_gate( int $user_id ): ?array {
+		if ( Content_Gate::should_skip_access_checks( $user_id ) ) {
+			return null;
+		}
+
+		$post_types = (array) get_query_var( 'post_type' );
+		foreach ( Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish' ) as $gate ) {
+			if ( empty( $gate['registration']['active'] ) && empty( $gate['custom_access']['active'] ) ) {
+				continue;
+			}
+			if ( ! Content_Rules::gate_matches_archive( $gate['archive_rules'] ?? [], $post_types ) ) {
+				continue;
+			}
+			// As in is_post_restricted(): a gate that admits the reader decides, and
+			// one that refuses them with no layout to show is passed over.
+			$verdict = self::evaluate_gate( $gate, $user_id );
+			if ( ! $verdict['restricted'] ) {
+				return null;
+			}
+			if ( $verdict['gate_layout_id'] ) {
+				return [
+					'gate_id'        => (int) $gate['id'],
+					'gate_layout_id' => (int) $verdict['gate_layout_id'],
+				];
+			}
+		}
+		return null;
 	}
 
 	/**

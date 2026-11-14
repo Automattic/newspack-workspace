@@ -20,6 +20,7 @@ use Newspack\Collections\Cache;
 use Newspack\Collections\Template_Helper;
 use Newspack\Collections\Content_Inserter;
 use Newspack\Collections\List_Screen_Header;
+use Newspack\Collections\Gate_Integration;
 
 /**
  * Collections module for managing print editions and other collections.
@@ -51,6 +52,7 @@ class Collections {
 		Template_Helper::init();
 		Content_Inserter::init();
 		List_Screen_Header::init();
+		Gate_Integration::init();
 	}
 
 	/**
