@@ -332,7 +332,7 @@ describe( 'getVerdict', () => {
 		const estimate = { directional: { readers: 1018, days: 3 }, reliable: { readers: 3888, days: 12 } };
 		const verdict = getVerdict( twoVersions, 'running', result( { label: 'collecting', confidence: 63.2, estimate, anonymous: true } ) );
 		expect( verdict.detail ).toBe(
-			'About 1,000 more readers, or about 3 days at the current pace, to reach an Early signal, and about 3,900, or about 12 days, to reach a reliable result. Some readers may have seen both versions on different devices.'
+			'About 1,000 more readers, or about 3 days at the current pace, to reach an Early signal, and about 3,900 more readers, or about 12 days, to reach a reliable result. Some readers may have seen both versions on different devices.'
 		);
 	} );
 
@@ -340,6 +340,16 @@ describe( 'getVerdict', () => {
 		const estimate = { directional: null, reliable: { readers: 2912, days: 9 } };
 		expect( getVerdict( twoVersions, 'running', result( { label: 'directional', confidence: 88.2, estimate, unit: 'events' } ) ).detail ).toMatch(
 			/ About 2,900 more views, or about 9 days at the current pace, to reach a reliable result\.$/
+		);
+	} );
+
+	it( 'counts views in both steps of the estimate, and in its absence', () => {
+		const estimate = { directional: { readers: 1018, days: 3 }, reliable: { readers: 3888, days: 12 } };
+		expect( getVerdict( twoVersions, 'running', result( { label: 'collecting', confidence: 63.2, estimate, unit: 'events' } ) ).detail ).toBe(
+			'About 1,000 more views, or about 3 days at the current pace, to reach an Early signal, and about 3,900 more views, or about 12 days, to reach a reliable result.'
+		);
+		expect( getVerdict( twoVersions, 'running', result( { label: 'collecting', confidence: 63.2, unit: 'events' } ) ).detail ).toBe(
+			'More views are needed.'
 		);
 	} );
 

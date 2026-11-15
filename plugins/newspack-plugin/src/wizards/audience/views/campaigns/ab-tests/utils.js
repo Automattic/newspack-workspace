@@ -594,7 +594,7 @@ export const getEstimateText = ( estimate, unit = 'readers' ) => {
 			return lowTraffic;
 		}
 		return `${ sprintf(
-			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days".
+			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days". "Early signal" is the name of a confidence label; translate it as that label is translated.
 			__( 'About %1$s, or about %2$s at the current pace, to reach an Early signal.', 'newspack-plugin' ),
 			moreCount( early.readers, unit ),
 			dayCount( early.days )
@@ -602,14 +602,14 @@ export const getEstimateText = ( estimate, unit = 'readers' ) => {
 	}
 	if ( early ) {
 		return sprintf(
-			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days", %3$s a number such as "2,900", %4$s a number of days.
+			// Translators: %1$s and %3$s are numbers of readers or views such as "1,000 more readers", %2$s and %4$s numbers of days such as "3 days". "Early signal" is the name of a confidence label; translate it as that label is translated.
 			__(
 				'About %1$s, or about %2$s at the current pace, to reach an Early signal, and about %3$s, or about %4$s, to reach a reliable result.',
 				'newspack-plugin'
 			),
 			moreCount( early.readers, unit ),
 			dayCount( early.days ),
-			formatCount( roundReaders( reliable.readers ) ),
+			moreCount( reliable.readers, unit ),
 			dayCount( reliable.days )
 		);
 	}
@@ -768,7 +768,10 @@ export const getVerdict = ( test, status, stats, copy = {} ) => {
 	const even = rates[ leader ] === rates[ other ];
 	const detail = [
 		! even && getEarlySignalText( { leader, other, comparison }, copy ),
-		( ! even && getEstimateText( comparison?.estimate, usable.source?.unit ) ) || __( 'More readers are needed.', 'newspack-plugin' ),
+		( ! even && getEstimateText( comparison?.estimate, usable.source?.unit ) ) ||
+			( usable.source?.unit === 'events'
+				? __( 'More views are needed.', 'newspack-plugin' )
+				: __( 'More readers are needed.', 'newspack-plugin' ) ),
 		usable.flags?.high_anonymous ? __( 'Some readers may have seen both versions on different devices.', 'newspack-plugin' ) : null,
 	]
 		.filter( Boolean )
