@@ -2652,6 +2652,14 @@ final class Reader_Activation {
 				 */
 				$user_id = \wc_create_new_customer( $email, $user_data['user_login'], $user_data['user_pass'], $user_data );
 			} else {
+				// Readers get Subscriber rather than the New User Default Role, which is a
+				// staff setting: a site defaulting to Author would otherwise give every new
+				// reader the post editor. A role set through newspack_register_reader_user_data
+				// is kept.
+				if ( empty( $user_data['role'] ) ) {
+					$user_data['role'] = 'subscriber';
+				}
+
 				/**
 				 * Deliberately no wp_new_user_notification(): readers are passwordless, and
 				 * the WooCommerce path above sends no account email, so this path must not

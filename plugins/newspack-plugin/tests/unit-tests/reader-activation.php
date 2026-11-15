@@ -165,6 +165,53 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A new reader gets the Subscriber role whatever the site's New User Default Role is.
+	 *
+	 * The New User Default Role is a staff setting. Sites that default to Author or
+	 * Contributor for their writers must not hand every new reader the post editor.
+	 * On sites with WooCommerce, readers get Customer instead.
+	 *
+	 * The plugin's test environment has no WooCommerce, so this exercises the fallback.
+	 */
+	public function test_register_new_reader_gets_subscriber_role_whatever_the_default_role() {
+		$this->assertFalse( function_exists( 'wc_create_new_customer' ), 'Test precondition: the non-WooCommerce registration path must be the one under test.' );
+		update_option( 'default_role', 'author' );
+
+		$user_id = Reader_Activation::register_reader( 'default-role-author@example.test', 'Default Role Reader', false );
+
+		$this->assertIsInt( $user_id );
+		$this->assertSame( [ 'subscriber' ], get_userdata( $user_id )->roles, 'A new reader must get the Subscriber role, not the New User Default Role.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * Subscriber is only the fallback: a role chosen through the
+	 * `newspack_register_reader_user_data` filter is kept.
+	 */
+	public function test_register_new_reader_keeps_role_set_by_filter() {
+		add_role( 'newspack_test_filtered_reader', 'Filtered Reader', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		update_option( 'default_role', 'author' );
+		$set_role = function ( $user_data ) {
+			$user_data['role'] = 'newspack_test_filtered_reader';
+			return $user_data;
+		};
+		add_filter( 'newspack_register_reader_user_data', $set_role );
+
+		$user_id = Reader_Activation::register_reader( 'filtered-role@example.test', 'Filtered Role Reader', false );
+
+		remove_filter( 'newspack_register_reader_user_data', $set_role );
+		$this->assertIsInt( $user_id );
+		$new_reader_roles = get_userdata( $user_id )->roles;
+
+		// Clean up before asserting, so a failure doesn't leave the role registered for later tests.
+		wp_delete_user( $user_id );
+		remove_role( 'newspack_test_filtered_reader' );
+
+		$this->assertSame( [ 'newspack_test_filtered_reader' ], $new_reader_roles, 'A role set through the user data filter must not be replaced.' );
+	}
+
+	/**
 	 * Test that verifying a reader register the proper meta.
 	 */
 	public function test_verify_reader_email() {
