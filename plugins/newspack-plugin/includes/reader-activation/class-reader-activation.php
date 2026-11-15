@@ -2652,8 +2652,8 @@ final class Reader_Activation {
 				 */
 				$user_id = \wc_create_new_customer( $email, $user_data['user_login'], $user_data['user_pass'], $user_data );
 			} else {
-				// Readers get Subscriber here, not the New User Default Role, which is meant
-				// for staff accounts (NPPM-3796). A role set through
+				// Readers get Subscriber here rather than the New User Default Role, which a
+				// site may set for the staff accounts it adds (NPPM-3796). A role set through
 				// newspack_register_reader_user_data is kept.
 				if ( empty( $user_data['role'] ) ) {
 					$user_data['role'] = 'subscriber';

@@ -167,9 +167,9 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	/**
 	 * A new reader gets the Subscriber role whatever the site's New User Default Role is.
 	 *
-	 * The New User Default Role is meant for staff accounts, so reader sign-up must
-	 * not depend on it (NPPM-3796). On sites with WooCommerce, readers get Customer
-	 * instead.
+	 * Reader sign-up must not depend on the New User Default Role, which a site may
+	 * set for the staff accounts it adds (NPPM-3796). On sites with WooCommerce,
+	 * readers get Customer instead.
 	 *
 	 * The plugin's test environment has no WooCommerce, so this exercises the fallback.
 	 */
