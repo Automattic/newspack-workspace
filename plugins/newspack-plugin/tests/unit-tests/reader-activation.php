@@ -190,10 +190,9 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	 * `newspack_register_reader_user_data` filter is kept.
 	 */
 	public function test_register_new_reader_keeps_role_set_by_filter() {
-		add_role( 'newspack_test_filtered_reader', 'Filtered Reader', [ 'read' => true ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
-		update_option( 'default_role', 'author' );
+		$this->assertFalse( function_exists( 'wc_create_new_customer' ), 'Test precondition: the non-WooCommerce registration path must be the one under test.' );
 		$set_role = function ( $user_data ) {
-			$user_data['role'] = 'newspack_test_filtered_reader';
+			$user_data['role'] = 'contributor';
 			return $user_data;
 		};
 		add_filter( 'newspack_register_reader_user_data', $set_role );
@@ -201,14 +200,11 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 		$user_id = Reader_Activation::register_reader( 'filtered-role@example.test', 'Filtered Role Reader', false );
 
 		remove_filter( 'newspack_register_reader_user_data', $set_role );
+
 		$this->assertIsInt( $user_id );
-		$new_reader_roles = get_userdata( $user_id )->roles;
+		$this->assertSame( [ 'contributor' ], get_userdata( $user_id )->roles, 'A role set through the user data filter must not be replaced.' );
 
-		// Clean up before asserting, so a failure doesn't leave the role registered for later tests.
-		wp_delete_user( $user_id );
-		remove_role( 'newspack_test_filtered_reader' );
-
-		$this->assertSame( [ 'newspack_test_filtered_reader' ], $new_reader_roles, 'A role set through the user data filter must not be replaced.' );
+		wp_delete_user( $user_id ); // Clean up.
 	}
 
 	/**
