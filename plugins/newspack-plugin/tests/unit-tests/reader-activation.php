@@ -186,7 +186,7 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Subscriber is only the fallback: a role chosen through the
+	 * Subscriber applies only when no role was set: a role chosen through the
 	 * `newspack_register_reader_user_data` filter is kept.
 	 */
 	public function test_register_new_reader_keeps_role_set_by_filter() {
