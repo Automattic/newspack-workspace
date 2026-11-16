@@ -40,7 +40,14 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	private $original_wp_scripts;
 
 	/**
-	 * Start each test with reCAPTCHA off, no token, an empty mailbox, an empty script queue and a mocked siteverify endpoint.
+	 * The style registry from before the test, restored afterwards.
+	 *
+	 * @var WP_Styles|null
+	 */
+	private $original_wp_styles;
+
+	/**
+	 * Start each test with reCAPTCHA off, no token, an empty mailbox, empty script and style queues and a mocked siteverify endpoint.
 	 */
 	public function set_up() {
 		parent::set_up();
@@ -49,12 +56,12 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		}
 		unset( $_POST['g-recaptcha-response'] );
 		reset_phpmailer_instance();
-		// Other tests leave scripts queued, and wp_script_is() counts their dependencies (jQuery among them).
-		// A fresh registry holds only core's defaults, so the queue reflects this test alone.
+		// Other tests leave scripts and styles queued, and wp_script_is() counts their dependencies (jQuery among them).
+		// Fresh registries hold only core's defaults, so the queues reflect this test alone.
 		$this->original_wp_scripts = $GLOBALS['wp_scripts'] ?? null;
 		$GLOBALS['wp_scripts']     = new WP_Scripts();
-		wp_dequeue_style( 'newspack-recaptcha' );
-		wp_deregister_style( 'newspack-recaptcha' );
+		$this->original_wp_styles  = $GLOBALS['wp_styles'] ?? null;
+		$GLOBALS['wp_styles']      = new WP_Styles();
 		// Read by the TEC Community Events mock when another test file has loaded it.
 		$GLOBALS['newspack_test_is_tec_community_page'] = false;
 		$this->siteverify       = [ 'success' => true ];
@@ -63,11 +70,12 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Clear the submitted token and put the original script registry back.
+	 * Clear the submitted token and put the original script and style registries back.
 	 */
 	public function tear_down() {
 		unset( $_POST['g-recaptcha-response'] );
 		$GLOBALS['wp_scripts'] = $this->original_wp_scripts;
+		$GLOBALS['wp_styles']  = $this->original_wp_styles;
 		parent::tear_down();
 	}
 
@@ -345,6 +353,7 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	/**
 	 * The registration screen loads the client and what it needs that the login screens don't load:
 	 * Google's API, jQuery, and the plugin's shared webpack chunk, which the client's bundle waits on before it runs.
+	 * The chunk's stylesheets style nothing on this screen, so they stay off it.
 	 */
 	public function test_register_screen_enqueues_client() {
 		$this->enable( 'v2_invisible' );
@@ -355,6 +364,8 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		$this->assertTrue( wp_script_is( 'newspack-recaptcha-api', 'enqueued' ), "Google's API should load." );
 		$this->assertTrue( wp_script_is( 'jquery', 'enqueued' ), 'jQuery should load for the client.' );
 		$this->assertTrue( wp_script_is( 'newspack_commons', 'enqueued' ), 'The shared chunk should load for the client.' );
+		$this->assertFalse( wp_style_is( 'newspack-commons', 'enqueued' ), "The shared chunk's stylesheet should not load." );
+		$this->assertFalse( wp_style_is( 'wp-components', 'enqueued' ), "The shared chunk's stylesheet dependency should not load." );
 	}
 
 	/**

@@ -638,7 +638,9 @@ final class Recaptcha {
 	 */
 	public static function enqueue_wp_registration_scripts() {
 		// The client's bundle can wait on the plugin's shared webpack chunk before it runs.
+		// The chunk's stylesheet styles nothing on this screen.
 		Newspack::load_common_assets();
+		\wp_dequeue_style( 'newspack-commons' );
 		self::register_scripts();
 		// The client calls jQuery without checking for it; without it the v2 client throws before it attaches to the form.
 		\wp_enqueue_script( 'jquery' );
