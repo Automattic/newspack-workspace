@@ -54,6 +54,11 @@ describe( 'loadConfig', () => {
 		expect( () => loadConfig( dir ) ).toThrow( `playground: ${ path.join( dir, 'missing' ) } does not exist` );
 	} );
 
+	it( 'names the config file when it cannot be loaded', () => {
+		write( 'playground.config.js', 'module.exports = {' );
+		expect( () => loadConfig( dir ) ).toThrow( `playground: could not load ${ path.join( dir, 'playground.config.js' ) }` );
+	} );
+
 	it( 'throws when there is no config', () => {
 		expect( () => loadConfig( dir ) ).toThrow( `playground: no playground.config.js in ${ dir }` );
 	} );

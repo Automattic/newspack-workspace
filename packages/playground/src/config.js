@@ -15,7 +15,13 @@ const loadConfig = dir => {
 	if ( ! fs.existsSync( file ) ) {
 		throw new Error( `playground: no playground.config.js in ${ root }` );
 	}
-	const config = require( file );
+	let config;
+	try {
+		config = require( file );
+	} catch ( error ) {
+		error.message = `playground: could not load ${ file }: ${ error.message }`;
+		throw error;
+	}
 	if ( ! config.entry || typeof config.entry !== 'string' ) {
 		throw new Error( 'playground: playground.config.js has no entry' );
 	}
