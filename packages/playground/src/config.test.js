@@ -38,6 +38,11 @@ describe( 'loadConfig', () => {
 		expect( () => loadConfig( dir ) ).toThrow( 'playground: playground.config.js has no entry' );
 	} );
 
+	it( 'throws when the entry is an empty string', () => {
+		writeConfig( { title: 'Demo', entry: '' } );
+		expect( () => loadConfig( dir ) ).toThrow( 'playground: playground.config.js has no entry' );
+	} );
+
 	it( 'throws for a missing entry', () => {
 		writeConfig( { title: 'Demo', entry: './nope.js' } );
 		expect( () => loadConfig( dir ) ).toThrow( `playground: ${ path.join( dir, 'nope.js' ) } does not exist` );

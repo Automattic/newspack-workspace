@@ -16,7 +16,7 @@ const loadConfig = dir => {
 		throw new Error( `playground: no playground.config.js in ${ root }` );
 	}
 	const config = require( file );
-	if ( typeof config.entry !== 'string' ) {
+	if ( ! config.entry || typeof config.entry !== 'string' ) {
 		throw new Error( 'playground: playground.config.js has no entry' );
 	}
 	const aliases = {};

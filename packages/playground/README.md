@@ -36,4 +36,8 @@ Messages are `np-playground:state`, `np-playground:height` and `np-playground:se
 
 ## Pinned versions
 
-`@wordpress/components` and `@wordpress/dataviews` are pinned to the versions bundled with the WordPress release we support. Update them together with that release.
+The playground bundles its own pinned copies of `@wordpress/components` and `@wordpress/dataviews`, independent of the range in `packages/components`, so prototypes render with current versions. Bump them deliberately, together.
+
+The build stubs `@wordpress/route`, which needs React 19.
+
+The CLI runs only from within a newspack-workspace checkout, because it uses the workspace's scripts and components.
