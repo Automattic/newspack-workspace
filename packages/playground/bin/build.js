@@ -5,7 +5,7 @@ const { loadConfig } = require( '../src/config' );
 
 process.env.NODE_ENV ??= 'production';
 
-const scriptsDir = path.resolve( __dirname, '../../scripts' );
+const scriptsDir = path.dirname( require.resolve( 'newspack-scripts/package.json' ) );
 const wpScripts = path.dirname( require.resolve( '@wordpress/scripts/package.json', { paths: [ scriptsDir ] } ) );
 
 const escapeHtml = value => String( value ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );

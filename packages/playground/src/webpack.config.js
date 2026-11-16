@@ -1,7 +1,8 @@
 const path = require( 'path' );
 
+const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
+
 const repo = path.resolve( __dirname, '../../..' );
-const getBaseWebpackConfig = require( path.join( repo, 'packages/scripts/config/getWebpackConfig' ) );
 
 const packageDir = path.resolve( __dirname, '..' );
 const packageRoot = name => path.dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
