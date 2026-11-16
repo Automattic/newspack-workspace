@@ -7,6 +7,8 @@ const repo = path.resolve( __dirname, '../../..' );
 const packageDir = path.resolve( __dirname, '..' );
 const packageRoot = name => path.dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
 
+const scriptsModules = path.resolve( packageRoot( 'newspack-scripts' ), 'node_modules' );
+
 const REMOVED_PLUGINS = [ 'DependencyExtractionWebpackPlugin', 'RtlCssPlugin', 'CopyPlugin', 'PhpFilePathsPlugin' ];
 
 module.exports = ( { entry, outDir, aliases = {} } ) => {
@@ -43,7 +45,7 @@ module.exports = ( { entry, outDir, aliases = {} } ) => {
 			modules: [ 'node_modules', path.join( packageDir, 'node_modules' ), path.join( pluginDir, 'node_modules' ), path.join( repo, 'node_modules' ) ],
 		},
 		resolveLoader: {
-			modules: [ path.join( pluginDir, 'node_modules' ), path.join( repo, 'packages/scripts/node_modules' ), path.join( repo, 'node_modules' ) ],
+			modules: [ path.join( pluginDir, 'node_modules' ), scriptsModules, path.join( repo, 'node_modules' ) ],
 		},
 		performance: { hints: false },
 	};
