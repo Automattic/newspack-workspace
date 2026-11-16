@@ -196,6 +196,9 @@ jobs:
           # Fail loud on any pipeline/log/grep error: a false "no release" here
           # would silently skip a real release, the one outcome we must avoid.
           set +e
+          # The playground package is private tooling with no release config, so it is left out here
+          # and in the release call below (keep both in sync). --ignore-private-packages would also
+          # drop newspack-ads and newspack-theme, which release.
           pnpm exec multi-semantic-release --dry-run --sequential-init --ignore-packages='packages/playground/**' 2>&1 | tee msr-dryrun.log
           # Copy the whole array in one go: PIPESTATUS is rebuilt after every
           # command, and an assignment is a command, so reading [1] on the line
