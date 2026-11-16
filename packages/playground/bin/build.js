@@ -35,6 +35,7 @@ const outDir = path.resolve( out );
 fs.mkdirSync( outDir, { recursive: true } );
 
 process.chdir( path.resolve( __dirname, '../../..' ) );
+// These requires must stay below the NODE_ENV default and the chdir: the wp-scripts base config reads NODE_ENV and the browserslist config at load time.
 const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
 const createWebpackConfig = require( '../src/webpack.config' );
 
