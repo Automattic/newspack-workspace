@@ -7,7 +7,7 @@ const repo = path.resolve( __dirname, '../../..' );
 const packageDir = path.resolve( __dirname, '..' );
 const packageRoot = name => path.dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
 
-const REMOVED_PLUGINS = [ 'DependencyExtractionWebpackPlugin', 'RtlCssPlugin', 'CleanWebpackPlugin', 'CopyWebpackPlugin', 'CopyPlugin', 'PhpFilePathsPlugin' ];
+const REMOVED_PLUGINS = [ 'DependencyExtractionWebpackPlugin', 'RtlCssPlugin', 'CopyPlugin', 'PhpFilePathsPlugin' ];
 
 module.exports = ( { entry, outDir, aliases = {} } ) => {
 	const wpComponents = packageRoot( '@wordpress/components' );
