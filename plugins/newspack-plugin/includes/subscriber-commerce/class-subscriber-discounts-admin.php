@@ -166,7 +166,7 @@ class Subscriber_Discounts_Admin {
 	 * @return bool|\WP_Error
 	 */
 	public static function api_permissions_check() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Audience_Subscriptions::CAPABILITY ) ) {
 			return new \WP_Error(
 				'newspack_rest_forbidden',
 				esc_html__( 'You cannot use this resource.', 'newspack-plugin' ),
