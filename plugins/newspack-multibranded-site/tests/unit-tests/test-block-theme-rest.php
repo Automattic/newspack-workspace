@@ -8,6 +8,7 @@
 use Newspack_Multibranded_Site\Block_Theme\Api;
 use Newspack_Multibranded_Site\Meta\Block_Theme_Menus;
 use Newspack_Multibranded_Site\Meta\Block_Theme_Parts;
+use Newspack_Multibranded_Site\Taxonomy;
 
 /**
  * The block theme brand endpoints and meta.
@@ -43,6 +44,40 @@ class TestBlockThemeRest extends Newspack_Multibranded_Rest_Testcase {
 		$response = $this->server->dispatch( $request );
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertStringEndsWith( '[' . $this->term1->name . ']', $response->get_data()['label'] );
+	}
+
+	/**
+	 * A brand with a Cyrillic name gets a percent-encoded slug, and its copies can still be replaced.
+	 */
+	public function test_replace_copy_with_encoded_slug() {
+		wp_set_current_user( $this->user_id->ID );
+		$main = $this->factory->post->create(
+			[
+				'post_type'    => 'wp_template_part',
+				'post_name'    => 'header-desktop',
+				'post_title'   => 'Header',
+				'post_content' => '<!-- wp:paragraph --><p>Main</p><!-- /wp:paragraph -->',
+				'post_status'  => 'publish',
+			]
+		);
+		wp_set_post_terms( $main, get_stylesheet(), 'wp_theme' );
+		$brand = $this->factory->term->create_and_get(
+			[
+				'taxonomy' => Taxonomy::SLUG,
+				'name'     => 'Новости',
+			]
+		);
+		$path = '/newspack-multibranded-site/v1/brands/' . $brand->term_id . '/copy-part';
+
+		$request = new WP_REST_Request( 'POST', $path );
+		$request->set_param( 'slot', 'header-desktop' );
+		$copy = $this->server->dispatch( $request )->get_data();
+		$this->assertStringContainsString( '%', $copy['slug'] );
+
+		$request = new WP_REST_Request( 'POST', $path );
+		$request->set_param( 'slot', 'header-desktop' );
+		$request->set_param( 'replace', $copy['slug'] );
+		$this->assertSame( 200, $this->server->dispatch( $request )->get_status() );
 	}
 
 	/**

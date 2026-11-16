@@ -47,7 +47,7 @@ class Api {
 					],
 					'replace' => [
 						'type'    => 'string',
-						'pattern' => '^[a-z0-9_-]*$',
+						'pattern' => '^[a-z0-9_%-]*$',
 						'default' => '',
 					],
 				],

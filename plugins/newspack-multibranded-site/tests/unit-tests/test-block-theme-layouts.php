@@ -256,7 +256,7 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 			]
 		);
 
-		// This copy's slug, header-desktop-brand-a-2, starts with Brand A's.
+		// A slug that starts with Brand A's doesn't make the copy Brand A's; only the tag does.
 		$copy = Layouts::copy_part( $other, 'header-desktop' );
 		$this->assertSame( $other->term_id . ':header-desktop', get_post_meta( $copy->wp_id, Layouts::COPY_META_KEY, true ) );
 		$this->assertWPError( Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a-2' ) );
