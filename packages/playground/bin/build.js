@@ -2,10 +2,9 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { loadConfig } = require( '../src/config' );
+
 const scriptsDir = path.resolve( __dirname, '../../scripts' );
 const wpScripts = path.dirname( require.resolve( '@wordpress/scripts/package.json', { paths: [ scriptsDir ] } ) );
-const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
-const createWebpackConfig = require( '../src/webpack.config' );
 
 const escapeHtml = value => String( value ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' );
 
@@ -33,6 +32,10 @@ try {
 const outDir = path.resolve( out );
 fs.mkdirSync( outDir, { recursive: true } );
 
+process.chdir( path.resolve( __dirname, '../../..' ) );
+const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
+const createWebpackConfig = require( '../src/webpack.config' );
+
 webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.aliases } ), ( error, stats ) => {
 	if ( error ) {
 		fail( error.stack || error.message );
@@ -41,6 +44,6 @@ webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.ali
 		fail( stats.toString( { all: false, errors: true } ) );
 	}
 	const template = fs.readFileSync( path.join( __dirname, '../src/template.html' ), 'utf8' );
-	fs.writeFileSync( path.join( outDir, 'index.html' ), template.replace( '{{title}}', escapeHtml( config.title || 'Playground' ) ) );
+	fs.writeFileSync( path.join( outDir, 'index.html' ), template.replace( '{{title}}', () => escapeHtml( config.title || 'Playground' ) ) );
 	console.log( `playground: built ${ outDir }` );
 } );
