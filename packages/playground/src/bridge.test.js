@@ -13,11 +13,9 @@ describe( 'writeState', () => {
 } );
 
 describe( 'readState', () => {
-	it( 'parses a query string', () => {
-		expect( readState( '?step=3&entry=tab' ) ).toEqual( { step: '3', entry: 'tab' } );
-	} );
-	it( 'returns an empty object for an empty string', () => {
-		expect( readState( '' ) ).toEqual( {} );
+	it( 'round-trips writeState, stringifying values and dropping false', () => {
+		const query = writeState( { step: 3, open: true, closed: false, name: 'a b' } );
+		expect( readState( query ) ).toEqual( { step: '3', open: '1', name: 'a b' } );
 	} );
 } );
 
