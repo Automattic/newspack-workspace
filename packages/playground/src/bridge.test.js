@@ -137,7 +137,7 @@ describe( 'connectScreen', () => {
 			callback = cb;
 			return { observe: jest.fn(), disconnect };
 		} );
-		win.document = { body: { getBoundingClientRect: () => ( { height: 100.2 } ) } };
+		win.document = { documentElement: { getBoundingClientRect: () => ( { height: 100.2 } ) } };
 		const screen = connectScreen( { win } );
 		callback( [ { borderBoxSize: [ { blockSize: 640 } ] } ] );
 		callback( [ { borderBoxSize: [ { blockSize: 300 } ] } ] );

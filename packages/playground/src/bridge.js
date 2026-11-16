@@ -36,7 +36,7 @@ export function connectScreen( { win = window, onSetState } = {} ) {
 
 	let observer;
 	if ( typeof win.ResizeObserver !== 'undefined' ) {
-		const root = win.document.body;
+		const root = win.document.documentElement;
 		observer = new win.ResizeObserver( entries => {
 			const size = entries?.[ 0 ]?.borderBoxSize;
 			const box = Array.isArray( size ) || size?.length ? size[ 0 ] : size;
