@@ -28,7 +28,7 @@ let config;
 try {
 	config = loadConfig( dir );
 } catch ( error ) {
-	fail( error.message.startsWith( 'playground:' ) ? error.message : error.stack );
+	fail( error.message.startsWith( 'playground:' ) ? [ error.message, error.cause?.stack ].filter( Boolean ).join( '\n' ) : error.stack );
 }
 
 const outDir = path.resolve( out );

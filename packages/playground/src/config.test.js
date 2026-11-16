@@ -54,7 +54,15 @@ describe( 'loadConfig', () => {
 
 	it( 'names the config file when it cannot be loaded', () => {
 		write( 'playground.config.js', 'module.exports = {' );
-		expect( () => loadConfig( dir ) ).toThrow( `playground: could not load ${ path.join( dir, 'playground.config.js' ) }` );
+		const file = path.join( dir, 'playground.config.js' );
+		let thrown;
+		try {
+			loadConfig( dir );
+		} catch ( error ) {
+			thrown = error;
+		}
+		expect( thrown.message ).toBe( `playground: could not load ${ file }` );
+		expect( thrown.cause.name ).toBe( 'SyntaxError' );
 	} );
 
 	it( 'throws when there is no config', () => {

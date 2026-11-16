@@ -19,8 +19,7 @@ const loadConfig = dir => {
 	try {
 		config = require( file );
 	} catch ( error ) {
-		error.message = `playground: could not load ${ file }: ${ error.message }`;
-		throw error;
+		throw new Error( `playground: could not load ${ file }`, { cause: error } );
 	}
 	if ( ! config.entry || typeof config.entry !== 'string' ) {
 		throw new Error( 'playground: playground.config.js has no entry' );
