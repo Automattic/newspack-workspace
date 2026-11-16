@@ -280,16 +280,15 @@ importers:
       '@wordpress/ui':
         specifier: ^0.26.0
         version: 0.26.0(@date-fns/tz@1.5.0)(@types/react-dom@19.2.3(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../scripts
       react:
         specifier: 18.3.1
         version: 18.3.1
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
-    devDependencies:
-      newspack-scripts:
-        specifier: workspace:*
-        version: link:../scripts
 
   packages/scripts:
     dependencies:

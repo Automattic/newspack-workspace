@@ -25,7 +25,7 @@ export function connectScreen( { win = window, onSetState } = {} ) {
 	const post = message => framed && win.parent.postMessage( message, win.location.origin );
 
 	const onMessage = event => {
-		if ( event.source !== win.parent || event.origin !== win.location.origin ) {
+		if ( ! framed || event.source !== win.parent || event.origin !== win.location.origin ) {
 			return;
 		}
 		if ( event.data?.type === MESSAGE.SET_STATE && onSetState ) {
@@ -36,15 +36,20 @@ export function connectScreen( { win = window, onSetState } = {} ) {
 
 	let observer;
 	if ( typeof win.ResizeObserver !== 'undefined' ) {
-		const root = win.document.documentElement;
-		observer = new win.ResizeObserver( () => post( { type: MESSAGE.HEIGHT, height: root.scrollHeight } ) );
+		const root = win.document.body;
+		observer = new win.ResizeObserver( entries => {
+			const size = entries?.[ 0 ]?.borderBoxSize;
+			const box = Array.isArray( size ) || size?.length ? size[ 0 ] : size;
+			const height = box?.blockSize ?? Math.ceil( root.getBoundingClientRect().height );
+			post( { type: MESSAGE.HEIGHT, height } );
+		} );
 		observer.observe( root );
 	}
 
 	return {
 		report( state ) {
 			post( { type: MESSAGE.STATE, state } );
-			win.history.replaceState( null, '', writeState( state ) );
+			win.history.replaceState( null, '', win.location.pathname + writeState( state ) + win.location.hash );
 		},
 		dispose() {
 			win.removeEventListener( 'message', onMessage );

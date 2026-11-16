@@ -74,7 +74,7 @@ describe( 'connectScreen', () => {
 	const makeWin = () => {
 		const listeners = [];
 		const win = {
-			location: { origin: 'http://localhost' },
+			location: { origin: 'http://localhost', pathname: '/p', hash: '' },
 			history: { replaceState: jest.fn() },
 			parent: { postMessage: jest.fn() },
 			addEventListener: jest.fn( ( type, fn ) => listeners.push( fn ) ),
@@ -89,7 +89,17 @@ describe( 'connectScreen', () => {
 		const screen = connectScreen( { win } );
 		screen.report( { step: 4 } );
 		expect( win.parent.postMessage ).toHaveBeenCalledWith( { type: MESSAGE.STATE, state: { step: 4 } }, 'http://localhost' );
-		expect( win.history.replaceState ).toHaveBeenCalledWith( null, '', '?step=4' );
+		expect( win.history.replaceState ).toHaveBeenCalledWith( null, '', '/p?step=4' );
+		screen.dispose();
+	} );
+
+	it( 'clears the query for an empty state and keeps the hash', () => {
+		const win = makeWin();
+		win.location.hash = '#top';
+		const screen = connectScreen( { win } );
+		screen.report( { a: 1 } );
+		screen.report( {} );
+		expect( win.history.replaceState ).toHaveBeenLastCalledWith( null, '', '/p#top' );
 		screen.dispose();
 	} );
 
@@ -97,8 +107,11 @@ describe( 'connectScreen', () => {
 		const win = makeWin();
 		win.parent = win;
 		win.postMessage = jest.fn();
-		connectScreen( { win } ).report( { step: 1 } );
+		const onSetState = jest.fn();
+		connectScreen( { win, onSetState } ).report( { step: 1 } );
 		expect( win.postMessage ).not.toHaveBeenCalled();
+		win.emit( { data: { type: MESSAGE.SET_STATE, state: {} }, origin: 'http://localhost', source: win } );
+		expect( onSetState ).not.toHaveBeenCalled();
 	} );
 
 	it( 'accepts set-state only from the parent on the same origin', () => {
@@ -116,7 +129,7 @@ describe( 'connectScreen', () => {
 		expect( onSetState ).toHaveBeenCalledTimes( 1 );
 	} );
 
-	it( 'posts height changes from a ResizeObserver', () => {
+	it( 'reports the content height, including when it shrinks', () => {
 		const win = makeWin();
 		let callback;
 		const disconnect = jest.fn();
@@ -124,10 +137,13 @@ describe( 'connectScreen', () => {
 			callback = cb;
 			return { observe: jest.fn(), disconnect };
 		} );
-		win.document = { documentElement: { scrollHeight: 640 } };
+		win.document = { body: { getBoundingClientRect: () => ( { height: 100.2 } ) } };
 		const screen = connectScreen( { win } );
-		callback();
-		expect( win.parent.postMessage ).toHaveBeenCalledWith( { type: MESSAGE.HEIGHT, height: 640 }, 'http://localhost' );
+		callback( [ { borderBoxSize: [ { blockSize: 640 } ] } ] );
+		callback( [ { borderBoxSize: [ { blockSize: 300 } ] } ] );
+		callback( [] );
+		const heights = win.parent.postMessage.mock.calls.map( ( [ message ] ) => message.height );
+		expect( heights ).toEqual( [ 640, 300, 101 ] );
 		screen.dispose();
 		expect( disconnect ).toHaveBeenCalled();
 	} );

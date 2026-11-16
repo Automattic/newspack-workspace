@@ -14,11 +14,9 @@
 		"@wordpress/element": "^6.33.0",
 		"@wordpress/icons": "^20.0.0",
 		"@wordpress/ui": "^0.26.0",
+		"newspack-scripts": "workspace:*",
 		"react": "^18.0.0",
 		"react-dom": "^18.0.0"
-	},
-	"devDependencies": {
-		"newspack-scripts": "workspace:*"
 	},
 	"scripts": {
 		"test": "newspack-scripts test"
