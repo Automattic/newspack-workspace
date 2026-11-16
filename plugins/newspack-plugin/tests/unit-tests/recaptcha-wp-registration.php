@@ -178,89 +178,110 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A bot posting the form without a token is refused before Google is asked.
+	 * The reCAPTCHA versions the form supports.
+	 *
+	 * @return array
 	 */
-	public function test_refuses_registration_without_token_v3() {
-		$this->enable( 'v3' );
+	public function data_versions() {
+		return [
+			'v3'           => [ 'v3' ],
+			'v2_invisible' => [ 'v2_invisible' ],
+		];
+	}
+
+	/**
+	 * A bot posting the form without a token is refused before Google is asked.
+	 *
+	 * @dataProvider data_versions
+	 *
+	 * @param string $version reCAPTCHA version.
+	 */
+	public function test_refuses_registration_without_token( $version ) {
+		$this->enable( $version );
 
 		$this->assert_refused( $this->register(), 'newspack_recaptcha_invalid_token' );
 		$this->assertSame( 0, $this->siteverify_calls );
 	}
 
 	/**
-	 * A token Google rejects is refused.
+	 * Passing siteverify responses, by version.
+	 *
+	 * @return array
 	 */
-	public function test_refuses_registration_when_google_rejects_token() {
-		$this->enable( 'v3' );
-		$_POST['g-recaptcha-response'] = self::TOKEN;
-		$this->siteverify              = [
-			'success'     => false,
-			'error-codes' => [ 'invalid-input-response' ],
+	public function data_passing_responses() {
+		return [
+			'v3 score above the threshold' => [
+				'v3',
+				[
+					'success' => true,
+					'score'   => 0.9,
+				],
+			],
+			'v2_invisible solved'          => [ 'v2_invisible', [ 'success' => true ] ],
 		];
+	}
 
-		$this->assert_refused( $this->register(), 'newspack_recaptcha_error' );
+	/**
+	 * A person whose token Google accepts registers as before.
+	 *
+	 * @dataProvider data_passing_responses
+	 *
+	 * @param string $version    reCAPTCHA version.
+	 * @param array  $siteverify Google's response.
+	 */
+	public function test_allows_registration_with_valid_token( $version, $siteverify ) {
+		$this->enable( $version );
+		$_POST['g-recaptcha-response'] = self::TOKEN;
+		$this->siteverify              = $siteverify;
+
+		$this->assert_allowed( $this->register() );
 		$this->assertSame( 1, $this->siteverify_calls );
 	}
 
 	/**
-	 * A v3 score under the site's threshold is refused.
+	 * Failed verifications, with the error code each refusal carries.
+	 *
+	 * @return array
 	 */
-	public function test_refuses_registration_below_v3_threshold() {
+	public function data_failed_verifications() {
+		return [
+			'Google rejects the token'  => [
+				[
+					'success'     => false,
+					'error-codes' => [ 'invalid-input-response' ],
+				],
+				'newspack_recaptcha_error',
+			],
+			'score below the threshold' => [
+				[
+					'success' => true,
+					'score'   => 0.3,
+				],
+				'newspack_recaptcha_failure',
+			],
+			// Fails closed: an outage refuses sign-ups rather than letting them through.
+			'Google cannot be reached'  => [
+				new WP_Error( 'http_request_failed', 'Could not connect.' ),
+				'http_request_failed',
+			],
+		];
+	}
+
+	/**
+	 * Any failed verification refuses the registration, with no account and no email.
+	 *
+	 * @dataProvider data_failed_verifications
+	 *
+	 * @param array|WP_Error $siteverify Google's response.
+	 * @param string         $code       Expected error code.
+	 */
+	public function test_refuses_registration_when_verification_fails( $siteverify, $code ) {
 		$this->enable( 'v3' );
 		update_option( 'newspack_recaptcha_threshold', 0.5 );
 		$_POST['g-recaptcha-response'] = self::TOKEN;
-		$this->siteverify              = [
-			'success' => true,
-			'score'   => 0.3,
-		];
+		$this->siteverify              = $siteverify;
 
-		$this->assert_refused( $this->register(), 'newspack_recaptcha_failure' );
-	}
-
-	/**
-	 * When Google can't be reached, the form refuses rather than letting the sign-up through.
-	 */
-	public function test_refuses_registration_when_siteverify_unreachable() {
-		$this->enable( 'v3' );
-		$_POST['g-recaptcha-response'] = self::TOKEN;
-		$this->siteverify              = new WP_Error( 'http_request_failed', 'Could not connect.' );
-
-		$this->assert_refused( $this->register(), 'http_request_failed' );
-	}
-
-	/**
-	 * A person with a passing v3 score registers as before.
-	 */
-	public function test_allows_registration_with_valid_v3_token() {
-		$this->enable( 'v3' );
-		$_POST['g-recaptcha-response'] = self::TOKEN;
-		$this->siteverify              = [
-			'success' => true,
-			'score'   => 0.9,
-		];
-
-		$this->assert_allowed( $this->register() );
-		$this->assertSame( 1, $this->siteverify_calls );
-	}
-
-	/**
-	 * Invisible v2 also refuses a post without a token.
-	 */
-	public function test_refuses_v2_invisible_registration_without_token() {
-		$this->enable( 'v2_invisible' );
-
-		$this->assert_refused( $this->register(), 'newspack_recaptcha_invalid_token' );
-	}
-
-	/**
-	 * Invisible v2 lets a solved challenge through.
-	 */
-	public function test_allows_v2_invisible_registration_with_valid_token() {
-		$this->enable( 'v2_invisible' );
-		$_POST['g-recaptcha-response'] = self::TOKEN;
-		$this->siteverify              = [ 'success' => true ];
-
-		$this->assert_allowed( $this->register() );
+		$this->assert_refused( $this->register(), $code );
 		$this->assertSame( 1, $this->siteverify_calls );
 	}
 
@@ -281,17 +302,6 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	 * With reCAPTCHA off, the form works as it does without this plugin.
 	 */
 	public function test_registration_unchanged_when_recaptcha_off() {
-		$this->assert_allowed( $this->register() );
-		$this->assertSame( 0, $this->siteverify_calls );
-	}
-
-	/**
-	 * Switched on but missing its keys counts as off.
-	 */
-	public function test_registration_unchanged_when_enabled_without_credentials() {
-		update_option( 'newspack_recaptcha_use_captcha', true );
-		update_option( 'newspack_recaptcha_version', 'v3' );
-
 		$this->assert_allowed( $this->register() );
 		$this->assertSame( 0, $this->siteverify_calls );
 	}
@@ -369,9 +379,30 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With reCAPTCHA off, the registration screen gets no extra markup or scripts.
+	 * Settings under which reCAPTCHA can't be used.
+	 *
+	 * @return array
 	 */
-	public function test_register_screen_unchanged_when_recaptcha_off() {
+	public function data_unusable_settings() {
+		return [
+			'off'                      => [ false ],
+			// Switched on but missing its keys counts as off.
+			'switched on without keys' => [ true ],
+		];
+	}
+
+	/**
+	 * With reCAPTCHA off, the registration screen gets no extra markup or scripts.
+	 *
+	 * @dataProvider data_unusable_settings
+	 *
+	 * @param bool $switched_on Whether the reCAPTCHA setting is on.
+	 */
+	public function test_register_screen_unchanged_when_recaptcha_off( $switched_on ) {
+		if ( $switched_on ) {
+			update_option( 'newspack_recaptcha_use_captcha', true );
+			update_option( 'newspack_recaptcha_version', 'v3' );
+		}
 		do_action( 'login_form_register' );
 		do_action( 'login_enqueue_scripts' );
 
