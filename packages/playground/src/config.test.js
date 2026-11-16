@@ -33,13 +33,11 @@ describe( 'loadConfig', () => {
 		expect( loadConfig( dir ).aliases ).toEqual( {} );
 	} );
 
-	it( 'throws when the entry is not set', () => {
-		writeConfig( { title: 'Demo' } );
-		expect( () => loadConfig( dir ) ).toThrow( 'playground: playground.config.js has no entry' );
-	} );
-
-	it( 'throws when the entry is an empty string', () => {
-		writeConfig( { title: 'Demo', entry: '' } );
+	it.each( [
+		[ 'not set', { title: 'Demo' } ],
+		[ 'an empty string', { title: 'Demo', entry: '' } ],
+	] )( 'throws when the entry is %s', ( label, config ) => {
+		writeConfig( config );
 		expect( () => loadConfig( dir ) ).toThrow( 'playground: playground.config.js has no entry' );
 	} );
 
