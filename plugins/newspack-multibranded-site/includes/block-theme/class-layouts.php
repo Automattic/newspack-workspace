@@ -288,7 +288,8 @@ class Layouts {
 	}
 
 	/**
-	 * The copy of a slot's main part made earlier for a brand, if it still exists.
+	 * The copy of a slot's main part made earlier for a brand, if it still exists. With
+	 * several, the oldest.
 	 *
 	 * @param \WP_Term $brand Brand.
 	 * @param string   $slot  Slot.
@@ -301,6 +302,8 @@ class Layouts {
 				'post_status'    => 'publish',
 				'posts_per_page' => 1,
 				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
 				'meta_key'       => self::COPY_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_value'     => $brand->term_id . ':' . $slot, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
@@ -317,25 +320,25 @@ class Layouts {
 
 	/**
 	 * Copy a slot's main part into a new regular part named "Original [Brand]". It isn't
-	 * tied to the brand or deleted with it.
+	 * deleted with the brand.
 	 *
-	 * With $replace, overwrite the brand's earlier copy instead, so there's one "[Brand]" copy
-	 * rather than two with the same name.
+	 * With $replace, overwrite the brand's earlier copy with that slug instead, so there's
+	 * one "[Brand]" copy rather than two with the same name.
 	 *
 	 * @param \WP_Term $brand   Brand.
 	 * @param string   $slot    Slot.
-	 * @param bool     $replace Overwrite the earlier copy.
+	 * @param string   $replace Slug of the brand's earlier copy to overwrite, or '' for a new copy.
 	 * @return \WP_Block_Template|\WP_Error
 	 */
-	public static function copy_part( $brand, $slot, $replace = false ) {
+	public static function copy_part( $brand, $slot, $replace = '' ) {
 		$source = Block_Theme::get_part( Block_Theme::main_part_slug( $slot ) );
 		if ( ! $source ) {
 			return new \WP_Error( 'newspack_multibranded_site_invalid_part', __( 'The main template part for this slot could not be found.', 'newspack-multibranded-site' ), [ 'status' => 404 ] );
 		}
 
 		if ( $replace ) {
-			$copy = self::existing_copy( $brand, $slot );
-			if ( ! $copy || ! $copy->wp_id ) {
+			$copy = Block_Theme::get_part( $replace );
+			if ( ! $copy || ! $copy->wp_id || get_post_meta( $copy->wp_id, self::COPY_META_KEY, true ) !== $brand->term_id . ':' . $slot ) {
 				return new \WP_Error( 'newspack_multibranded_site_no_copy', __( 'This brand has no earlier copy to replace.', 'newspack-multibranded-site' ), [ 'status' => 404 ] );
 			}
 			$result = wp_update_post(

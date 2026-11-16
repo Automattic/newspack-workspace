@@ -509,7 +509,7 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 	const earlierCopy = ( slot: BlockThemeSlot ) =>
 		Object.values( parts ).find( part => part.slug !== slot.main && part.copyOf === `${ brand.id }:${ slot.slot }` );
 
-	const copy = ( slot: BlockThemeSlot, replace: boolean ) => {
+	const copy = ( slot: BlockThemeSlot, replace = '' ) => {
 		setMessage( '' );
 		wizardApiFetch(
 			{
@@ -636,7 +636,7 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 										</Button>
 									) }
 									{ brand.id > 0 && ! current && ! earlier && (
-										<Button variant="link" onClick={ () => copy( slot, false ) }>
+										<Button variant="link" onClick={ () => copy( slot ) }>
 											{ __( 'Copy', 'newspack-plugin' ) }
 										</Button>
 									) }
@@ -655,7 +655,7 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 											isDestructive
 											onClick={ () => {
 												setPendingReplace( { slot, copy: earlier } );
-												requestConfirm( () => copy( slot, true ) );
+												requestConfirm( () => copy( slot, earlier.slug ) );
 											} }
 										>
 											{ __( 'Replace it with a fresh copy', 'newspack-plugin' ) }

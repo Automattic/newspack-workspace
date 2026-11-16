@@ -236,12 +236,12 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 				'post_content' => '<!-- wp:paragraph --><p>Main v2</p><!-- /wp:paragraph -->',
 			]
 		);
-		$replaced = Layouts::copy_part( $this->brand, 'header-desktop', true );
+		$replaced = Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a' );
 		$this->assertStringContainsString( 'Main v2', $replaced->content );
 	}
 
 	/**
-	 * A brand's earlier copy is the one made for that brand, not one whose slug only looks like it.
+	 * A brand's earlier copy is found by its brand tag, not its slug.
 	 */
 	public function test_existing_copy_belongs_to_its_brand() {
 		$this->make_part( 'header-desktop' );
@@ -257,10 +257,13 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 		Layouts::copy_part( $other, 'header-desktop' );
 		$this->assertNull( Layouts::existing_copy( $this->brand, 'header-desktop' ) );
 		$this->assertSame( 'header-desktop-brand-a-2', Layouts::existing_copy( $other, 'header-desktop' )->slug );
+
+		// Nor can Brand A replace it.
+		$this->assertWPError( Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a-2' ) );
 	}
 
 	/**
-	 * A copy takes its slot's area, even when the main part was saved before the theme gave it one.
+	 * A copy takes its slot's area, whatever the main part's saved area is.
 	 */
 	public function test_copy_part_uses_slot_area() {
 		$this->make_part( 'sidebar-contents', '<!-- wp:paragraph --><p>Sidebar</p><!-- /wp:paragraph -->', 'uncategorized' );

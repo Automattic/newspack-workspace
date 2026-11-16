@@ -46,8 +46,8 @@ class Api {
 						'required' => true,
 					],
 					'replace' => [
-						'type'    => 'boolean',
-						'default' => false,
+						'type'    => 'string',
+						'default' => '',
 					],
 				],
 			]
@@ -109,7 +109,7 @@ class Api {
 		if ( is_wp_error( $brand ) ) {
 			return $brand;
 		}
-		$part = Layouts::copy_part( $brand, $request['slot'], (bool) $request['replace'] );
+		$part = Layouts::copy_part( $brand, $request['slot'], (string) $request['replace'] );
 		if ( is_wp_error( $part ) ) {
 			return $part;
 		}
