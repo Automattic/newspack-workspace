@@ -18,7 +18,6 @@ $donate_settings = [
 		'month' => false,
 		'year'  => false,
 	],
-	'minimumDonation'     => 5,
 	'layoutOption'        => 'tiers',
 ];
 ?>

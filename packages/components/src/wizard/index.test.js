@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  * WordPress dependencies.
  */
 import apiFetch from '@wordpress/api-fetch';
-import { select, useDispatch } from '@wordpress/data';
+import { dispatch, select, useDispatch } from '@wordpress/data';
 import { useLayoutEffect, useState } from '@wordpress/element';
 
 /**
@@ -356,5 +356,34 @@ describe( 'Wizard tab bar on hidden routes', () => {
 		} );
 		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'tab', { name: 'Other' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'Wizard header More menu', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		act( () => {
+			dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
+		} );
+	} );
+
+	it( 'closes the menu and runs the action when an item is clicked', async () => {
+		const action = jest.fn();
+		const SetsActions = () => {
+			const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+			useLayoutEffect( () => {
+				setHeaderData( { actions: [ { label: 'Advanced Settings', type: 'more', action } ] } );
+			}, [ setHeaderData ] );
+			return <div>Section content</div>;
+		};
+		render( <Wizard headerText="Test wizard" sections={ [ { label: 'List', path: '/', exact: true, render: () => <SetsActions /> } ] } /> );
+
+		fireEvent.click( await screen.findByRole( 'button', { name: 'More' } ) );
+		fireEvent.click( await screen.findByRole( 'menuitem', { name: 'Advanced Settings' } ) );
+		expect( action ).toHaveBeenCalledTimes( 1 );
+		expect( screen.queryByRole( 'menuitem', { name: 'Advanced Settings' } ) ).not.toBeInTheDocument();
 	} );
 } );

@@ -135,13 +135,20 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ 'Newspack_Blocks_API', 'specific_posts_endpoint' ],
 				'args'                => [
-					'search'      => [
+					'search'               => [
 						'sanitize_callback' => 'sanitize_text_field',
 					],
-					'postsToShow' => [
+					'postsToShow'          => [
 						'sanitize_callback' => 'absint',
 					],
-					'postType'    => [
+					'postType'             => [
+						'type'    => 'array',
+						'items'   => array(
+							'type' => 'string',
+						),
+						'default' => array(),
+					],
+					'includedPostStatuses' => [
 						'type'    => 'array',
 						'items'   => array(
 							'type' => 'string',

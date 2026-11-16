@@ -27,6 +27,7 @@ class AutocompleteTokenField extends Component {
 		};
 
 		this.debouncedUpdateSuggestions = debounce( this.updateSuggestions, 500 );
+		this.knownSuggestions = {};
 	}
 
 	/**
@@ -47,13 +48,7 @@ class AutocompleteTokenField extends Component {
 
 			fetchSavedInfo( tokens )
 				.then( results => {
-					const { validValues } = this.state;
-
-					results.forEach( suggestion => {
-						validValues[ suggestion.value ] = suggestion.label;
-					} );
-
-					this.setState( { validValues, loading: false } );
+					this.setState( { validValues: this.addValidValues( results ), loading: false } );
 				} )
 				.catch( error => {
 					// eslint-disable-next-line no-console
@@ -88,6 +83,40 @@ class AutocompleteTokenField extends Component {
 	getLabelsForValues( values ) {
 		const { validValues } = this.state;
 		return values.reduce( ( accumulator, value ) => ( validValues[ value ] ? [ ...accumulator, validValues[ value ] ] : accumulator ), [] );
+	}
+
+	/**
+	 * Add suggestions to the valid values, relabelling every value whose title clashes.
+	 *
+	 * Tokens are plain strings, so a label is the only thing that maps a token back to its ID.
+	 * Two IDs sharing one would collapse onto a single ID on the next change. A clashing value
+	 * shows its `clashNote` when that tells it apart, and its ID when it doesn't.
+	 *
+	 * @param {Array} suggestions Objects with a value, a label and an optional clashNote.
+	 * @return {Object} The valid values, keyed by value.
+	 */
+	addValidValues( suggestions ) {
+		const { validValues } = this.state;
+
+		suggestions.forEach( ( { value, label, clashNote } ) => {
+			this.knownSuggestions[ value ] = { title: label.trim(), clashNote };
+		} );
+
+		const known = Object.values( this.knownSuggestions );
+		Object.entries( this.knownSuggestions ).forEach( ( [ value, { title, clashNote } ] ) => {
+			const clashes = known.filter( other => other.title === title );
+			if ( clashes.length === 1 ) {
+				validValues[ value ] = title;
+			} else if ( ! clashNote ) {
+				validValues[ value ] = `${ title } (${ value })`;
+			} else if ( clashes.filter( other => other.clashNote === clashNote ).length === 1 ) {
+				validValues[ value ] = `${ title } (${ clashNote })`;
+			} else {
+				validValues[ value ] = `${ title } (${ clashNote }, ${ value })`;
+			}
+		} );
+
+		return validValues;
 	}
 
 	/**
@@ -129,18 +158,8 @@ class AutocompleteTokenField extends Component {
 						return;
 					}
 
-					const { validValues } = this.state;
-					const currentSuggestions = [];
-
-					suggestions.forEach( suggestion => {
-						const trimmedSuggestionLabel = suggestion.label.trim();
-						const duplicatedSuggestionIndex = currentSuggestions.indexOf( trimmedSuggestionLabel );
-						if ( duplicatedSuggestionIndex >= 0 ) {
-							suggestion.label = `${ trimmedSuggestionLabel } (${ suggestion.value })`;
-						}
-						currentSuggestions.push( trimmedSuggestionLabel );
-						validValues[ suggestion.value ] = trimmedSuggestionLabel;
-					} );
+					const validValues = this.addValidValues( suggestions );
+					const currentSuggestions = suggestions.map( suggestion => validValues[ suggestion.value ] );
 
 					this.setState( { suggestions: currentSuggestions, validValues, loading: false } );
 				} )

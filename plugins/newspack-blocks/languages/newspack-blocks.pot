@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Blocks plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Blocks 4.36.6\n"
+"Project-Id-Version: Newspack Blocks 4.36.9\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-26T22:15:17+00:00\n"
+"POT-Creation-Date: 2026-11-11T01:11:38+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-blocks\n"
@@ -314,30 +314,34 @@ msgstr ""
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1667
+#: includes/class-newspack-blocks.php:1682
+#: dist/editor.js:26
 #: dist/editor.js:30
+#: src/components/query-controls.js:32
 #: src/shared/js/utils.js:49
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1668
+#: includes/class-newspack-blocks.php:1683
+#: dist/editor.js:26
 #: dist/editor.js:30
+#: src/components/query-controls.js:33
 #: src/shared/js/utils.js:49
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1909
+#: includes/class-newspack-blocks.php:1924
 #: dist/editor.js:52
 #, php-format,js-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1940
+#: includes/class-newspack-blocks.php:1955
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1943
+#: includes/class-newspack-blocks.php:1958
 msgid " per "
 msgstr ""
 
@@ -613,17 +617,17 @@ msgstr ""
 msgid "Could not retrieve donation settings."
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:115
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
 #: dist/editor.js:52
 msgid "One-time"
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:116
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:118
 #: dist/editor.js:52
 msgid "Monthly"
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:119
 #: dist/editor.js:52
 msgid "Annually"
 msgstr ""
@@ -902,7 +906,7 @@ msgstr ""
 #: dist/editor.js:26
 #: dist/editor.js:58
 #: src/blocks/author-profile/edit.js:538
-#: src/blocks/carousel/edit.js:245
+#: src/blocks/carousel/edit.js:246
 msgid "Display"
 msgstr ""
 
@@ -1061,8 +1065,8 @@ msgstr ""
 #: src/blocks/author-list/edit.js:249
 #: src/blocks/author-profile/edit.js:757
 #: src/blocks/author-profile/edit.js:952
-#: src/components/query-controls.js:104
-#: src/components/query-controls.js:119
+#: src/components/query-controls.js:115
+#: src/components/query-controls.js:130
 msgid "(no name)"
 msgstr ""
 
@@ -1152,136 +1156,136 @@ msgid "9:16"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:247
+#: src/blocks/carousel/edit.js:248
 msgid "Hide Controls"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:248
+#: src/blocks/carousel/edit.js:249
 msgid "Remove navigation indicators from view."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:255
+#: src/blocks/carousel/edit.js:256
 msgid "Autoplay"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:256
+#: src/blocks/carousel/edit.js:257
 msgid "Automatically advance through slides."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:264
+#: src/blocks/carousel/edit.js:265
 msgid "Transition delay"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:271
+#: src/blocks/carousel/edit.js:272
 msgid "Set the waiting time between automatic slide transitions in seconds."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:277
+#: src/blocks/carousel/edit.js:278
 msgid "Slides per view"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:286
+#: src/blocks/carousel/edit.js:287
 msgid "Choose how many slides appear on screen simultaneously."
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:291
+#: src/blocks/carousel/edit.js:292
 msgid "Featured Image"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:293
+#: src/blocks/carousel/edit.js:294
 msgid "Aspect ratio"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:294
+#: src/blocks/carousel/edit.js:295
 msgid "All slides will share the same aspect ratio, for consistency."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:305
+#: src/blocks/carousel/edit.js:306
 msgid "Fit"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:308
+#: src/blocks/carousel/edit.js:309
 msgid "The image will fill the entire slide and will be cropped if necessary."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:309
+#: src/blocks/carousel/edit.js:310
 msgid "The image will be resized to fit inside the slide without being cropped."
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:316
+#: src/blocks/carousel/edit.js:317
 msgid "Cover"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:317
+#: src/blocks/carousel/edit.js:318
 msgid "Contain"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:320
+#: src/blocks/carousel/edit.js:321
 msgid "Show caption"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:325
+#: src/blocks/carousel/edit.js:326
 msgid "Show credit"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:330
+#: src/blocks/carousel/edit.js:331
 msgid "Post Meta"
 msgstr ""
 
 #: dist/editor.js:26
-#: src/blocks/carousel/edit.js:332
+#: src/blocks/carousel/edit.js:333
 msgid "Show title"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:337
+#: src/blocks/carousel/edit.js:338
 msgid "Show date"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:342
+#: src/blocks/carousel/edit.js:343
 msgid "Show category"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:347
+#: src/blocks/carousel/edit.js:348
 msgid "Show tag labels"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:352
+#: src/blocks/carousel/edit.js:353
 msgid "Show author"
 msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:64
-#: src/blocks/carousel/edit.js:357
+#: src/blocks/carousel/edit.js:358
 msgid "Show avatar"
 msgstr ""
 
@@ -1349,7 +1353,7 @@ msgstr ""
 
 #: dist/editor.js:26
 #: dist/editor.js:27
-#: src/components/query-controls.js:346
+#: src/components/query-controls.js:360
 msgid "Category"
 msgstr ""
 
@@ -1428,107 +1432,112 @@ msgstr ""
 #: src/blocks/video-playlist/edit.js:137
 #: src/blocks/video-playlist/edit.js:158
 #: src/components/query-controls.js:27
-#: src/components/query-controls.js:29
-#: src/components/query-controls.js:46
-#: src/components/query-controls.js:70
-#: src/components/query-controls.js:164
-#: src/components/query-controls.js:191
-#: src/components/query-controls.js:205
-#: src/components/query-controls.js:260
+#: src/components/query-controls.js:36
+#: src/components/query-controls.js:54
+#: src/components/query-controls.js:80
+#: src/components/query-controls.js:175
+#: src/components/query-controls.js:202
+#: src/components/query-controls.js:216
+#: src/components/query-controls.js:271
 msgid "(no title)"
+msgstr ""
+
+#: dist/editor.js:26
+#: src/components/query-controls.js:31
+msgid "Published"
 msgstr ""
 
 #. translators: %d: numeric ID of content that could not be found.
 #: dist/editor.js:27
-#: src/components/query-controls.js:83
+#: src/components/query-controls.js:94
 #, js-format
 msgid "Unavailable content (%d)"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:171
+#: src/components/query-controls.js:182
 msgid "Deleted category"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:212
+#: src/components/query-controls.js:223
 msgid "Deleted tag"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:312
+#: src/components/query-controls.js:324
 msgid "Mode"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:324
+#: src/components/query-controls.js:336
 msgid "The block will display only the specifically selected content."
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:325
+#: src/components/query-controls.js:337
 msgid "The block will display content based on the filtering settings below."
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:329
+#: src/components/query-controls.js:341
 msgid "Dynamic"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:330
+#: src/components/query-controls.js:342
 msgid "Static"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:351
+#: src/components/query-controls.js:365
 msgid "is one of"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:352
+#: src/components/query-controls.js:366
 msgid "is all of"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:375
+#: src/components/query-controls.js:389
 msgid "Include subcategories"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:384
+#: src/components/query-controls.js:398
 msgid "Tags"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:393
+#: src/components/query-controls.js:407
 msgid "Authors"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:415
+#: src/components/query-controls.js:429
 msgid "Excluded categories"
 msgstr ""
 
 #: dist/editor.js:27
-#: src/components/query-controls.js:424
+#: src/components/query-controls.js:438
 msgid "Excluded tags"
 msgstr ""
 
 #. translators: %s is the custom taxonomy label.
 #: dist/editor.js:30
-#: src/components/query-controls.js:436
+#: src/components/query-controls.js:450
 #, js-format
 msgid "Excluded %s"
 msgstr ""
 
 #: dist/editor.js:30
-#: src/components/query-controls.js:449
+#: src/components/query-controls.js:463
 msgid "Allow duplicate content"
 msgstr ""
 
 #: dist/editor.js:30
-#: src/components/query-controls.js:450
+#: src/components/query-controls.js:464
 msgid "Exclude this block from the page's deduplication logic."
 msgstr ""
 
@@ -2073,6 +2082,10 @@ msgstr ""
 
 #: dist/editor.js:55
 msgid "Minimum donation"
+msgstr ""
+
+#: dist/editor.js:55
+msgid "Leave empty to use the site-wide minimum donation."
 msgstr ""
 
 #: dist/editor.js:55

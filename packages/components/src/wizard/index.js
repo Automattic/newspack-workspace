@@ -399,7 +399,7 @@ const Wizard = (
 					label={ __( 'More', 'newspack-plugin' ) }
 					popoverProps={ { className: 'newspack-wizard__actions__more' } }
 				>
-					{ () =>
+					{ ( { onClose } ) =>
 						// Split actions into groups whenever an action opts in via `separator: true`.
 						// Consecutive MenuGroups render the WordPress-standard divider between them.
 						actions
@@ -423,7 +423,10 @@ const Wizard = (
 											}
 											icon={ action.icon }
 											href={ action.href }
-											onClick={ action.action }
+											onClick={ event => {
+												onClose();
+												action.action?.( event );
+											} }
 											disabled={ action.disabled || false }
 											isDestructive={ action.destructive || false }
 										>

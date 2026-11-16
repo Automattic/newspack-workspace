@@ -65,3 +65,13 @@ CLAUDE-SECURITY-*
 # PHPUnit's per-run defect/timing cache. Written wherever tests are run, so it
 # is ignored workspace-wide rather than per package.
 .phpunit.result.cache
+
+# Playwright MCP browser-testing output (console logs, page snapshots,
+# screenshots). Written wherever a session runs, so it is ignored workspace-wide.
+.playwright-mcp/
+
+# Local working files from Claude Code sessions: screenshots, personal context,
+# and superpowers plans/specs. Kept on disk, never committed.
+.shots/
+claude-context.md
+docs/superpowers/

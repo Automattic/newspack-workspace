@@ -1,3 +1,46 @@
+## newspack [6.56.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.7...newspack@6.56.8) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** keep a product minimum set back to an earlier value ([#1564](https://github.com/Automattic/newspack-workspace/issues/1564)) ([1004950](https://github.com/Automattic/newspack-workspace/commit/1004950369da06f99f4cecdbe87ecd556cf859f7))
+
+## newspack [6.56.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.6...newspack@6.56.7) (2026-11-11)
+
+
+### Bug Fixes
+
+* **sync:** count newer one-time gifts in last donation fields ([#1459](https://github.com/Automattic/newspack-workspace/issues/1459)) ([2c5e462](https://github.com/Automattic/newspack-workspace/commit/2c5e4624ae21905dc7f878c3dde681ba510ef8e7))
+
+## newspack [6.56.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.5...newspack@6.56.6) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** stop overwriting per-block and per-product minimums ([#1550](https://github.com/Automattic/newspack-workspace/issues/1550)) ([5d79d59](https://github.com/Automattic/newspack-workspace/commit/5d79d59d4c492b13c2dab53f6569240c4b87ea99))
+
+## newspack [6.56.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.4...newspack@6.56.5) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## newspack [6.56.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.3...newspack@6.56.4) (2026-11-04)
+
+
+### Bug Fixes
+
+* **group-subscription:** fire an action when an invite is created ([#1462](https://github.com/Automattic/newspack-workspace/issues/1462)) ([9cf9d8a](https://github.com/Automattic/newspack-workspace/commit/9cf9d8a186da9cbae543c91ea6814e21dc2e8226))
+* **reader-data:** cut REST requests per logged-in page view ([#1445](https://github.com/Automattic/newspack-workspace/issues/1445)) ([f77098e](https://github.com/Automattic/newspack-workspace/commit/f77098ecdd7fedb6e5c9159d0e59bd97265a9b42))
+
+## newspack [6.56.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.2...newspack@6.56.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **gifting:** count received gifts on the billing page (NPPD-2561) ([#1476](https://github.com/Automattic/newspack-workspace/issues/1476)) ([62ce6e8](https://github.com/Automattic/newspack-workspace/commit/62ce6e87c98cffa4aae26ef904f35f70ce62ef85))
+
 ## newspack [6.56.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.1...newspack@6.56.2) (2026-10-27)
 
 
