@@ -362,8 +362,9 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 
 	/**
 	 * The registration screen loads the client and what it needs that the login screens don't load:
-	 * Google's API, jQuery, and the plugin's shared webpack chunk, which the client's bundle waits on before it runs.
-	 * The chunk's stylesheets style nothing on this screen, so they stay off it.
+	 * Google's API, jQuery, and the plugin's shared webpack chunk, which the client's bundle waits on whenever it
+	 * shares a module with another script. The client keeps its own stylesheet; the chunk's stylesheets style
+	 * nothing on this screen, so they stay off it.
 	 */
 	public function test_register_screen_enqueues_client() {
 		$this->enable( 'v2_invisible' );
@@ -374,6 +375,7 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		$this->assertTrue( wp_script_is( 'newspack-recaptcha-api', 'enqueued' ), "Google's API should load." );
 		$this->assertTrue( wp_script_is( 'jquery', 'enqueued' ), 'jQuery should load for the client.' );
 		$this->assertTrue( wp_script_is( 'newspack_commons', 'enqueued' ), 'The shared chunk should load for the client.' );
+		$this->assertTrue( wp_style_is( 'newspack-recaptcha', 'enqueued' ), "The client's stylesheet should still load." );
 		$this->assertFalse( wp_style_is( 'newspack-commons', 'enqueued' ), "The shared chunk's stylesheet should not load." );
 		$this->assertFalse( wp_style_is( 'wp-components', 'enqueued' ), "The shared chunk's stylesheet dependency should not load." );
 	}
