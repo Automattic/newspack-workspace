@@ -4,20 +4,25 @@ A harness for building design prototypes against the workspace's own components.
 
 ## Config
 
-Each prototype has a `playground.config.js` next to it. It is read by the build command.
+Each prototype folder has a `playground.config.js` (CommonJS). Paths are relative to the config file and must exist.
 
 ```js
-export default {
-	entry: './src/screens.js',
-	outDir: './dist',
+module.exports = {
+	title: 'My prototype',
+	entry: './src/index.js',
+	aliases: { '@shared': './shared' },
 };
 ```
+
+`@np` (`packages/components/src`), `@plugin` (`plugins/newspack-plugin/src`) and `newspack-playground/bridge` are always available. A prototype's `aliases` are merged over them.
 
 ## Build
 
 ```sh
-npx newspack-playground build
+node packages/playground/bin/build.js <prototype-dir> --out <dir>
 ```
+
+This writes `index.html`, `screen.js`, `screen.css` and any fonts to the output directory. Serve it over http to view it.
 
 ## Bridge
 

@@ -4,6 +4,9 @@
 	"description": "Build design prototypes against the Newspack components",
 	"license": "GPL-2.0-or-later",
 	"private": true,
+	"bin": {
+		"newspack-playground": "bin/build.js"
+	},
 	"exports": {
 		"./bridge": "./src/bridge.js"
 	},
