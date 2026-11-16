@@ -67,7 +67,7 @@ class Editor_Notices {
 		$usage   = Layouts::usage();
 		$notices = [];
 		foreach ( $usage['navs'] as $nav_id => $entry ) {
-			$notices[ 'wp_navigation:' . $nav_id ] = self::usage_notice( $entry, get_the_title( $nav_id ) );
+			$notices[ 'wp_navigation:' . $nav_id ] = self::usage_notice( $entry, get_post_field( 'post_title', $nav_id ) );
 		}
 		foreach ( $usage['parts'] as $slug => $entry ) {
 			$part = Block_Theme::get_part( $slug );

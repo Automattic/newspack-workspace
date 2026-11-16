@@ -24,6 +24,11 @@ class Layouts {
 	const BACKDATE = '2000-01-01 00:00:00';
 
 	/**
+	 * Post meta on a template part copied for a brand: "{brand term ID}:{slot}".
+	 */
+	const COPY_META_KEY = '_newspack_brand_copy';
+
+	/**
 	 * For each template part being rendered, whether it's one the brand chose instead of the
 	 * main one. Pushed in filter_block_data(), popped in leave_part().
 	 *
@@ -164,7 +169,7 @@ class Layouts {
 	public static function brand_nav_id( $brand, $nav_id ) {
 		$map    = self::meta_array( $brand, Block_Theme_Menus::get_key() );
 		$chosen = isset( $map[ $nav_id ] ) ? (int) $map[ $nav_id ] : 0;
-		return $chosen && $chosen !== (int) $nav_id && 'publish' === get_post_status( $chosen ) ? $chosen : 0;
+		return $chosen && $chosen !== (int) $nav_id && 'wp_navigation' === get_post_type( $chosen ) && 'publish' === get_post_status( $chosen ) ? $chosen : 0;
 	}
 
 	/**
@@ -285,21 +290,29 @@ class Layouts {
 	/**
 	 * The copy of a slot's main part made earlier for a brand, if it still exists.
 	 *
-	 * Copies are regular parts, so this goes by the slug copy_part() gives them ({slot}-{brand
-	 * slug}, numbered if taken). A copy made before the brand's slug changed isn't found.
-	 *
 	 * @param \WP_Term $brand Brand.
 	 * @param string   $slot  Slot.
 	 * @return \WP_Block_Template|null
 	 */
 	public static function existing_copy( $brand, $slot ) {
-		$base = $slot . '-' . $brand->slug;
-		foreach ( Block_Theme::parts_in_area( Block_Theme::slot_area( $slot ) ) as $part ) {
-			if ( 'custom' === $part->source && preg_match( '/^' . preg_quote( $base, '/' ) . '(-\d+)?$/', $part->slug ) && Block_Theme::main_part_slug( $slot ) !== $part->slug ) {
-				return $part;
-			}
-		}
-		return null;
+		$ids = get_posts(
+			[
+				'post_type'      => 'wp_template_part',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_key'       => self::COPY_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $brand->term_id . ':' . $slot, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+					[
+						'taxonomy' => 'wp_theme',
+						'field'    => 'name',
+						'terms'    => get_stylesheet(),
+					],
+				],
+			]
+		);
+		return $ids ? Block_Theme::get_part( get_post_field( 'post_name', $ids[0] ) ) : null;
 	}
 
 	/**
@@ -355,8 +368,9 @@ class Layouts {
 			return $id;
 		}
 		wp_set_post_terms( $id, get_stylesheet(), 'wp_theme' );
-		wp_set_post_terms( $id, $source->area ? $source->area : Block_Theme::slot_area( $slot ), 'wp_template_part_area' );
-		return Block_Theme::get_part( $new_slug );
+		wp_set_post_terms( $id, Block_Theme::slot_area( $slot ), 'wp_template_part_area' );
+		update_post_meta( $id, self::COPY_META_KEY, $brand->term_id . ':' . $slot );
+		return Block_Theme::get_part( get_post_field( 'post_name', $id ) );
 	}
 
 	/**

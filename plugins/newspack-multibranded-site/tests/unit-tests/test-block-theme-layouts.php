@@ -201,6 +201,18 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Only a menu can be swapped in for a menu, so a stale or edited choice can't render another post.
+	 */
+	public function test_non_menu_choice_not_used() {
+		$main_nav = $this->make_nav( 'Main' );
+		$post     = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+		update_term_meta( $this->brand->term_id, Block_Theme_Menus::get_key(), [ $main_nav => $post ] );
+		$this->go_to( get_term_link( $this->brand ) );
+		$nav = Layouts::filter_block_data( $this->nav_block( $main_nav ) );
+		$this->assertSame( $main_nav, $nav['attrs']['ref'] );
+	}
+
+	/**
 	 * Copies are regular parts named "… [Brand]"; a second copy reuses the earlier one when asked.
 	 */
 	public function test_copy_part() {
@@ -226,6 +238,33 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 		);
 		$replaced = Layouts::copy_part( $this->brand, 'header-desktop', true );
 		$this->assertStringContainsString( 'Main v2', $replaced->content );
+	}
+
+	/**
+	 * A brand's earlier copy is the one made for that brand, not one whose slug only looks like it.
+	 */
+	public function test_existing_copy_belongs_to_its_brand() {
+		$this->make_part( 'header-desktop' );
+		$other = $this->factory->term->create_and_get(
+			[
+				'taxonomy' => Taxonomy::SLUG,
+				'name'     => 'Brand A 2',
+				'slug'     => 'brand-a-2',
+			]
+		);
+
+		// This copy's slug, header-desktop-brand-a-2, starts with Brand A's.
+		Layouts::copy_part( $other, 'header-desktop' );
+		$this->assertNull( Layouts::existing_copy( $this->brand, 'header-desktop' ) );
+		$this->assertSame( 'header-desktop-brand-a-2', Layouts::existing_copy( $other, 'header-desktop' )->slug );
+	}
+
+	/**
+	 * A copy takes its slot's area, even when the main part was saved before the theme gave it one.
+	 */
+	public function test_copy_part_uses_slot_area() {
+		$this->make_part( 'sidebar-contents', '<!-- wp:paragraph --><p>Sidebar</p><!-- /wp:paragraph -->', 'uncategorized' );
+		$this->assertSame( 'sidebar', Layouts::copy_part( $this->brand, 'sidebar' )->area );
 	}
 
 	/**

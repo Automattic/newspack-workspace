@@ -172,6 +172,7 @@ class Api {
 			'source'  => $part->source,
 			'editUrl' => Block_Theme::site_editor_url( 'wp_template_part', $part->slug ),
 			'navs'    => $navs,
+			'copyOf'  => $part->wp_id ? (string) get_post_meta( $part->wp_id, Layouts::COPY_META_KEY, true ) : '',
 		];
 	}
 

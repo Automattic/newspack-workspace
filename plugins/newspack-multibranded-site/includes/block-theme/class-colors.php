@@ -30,7 +30,10 @@ class Colors {
 	 * Initializes.
 	 */
 	public static function init() {
-		add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
+		// Only the brand settings screens read the list, and building it resolves theme.json.
+		if ( is_admin() ) {
+			add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
+		}
 		add_filter( 'wp_theme_json_data_user', [ __CLASS__, 'filter_user_theme_json' ] );
 		add_action( 'wp', [ __CLASS__, 'clean_theme_json_cache' ], 20 );
 	}
@@ -126,10 +129,9 @@ class Colors {
 	 * @return array|null Null when the brand changes nothing.
 	 */
 	public static function brand_palette( $brand, $site_palette ) {
-		$variations = self::variation_palettes();
-		$title      = (string) get_term_meta( $brand->term_id, Block_Theme_Palette::get_key(), true );
-		$base       = $variations[ $title ] ?? [];
-		$picks      = self::brand_picks( $brand );
+		$title = (string) get_term_meta( $brand->term_id, Block_Theme_Palette::get_key(), true );
+		$base  = $title ? ( self::variation_palettes()[ $title ] ?? [] ) : [];
+		$picks = self::brand_picks( $brand );
 		if ( empty( $base ) && empty( $picks ) ) {
 			return null;
 		}
