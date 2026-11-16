@@ -45,6 +45,9 @@ webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.ali
 	if ( stats.hasErrors() ) {
 		fail( stats.toString( { all: false, errors: true } ) );
 	}
+	if ( stats.hasWarnings() ) {
+		console.warn( stats.toString( { all: false, warnings: true } ) );
+	}
 	const template = fs.readFileSync( path.join( __dirname, '../src/template.html' ), 'utf8' );
 	fs.writeFileSync( path.join( outDir, 'index.html' ), template.replace( '{{title}}', () => escapeHtml( config.title || 'Playground' ) ) );
 	console.log( `playground: built ${ outDir }` );

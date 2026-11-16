@@ -20,6 +20,10 @@ module.exports = ( { entry, outDir, aliases = {} } ) => {
 		devtool: false,
 		output: { path: outDir, filename: '[name].js' },
 		plugins: base.plugins.filter( plugin => ! REMOVED_PLUGINS.includes( plugin.constructor.name ) ),
+		module: {
+			...base.module,
+			parser: { ...base.module?.parser, javascript: { ...base.module?.parser?.javascript, exportsPresence: 'error' } },
+		},
 		optimization: { ...base.optimization, splitChunks: false, runtimeChunk: false },
 		resolve: {
 			...base.resolve,
