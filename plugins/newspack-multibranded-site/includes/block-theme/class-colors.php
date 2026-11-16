@@ -30,13 +30,9 @@ class Colors {
 	 * Initializes.
 	 */
 	public static function init() {
-		// Building the list resolves theme.json, and only admin screens show it.
-		add_action(
-			'current_screen',
-			function () {
-				add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
-			}
-		);
+		// Building the list resolves theme.json. current_screen, not is_admin(): admin-ajax and
+		// REST requests are admin too, but never show the list.
+		add_action( 'current_screen', [ __CLASS__, 'add_palette_colors_filter' ] );
 		add_filter( 'wp_theme_json_data_user', [ __CLASS__, 'filter_user_theme_json' ] );
 		add_action( 'wp', [ __CLASS__, 'clean_theme_json_cache' ], 20 );
 	}
@@ -147,6 +143,13 @@ class Colors {
 			];
 		}
 		return $palette;
+	}
+
+	/**
+	 * Offers the palette colors on admin screens.
+	 */
+	public static function add_palette_colors_filter() {
+		add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
 	}
 
 	/**

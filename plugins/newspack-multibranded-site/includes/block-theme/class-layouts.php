@@ -288,37 +288,6 @@ class Layouts {
 	}
 
 	/**
-	 * The copy of a slot's main part made earlier for a brand, if it still exists. With
-	 * several, the oldest.
-	 *
-	 * @param \WP_Term $brand Brand.
-	 * @param string   $slot  Slot.
-	 * @return \WP_Block_Template|null
-	 */
-	public static function existing_copy( $brand, $slot ) {
-		$ids = get_posts(
-			[
-				'post_type'      => 'wp_template_part',
-				'post_status'    => 'publish',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'meta_key'       => self::COPY_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-				'meta_value'     => $brand->term_id . ':' . $slot, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-				'tax_query'      => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-					[
-						'taxonomy' => 'wp_theme',
-						'field'    => 'name',
-						'terms'    => get_stylesheet(),
-					],
-				],
-			]
-		);
-		return $ids ? Block_Theme::get_part( get_post_field( 'post_name', $ids[0] ) ) : null;
-	}
-
-	/**
 	 * Copy a slot's main part into a new regular part named "Original [Brand]". It isn't
 	 * deleted with the brand.
 	 *

@@ -223,12 +223,11 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 		$this->assertSame( 'header-desktop-brand-a', $copy->slug );
 		$this->assertSame( 'header-desktop [Brand A]', $copy->title );
 		$this->assertSame( 'header', $copy->area );
-		$this->assertSame( 'header-desktop-brand-a', Layouts::existing_copy( $this->brand, 'header-desktop' )->slug );
 
 		// A second plain copy gets a numbered slug.
 		$this->assertSame( 'header-desktop-brand-a-2', Layouts::copy_part( $this->brand, 'header-desktop' )->slug );
 
-		// Replace overwrites the earlier copy with the main part's current content.
+		// Replace overwrites only the named copy, with the main part's current content.
 		$main = get_page_by_path( 'header-desktop', OBJECT, 'wp_template_part' );
 		wp_update_post(
 			[
@@ -236,14 +235,18 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 				'post_content' => '<!-- wp:paragraph --><p>Main v2</p><!-- /wp:paragraph -->',
 			]
 		);
-		$replaced = Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a' );
+		$replaced = Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a-2' );
 		$this->assertStringContainsString( 'Main v2', $replaced->content );
+		$this->assertStringContainsString( 'Main v1', Block_Theme::get_part( 'header-desktop-brand-a' )->content );
+
+		// The main part itself is never a copy to replace.
+		$this->assertWPError( Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop' ) );
 	}
 
 	/**
-	 * A brand's earlier copy is found by its brand tag, not its slug.
+	 * A copy is tagged with the brand and slot it was made for, and only that brand can replace it.
 	 */
-	public function test_existing_copy_belongs_to_its_brand() {
+	public function test_copy_tagged_with_its_brand() {
 		$this->make_part( 'header-desktop' );
 		$other = $this->factory->term->create_and_get(
 			[
@@ -254,11 +257,8 @@ class TestBlockThemeLayouts extends WP_UnitTestCase {
 		);
 
 		// This copy's slug, header-desktop-brand-a-2, starts with Brand A's.
-		Layouts::copy_part( $other, 'header-desktop' );
-		$this->assertNull( Layouts::existing_copy( $this->brand, 'header-desktop' ) );
-		$this->assertSame( 'header-desktop-brand-a-2', Layouts::existing_copy( $other, 'header-desktop' )->slug );
-
-		// Nor can Brand A replace it.
+		$copy = Layouts::copy_part( $other, 'header-desktop' );
+		$this->assertSame( $other->term_id . ':header-desktop', get_post_meta( $copy->wp_id, Layouts::COPY_META_KEY, true ) );
 		$this->assertWPError( Layouts::copy_part( $this->brand, 'header-desktop', 'header-desktop-brand-a-2' ) );
 	}
 
