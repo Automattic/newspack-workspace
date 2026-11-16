@@ -3,6 +3,8 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 const { loadConfig } = require( '../src/config' );
 
+process.env.NODE_ENV ??= 'production';
+
 const scriptsDir = path.resolve( __dirname, '../../scripts' );
 const wpScripts = path.dirname( require.resolve( '@wordpress/scripts/package.json', { paths: [ scriptsDir ] } ) );
 
