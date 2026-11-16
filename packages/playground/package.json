@@ -1,0 +1,26 @@
+{
+	"name": "newspack-playground",
+	"version": "0.1.0",
+	"description": "Build design prototypes against the Newspack components",
+	"license": "GPL-2.0-or-later",
+	"private": true,
+	"exports": {
+		"./bridge": "./src/bridge.js"
+	},
+	"dependencies": {
+		"@wordpress/a11y": "^4.48.0",
+		"@wordpress/components": "44.0.0",
+		"@wordpress/dataviews": "22.0.0",
+		"@wordpress/element": "^6.33.0",
+		"@wordpress/icons": "^20.0.0",
+		"@wordpress/ui": "^0.26.0",
+		"react": "^18.0.0",
+		"react-dom": "^18.0.0"
+	},
+	"devDependencies": {
+		"newspack-scripts": "workspace:*"
+	},
+	"scripts": {
+		"test": "newspack-scripts test"
+	}
+}
