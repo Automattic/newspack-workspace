@@ -30,10 +30,13 @@ class Colors {
 	 * Initializes.
 	 */
 	public static function init() {
-		// Only the brand settings screens read the list, and building it resolves theme.json.
-		if ( is_admin() ) {
-			add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
-		}
+		// Building the list resolves theme.json, and only admin screens show it.
+		add_action(
+			'current_screen',
+			function () {
+				add_filter( 'newspack_multibranded_site_theme_colors', [ __CLASS__, 'register_palette_colors' ], 20 );
+			}
+		);
 		add_filter( 'wp_theme_json_data_user', [ __CLASS__, 'filter_user_theme_json' ] );
 		add_action( 'wp', [ __CLASS__, 'clean_theme_json_cache' ], 20 );
 	}
