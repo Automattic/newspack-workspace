@@ -42,6 +42,7 @@ type BlockThemePart = {
 	source: string;
 	editUrl: string;
 	navs: Array< { id: number; fallback: boolean } >;
+	copyOf: string;
 };
 
 type BlockThemeSlot = {

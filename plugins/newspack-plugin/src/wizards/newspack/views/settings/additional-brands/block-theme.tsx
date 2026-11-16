@@ -285,7 +285,7 @@ export function BlockThemeColors( {
  * @param props.wizardApiFetch API fetch.
  */
 export function BlockThemeMenus( { brand, brands, updateMeta, wizardApiFetch }: SectionProps ) {
-	const [ menus, setMenus ] = useState< BlockThemeMenu[] >( blockThemeData?.menus || [] );
+	const [ menus, setMenus ] = useState< BlockThemeMenu[] >( [ ...( blockThemeData?.menus || [] ) ] );
 	const [ message, setMessage ] = useState( '' );
 	if ( ! blockThemeData ) {
 		return null;
@@ -506,11 +506,8 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 		updateMeta( { _block_theme_parts: next } );
 	};
 
-	// "Copy" names copies {slot}-{brand slug}, numbered if taken.
 	const earlierCopy = ( slot: BlockThemeSlot ) =>
-		Object.values( parts ).find(
-			part => 'custom' === part.source && part.slug !== slot.main && new RegExp( `^${ slot.slot }-${ brand.slug }(-\\d+)?$` ).test( part.slug )
-		);
+		Object.values( parts ).find( part => part.slug !== slot.main && part.copyOf === `${ brand.id }:${ slot.slot }` );
 
 	const copy = ( slot: BlockThemeSlot, replace: boolean ) => {
 		setMessage( '' );
@@ -545,17 +542,17 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 	blockThemeData.slots.forEach( slot => {
 		const slug = ownPart( brand, slot );
 		if ( slug ) {
-			/* translators: 1: slot name, e.g. "desktop header", 2: template part title. */
-			owned.push( sprintf( __( '%1$s (%2$s)', 'newspack-plugin' ), slot.label.toLowerCase(), parts[ slug ]?.title || slug ) );
+			/* translators: 1: slot name, e.g. "Desktop header", 2: template part title. */
+			owned.push( sprintf( __( '%1$s (%2$s)', 'newspack-plugin' ), slot.label, parts[ slug ]?.title || slug ) );
 		}
 	} );
 	let status = __( 'Uses the main site’s header, footer and sidebar.', 'newspack-plugin' );
 	if ( owned.length === blockThemeData.slots.length ) {
 		/* translators: %s: list of template parts. */
-		status = sprintf( __( 'Own %s.', 'newspack-plugin' ), listNames( owned ) );
+		status = sprintf( __( 'This brand’s own parts: %s.', 'newspack-plugin' ), listNames( owned ) );
 	} else if ( owned.length ) {
 		/* translators: %s: list of template parts. */
-		status = sprintf( __( 'Own %s. Everything else uses the main site’s parts.', 'newspack-plugin' ), listNames( owned ) );
+		status = sprintf( __( 'This brand’s own parts: %s. Everything else uses the main site’s parts.', 'newspack-plugin' ), listNames( owned ) );
 	}
 
 	return (
