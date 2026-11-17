@@ -52,7 +52,7 @@ Core's theme.json is `src/wp-core-theme.json`, copied from WordPress 7.1.4. With
 
 ## Pinned versions
 
-The playground bundles its own pinned copies of `@wordpress/components`, `@wordpress/dataviews` and the editor packages (`block-editor`, `block-library`, `blocks`, `data`, `core-data`, `global-styles-engine`, `global-styles-ui`), independent of the ranges elsewhere in the workspace, so prototypes render with current versions. Every import of one of these resolves to the pinned copy, so the editor stores exist once. Bump them deliberately, together: each editor release names the `@wordpress/components` and `@wordpress/ui` versions it was built against.
+The playground bundles its own pinned copies of `@wordpress/components`, `@wordpress/dataviews` and the editor packages (`block-editor`, `block-library`, `blocks`, `data`, `core-data`, `global-styles-engine`, `global-styles-ui`, `hooks`, `interface`), independent of the ranges elsewhere in the workspace, so prototypes render with current versions. Every import of one of these resolves to the pinned copy, so the editor stores exist once. Bump them deliberately, together: each editor release names the `@wordpress/components` and `@wordpress/ui` versions it was built against.
 
 `fixtures/editor` builds a block editor with core blocks, the block theme's styles and the block inspector. Build it after a bump.
 

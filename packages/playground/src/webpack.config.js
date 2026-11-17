@@ -13,6 +13,7 @@ const REMOVED_PLUGINS = [ 'DependencyExtractionWebpackPlugin', 'RtlCssPlugin', '
 
 // Each of these holds a store or registry, or must match one that does, so every import gets the playground's pinned copy.
 const PINNED = [
+	'@wordpress/api-fetch',
 	'@wordpress/block-editor',
 	'@wordpress/block-library',
 	'@wordpress/blocks',
@@ -22,6 +23,8 @@ const PINNED = [
 	'@wordpress/dataviews',
 	'@wordpress/global-styles-engine',
 	'@wordpress/global-styles-ui',
+	'@wordpress/hooks',
+	'@wordpress/interface',
 ];
 
 const pinnedAliases = () =>
