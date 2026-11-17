@@ -36,7 +36,9 @@ Messages are `np-playground:state`, `np-playground:height` and `np-playground:se
 
 ## Theme
 
-`newspack-playground/theme` exports `themeConfig( theme, ...variations )`. It resolves a theme.json the way WordPress does: core's theme.json at the bottom, its presets under the `default` origin, then the theme and any style variations, their presets under `theme`. The block editor and `GlobalStylesUI` both read that shape.
+`newspack-playground/theme` exports `themeConfig( theme, ...variations )`. It resolves a theme.json the way WordPress does: core's theme.json at the bottom, its presets under the `default` origin, then the theme and any style variations, their presets under `theme`, each file migrated to schema v3 and `appearanceTools` expanded. The block editor and `GlobalStylesUI` both read that shape.
+
+It covers theme.json only. It doesn't load the theme's `@font-face` rules or its editor stylesheet, and it doesn't generate core's spacing sizes from `spacingScale`, which WordPress does on the server.
 
 ```js
 import { generateGlobalStyles } from '@wordpress/global-styles-engine';
@@ -52,7 +54,7 @@ Core's theme.json is `src/wp-core-theme.json`, copied from WordPress 7.1.4. With
 
 ## Pinned versions
 
-The playground bundles its own pinned copies of `@wordpress/components`, `@wordpress/dataviews` and the editor packages (`block-editor`, `block-library`, `blocks`, `data`, `core-data`, `global-styles-engine`, `global-styles-ui`, `hooks`, `interface`), independent of the ranges elsewhere in the workspace, so prototypes render with current versions. Every import of one of these resolves to the pinned copy, so the editor stores exist once. Bump them deliberately, together: each editor release names the `@wordpress/components` and `@wordpress/ui` versions it was built against.
+The playground bundles its own pinned copies of `@wordpress/components`, `@wordpress/dataviews` and the editor packages (`api-fetch`, `block-editor`, `block-library`, `blocks`, `data`, `core-data`, `global-styles-engine`, `global-styles-ui`, `hooks`, `interface`), independent of the ranges elsewhere in the workspace, so prototypes render with current versions. Every import of one of these resolves to the pinned copy, so the editor stores exist once. That holds for screens built on `block-editor`; packages above it, such as `@wordpress/editor`, `edit-post` and `plugins`, aren't pinned, so a plugin sidebar from `@plugin` isn't supported yet. Bump them deliberately, together: each editor release names the `@wordpress/components` and `@wordpress/ui` versions it was built against.
 
 `fixtures/editor` builds a block editor with core blocks, the block theme's styles and the block inspector. Build it after a bump.
 
