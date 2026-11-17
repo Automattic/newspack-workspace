@@ -125,6 +125,9 @@ class Taxonomy {
 		Meta\Logo::init();
 		Meta\Theme_Colors::init();
 		Meta\Menus::init();
+		Meta\Block_Theme_Menus::init();
+		Meta\Block_Theme_Parts::init();
+		Meta\Block_Theme_Palette::init();
 		Meta\User_Primary_Brand::init();
 		Meta\Tag_Primary_Brand::init();
 		Meta\Category_Primary_Brand::init();
