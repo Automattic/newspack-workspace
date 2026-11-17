@@ -9,7 +9,7 @@ import classnames from 'classnames';
 import { Notice, SlotFillProvider, createSlotFill } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, createInterpolateElement, isValidElement, useLayoutEffect, useRef, useState, forwardRef, Suspense } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical, plus } from '@wordpress/icons';
 
@@ -360,7 +360,10 @@ const Wizard = (
 												noMargin
 											/>
 										) }
-										<SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } />
+										{ /* Keeps a lazy section's loading below the HashRouter, so the router keeps hearing hash changes. */ }
+										<Suspense fallback={ <Waiting isCenter /> }>
+											<SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } />
+										</Suspense>
 									</div>
 								) }
 							/>
