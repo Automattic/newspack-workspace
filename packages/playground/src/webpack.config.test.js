@@ -15,9 +15,24 @@ describe( 'createWebpackConfig', () => {
 
 	it( 'resolves every editor store to the one pinned copy', () => {
 		const packageDir = require( 'path' ).resolve( __dirname, '..' );
-		for ( const name of [ '@wordpress/data', '@wordpress/blocks', '@wordpress/block-editor', '@wordpress/core-data' ] ) {
+		const stores = [
+			'@wordpress/api-fetch',
+			'@wordpress/block-editor',
+			'@wordpress/block-library',
+			'@wordpress/blocks',
+			'@wordpress/components',
+			'@wordpress/core-data',
+			'@wordpress/data',
+			'@wordpress/dataviews',
+			'@wordpress/global-styles-engine',
+			'@wordpress/global-styles-ui',
+			'@wordpress/hooks',
+			'@wordpress/interface',
+		];
+		for ( const name of stores ) {
 			const pinned = require( 'path' ).dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
 			expect( config.resolve.alias[ `${ name }$` ] ).toBe( pinned );
+			expect( require( `${ config.resolve.alias[ `${ name }$` ] }/package.json` ).version ).toBe( require( '../package.json' ).dependencies[ name ] );
 		}
 	} );
 
