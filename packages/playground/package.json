@@ -8,11 +8,21 @@
 		"newspack-playground": "bin/build.js"
 	},
 	"exports": {
-		"./bridge": "./src/bridge.js"
+		"./bridge": "./src/bridge.js",
+		"./theme": "./src/theme.js"
 	},
 	"dependencies": {
+		"@wordpress/api-fetch": "8.1.0",
+		"@wordpress/block-editor": "20.0.0",
+		"@wordpress/block-library": "12.1.0",
+		"@wordpress/blocks": "17.1.0",
 		"@wordpress/components": "44.0.0",
+		"@wordpress/core-data": "9.1.0",
+		"@wordpress/data": "11.1.0",
 		"@wordpress/dataviews": "22.0.0",
+		"@wordpress/element": "10.1.0",
+		"@wordpress/global-styles-engine": "2.1.0",
+		"@wordpress/global-styles-ui": "2.1.0",
 		"@wordpress/icons": "^20.0.0",
 		"@wordpress/ui": "^0.26.0",
 		"newspack-scripts": "workspace:*",

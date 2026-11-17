@@ -13,6 +13,18 @@ describe( 'createWebpackConfig', () => {
 		expect( names ).not.toContain( 'DependencyExtractionWebpackPlugin' );
 	} );
 
+	it( 'resolves every editor store to the one pinned copy', () => {
+		const packageDir = require( 'path' ).resolve( __dirname, '..' );
+		for ( const name of [ '@wordpress/data', '@wordpress/blocks', '@wordpress/block-editor', '@wordpress/core-data' ] ) {
+			const pinned = require( 'path' ).dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
+			expect( config.resolve.alias[ `${ name }$` ] ).toBe( pinned );
+		}
+	} );
+
+	it( 'reaches the themes folder through @themes', () => {
+		expect( config.resolve.alias[ '@themes' ] ).toBe( require( 'path' ).resolve( __dirname, '../../../themes' ) );
+	} );
+
 	it( 'fails the build on a missing export', () => {
 		expect( config.module.parser.javascript.exportsPresence ).toBe( 'error' );
 	} );
