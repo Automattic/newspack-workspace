@@ -57,4 +57,11 @@ describe( 'themeConfig', () => {
 		expect( settings.spacing.defaultSpacingSizes ).toBe( false );
 		expect( themeConfig( { ...v2, version: 3 } ).settings.typography.defaultFontSizes ).toBe( true );
 	} );
+
+	it( 'expands appearanceTools per file, so a variation opts in over the theme\'s own value', () => {
+		const base = { settings: { appearanceTools: true, spacing: { margin: false } } };
+		const variation = { settings: { appearanceTools: true } };
+		expect( themeConfig( base, variation ).settings.spacing.margin ).toBe( true );
+		expect( themeConfig( base, { settings: { appearanceTools: false } } ).settings.spacing.padding ).toBe( true );
+	} );
 } );

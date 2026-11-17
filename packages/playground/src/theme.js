@@ -83,10 +83,11 @@ const expandAppearanceTools = ( settings = {} ) => {
 
 /**
  * WordPress's v2 to v3 migration of a theme file (`WP_Theme_JSON_Schema::migrate_v2_to_v3`): a
- * v2 file that sets its own font or spacing sizes turns core's off, as v2 always did.
+ * v2 file that sets its own font or spacing sizes turns core's off, as v2 always did. A file
+ * with no version is left as it is, where WordPress would discard it.
  */
 const migrate = layer => {
-	if ( ! layer?.settings || ( layer.version ?? 1 ) >= 3 ) {
+	if ( ! layer?.settings || ! ( layer.version < 3 ) ) {
 		return layer;
 	}
 	const { typography, spacing } = layer.settings;
@@ -118,18 +119,22 @@ const byOrigin = ( origin, settings = {} ) => {
  * resolves it: core's theme.json (WordPress 7.1.4, `wp-core-theme.json`) at the bottom with
  * its presets under the `default` origin, then the theme with each style variation layered
  * over it in order, replacing the arrays and values it sets, its presets under `theme`. Each
- * file is migrated to schema v3 first, and the theme's `appearanceTools` is expanded into the
- * settings it turns on.
+ * file is first migrated to schema v3 and has its `appearanceTools` expanded into the settings
+ * it turns on, as WordPress does per file.
  *
  * @param {Object}    theme      The theme's theme.json.
  * @param {...Object} variations Style variations from the theme's styles/ folder.
  * @return {Object} The resolved config.
  */
 export const themeConfig = ( theme, ...variations ) => {
-	const merged = variations.map( migrate ).reduce( merge, migrate( theme ) );
+	const [ base, ...rest ] = [ theme, ...variations ].map( layer => {
+		const migrated = migrate( layer );
+		return migrated?.settings ? { ...migrated, settings: expandAppearanceTools( migrated.settings ) } : migrated;
+	} );
+	const merged = rest.reduce( merge, base );
 	return {
 		...merged,
-		settings: merge( byOrigin( 'default', core.settings ), byOrigin( 'theme', expandAppearanceTools( merged.settings ) ) ),
+		settings: merge( byOrigin( 'default', core.settings ), byOrigin( 'theme', merged.settings ) ),
 		styles: merge( core.styles, merged.styles ),
 	};
 };
