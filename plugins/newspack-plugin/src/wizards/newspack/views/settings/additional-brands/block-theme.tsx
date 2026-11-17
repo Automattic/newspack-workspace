@@ -546,7 +546,7 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 			owned.push( sprintf( __( '%1$s (%2$s)', 'newspack-plugin' ), slot.label, parts[ slug ]?.title || slug ) );
 		}
 	} );
-	let status = __( 'Uses the main site’s header, footer and sidebar.', 'newspack-plugin' );
+	let status: string = __( 'Uses the main site’s header, footer and sidebar.', 'newspack-plugin' );
 	if ( owned.length === blockThemeData.slots.length ) {
 		/* translators: %s: list of template parts. */
 		status = sprintf( __( 'This brand’s own parts: %s.', 'newspack-plugin' ), listNames( owned ) );
