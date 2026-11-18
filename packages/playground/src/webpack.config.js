@@ -2,7 +2,7 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
-const { PINNED, packageDir, packageRoot } = require( './pinned' );
+const { PINNED, linkedDeps, packageDir, packageRoot } = require( './pinned' );
 
 const repo = path.resolve( __dirname, '../../..' );
 
@@ -25,12 +25,17 @@ const pinnedAliases = () =>
 // Webpack also matches aliases against a file's resolved absolute path, so an exact alias on it catches the package's own relative imports.
 const replaceAliases = replace => Object.fromEntries( replace.map( ( { original, replacement } ) => [ `${ original }$`, replacement ] ) );
 
-// The playground's own node_modules comes first so a package it declares keeps that copy; anything else resolves from the original package's dependencies.
+// The playground's own node_modules comes first so a package it declares keeps that copy. The other pinned packages come from the same release, so their links fill in what the original package doesn't link.
 const replaceRules = replace =>
 	replace.map( ( { name, replacement } ) => ( {
 		include: fs.realpathSync( replacement ),
 		resolve: {
-			modules: [ path.join( packageDir, 'node_modules' ), path.resolve( packageRoot( name ), ...name.split( '/' ).map( () => '..' ) ), '...' ],
+			modules: [
+				path.join( packageDir, 'node_modules' ),
+				linkedDeps( name ),
+				...PINNED.filter( pinned => pinned !== name ).map( linkedDeps ),
+				'...',
+			],
 		},
 	} ) );
 

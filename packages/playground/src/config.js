@@ -62,6 +62,7 @@ const loadConfig = dir => {
 	return {
 		title: config.title,
 		entry: resolveExisting( root, config.entry ),
+		file,
 		aliases,
 		replace,
 	};

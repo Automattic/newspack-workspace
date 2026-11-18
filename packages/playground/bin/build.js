@@ -2,6 +2,7 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { loadConfig } = require( '../src/config' );
+const { packageRoot } = require( '../src/pinned' );
 
 process.env.NODE_ENV ??= 'production';
 
@@ -14,6 +15,18 @@ const args = process.argv.slice( 2 );
 const outIndex = args.indexOf( '--out' );
 const out = outIndex === -1 ? null : args[ outIndex + 1 ];
 const dir = args.find( ( arg, i ) => ! arg.startsWith( '--' ) && i !== outIndex + 1 );
+
+const importedFromPackage = ( compilation, { name, replacement } ) => {
+	const target = fs.realpathSync( replacement );
+	const inside = `${ fs.realpathSync( packageRoot( name ) ) }${ path.sep }`;
+	return [ ...compilation.modules ]
+		.flatMap( module => [ module, ...( module.modules || [] ) ] )
+		.some(
+			module =>
+				module.resource === target &&
+				[ ...compilation.moduleGraph.getIncomingConnections( module ) ].some( ( { originModule } ) => originModule?.resource?.startsWith( inside ) )
+		);
+};
 
 const fail = message => {
 	console.error( message );
@@ -46,9 +59,9 @@ webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.ali
 	if ( stats.hasErrors() ) {
 		fail( stats.toString( { all: false, errors: true } ) );
 	}
-	const unreached = config.replace.filter( ( { replacement } ) => ! stats.compilation.fileDependencies.has( replacement ) );
+	const unreached = config.replace.filter( entry => ! importedFromPackage( stats.compilation, entry ) );
 	if ( unreached.length ) {
-		fail( unreached.map( ( { key } ) => `playground: replace "${ key }": no import in the bundle reaches that file` ).join( '\n' ) );
+		fail( unreached.map( ( { key, name } ) => `playground: replace "${ key }" in ${ config.file }: nothing in ${ name } imports that file` ).join( '\n' ) );
 	}
 	if ( stats.hasWarnings() ) {
 		console.warn( stats.toString( { all: false, warnings: true } ) );

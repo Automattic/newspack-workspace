@@ -20,4 +20,6 @@ const PINNED = [
 
 const packageRoot = name => path.dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
 
-module.exports = { PINNED, packageDir, packageRoot };
+const linkedDeps = name => path.resolve( packageRoot( name ), ...name.split( '/' ).map( () => '..' ) );
+
+module.exports = { PINNED, linkedDeps, packageDir, packageRoot };

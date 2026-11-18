@@ -24,6 +24,7 @@ describe( 'loadConfig', () => {
 		expect( loadConfig( dir ) ).toEqual( {
 			title: 'Demo',
 			entry: path.join( dir, 'src/entry.js' ),
+			file: path.join( dir, 'playground.config.js' ),
 			aliases: { '@shared': path.join( dir, 'shared' ) },
 			replace: [],
 		} );
