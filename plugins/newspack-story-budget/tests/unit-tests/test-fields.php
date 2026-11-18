@@ -453,7 +453,7 @@ class TestFields extends WP_UnitTestCase {
 		$this->assertSame( get_post_status_object( 'future' )->label, $labels['future'] );
 	}
 
-	/*
+	/**
 	 * Empty the static registry so a test can observe it being built.
 	 */
 	private static function reset_registry() {
