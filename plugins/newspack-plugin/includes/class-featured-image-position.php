@@ -22,13 +22,30 @@ defined( 'ABSPATH' ) || exit;
  * returns empty when there is no thumbnail at all. It knows nothing about the
  * Newspack setting, so a post whose image the publisher hid shows it again.
  *
- * Three things have to go, because the templates render three things:
+ * Two blocks therefore have to render nothing: the image, and Newspack's
+ * caption block, which draws its caption and photo credit from the attachment
+ * and so survives the image's removal.
  *
- * 1. the image itself (`core/post-featured-image`);
- * 2. its caption and photo credit (`newspack/featured-image-caption`), which
- *    render from the attachment and so survive the image's removal;
- * 3. the container holding them, which carries vertical spacing of its own and
- *    would otherwise leave a gap where the image was.
+ * The container around them needs no help. Every single template wraps the
+ * image in a block carrying `className: "post-image"`, and the theme already
+ * collapses that container when it holds no image — `src/scss/_base.scss`:
+ *
+ *     .post-image {
+ *         &:empty,
+ *         &:not(:has(.wp-block-post-featured-image)) { display: none; }
+ *     }
+ *
+ * That rule is what keeps a post with no thumbnail at all from showing an empty
+ * box with vertical spacing, and a hidden image reaches exactly the same state:
+ * once the image block renders nothing, `.wp-block-post-featured-image` is
+ * absent and the container collapses, margins included. Removing the container
+ * server-side as well was tried and dropped — it duplicated this rule, and the
+ * structural test it needed could delete markup a publisher had put in the
+ * container by hand, which is a worse failure than the gap it prevented.
+ *
+ * The one case the CSS does not cover is a custom template whose container does
+ * not carry `post-image`. That container keeps its spacing, exactly as it
+ * already does today for a post with no thumbnail.
  */
 class Featured_Image_Position {
 
@@ -55,35 +72,12 @@ class Featured_Image_Position {
 	const THEME_MOD_KEYS = [ 'featured_image_default', 'page_featured_image_default' ];
 
 	/**
-	 * The only blocks allowed beneath a container before it counts as the
-	 * image's own box. Anything else means the container is holding something
-	 * besides the image, so it stays.
-	 *
-	 * @var string[]
-	 */
-	const IMAGE_BOX_BLOCKS = [
-		'core/group',
-		'core/column',
-		'core/post-featured-image',
-		'newspack/featured-image-caption',
-	];
-
-	/**
 	 * Register hooks.
 	 */
 	public static function init() {
 		add_action( 'after_switch_theme', [ __CLASS__, 'migrate_position_defaults' ], 10, 2 );
 		add_filter( 'render_block_core/post-featured-image', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
 		add_filter( 'render_block_newspack/featured-image-caption', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
-
-		/*
-		 * core/columns is deliberately absent. In `single/50-50-image.html` the
-		 * image's sibling column holds the post header, so dropping the image
-		 * column alone would let the remaining width-less one expand. Do not
-		 * "complete" this list.
-		 */
-		add_filter( 'render_block_core/group', [ __CLASS__, 'filter_image_wrapper' ], 10, 2 );
-		add_filter( 'render_block_core/column', [ __CLASS__, 'filter_image_wrapper' ], 10, 2 );
 	}
 
 	/**
@@ -97,10 +91,17 @@ class Featured_Image_Position {
 	 *
 	 * Mirrors `Post_Date::migrate_date_settings()`.
 	 *
-	 * @param string    $old_name  Name of the previous theme.
-	 * @param \WP_Theme $old_theme Previous theme object.
+	 * WordPress passes a `WP_Theme` in both branches of `check_theme_switched()`
+	 * — including when the old theme's files are gone, where the object exists
+	 * but `exists()` is false and `get_stylesheet()` still yields the slug, so
+	 * its stored mods are still readable. Core's own docblock warns that "the
+	 * parameters differ", which is why the second one is optional here rather
+	 * than required.
+	 *
+	 * @param string         $old_name  Name of the previous theme.
+	 * @param \WP_Theme|null $old_theme Previous theme object.
 	 */
-	public static function migrate_position_defaults( $old_name, $old_theme ) {
+	public static function migrate_position_defaults( $old_name, $old_theme = null ) {
 		if ( ! $old_theme instanceof \WP_Theme ) {
 			return;
 		}
@@ -110,9 +111,23 @@ class Featured_Image_Position {
 			return;
 		}
 
+		/*
+		 * Read the new theme's stored row rather than asking `get_theme_mod()`,
+		 * which runs the `theme_mod_{$name}` filters: a theme or plugin that
+		 * hardcodes a value through one of those would make the guard believe a
+		 * value is stored, skip the copy, and lose the publisher's default — the
+		 * very thing this exists to prevent. `get_option( 'stylesheet' )` is the
+		 * same key `set_theme_mod()` writes to, and by the time this action
+		 * fires it is already the new theme.
+		 */
+		$new_mods = get_option( 'theme_mods_' . get_option( 'stylesheet' ), [] );
+		if ( ! is_array( $new_mods ) ) {
+			$new_mods = [];
+		}
+
 		foreach ( self::THEME_MOD_KEYS as $key ) {
 			// Never overwrite a value the new theme already carries.
-			if ( isset( $old_mods[ $key ] ) && false === get_theme_mod( $key, false ) ) {
+			if ( isset( $old_mods[ $key ] ) && ! isset( $new_mods[ $key ] ) ) {
 				set_theme_mod( $key, $old_mods[ $key ] );
 			}
 		}
@@ -133,8 +148,8 @@ class Featured_Image_Position {
 	 *   position, `hidden` included. Miss it and a site-wide `hidden` default
 	 *   strips images from custom post types that classic still shows.
 	 *
-	 * The narrow-image half of that same clause is genuinely irrelevant here,
-	 * because only `hidden` suppresses anything.
+	 * The narrow-image half of that same clause cannot affect this, because it
+	 * is guarded by `'large' === $position`: a hidden position never reaches it.
 	 *
 	 * One deliberate divergence: classic returns before the downgrade when
 	 * `wp_get_attachment_metadata()` is false, so an attachment with no
@@ -169,6 +184,10 @@ class Featured_Image_Position {
 		 * in someone else's loop. A single post can render query loops of other
 		 * posts — related content, a curated block — and those keep their
 		 * thumbnails, exactly as they do on an archive.
+		 *
+		 * The one case this does not separate is a loop on a post's own page
+		 * that includes that same post, where the card is the queried post and
+		 * so loses its thumbnail. No shipped template or pattern does that.
 		 */
 		if ( (int) $post_id !== (int) get_queried_object_id() ) {
 			return false;
@@ -180,9 +199,9 @@ class Featured_Image_Position {
 	/**
 	 * Resolve the position for a post, past the context guards.
 	 *
-	 * Deliberately not memoized. Every lookup below reads the object cache, and
-	 * a per-request memo would go stale for anything that changes the position
-	 * mid-request — the block editor's own render endpoint among them.
+	 * Deliberately not memoized: every lookup below reads the object cache, and
+	 * the guards above mean this is reached only for the post actually being
+	 * viewed, at most twice per request.
 	 *
 	 * @param int $post_id Post to check.
 	 * @return bool
@@ -190,8 +209,9 @@ class Featured_Image_Position {
 	private static function resolve_hidden( $post_id ) {
 		/*
 		 * The supported post types. Read through the theme's own filter, which
-		 * newspack-newsletters and newspack-listings both add to from their own
-		 * init, so the list is right whichever theme is active.
+		 * newspack-newsletters and newspack-listings both add to when they
+		 * load, not gated on the active theme, so the list is right whichever
+		 * theme is running.
 		 */
 		$supported = apply_filters( 'newspack_theme_featured_image_post_types', [ 'post', 'page' ] );
 		if ( ! in_array( get_post_type( $post_id ), (array) $supported, true ) ) {
@@ -201,8 +221,7 @@ class Featured_Image_Position {
 		/*
 		 * Classic returns an empty position before it reads anything when the
 		 * post has no thumbnail, so a site-wide `hidden` default never applies
-		 * to a post with no image. Without this guard the wrapper would be
-		 * dropped from posts that have nothing to hide.
+		 * to a post with no image.
 		 */
 		if ( ! has_post_thumbnail( $post_id ) ) {
 			return false;
@@ -222,17 +241,21 @@ class Featured_Image_Position {
 	/**
 	 * Return nothing for a block whose post has its featured image hidden.
 	 *
-	 * Registered on both the image block and Newspack's caption block: the
-	 * caption and photo credit read from the attachment, so removing the image
-	 * alone leaves them captioning nothing.
+	 * Registered on both the image block and Newspack's caption block. The
+	 * caption matters even though the theme's CSS collapses the container around
+	 * it: a photo credit for an image nobody can see should not sit in the
+	 * markup, and a custom template whose container lacks `post-image` would
+	 * show it.
 	 *
 	 * This discards markup core has already built, which means the featured
 	 * image has already claimed the one-shot `fetchpriority="high"` slot and
 	 * incremented the content media count in
 	 * `wp_get_loading_optimization_attributes()`. So on a post whose image is
 	 * hidden, the first visible in-content image does not get that hint.
-	 * `pre_render_block` would avoid the work but has no per-block-name
-	 * variant, so it would cost a callback on every block on every page.
+	 * `pre_render_block` would avoid that, at the cost of a callback on every
+	 * block on every page and of hiding these blocks from other plugins'
+	 * `render_block` callbacks; it is worth revisiting if the lost hint shows up
+	 * in a real measurement.
 	 *
 	 * @param string         $block_content Rendered block.
 	 * @param array          $block         Parsed block.
@@ -244,7 +267,10 @@ class Featured_Image_Position {
 			return $block_content;
 		}
 
-		// The block's own post, which is what core's render callback uses.
+		/*
+		 * The block's own post, which is what core's render callback uses. Both
+		 * blocks declare `postId` in `usesContext`, so this is populated.
+		 */
 		$post_id = isset( $instance->context['postId'] ) ? (int) $instance->context['postId'] : null;
 
 		if ( self::is_hidden( $post_id ) ) {
@@ -252,106 +278,6 @@ class Featured_Image_Position {
 		}
 
 		return $block_content;
-	}
-
-	/**
-	 * Drop the container around a suppressed featured image.
-	 *
-	 * The block theme's single templates wrap the image and its caption in a
-	 * container carrying vertical spacing of its own, so suppressing only the
-	 * contents would leave that spacing behind as a gap.
-	 *
-	 * The container is recognized structurally, from the parsed block, not from
-	 * its name, its class or what it rendered:
-	 *
-	 * - not by name, because the templates use a group in five places and a
-	 *   column in the sixth, and a block's name is editable in the Site Editor,
-	 *   so a publisher's own "Post Image" group must never be dropped for
-	 *   sharing a label;
-	 * - not by what it rendered, because output can be invisible and still
-	 *   matter. An ad slot renders a bare `<div id="div-gpt-ad-…">`, an embed
-	 *   loader renders only a script, and both would read as empty. Dropping
-	 *   the container would take them with it.
-	 *
-	 * So a container qualifies only when every block beneath it is one of
-	 * `IMAGE_BOX_BLOCKS` and one of them is the featured image. That is why the
-	 * `<main>` group wrapping the whole article is safe: it holds
-	 * `core/post-content`, so it never qualifies, whatever it rendered.
-	 *
-	 * Known limitation: `core/pattern`, `core/block` and `core/template-part`
-	 * are resolved inside their own render callbacks, not in the parse tree
-	 * (`resolve_pattern_blocks()` runs only for the REST controllers), so an
-	 * image moved inside one of those is still suppressed but its container is
-	 * not recognized and its gap remains. That fails in the safe direction:
-	 * nothing of the publisher's is ever removed.
-	 *
-	 * @param string $block_content Rendered block.
-	 * @param array  $block         Parsed block.
-	 * @return string
-	 */
-	public static function filter_image_wrapper( $block_content, $block ) {
-		if ( ! wp_is_block_theme() ) {
-			return $block_content;
-		}
-
-		// Structural and database-free, so it runs before the position lookup.
-		if ( ! self::is_image_box( $block ) ) {
-			return $block_content;
-		}
-
-		if ( ! self::is_hidden() ) {
-			return $block_content;
-		}
-
-		return '';
-	}
-
-	/**
-	 * Whether a parsed block holds the featured image and nothing else.
-	 *
-	 * @param array $block Parsed block.
-	 * @return bool
-	 */
-	private static function is_image_box( $block ) {
-		if ( empty( $block['innerBlocks'] ) || ! is_array( $block['innerBlocks'] ) ) {
-			return false;
-		}
-
-		$holds_the_image = false;
-
-		foreach ( $block['innerBlocks'] as $inner ) {
-			$name = isset( $inner['blockName'] ) ? $inner['blockName'] : null;
-
-			/*
-			 * `parse_blocks()` emits nameless nodes for the markup between
-			 * blocks. Whitespace is just the template's indentation; anything
-			 * else is content, and content means the container stays.
-			 */
-			if ( null === $name ) {
-				if ( '' !== trim( isset( $inner['innerHTML'] ) ? $inner['innerHTML'] : '' ) ) {
-					return false;
-				}
-				continue;
-			}
-
-			if ( ! in_array( $name, self::IMAGE_BOX_BLOCKS, true ) ) {
-				return false;
-			}
-
-			if ( 'core/post-featured-image' === $name ) {
-				$holds_the_image = true;
-				continue;
-			}
-
-			if ( 'core/group' === $name || 'core/column' === $name ) {
-				if ( ! self::is_image_box( $inner ) ) {
-					return false;
-				}
-				$holds_the_image = true;
-			}
-		}
-
-		return $holds_the_image;
 	}
 }
 

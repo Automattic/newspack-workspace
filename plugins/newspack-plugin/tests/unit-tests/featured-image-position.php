@@ -13,7 +13,6 @@ use Newspack\Featured_Image_Position;
  * @group featured-image-position
  */
 class Test_Featured_Image_Position extends WP_UnitTestCase {
-
 	/**
 	 * A published post carrying a featured image.
 	 *
@@ -130,61 +129,6 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A parsed wrapper block containing a featured image, as the templates have.
-	 *
-	 * @param string $block_name Wrapper block name.
-	 * @return array
-	 */
-	private function wrapper_block( $block_name = 'core/group' ) {
-		return [
-			'blockName'   => $block_name,
-			'attrs'       => [ 'metadata' => [ 'name' => 'Post Image' ] ],
-			'innerBlocks' => [
-				[
-					'blockName'   => 'core/group',
-					'attrs'       => [],
-					'innerBlocks' => [
-						[
-							'blockName'   => 'core/post-featured-image',
-							'attrs'       => [],
-							'innerBlocks' => [],
-						],
-						[
-							'blockName'   => 'newspack/featured-image-caption',
-							'attrs'       => [],
-							'innerBlocks' => [],
-						],
-					],
-				],
-			],
-		];
-	}
-
-	/**
-	 * Find the first parsed block matching a test, at any depth.
-	 *
-	 * @param array    $blocks Parsed blocks.
-	 * @param callable $test   Receives a parsed block, returns bool.
-	 * @return array|null
-	 */
-	private function find_block( $blocks, $test ) {
-		foreach ( $blocks as $block ) {
-			if ( $test( $block ) ) {
-				return $block;
-			}
-
-			if ( ! empty( $block['innerBlocks'] ) ) {
-				$found = $this->find_block( $block['innerBlocks'], $test );
-				if ( $found ) {
-					return $found;
-				}
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * The per-post meta suppresses the image.
 	 */
 	public function test_hidden_meta_hides_the_image() {
@@ -252,8 +196,7 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	 *
 	 * Classic returns an empty position before it reads the default, so a
 	 * site-wide `hidden` must not make `is_hidden()` true for a post that has
-	 * nothing to hide — otherwise the wrapper gets dropped from posts the
-	 * feature has no business touching.
+	 * nothing to hide.
 	 */
 	public function test_post_without_a_thumbnail_is_never_hidden() {
 		$bare_id = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
@@ -264,9 +207,9 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 
 		$this->assertFalse( Featured_Image_Position::is_hidden( $bare_id ) );
 		$this->assertSame(
-			'<div>kept</div>',
-			Featured_Image_Position::filter_image_wrapper( '<div>kept</div>', $this->wrapper_block() ),
-			'A post with no featured image keeps its wrapper.'
+			'<img />',
+			Featured_Image_Position::suppress_when_hidden( '<img />', [] ),
+			'A post with no featured image keeps whatever it renders.'
 		);
 	}
 
@@ -326,215 +269,14 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The image's container goes — whatever block it is.
-	 *
-	 * Five of the block theme's single templates wrap the image in a group and
-	 * one uses a column, so the filter must not care which. Nor does it care
-	 * what the container rendered: the decision is structural.
-	 */
-	public function test_image_box_dropped_for_group_and_column() {
-		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
-		$this->go_to_singular( $this->post_id );
-
-		foreach ( [ 'core/group', 'core/column' ] as $block_name ) {
-			foreach ( [ '', '<div class="wp-block-group"></div>', '<div><img src="x.jpg" /></div>' ] as $rendered ) {
-				$this->assertSame(
-					'',
-					Featured_Image_Position::filter_image_wrapper( $rendered, $this->wrapper_block( $block_name ) ),
-					sprintf( 'A %s holding only the featured image is dropped.', $block_name )
-				);
-			}
-		}
-	}
-
-	/**
-	 * A container holding anything besides the image is never dropped.
-	 *
-	 * This is the case a rendered-emptiness test gets wrong. An ad slot renders
-	 * a bare `<div id="div-gpt-ad-…">` and an embed loader renders only a
-	 * script: no text, nothing that looks like content, yet dropping the
-	 * container would take them with it. Someone moving the above-content ad
-	 * slot into the image's group in the Site Editor is an ordinary edit.
-	 */
-	public function test_container_holding_anything_else_is_kept() {
-		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
-		$this->go_to_singular( $this->post_id );
-
-		$neighbours = [
-			'an ad slot'      => 'newspack-ads/ad-slot',
-			'the content'     => 'core/post-content',
-			'a paragraph'     => 'core/paragraph',
-			'a cover'         => 'core/cover',
-			'a pattern'       => 'core/pattern',
-			'a synced block'  => 'core/block',
-			'a template part' => 'core/template-part',
-		];
-
-		foreach ( $neighbours as $label => $block_name ) {
-			$box                  = $this->wrapper_block();
-			$box['innerBlocks'][] = [
-				'blockName'   => $block_name,
-				'attrs'       => [],
-				'innerBlocks' => [],
-			];
-
-			$this->assertSame(
-				'<div>kept</div>',
-				Featured_Image_Position::filter_image_wrapper( '<div>kept</div>', $box ),
-				sprintf( 'A container that also holds %s must be kept.', $label )
-			);
-		}
-	}
-
-	/**
-	 * Markup between the blocks counts as content, unless it is whitespace.
-	 *
-	 * `parse_blocks()` gives the template's own indentation a nameless node, so
-	 * blank ones have to be ignored — but a nameless node carrying actual
-	 * markup is something a publisher put there.
-	 */
-	public function test_nameless_nodes_are_whitespace_only() {
-		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
-		$this->go_to_singular( $this->post_id );
-
-		$indented                  = $this->wrapper_block();
-		$indented['innerBlocks'][] = [
-			'blockName'   => null,
-			'innerHTML'   => "\n\t\t",
-			'innerBlocks' => [],
-		];
-		$this->assertSame(
-			'',
-			Featured_Image_Position::filter_image_wrapper( '<div></div>', $indented ),
-			'Indentation between blocks does not keep the container.'
-		);
-
-		$with_markup                  = $this->wrapper_block();
-		$with_markup['innerBlocks'][] = [
-			'blockName'   => null,
-			'innerHTML'   => '<img src="https://example.com/pixel.gif" alt="" />',
-			'innerBlocks' => [],
-		];
-		$this->assertSame(
-			'<div>kept</div>',
-			Featured_Image_Position::filter_image_wrapper( '<div>kept</div>', $with_markup ),
-			'Raw markup between the blocks keeps the container.'
-		);
-	}
-
-	/**
-	 * A publisher's own block is never dropped, however it is named.
-	 *
-	 * The wrapper is identified by containing a featured image, not by its
-	 * label — "Post Image" is an editable name that can appear on a group in
-	 * post content.
-	 */
-	public function test_unrelated_blocks_are_left_alone() {
-		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
-		$this->go_to_singular( $this->post_id );
-
-		$impostor = [
-			'blockName'   => 'core/group',
-			'attrs'       => [ 'metadata' => [ 'name' => 'Post Image' ] ],
-			'innerBlocks' => [
-				[
-					'blockName'   => 'core/paragraph',
-					'attrs'       => [],
-					'innerBlocks' => [],
-				],
-			],
-		];
-
-		$this->assertSame(
-			'<div>a publisher wrote this</div>',
-			Featured_Image_Position::filter_image_wrapper( '<div>a publisher wrote this</div>', $impostor ),
-			'A group named "Post Image" that holds no featured image is a publisher\'s own content.'
-		);
-	}
-
-	/**
-	 * The real template, parsed: the article survives, the image's box does not.
-	 *
-	 * `templates/single.html` wraps the whole article in a group with
-	 * `tagName: main`, which therefore contains the featured image just as the
-	 * image's own container does. Containment alone cannot tell them apart, and
-	 * a filter that tried would delete the article. Hand-built fixtures never
-	 * caught that, so this test reads the shipped template.
-	 */
-	public function test_real_single_template_keeps_the_article() {
-		/*
-		 * Read the tracked template straight off disk. It is checked in, unlike
-		 * the theme's generated `style.css`, so this works in a fresh checkout
-		 * whether or not newspack-block-theme is installable. Two candidate
-		 * roots: the monorepo layout, and the path the dev container mounts.
-		 */
-		$template = '';
-		foreach ( [ dirname( NEWSPACK_ABSPATH, 2 ) . '/themes', '/newspack-themes' ] as $root ) {
-			$candidate = $root . '/newspack-block-theme/templates/single.html';
-			if ( file_exists( $candidate ) ) {
-				$template = $candidate;
-				break;
-			}
-		}
-
-		if ( ! $template ) {
-			$this->fail( 'newspack-block-theme/templates/single.html was not found next to the plugin.' );
-		}
-
-		$blocks = parse_blocks( file_get_contents( $template ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- A local template file in the active theme, read once in a test.
-
-		$main = $this->find_block(
-			$blocks,
-			function ( $block ) {
-				return 'core/group' === $block['blockName'] && 'main' === ( $block['attrs']['tagName'] ?? '' );
-			}
-		);
-		$this->assertNotNull( $main, 'The template should wrap the article in a group with tagName "main".' );
-
-		$image_box = $this->find_block(
-			$blocks,
-			function ( $block ) {
-				return 'Post Image' === ( $block['attrs']['metadata']['name'] ?? '' );
-			}
-		);
-		$this->assertNotNull( $image_box, 'The template should carry a block holding the featured image.' );
-
-		/*
-		 * Both of them contain the featured image somewhere beneath them, which
-		 * is exactly why "contains the image" cannot be the test on its own.
-		 */
-		$finder = function ( $block ) {
-			return 'core/post-featured-image' === $block['blockName'];
-		};
-		$this->assertNotNull( $this->find_block( $main['innerBlocks'], $finder ), 'The article wrapper contains the featured image.' );
-		$this->assertNotNull( $this->find_block( $image_box['innerBlocks'], $finder ), 'The image box contains the featured image.' );
-
-		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
-		$this->go_to_singular( $this->post_id );
-
-		$article = '<main class="wp-block-group"><h1>Headline</h1><p>The article body.</p></main>';
-		$this->assertSame(
-			$article,
-			Featured_Image_Position::filter_image_wrapper( $article, $main ),
-			'The article wrapper must survive on a post whose image is hidden.'
-		);
-
-		$this->assertSame(
-			'',
-			Featured_Image_Position::filter_image_wrapper( '<div class="wp-block-group alignfull post-image"><div class="wp-block-group"></div></div>', $image_box ),
-			'The image box is dropped.'
-		);
-	}
-
-	/**
 	 * End to end through the filters: the image goes, the article stays.
 	 *
-	 * `WP_Block::render()` renders inner blocks before the block itself, which
-	 * is what makes the emptiness test safe — by the time an ancestor is
-	 * filtered, the image beneath it has already gone. This renders the real
-	 * stack rather than asserting that it behaves that way.
+	 * The container is deliberately still there afterwards. The theme collapses
+	 * it in CSS once it holds no `.wp-block-post-featured-image`, which is the
+	 * same rule that already handles a post with no thumbnail, so this asserts
+	 * the state that rule expects rather than removing the container twice.
 	 */
-	public function test_render_drops_the_image_box_and_keeps_the_article() {
+	public function test_render_removes_the_image_and_keeps_everything_else() {
 		$this->go_to_singular( $this->post_id );
 
 		$parsed = parse_blocks(
@@ -554,15 +296,19 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		$visible = ( new WP_Block( $parsed[0], $context ) )->render();
 		$this->assertStringContainsString( '<img', $visible, 'A visible featured image renders an image.' );
 		$this->assertStringContainsString( 'The article body.', $visible );
-		$this->assertStringContainsString( 'post-image', $visible, 'The image box renders while the image is visible.' );
 
 		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
 
 		$hidden = ( new WP_Block( $parsed[0], $context ) )->render();
 		$this->assertStringNotContainsString( '<img', $hidden, 'A hidden featured image renders nothing.' );
+		$this->assertStringNotContainsString(
+			'wp-block-post-featured-image',
+			$hidden,
+			"Nothing with the image's class may remain, or the theme's CSS will not collapse the container."
+		);
 		$this->assertStringContainsString( 'The article body.', $hidden, 'The article survives.' );
 		$this->assertStringContainsString( '<main', $hidden, 'The article wrapper survives.' );
-		$this->assertStringNotContainsString( 'post-image', $hidden, 'The emptied image box is gone.' );
+		$this->assertStringContainsString( 'post-image', $hidden, 'The container stays; the theme hides it.' );
 	}
 
 	/**
@@ -620,15 +366,13 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	 *
 	 * The behavior tests call the callbacks directly, so they would all still
 	 * pass if a registration were dropped — and a dropped caption filter is
-	 * exactly the kind of regression that leaves a caption floating under no
-	 * image.
+	 * exactly the kind of regression that leaves a photo credit in the markup
+	 * for an image nobody can see.
 	 */
 	public function test_filters_are_registered() {
 		$expected = [
 			'render_block_core/post-featured-image'        => 'suppress_when_hidden',
 			'render_block_newspack/featured-image-caption' => 'suppress_when_hidden',
-			'render_block_core/group'                      => 'filter_image_wrapper',
-			'render_block_core/column'                     => 'filter_image_wrapper',
 		];
 
 		foreach ( $expected as $hook => $method ) {
@@ -642,6 +386,90 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			has_action( 'after_switch_theme', [ Featured_Image_Position::class, 'migrate_position_defaults' ] ),
 			'The theme-mod migration should run on a theme switch.'
 		);
+	}
+
+	/**
+	 * On a classic theme the filters pass everything through untouched.
+	 *
+	 * The classic theme handles the position itself, and post content there can
+	 * perfectly well hold a featured image block. Without this guard a hidden
+	 * position would blank it twice over.
+	 */
+	public function test_classic_themes_are_untouched() {
+		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
+
+		switch_theme( 'default' );
+		if ( wp_is_block_theme() ) {
+			$this->fail( 'The fallback theme is a block theme, so this guard cannot be exercised.' );
+		}
+
+		$this->go_to_singular( $this->post_id );
+
+		$this->assertTrue(
+			Featured_Image_Position::is_hidden( $this->post_id ),
+			'The position still resolves; it is the filters that stand down.'
+		);
+		$this->assertSame(
+			'<figure><img /></figure>',
+			Featured_Image_Position::suppress_when_hidden( '<figure><img /></figure>', [] ),
+			'A classic theme keeps its own markup.'
+		);
+	}
+
+	/**
+	 * A real theme switch runs the migration.
+	 *
+	 * The other two migration tests call the callback directly, so they would
+	 * pass even if the hook name, priority or argument count were wrong. This
+	 * one goes through `switch_theme()` and the `check_theme_switched()` that
+	 * fires `after_switch_theme` on the next load.
+	 */
+	public function test_a_real_theme_switch_carries_the_defaults() {
+		switch_theme( 'default' );
+		set_theme_mod( 'featured_image_default', 'hidden' );
+		$classic = get_stylesheet();
+
+		switch_theme( $this->block_theme );
+		$this->assertSame( $classic, get_option( 'theme_switched' ), 'The switch should be pending.' );
+
+		remove_theme_mod( 'featured_image_default' );
+		check_theme_switched();
+
+		$this->assertSame(
+			'hidden',
+			get_theme_mod( 'featured_image_default' ),
+			'The default should survive a switch driven through WordPress itself.'
+		);
+	}
+
+	/**
+	 * The migration survives a previous theme whose files are gone.
+	 *
+	 * `check_theme_switched()` still passes a `WP_Theme` for a missing theme,
+	 * but one whose `exists()` is false. Its stored mods are still readable and
+	 * still worth carrying.
+	 */
+	public function test_migration_handles_a_missing_previous_theme() {
+		$ghost = wp_get_theme( 'a-theme-that-was-deleted' );
+		$this->assertFalse( $ghost->exists(), 'The fixture must be a theme that is not installed.' );
+
+		update_option(
+			'theme_mods_a-theme-that-was-deleted',
+			[ 'featured_image_default' => 'hidden' ]
+		);
+		remove_theme_mod( 'featured_image_default' );
+
+		Featured_Image_Position::migrate_position_defaults( 'a-theme-that-was-deleted', $ghost );
+
+		$this->assertSame( 'hidden', get_theme_mod( 'featured_image_default' ) );
+	}
+
+	/**
+	 * Nothing fatals if WordPress ever passes the old name alone.
+	 */
+	public function test_migration_tolerates_a_single_argument() {
+		Featured_Image_Position::migrate_position_defaults( 'some-theme' );
+		$this->assertTrue( true, 'Called with one argument without fataling.' );
 	}
 
 	/**
