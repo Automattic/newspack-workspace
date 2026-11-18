@@ -43,4 +43,15 @@ describe( 'createWebpackConfig', () => {
 	it( 'fails the build on a missing export', () => {
 		expect( config.module.parser.javascript.exportsPresence ).toBe( 'error' );
 	} );
+
+	it( 'has a root entry for every pinned package, so the pins leave root node_modules alone', () => {
+		const root = require( '../../../package.json' );
+		const declared = { ...root.dependencies, ...root.devDependencies };
+		// packages/components declares it at the playground's range, so the root slot already holds that version.
+		const heldElsewhere = [ '@wordpress/ui' ];
+		const pins = Object.keys( require( '../package.json' ).dependencies ).filter(
+			name => name.startsWith( '@wordpress/' ) && ! heldElsewhere.includes( name )
+		);
+		expect( pins.filter( name => ! declared[ name ] ) ).toEqual( [] );
+	} );
 } );
