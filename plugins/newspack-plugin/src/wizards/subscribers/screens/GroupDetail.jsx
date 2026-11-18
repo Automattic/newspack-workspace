@@ -4,7 +4,7 @@
  * The publisher-facing counterpart to the owner's My Account group page. Members
  * and Invitations are sortable DataViews tables; an admin can invite on behalf of
  * the owner, add people directly, remove members, manage invitations, adjust the
- * seat limit and change who manages the group.
+ * seat limit, change who manages the group and hand the group to a new owner.
  *
  * THE ROLE MODEL IS ENFORCED SERVER-SIDE, NOT HERE. Owner-only may promote or
  * demote a manager (Group_Subscription::user_can_manage_roles()), and a manager
@@ -39,6 +39,7 @@ import { pendingInvitesText, seatsRemaining, seatUsageText } from '../flows/capa
 import AddMembersFlow from '../flows/AddMembersFlow';
 import AdjustSeatsFlow from '../flows/AdjustSeatsFlow';
 import CancelInviteFlow from '../flows/CancelInviteFlow';
+import ChangeOwnerFlow from '../flows/ChangeOwnerFlow';
 import DisableLinkFlow from '../flows/DisableLinkFlow';
 import InviteMemberFlow from '../flows/InviteMemberFlow';
 import RegenerateLinkFlow from '../flows/RegenerateLinkFlow';
@@ -426,6 +427,17 @@ function GroupDetailView() {
 				description={ invitesNote && <span className="newspack-subscribers__muted">{ invitesNote }</span> }
 				actions={
 					<>
+						{ /* Only offered while no payment method renews the group: the owner holds billing. */ }
+						{ group.ownerChangeable && (
+							<Button
+								variant="tertiary"
+								size="compact"
+								onClick={ () => setModal( { kind: 'owner' } ) }
+								disabled={ ! isManageable( group ) }
+							>
+								{ __( 'Change owner', 'newspack-plugin' ) }
+							</Button>
+						) }
 						<Button
 							variant="tertiary"
 							size="compact"
@@ -562,6 +574,7 @@ function GroupDetailView() {
 			{ 'remove' === modal?.kind && (
 				<RemoveMemberFlow members={ modal.members } actions={ actions } onClose={ closeModal } onDone={ onDone } />
 			) }
+			{ 'owner' === modal?.kind && <ChangeOwnerFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
 			{ 'seats' === modal?.kind && <AdjustSeatsFlow group={ group } actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
 			{ 'regenerate-link' === modal?.kind && <RegenerateLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
 			{ 'disable-link' === modal?.kind && <DisableLinkFlow actions={ actions } onClose={ closeModal } onDone={ onDone } /> }
