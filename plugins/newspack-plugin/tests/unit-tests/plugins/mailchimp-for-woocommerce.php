@@ -130,15 +130,17 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 	 * The plugin's block checkout saves its unticked opt-in checkbox to the customer's stored
 	 * opt-in as "". Saving the stored opt-in in a REST request sends it to Mailchimp, and "" goes
 	 * as "transactional", so a subscribed reader who places an order would be unsubscribed. The
-	 * handler is back after the checkout, so a save elsewhere, such as a "0" an integration sends
-	 * on purpose, still reaches it.
+	 * save is still timestamped, as the plugin does. One customer has no stored opt-in and one
+	 * has "1", so the checkout covers both a new and an updated value. The handler is back for
+	 * both after the checkout, so a save elsewhere, such as a "0" an integration sends on purpose,
+	 * still reaches it.
 	 */
 	public function test_block_checkout_skips_the_plugin_for_its_opt_in_save() {
-		$new_customer     = $this->create_customer( 'checkout-new@example.test', 'subscribed' );
-		$returning_reader = $this->create_customer( 'checkout-returning@example.test', 'subscribed', '1' );
-		$save_unticked_opt_in = function () use ( $new_customer, $returning_reader ) {
-			update_user_meta( $new_customer->ID, 'mailchimp_woocommerce_is_subscribed', '' );
-			update_user_meta( $returning_reader->ID, 'mailchimp_woocommerce_is_subscribed', '' );
+		$customer_without_opt_in = $this->create_customer( 'checkout-new@example.test', 'subscribed' );
+		$customer_with_opt_in    = $this->create_customer( 'checkout-returning@example.test', 'subscribed', '1' );
+		$save_unticked_opt_in    = function () use ( $customer_without_opt_in, $customer_with_opt_in ) {
+			update_user_meta( $customer_without_opt_in->ID, 'mailchimp_woocommerce_is_subscribed', '' );
+			update_user_meta( $customer_with_opt_in->ID, 'mailchimp_woocommerce_is_subscribed', '' );
 		};
 		add_action( 'woocommerce_store_api_checkout_order_processed', $save_unticked_opt_in );
 		MailChimp_Service::instance()->saved_opt_ins = [];
@@ -146,9 +148,14 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 		do_action( 'woocommerce_store_api_checkout_order_processed', null );
 		remove_action( 'woocommerce_store_api_checkout_order_processed', $save_unticked_opt_in );
 		$this->assertSame( [], MailChimp_Service::instance()->saved_opt_ins );
+		foreach ( [ $customer_without_opt_in, $customer_with_opt_in ] as $customer ) {
+			$this->assertNotEmpty( get_user_meta( $customer->ID, 'mailchimp_woocommerce_marketing_status_updated_at', true ) );
+		}
 
-		update_user_meta( $returning_reader->ID, 'mailchimp_woocommerce_is_subscribed', '0' );
-		$this->assertSame( [ $returning_reader->ID ], MailChimp_Service::instance()->saved_opt_ins );
+		delete_user_meta( $customer_without_opt_in->ID, 'mailchimp_woocommerce_is_subscribed' );
+		add_user_meta( $customer_without_opt_in->ID, 'mailchimp_woocommerce_is_subscribed', '0' );
+		update_user_meta( $customer_with_opt_in->ID, 'mailchimp_woocommerce_is_subscribed', '0' );
+		$this->assertSame( [ $customer_without_opt_in->ID, $customer_with_opt_in->ID ], MailChimp_Service::instance()->saved_opt_ins );
 	}
 
 	/**

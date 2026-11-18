@@ -97,9 +97,13 @@ class Mailchimp_For_WooCommerce {
 	 * as "" when the box is not ticked or not shown. A save of the stored opt-in in a REST request
 	 * makes MC4WC send it to Mailchimp, with "" as "transactional", so a subscribed reader who
 	 * buys something would be unsubscribed. An unticked box is not a choice to stop receiving
-	 * newsletters. MC4WC's handler is off for that save only. A ticked box still subscribes the
-	 * customer, because the checkout queues that subscription itself, and the order MC4WC sends
-	 * next keeps a subscribed customer subscribed, see keep_subscribed_customer_subscribed().
+	 * newsletters.
+	 *
+	 * MC4WC's stored opt-in handler is off while the checkout runs its default-priority callbacks,
+	 * which is where MC4WC saves the checkbox. The opt-in is still timestamped as MC4WC would.
+	 * A ticked box still subscribes the customer, because the checkout queues that subscription
+	 * itself, and the order MC4WC sends next keeps a subscribed customer subscribed, see
+	 * keep_subscribed_customer_subscribed().
 	 */
 	public static function skip_checkout_opt_in_save() {
 		if ( ! \class_exists( '\MailChimp_Service' ) ) {
@@ -107,8 +111,22 @@ class Mailchimp_For_WooCommerce {
 		}
 		foreach ( [ 'added_user_meta', 'updated_user_meta' ] as $user_meta_hook ) {
 			if ( remove_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10 ) ) {
+				add_action( $user_meta_hook, [ __CLASS__, 'record_checkout_opt_in_time' ], 10, 3 );
 				self::$checkout_removed_user_meta_hooks[] = $user_meta_hook;
 			}
+		}
+	}
+
+	/**
+	 * Record when the checkout saved the stored opt-in, which MC4WC sends with the customer's orders.
+	 *
+	 * @param int    $meta_id  Meta ID.
+	 * @param int    $user_id  User ID.
+	 * @param string $meta_key Meta key.
+	 */
+	public static function record_checkout_opt_in_time( $meta_id, $user_id, $meta_key ) {
+		if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
+			update_user_meta( $user_id, 'mailchimp_woocommerce_marketing_status_updated_at', time() );
 		}
 	}
 
@@ -117,6 +135,7 @@ class Mailchimp_For_WooCommerce {
 	 */
 	public static function restore_checkout_opt_in_handler() {
 		foreach ( self::$checkout_removed_user_meta_hooks as $user_meta_hook ) {
+			remove_action( $user_meta_hook, [ __CLASS__, 'record_checkout_opt_in_time' ], 10 );
 			add_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 4 );
 		}
 		self::$checkout_removed_user_meta_hooks = [];
