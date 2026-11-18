@@ -21,8 +21,8 @@ import CatalogImpact from './catalog-impact';
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 // Covered by impact-table.test.jsx; here it only needs its props assertable.
-jest.mock( './impact-table', () => ( { baseline, framed, collapsible } ) => (
-	<div data-testid="impact-table" data-framed={ String( framed ) } data-collapsible={ String( collapsible ) }>
+jest.mock( './impact-table', () => ( { baseline, title, collapsible } ) => (
+	<div data-testid="impact-table" data-title={ String( title ) } data-collapsible={ String( collapsible ) }>
 		{ baseline.length } rows
 	</div>
 ) );
@@ -83,7 +83,7 @@ describe( 'CatalogImpact', () => {
 		expect( screen.queryByTestId( 'impact-table' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'requests the full sample on open and shows the table unframed', async () => {
+	it( 'requests the full sample on open and shows the table without a card heading', async () => {
 		apiFetch.mockResolvedValue( detail() );
 		render( <CatalogImpact stats={ stats() } /> );
 
@@ -94,7 +94,7 @@ describe( 'CatalogImpact', () => {
 		expect( apiFetch ).toHaveBeenCalledWith( { path: '/wc-dynamic-pricing/v1/impact-preview?limit=50' } );
 		const table = screen.getByTestId( 'impact-table' );
 		expect( table ).toHaveTextContent( '3 rows' );
-		expect( table ).toHaveAttribute( 'data-framed', 'false' );
+		expect( table ).toHaveAttribute( 'data-title', 'null' );
 		expect( table ).toHaveAttribute( 'data-collapsible', 'false' );
 	} );
 

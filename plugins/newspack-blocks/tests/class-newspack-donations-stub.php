@@ -4,7 +4,8 @@
  *
  * The newspack-blocks test suite runs without newspack-plugin loaded, so the
  * real \Newspack\Donations class is absent. This lightweight stub lets the
- * tests exercise the newspack_is_donation REST field contract in isolation.
+ * tests exercise the newspack_is_donation REST field contract and the Donate
+ * block renderer in isolation.
  *
  * @package Newspack_Blocks
  */
@@ -32,21 +33,19 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 		public static $stub_calls = [];
 
 		/**
-		 * Donation settings.
+		 * Site-wide donation settings the stub returns. Set by the test.
 		 *
-		 * @return array
+		 * @var array
 		 */
-		public static function get_donation_settings() {
-			return [
-				'tiered'              => false,
-				'platform'            => 'wc',
-				'disabledFrequencies' => [
-					'once'  => false,
-					'month' => false,
-					'year'  => false,
-				],
-			];
-		}
+		public static $stub_donation_settings = [];
+
+		/**
+		 * Whether the stub reports the RevEngine platform, which makes the Donate
+		 * block treat Name Your Price as available. Set by the test.
+		 *
+		 * @var bool
+		 */
+		public static $stub_is_platform_nrh = false;
 
 		/**
 		 * Whether the given product ID is a donation product.
@@ -57,6 +56,24 @@ if ( ! class_exists( __NAMESPACE__ . '\Donations' ) ) {
 		public static function is_donation_product( $product_id ) {
 			self::$stub_calls[] = $product_id;
 			return in_array( (int) $product_id, self::$stub_donation_product_ids, true );
+		}
+
+		/**
+		 * Site-wide donation settings.
+		 *
+		 * @return array
+		 */
+		public static function get_donation_settings() {
+			return self::$stub_donation_settings;
+		}
+
+		/**
+		 * Whether the donation platform is RevEngine.
+		 *
+		 * @return bool
+		 */
+		public static function is_platform_nrh() {
+			return self::$stub_is_platform_nrh;
 		}
 	}
 }

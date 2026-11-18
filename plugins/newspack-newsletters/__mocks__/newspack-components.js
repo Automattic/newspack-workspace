@@ -6,7 +6,7 @@
  * fails to parse during tests. Jest auto-loads `__mocks__/<pkg>.js` from
  * the project root for node_modules without requiring an explicit
  * `jest.mock()` call, so this stub keeps tests that transitively import
- * `newspack-components` (via the screen registry, the empty state, etc.)
+ * `newspack-components` (via the screen registry, etc.)
  * loadable without rendering the real components.
  *
  * The exports are deliberately minimal: each component is a pass-through
@@ -16,8 +16,8 @@
  * via `jest.mock('newspack-components', () => …)`.
  *
  * Member access yields another stub so compound components survive. Without
- * it `EmptyState.Root` is `undefined`, and a screen rendered at zero items
- * fails with "Element type is invalid", which reads as a broken component
+ * it a compound component such as `Card.Header` is `undefined`, and a screen
+ * rendering it fails with "Element type is invalid", which reads as a broken component
  * rather than a gap in this file.
  */
 

@@ -26,6 +26,7 @@
 		background: color.adjust(wp-colors.$alert-red, $lightness: 35%);
 
 		> svg {
+			color: wp-colors.$alert-red;
 			fill: wp-colors.$alert-red;
 			transform: rotate(180deg);
 		}
@@ -47,6 +48,7 @@
 		background: np-colors.$primary-050;
 
 		> svg {
+			color: var(--wp-admin-theme-color);
 			fill: var(--wp-admin-theme-color);
 		}
 	}
@@ -55,6 +57,7 @@
 		background: color.adjust(wp-colors.$alert-green, $lightness: 45%);
 
 		> svg {
+			color: wp-colors.$alert-green;
 			fill: wp-colors.$alert-green;
 		}
 	}
@@ -63,6 +66,7 @@
 		background: color.adjust(wp-colors.$alert-yellow, $lightness: 35%);
 
 		> svg {
+			color: wp-colors.$alert-yellow;
 			fill: wp-colors.$alert-yellow;
 			transform: rotate(180deg);
 		}

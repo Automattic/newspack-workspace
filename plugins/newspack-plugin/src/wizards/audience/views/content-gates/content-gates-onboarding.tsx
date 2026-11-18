@@ -6,39 +6,33 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { envelope, postList, settings } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Card } from '../../../../../packages/components/src';
-import EmptyState from '../../../../../packages/components/src/empty-state';
 import { contentLocked, emailPremium } from '../../../../../packages/icons';
 
 const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: boolean } ) => {
 	return (
-		<EmptyState.Root>
-			<EmptyState.Header
-				icon={ isNewsletter ? emailPremium : contentLocked }
-				title={ sprintf(
-					// translators: %s is the type of content to restrict.
-					__( 'Get started with %s', 'newspack-plugin' ),
-					isNewsletter ? __( 'premium newsletters', 'newspack-plugin' ) : __( 'access control', 'newspack-plugin' )
-				) }
-				description={
-					isNewsletter
-						? __(
-								'Set up premium newsletters to manage which lists readers can sign up for. Start by selecting which lists to restrict, then configure access through registered and/or paid options.',
-								'newspack-plugin'
-						  )
+		<Stack direction="column" align="center" gap="2xl">
+			<EmptyState.Root>
+				<EmptyState.Icon icon={ isNewsletter ? emailPremium : contentLocked } />
+				<EmptyState.Title>
+					{ isNewsletter ? __( 'No premium newsletters yet', 'newspack-plugin' ) : __( 'No content gates yet', 'newspack-plugin' ) }
+				</EmptyState.Title>
+				<EmptyState.Description>
+					{ isNewsletter
+						? __( 'Restrict newsletter lists to paying readers. Pick the lists, then choose who gets access.', 'newspack-plugin' )
 						: __(
-								'Set up gates to manage what content readers can access across your site. Start by selecting which content to restrict, then configure access through registered and/or paid options (including metered rules).',
+								'Gates control who can read which content. Pick what to restrict, then require registration, payment, or both.',
 								'newspack-plugin'
-						  )
-				}
-			/>
-			<VStack spacing={ 4 }>
+						  ) }
+				</EmptyState.Description>
+			</EmptyState.Root>
+			<Stack direction="column" gap="lg" style={ { width: '100%', maxWidth: '487px' } }>
 				<Card
 					actionType="chevron"
 					isSmall
@@ -93,8 +87,8 @@ const ContentGatesOnboarding = ( { isNewsletter = false }: { isNewsletter?: bool
 						iconBackgroundColor: true,
 					} }
 				/>
-			</VStack>
-		</EmptyState.Root>
+			</Stack>
+		</Stack>
 	);
 };
 

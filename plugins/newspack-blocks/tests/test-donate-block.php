@@ -59,10 +59,66 @@ if ( ! function_exists( 'wcs_price_string' ) ) {
 	}
 }
 
+require_once __DIR__ . '/class-newspack-donations-stub.php';
+
 /**
  * Donate Block.
  */
 class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+	/**
+	 * Block minimums and the minimum the front end should use for each.
+	 */
+	public function block_minimum_provider() {
+		return [
+			'saved as a number string' => [ '1200', '1200' ],
+			// Earlier editors stored an empty string when the field was cleared.
+			'left empty'               => [ '', 20 ],
+		];
+	}
+
+	/**
+	 * A manual block's own minimum applies only when it is a number. Anything
+	 * else falls back to the site-wide minimum, so a blank minimum can't drop the floor.
+	 *
+	 * @dataProvider block_minimum_provider
+	 *
+	 * @param mixed $block_minimum    The block's minimumDonation attribute.
+	 * @param mixed $expected_minimum The minimum the front end should use.
+	 */
+	public function test_manual_block_uses_its_minimum_only_when_numeric( $block_minimum, $expected_minimum ) {
+		\Newspack\Donations::$stub_is_platform_nrh   = true;
+		\Newspack\Donations::$stub_donation_settings = [
+			'amounts'             => [
+				'once'  => [ 9, 20, 90, 20 ],
+				'month' => [ 7, 15, 30, 15 ],
+				'year'  => [ 84, 180, 360, 180 ],
+			],
+			'tiered'              => false,
+			'disabledFrequencies' => [
+				'once'  => false,
+				'month' => false,
+				'year'  => false,
+			],
+			'platform'            => 'nrh',
+			'minimumDonation'     => 20,
+		];
+
+		$configuration = Newspack_Blocks_Donate_Renderer_Frequency_Based::get_configuration(
+			[
+				'manual'              => true,
+				'tiered'              => false,
+				'amounts'             => \Newspack\Donations::$stub_donation_settings['amounts'],
+				'disabledFrequencies' => \Newspack\Donations::$stub_donation_settings['disabledFrequencies'],
+				'defaultFrequency'    => 'month',
+				'layoutOption'        => 'frequency',
+				'tierStyle'           => 'grid',
+				'minimumDonation'     => $block_minimum,
+			]
+		);
+
+		$this->assertSame( $expected_minimum, $configuration['minimumDonation'] );
+	}
+
 	/**
 	 * Test the amount formatting.
 	 */
@@ -103,9 +159,11 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	private $original_theme = null;
 
 	/**
-	 * Restore the theme a test switched.
+	 * Restore the Donations stub's defaults and the theme a test switched.
 	 */
 	public function tear_down() {
+		\Newspack\Donations::$stub_donation_settings = [];
+		\Newspack\Donations::$stub_is_platform_nrh   = false;
 		if ( null !== $this->original_theme ) {
 			switch_theme( $this->original_theme );
 			$this->original_theme = null;
@@ -265,6 +323,15 @@ class DonateBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * @return array
 	 */
 	private function get_wrapper_attributes( $name ) {
+		\Newspack\Donations::$stub_donation_settings = [
+			'tiered'              => false,
+			'platform'            => 'wc',
+			'disabledFrequencies' => [
+				'once'  => false,
+				'month' => false,
+				'year'  => false,
+			],
+		];
 		return [
 			'defaultFrequency' => 'month',
 			'className'        => 'is-style-' . $name,

@@ -1,3 +1,17 @@
+## newspack-story-budget [1.3.10](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.9...newspack-story-budget@1.3.10) (2026-11-16)
+
+
+### Bug Fixes
+
+* **story-budget:** build field registry only when it is read ([#1454](https://github.com/Automattic/newspack-workspace/issues/1454)) ([9087911](https://github.com/Automattic/newspack-workspace/commit/90879116288361c03d933534e9d3aa7359c91dbb))
+
+## newspack-story-budget [1.3.9](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.8...newspack-story-budget@1.3.9) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
 ## newspack-story-budget [1.3.8](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.7...newspack-story-budget@1.3.8) (2026-10-22)
 
 

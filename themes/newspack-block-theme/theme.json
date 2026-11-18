@@ -1382,6 +1382,11 @@
 			"area": "footer",
 			"name": "footer-mobile",
 			"title": "Footer (Mobile)"
+		},
+		{
+			"area": "sidebar",
+			"name": "sidebar-contents",
+			"title": "Sidebar"
 		}
 	],
 	"version": 2,

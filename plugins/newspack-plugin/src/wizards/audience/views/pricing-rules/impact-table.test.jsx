@@ -13,17 +13,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  */
 import ImpactTable from './impact-table';
 
-// A stand-in makes framing observable and still renders the `after` slot the
-// Show more button lives in.
-jest.mock( '../../../../../packages/components/src', () => ( {
-	TableCard: ( { children, after } ) => (
-		<div data-testid="table-card">
-			{ children }
-			{ after }
-		</div>
-	),
-} ) );
-
 const CURRENCY = { code: 'USD', symbol: '$', decimals: 2 };
 
 const row = ( over = {} ) => ( {
@@ -150,7 +139,8 @@ describe( 'ImpactTable', () => {
 
 	it( 'renders one row per product with its regular and resulting price', () => {
 		render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
-		expect( screen.getByRole( 'link', { name: 'Monthly' } ) ).toHaveAttribute( 'href', 'https://example.test/edit/1' );
+		expect( screen.getByText( 'Monthly' ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'link', { name: 'Monthly' } ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '$10.00' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$5.00' ) ).toBeInTheDocument();
 	} );
@@ -249,14 +239,8 @@ describe( 'ImpactTable', () => {
 
 	it( 'renders through the Newspack DataViews wrapper at the default density in its card', () => {
 		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } /> );
-		expect( container.querySelector( '.newspack-dataviews' ) ).not.toBeNull();
+		expect( container.querySelector( '.newspack-table-card .newspack-dataviews--in-card' ) ).not.toBeNull();
 		expect( container.querySelector( '.has-compact-density' ) ).toBeNull();
-	} );
-
-	it( 'renders on core DataViews with compact rows when unframed', () => {
-		const { container } = render( <ImpactTable baseline={ [ row() ] } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
-		expect( container.querySelector( '.newspack-dataviews' ) ).toBeNull();
-		expect( container.querySelector( '.has-compact-density' ) ).not.toBeNull();
 	} );
 
 	it( 'offers no way to hide or move a column, but keeps sorting', async () => {
@@ -314,16 +298,19 @@ describe( 'ImpactTable', () => {
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
 	} );
 
-	it( 'frames itself in a card by default', () => {
-		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
+	it( 'frames itself in a headed card by default', () => {
+		const { container } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } /> );
 
-		expect( screen.getByTestId( 'table-card' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Affected Products', level: 3 } ) ).toBeInTheDocument();
+		expect( container.querySelector( '.newspack-table-card--separated' ) ).not.toBeNull();
 	} );
 
-	it( 'drops the card when unframed, so a modal supplies the frame', () => {
-		render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } framed={ false } /> );
+	it( 'keeps the card without a heading or separator when the title is left out', () => {
+		const { container } = render( <ImpactTable baseline={ sample( 3 ) } segmentGroups={ [] } currency={ CURRENCY } title={ null } /> );
 
-		expect( screen.queryByTestId( 'table-card' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-table-card' ) ).not.toBeNull();
+		expect( container.querySelector( '.newspack-table-card__header' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-table-card--separated' ) ).toBeNull();
 		expect( bodyRows() ).toBe( 3 );
 	} );
 

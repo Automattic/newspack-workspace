@@ -219,6 +219,45 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[] $prompt_ids Prompt IDs.
+	 */
+	private function store_percent_encoded_id( $prompt_ids ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets reaches the stats route in
+	 * both forms the page's encoded request arrives in: undecoded through
+	 * /wp-json/, decoded once through ?rest_route=. It isn't decoded further,
+	 * into the separate test its transliteration names.
+	 */
+	public function test_stats_route_finds_a_percent_encoded_legacy_test_id() {
+		$this->as_admin();
+		$this->store_percent_encoded_id( $this->create_running_test( 'legacy-cafe' ) );
+		$this->create_running_test( 'cafe' );
+		foreach ( [ 'caf%25c3%25a9', 'caf%c3%a9' ] as $route_id ) {
+			$response = $this->stats_request( $route_id );
+			$this->assertSame( 200, $response->get_status(), $route_id );
+			$this->assertSame( 'caf%c3%a9', $response->get_data()['test_id'], $route_id );
+		}
+	}
+
+	/**
 	 * Sign in as an administrator.
 	 */
 	private function as_admin() {

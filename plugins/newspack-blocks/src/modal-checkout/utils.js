@@ -223,6 +223,46 @@ export function placeOrderSummary( doc, summary, reviewTable ) {
 }
 
 /**
+ * Restate an element's computed background as an inline `rgb()`/`rgba()` value.
+ *
+ * Stripe picks its light or dark card form from the first opaque background
+ * around the form, and parses it with tinycolor, which reads modern color
+ * syntax (`oklab()`, `color()`, what `color-mix()` computes to) as black. The
+ * color drawn is unchanged; only its notation moves to one Stripe can read,
+ * so the form still follows the theme's own light or dark surface. It has to
+ * run before Stripe mounts, since Stripe caches its theme for the page.
+ *
+ * @param {HTMLElement|null} element The element whose background Stripe reads.
+ *
+ * @return {void}
+ */
+export function setReadableBackground( element ) {
+	if ( ! element ) {
+		return;
+	}
+	const background = window.getComputedStyle( element ).backgroundColor;
+	if ( ! background || /^(rgba?\(|#)/.test( background ) ) {
+		return;
+	}
+	const context = document.createElement( 'canvas' ).getContext?.( '2d', { willReadFrequently: true } );
+	if ( ! context ) {
+		return;
+	}
+	// A canvas ignores a color it can't parse and keeps its previous fill, so
+	// start from transparent: an unreadable color then draws nothing and is
+	// skipped below, rather than painting the element black.
+	context.fillStyle = 'transparent';
+	context.fillStyle = background;
+	context.fillRect( 0, 0, 1, 1 );
+	const [ r, g, b, a ] = context.getImageData( 0, 0, 1, 1 ).data;
+	if ( a === 0 ) {
+		return;
+	}
+	element.style.backgroundColor =
+		a === 255 ? `rgb(${ r }, ${ g }, ${ b })` : `rgba(${ r }, ${ g }, ${ b }, ${ Math.round( ( a / 255 ) * 100 ) / 100 })`;
+}
+
+/**
  * Create a hidden input field.
  *
  * @param {string} name  The name of the input field.

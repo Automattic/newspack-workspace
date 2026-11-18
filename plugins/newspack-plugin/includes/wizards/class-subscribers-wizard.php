@@ -61,34 +61,6 @@ class Subscribers_Wizard extends Wizard {
 	const AVATAR_BATCH_CAP = 200;
 
 	/**
-	 * How many subscriptions the filter scan hydrates at a time. The scan itself
-	 * is bounded by FILTER_INCLUDE_CAP, but WooCommerce returns fully hydrated
-	 * WC_Subscription objects and only their holder ID is needed here — walking
-	 * the set a page at a time keeps peak memory at one chunk rather than the
-	 * whole cap. See customer_ids_for_raw_statuses().
-	 */
-	const FILTER_SCAN_CHUNK = 500;
-
-	/**
-	 * Per-request memo of the site's group subscriptions (each with its resolved
-	 * settings). A single request can resolve these several times — once per active
-	 * filter set plus the group list itself — and each resolution hydrates every
-	 * group subscription, so it's cached for the life of the (per-request) wizard.
-	 *
-	 * @var array<int,array{subscription:\WC_Subscription,settings:array}>|null
-	 */
-	private $group_subscriptions_cache = null;
-
-	/**
-	 * Per-request memo mapping each user ID to their group memberships
-	 * ({ id, plan, status, role }), built once from the site's groups so the
-	 * subscriber list doesn't re-resolve group roles per row.
-	 *
-	 * @var array<int,array<int,array>>|null
-	 */
-	private $group_membership_index = null;
-
-	/**
 	 * Per-request memo of holder IDs keyed by the sorted status set they were
 	 * resolved for. See customer_ids_for_raw_statuses().
 	 *
@@ -234,6 +206,58 @@ class Subscribers_Wizard extends Wizard {
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_get_groups' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'page'     => [
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'per_page' => [
+						'type'              => 'integer',
+						'default'           => 20,
+						'minimum'           => 1,
+						'maximum'           => 100,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					// Matches the group name, the product name, and the owner's name or email.
+					'search'   => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'orderby'  => [
+						'type'              => 'string',
+						'enum'              => array_keys( Subscribers_Index::ORDERBY ),
+						'default'           => 'createdAt',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'order'    => [
+						'type'              => 'string',
+						'enum'              => [ 'asc', 'desc' ],
+						'default'           => 'desc',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'status'   => [
+						'type'              => 'array',
+						'items'             => [
+							'type' => 'string',
+							'enum' => [ 'active', 'pending', 'on-hold', 'cancelled' ],
+						],
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					// Product names, as the Subscription column shows them.
+					'product'  => [
+						'type'              => 'array',
+						'items'             => [ 'type' => 'string' ],
+						'maxItems'          => 100,
+						'sanitize_callback' => 'rest_sanitize_request_arg',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
 			]
 		);
 
@@ -467,28 +491,65 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * GET the site's group subscriptions, hydrated for the admin group list.
+	 * GET one page of the site's group subscriptions, hydrated for the admin group list.
 	 *
-	 * Returns the `{ items, total, pages }` envelope the wizard's data hooks
-	 * expect. Groups are returned in full (the group list paginates client-side),
-	 * so `pages` is always 1. Each group carries the owner-inclusive member count
-	 * and the seat limit so the list can render "used / limit" without a second
-	 * round-trip.
+	 * The list is server-paginated: Subscribers_Index filters, searches,
+	 * sorts and pages the groups in SQL, and only the page it returns is loaded
+	 * as subscriptions. Returns the `{ items, total, pages }` envelope the
+	 * wizard's data hooks expect, plus `products`: every product name behind a
+	 * group, for the Subscription filter's options.
+	 *
+	 * Each group carries the owner-inclusive member count and the seat limit so
+	 * the list can render "used / limit" without a second round-trip.
+	 *
+	 * The index takes its candidates from get_group_subscription_ids(), whose
+	 * product-inheritance step can include a subscription whose own settings say
+	 * it is not a group. Such a row is dropped from the page here, so a page can
+	 * come back one short of `per_page` without the total changing.
+	 *
+	 * @param \WP_REST_Request $request The request.
 	 *
 	 * @return \WP_REST_Response
 	 */
-	public function api_get_groups() {
+	public function api_get_groups( \WP_REST_Request $request ): \WP_REST_Response {
 		$this->reset_request_caches();
+		$per_page  = (int) $request->get_param( 'per_page' );
+		$group_ids = $this->group_subscription_ids();
+		$page      = Subscribers_Index::query(
+			$group_ids,
+			[
+				'search'   => (string) $request->get_param( 'search' ),
+				'statuses' => (array) $request->get_param( 'status' ),
+				'products' => (array) $request->get_param( 'product' ),
+				'orderby'  => (string) $request->get_param( 'orderby' ),
+				'order'    => (string) $request->get_param( 'order' ),
+				'per_page' => $per_page,
+				'page'     => (int) $request->get_param( 'page' ),
+			]
+		);
+
 		$items = [];
-		foreach ( $this->get_group_subscriptions() as $group ) {
-			$items[] = $this->prepare_group( $group['subscription'], $group['settings'] );
+		foreach ( $page['ids'] as $subscription_id ) {
+			$subscription = \wcs_get_subscription( $subscription_id );
+			if ( ! $subscription ) {
+				continue;
+			}
+			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+			if ( empty( $settings['enabled'] ) ) {
+				continue;
+			}
+			$items[] = $this->prepare_group( $subscription, $settings );
 		}
+
+		$products = Subscribers_Index::products( $group_ids );
+		sort( $products, SORT_NATURAL | SORT_FLAG_CASE );
 
 		return rest_ensure_response(
 			[
-				'items' => $items,
-				'total' => count( $items ),
-				'pages' => 1,
+				'items'    => $items,
+				'total'    => $page['total'],
+				'pages'    => (int) ceil( $page['total'] / $per_page ),
+				'products' => $products,
 			]
 		);
 	}
@@ -497,9 +558,8 @@ class Subscribers_Wizard extends Wizard {
 	 * GET the plan names the subscriber list can be filtered by.
 	 *
 	 * The subscriber list is server-paginated, so it can't derive its plan filter
-	 * from the rows it happens to be showing the way the group list does — a plan
-	 * nobody on page 1 holds would simply not be offered. This endpoint supplies
-	 * the whole set instead.
+	 * from the rows it happens to be showing: a plan nobody on page 1 holds would
+	 * simply not be offered. This endpoint supplies the whole set instead.
 	 *
 	 * Names, not IDs: the `plan` filter on /subscribers matches display names, the
 	 * names the Subscription column shows. Group and individual plans alike show
@@ -530,11 +590,9 @@ class Subscribers_Wizard extends Wizard {
 	 */
 	public function api_get_plans(): \WP_REST_Response {
 		$this->reset_request_caches();
-		$names = [];
-
-		foreach ( $this->get_group_subscriptions() as $group ) {
-			$names[] = $group['plan_name'];
-		}
+		// Group plan names come from the index, so the plan list costs one query however
+		// many groups the site holds.
+		$names = Subscribers_Index::plan_names( $this->group_subscription_ids() );
 		foreach ( $this->subscription_product_names() as $product_name ) {
 			$names[] = $product_name;
 		}
@@ -651,40 +709,18 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Every group-enabled subscription on the site, each paired with its resolved
-	 * settings and the plan name its members see (group_plan_name()), keyed by
-	 * subscription ID. Memoized for the request.
+	 * The IDs of the site's group subscriptions, for Subscribers_Index.
 	 *
-	 * The HPOS-safe site-wide query get_group_subscription_ids() can over-report
-	 * under product inheritance, so each candidate is re-checked against its own
-	 * settings — the authority on group membership.
+	 * IDs only. Every group question this wizard asks is answered in SQL over
+	 * this set, and only a page of results is ever loaded as subscriptions.
 	 *
-	 * @return array<int,array{subscription:\WC_Subscription,settings:array,plan_name:string}>
+	 * @return int[]
 	 */
-	private function get_group_subscriptions() {
-		if ( null !== $this->group_subscriptions_cache ) {
-			return $this->group_subscriptions_cache;
+	private function group_subscription_ids(): array {
+		if ( ! class_exists( '\Newspack\Group_Subscription_Settings' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return [];
 		}
-		$groups = [];
-		if ( class_exists( '\Newspack\Group_Subscription_Settings' ) && function_exists( 'wcs_get_subscription' ) ) {
-			foreach ( Group_Subscription_Settings::get_group_subscription_ids() as $subscription_id ) {
-				$subscription = \wcs_get_subscription( $subscription_id );
-				if ( ! $subscription ) {
-					continue;
-				}
-				$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
-				if ( empty( $settings['enabled'] ) ) {
-					continue;
-				}
-				$groups[ (int) $subscription->get_id() ] = [
-					'subscription' => $subscription,
-					'settings'     => $settings,
-					'plan_name'    => $this->group_plan_name( $subscription, $settings ),
-				];
-			}
-		}
-		$this->group_subscriptions_cache = $groups;
-		return $groups;
+		return array_map( 'intval', Group_Subscription_Settings::get_group_subscription_ids() );
 	}
 
 	/**
@@ -1500,8 +1536,7 @@ class Subscribers_Wizard extends Wizard {
 	 * re-resolving within a single request, so each entry point starts clean.
 	 */
 	private function reset_request_caches() {
-		$this->group_subscriptions_cache       = null;
-		$this->group_membership_index          = null;
+		Subscribers_Index::reset();
 		$this->raw_status_ids_cache            = [];
 		$this->network_index_cache             = null;
 		$this->newsletter_list_titles_cache    = null;
@@ -1511,11 +1546,11 @@ class Subscribers_Wizard extends Wizard {
 	/**
 	 * Shape a reader user for the admin subscriber list.
 	 *
-	 * Cost note: group memberships are indexed once per request
-	 * (get_group_membership_index), but two lookups here are inherently per-row —
-	 * wcs_get_users_subscriptions() and last_payment_date()'s wc_get_orders() —
-	 * so a page costs ~2 × `per_page` (≤100) WooCommerce queries, plus one order
-	 * lookup per gift a reader holds. Both are
+	 * Cost note: every lookup here is per row. wcs_get_users_subscriptions() and
+	 * last_payment_date()'s wc_get_orders() cost a WooCommerce query each, plus one
+	 * order lookup per gift a reader holds. get_group_memberships() adds, per group
+	 * the reader is in, a subscription load, its settings, and a manager query. The
+	 * two WooCommerce lookups are
 	 * "newest/owned rows for one subscriber" lookups that WooCommerce can't answer
 	 * per-subscriber in a single batched query: batching last_payment_date() over
 	 * the page's subscriber IDs would need either an unbounded `limit => -1` (worse
@@ -1545,7 +1580,7 @@ class Subscribers_Wizard extends Wizard {
 			$this->get_individual_subscriptions( $user_id, $owned_subscriptions, $detailed ),
 			$this->get_network_subscriptions( $user_id )
 		);
-		$groups        = $this->get_group_memberships( $user_id, $detailed );
+		$groups        = $this->get_group_memberships( $user_id, $detailed, $owned_subscriptions );
 
 		// user_registered is stored in GMT, so anchor the parse to UTC before it is
 		// localized. It can also be a zero date ('0000-00-00 …'), which is truthy but
@@ -2015,64 +2050,68 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * A reader's group memberships, shaped as { id, plan, status, role, editUrl },
-	 * where `plan` is the group's own name. List-path entries add `planName`, the
-	 * plan the Subscription column shows (group_plan_name()), and `isComplimentary`.
+	 * A reader's group memberships: the groups they own, manage or belong to.
+	 * Each entry carries `plan`, the group's own name, and `planName`, the plan its
+	 * members subscribe to (group_plan_name()), which the Subscription column shows.
 	 *
-	 * On the list path (`$detailed` false) this reads from the per-request
-	 * membership index — built once by walking the site's groups — because the
-	 * cost amortizes across a whole page of rows.
+	 * Resolves only this user's groups, never the site's: a site can hold
+	 * thousands of them.
 	 *
-	 * On the single-profile path (`$detailed` true) that index is the wrong tool:
-	 * nothing amortizes it for one person, and building it walks every group and
-	 * every group's full membership. A single site here can hold a group with tens
-	 * of thousands of members. So the detail path resolves only the groups THIS
-	 * user is attached to — via the per-user helpers that already exist — and
-	 * widens each into the whole group object the profile's card renders
-	 * (prepare_group + billing + this reader's role and joinedAt). See
+	 * The list path (`$detailed` false) reads the same records the list's
+	 * filters read through Subscribers_Index::people(): the groups the reader
+	 * owns, and the member and manager meta on their account. So a row and the
+	 * filters that matched it always agree about a reader's groups. Each is
+	 * shaped as { id, plan, status, role, editUrl, isComplimentary }.
+	 *
+	 * The profile path (`$detailed` true) resolves through the per-user helpers,
+	 * get_managed_subscriptions_for_user() and get_group_subscriptions_for_user(),
+	 * and widens each group into the whole object its card renders:
+	 * prepare_group(), billing, and this reader's role and joinedAt. See
 	 * api_get_subscriber() for why the group travels whole rather than as an ID.
 	 *
-	 * @param int  $user_id  The reader user ID.
-	 * @param bool $detailed Whether to resolve the whole group object per membership.
+	 * Role precedence: owner (the subscription customer), else manager
+	 * (get_managers() is owner-inclusive and small), else member.
+	 *
+	 * @param int                $user_id             The reader user ID.
+	 * @param bool               $detailed            Whether to resolve the whole group object per membership.
+	 * @param \WC_Subscription[] $owned_subscriptions The list path's already-fetched subscriptions of the reader.
 	 *
 	 * @return array<int,array>
 	 */
-	private function get_group_memberships( $user_id, $detailed = false ) {
-		if ( ! $detailed ) {
-			$index = $this->get_group_membership_index();
-			return $index[ $user_id ] ?? [];
-		}
-		return $this->get_detailed_group_memberships( $user_id );
-	}
-
-	/**
-	 * The whole group object for each group a single user is attached to, for the
-	 * person profile.
-	 *
-	 * Resolves only this user's groups rather than the whole estate: the groups
-	 * they own or manage via get_managed_subscriptions_for_user(), and those they
-	 * are a plain member of via get_group_subscriptions_for_user(), unioned by ID.
-	 * Role is derived from the (small, owner-inclusive) manager set, so the
-	 * expensive full-membership walk is only ever done for the counts prepare_group
-	 * needs on the user's own group(s) — never once per group site-wide.
-	 *
-	 * @param int $user_id The user ID.
-	 *
-	 * @return array<int,array>
-	 */
-	private function get_detailed_group_memberships( $user_id ) {
-		if ( ! class_exists( '\Newspack\Group_Subscription' ) || ! class_exists( '\Newspack\Group_Subscription_Settings' ) ) {
+	private function get_group_memberships( $user_id, $detailed = false, array $owned_subscriptions = [] ) {
+		if ( ! class_exists( '\Newspack\Group_Subscription' ) || ! class_exists( '\Newspack\Group_Subscription_Settings' ) || ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
+		$user_id = (int) $user_id;
 
-		// Union owned/managed and member-of subscriptions, keyed by ID so a user
-		// who is both (a promoted manager was first a member) is resolved once.
+		// Keyed by ID, so a user who is both owner or manager and member is resolved once.
 		$subscriptions = [];
-		foreach ( Group_Subscription::get_managed_subscriptions_for_user( $user_id ) as $subscription ) {
-			$subscriptions[ (int) $subscription->get_id() ] = $subscription;
-		}
-		foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
-			$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+		if ( $detailed ) {
+			foreach ( Group_Subscription::get_managed_subscriptions_for_user( $user_id ) as $subscription ) {
+				$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+			}
+			foreach ( Group_Subscription::get_group_subscriptions_for_user( $user_id ) as $subscription ) {
+				$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+			}
+		} else {
+			foreach ( $owned_subscriptions as $subscription ) {
+				if ( $subscription instanceof \WC_Subscription && (int) $subscription->get_customer_id() === $user_id ) {
+					$subscriptions[ (int) $subscription->get_id() ] = $subscription;
+				}
+			}
+			$meta_keys = [ Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, Group_Subscription::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY ];
+			foreach ( $meta_keys as $meta_key ) {
+				foreach ( array_map( 'absint', (array) get_user_meta( $user_id, $meta_key, false ) ) as $subscription_id ) {
+					if ( $subscription_id && ! isset( $subscriptions[ $subscription_id ] ) ) {
+						$subscription = \wcs_get_subscription( $subscription_id );
+						// Member and manager meta outlives a trashed group; the Teams tab
+						// and the filters leave those statuses out, so the row does too.
+						if ( $subscription && ! in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ) {
+							$subscriptions[ $subscription_id ] = $subscription;
+						}
+					}
+				}
+			}
 		}
 
 		$out = [];
@@ -2081,15 +2120,24 @@ class Subscribers_Wizard extends Wizard {
 			if ( empty( $settings['enabled'] ) ) {
 				continue;
 			}
-			// Role precedence matches the list index: owner (the subscription
-			// customer), else manager (get_managers is owner-inclusive and small),
-			// else plain member.
 			if ( (int) $subscription->get_user_id() === $user_id ) {
 				$role = 'owner';
 			} elseif ( in_array( $user_id, array_map( 'intval', Group_Subscription::get_managers( $subscription ) ), true ) ) {
 				$role = 'manager';
 			} else {
 				$role = 'member';
+			}
+			if ( ! $detailed ) {
+				$out[] = [
+					'id'              => (int) $subscription->get_id(),
+					'plan'            => (string) $settings['name'],
+					'planName'        => $this->group_plan_name( $subscription, $settings ),
+					'status'          => self::map_subscription_status( $subscription->get_status() ),
+					'editUrl'         => $this->subscription_edit_url( $subscription ),
+					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
+					'role'            => $role,
+				];
+				continue;
 			}
 			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
 			$out[]     = array_merge(
@@ -2104,53 +2152,6 @@ class Subscribers_Wizard extends Wizard {
 			);
 		}
 		return $out;
-	}
-
-	/**
-	 * Build (once per request) a map of user ID → their group memberships, each
-	 * shaped as { id, plan, planName, status, isComplimentary, role, editUrl }:
-	 * `plan` is the group's own name, `planName` the plan its members subscribe to.
-	 *
-	 * Iterating the site's (few, memoized) groups and reading each group's people
-	 * once is far cheaper than resolving every subscriber's owned/managed/member
-	 * subscriptions individually while paginating a large reader list. Role
-	 * precedence matches the per-group display: owner (the subscription customer),
-	 * else manager (in get_managers), else member.
-	 *
-	 * @return array<int,array<int,array>> User ID → list of membership entries.
-	 */
-	private function get_group_membership_index() {
-		if ( null !== $this->group_membership_index ) {
-			return $this->group_membership_index;
-		}
-		$index = [];
-		if ( class_exists( '\Newspack\Group_Subscription' ) ) {
-			foreach ( $this->get_group_subscriptions() as $group ) {
-				$subscription = $group['subscription'];
-				$owner_id     = (int) $subscription->get_user_id();
-				$managers     = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
-				$entry        = [
-					'id'              => (int) $subscription->get_id(),
-					'plan'            => (string) $group['settings']['name'],
-					'planName'        => $group['plan_name'],
-					'status'          => self::map_subscription_status( $subscription->get_status() ),
-					'editUrl'         => $this->subscription_edit_url( $subscription ),
-					'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
-				];
-				foreach ( array_map( 'intval', Group_Subscription::get_all_members( $subscription ) ) as $member_id ) {
-					if ( $member_id === $owner_id ) {
-						$role = 'owner';
-					} elseif ( in_array( $member_id, $managers, true ) ) {
-						$role = 'manager';
-					} else {
-						$role = 'member';
-					}
-					$index[ $member_id ][] = array_merge( $entry, [ 'role' => $role ] );
-				}
-			}
-		}
-		$this->group_membership_index = $index;
-		return $index;
 	}
 
 	/**
@@ -2390,7 +2391,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * The site's lists are few and shared by every row, while resolving a list
 	 * on demand costs a query — so the map is built once per request and read
-	 * per row, the same shape the group-membership index uses.
+	 * per row.
 	 *
 	 * A site running without the Newsletters plugin has no registry at all, which
 	 * is reported as null and is a different thing from a registry that exists and
@@ -2541,67 +2542,19 @@ class Subscribers_Wizard extends Wizard {
 
 		$ids = [];
 
-		// Individual + owned subscriptions in a matching WCS status (HPOS-safe).
-		// Bounded to the same ceiling the include set is capped at, so the filter
-		// path can't load an unbounded number of subscription objects on a large
-		// store, and walked a chunk at a time: WooCommerce hands back fully
-		// hydrated WC_Subscription objects and only the holder ID is read here,
-		// so paging keeps peak memory at one chunk instead of the whole cap.
-		//
-		// The walk pages with `offset`, not `paged`: wcs_get_subscriptions()
-		// declares `paged` among its own defaults, so it is stripped from the
-		// extra args and never reaches the WC_Order_Query — passing it would
-		// re-scan the first chunk on every iteration. `orderby => ID` gives the
-		// walk a deterministic tiebreak; the default start-date sort can shuffle
-		// rows sharing a date across a chunk boundary and skip a holder.
+		// Individual + owned subscriptions in a matching WCS status, read in SQL.
+		// Bounded to the same ceiling the include set is capped at.
 		$wcs_statuses = $this->wcs_statuses_for( $prototype_statuses );
-		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscriptions' ) ) {
-			for ( $page = 1; ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
-				$subs = \wcs_get_subscriptions(
-					[
-						'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
-						'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
-						'orderby'                => 'ID',
-						'subscription_status'    => $wcs_statuses,
-					]
-				);
-				self::prime_gift_recipients( $subs );
-				foreach ( $subs as $subscription ) {
-					$ids[] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
-				}
-				if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
-					break;
-				}
-			}
+		if ( ! empty( $wcs_statuses ) && function_exists( 'wcs_get_subscription' ) ) {
+			$ids = Subscribers_Index::holder_ids( [ 'statuses' => $wcs_statuses ], self::FILTER_INCLUDE_CAP );
 		}
 
 		// Group members inherit their group's status.
-		foreach ( $this->get_group_subscriptions() as $group ) {
-			if ( in_array( self::map_subscription_status( $group['subscription']->get_status() ), $prototype_statuses, true ) ) {
-				$ids = array_merge( $ids, array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) ) );
-			}
-		}
+		$group_ids = $this->group_subscription_ids();
+		$ids       = array_merge( $ids, Subscribers_Index::people( Subscribers_Index::ids_where( $group_ids, [ 'statuses' => $prototype_statuses ] ) ) );
 
 		$this->raw_status_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $ids ) ) );
 		return $this->raw_status_ids_cache[ $cache_key ];
-	}
-
-	/**
-	 * Load every gift recipient in a batch of subscriptions into the user cache.
-	 *
-	 * The holder lookup checks that each gift recipient's account still exists,
-	 * which would otherwise cost a query pair per gift inside the filter scans.
-	 *
-	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
-	 */
-	private static function prime_gift_recipients( array $subscriptions ): void {
-		if ( ! class_exists( 'WCS_Gifting' ) ) {
-			return;
-		}
-		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) \WCS_Gifting::get_recipient_user( $subscription ), $subscriptions ) );
-		if ( ! empty( $recipient_ids ) ) {
-			cache_users( array_values( array_unique( $recipient_ids ) ) );
-		}
 	}
 
 	/**
@@ -2624,55 +2577,75 @@ class Subscribers_Wizard extends Wizard {
 		$ids           = [];
 		$cancelled_ids = [];
 
-		// Group plans, matched by the name their members see (group_plan_name()),
-		// sanitized like the submitted names. Members inherit their group's status, so
-		// a cancelled group is cancelled for every one of them.
-		$groups = $this->get_group_subscriptions();
-		foreach ( $groups as $group ) {
-			if ( ! in_array( sanitize_text_field( $group['plan_name'] ), $plan_names, true ) ) {
-				continue;
-			}
-			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
-			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
-				$cancelled_ids = array_merge( $cancelled_ids, $members );
-			} else {
-				$ids = array_merge( $ids, $members );
-			}
+		// Group plans, matched by the name their members see (group_plan_name()).
+		// Members inherit their group's status, so a cancelled group is cancelled for
+		// every one of them.
+		//
+		// The submitted names went through sanitize_text_field(), and /plans lists
+		// raw names, so match each raw name by its sanitized form before the exact
+		// SQL comparison. A name with a tab or a `<` still finds its Team.
+		$group_ids       = $this->group_subscription_ids();
+		$raw_group_names = array_values(
+			array_filter(
+				Subscribers_Index::plan_names( $group_ids ),
+				fn( $name ) => in_array( sanitize_text_field( $name ), $plan_names, true )
+			)
+		);
+		// An empty list would leave the index unfiltered and match every group.
+		if ( $raw_group_names ) {
+			$live_groups   = Subscribers_Index::ids_where(
+				$group_ids,
+				[
+					'plan_names' => $raw_group_names,
+					'statuses'   => [ 'active', 'pending', 'on-hold' ],
+				]
+			);
+			$closed_groups = Subscribers_Index::ids_where(
+				$group_ids,
+				[
+					'plan_names' => $raw_group_names,
+					'statuses'   => [ 'cancelled' ],
+				]
+			);
+			$ids           = Subscribers_Index::people( $live_groups );
+			$cancelled_ids = Subscribers_Index::people( $closed_groups );
 		}
 
-		// Individual plans, matched by product name → subscriptions for that product.
-		//
-		// The product → subscription-ID lookup is a single uncached join across the
-		// order-item tables, so it runs once per product and is bounded in SQL.
-		// wcs_get_subscriptions() is not a way to page it: handed a product_id but no
-		// customer_id or order_id it runs this same lookup unbounded on every call
-		// (WC_Subscription_Query_Controller::should_filter_query_results), so paging
-		// through it repeats the expensive half rather than splitting it.
+		// Individual plans, matched by product name → holders of subscriptions for
+		// that product, read in SQL.
 		//
 		// The cap is shared out per product instead of consumed in order, so one plan
 		// with more holders than the whole budget cannot leave the other plans in the
-		// same multi-select matching nobody. Equal shares keep the total at or under
-		// the cap however many plans are ticked.
+		// same multi-select matching nobody. Live and cancelled holders each take a
+		// share; resolve_filter_include() trims the combined set to the cap.
 		$product_ids = $this->product_ids_for_names( $plan_names );
-		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscriptions_for_product' ) && function_exists( 'wcs_get_subscription' ) ) {
+		if ( ! empty( $product_ids ) && function_exists( 'wcs_get_subscription' ) ) {
 			$per_product = max( 1, intdiv( self::FILTER_INCLUDE_CAP, count( $product_ids ) ) );
 			foreach ( $product_ids as $product_id ) {
-				$subscription_ids = \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'limit' => $per_product ] );
 				// A group on this product was matched with all its members above; its
 				// subscription's holder alone may not be one of them (a gifted group).
-				$subscription_ids = array_filter( $subscription_ids, fn( $id ) => ! isset( $groups[ (int) $id ] ) );
-				foreach ( array_chunk( $subscription_ids, self::FILTER_SCAN_CHUNK ) as $chunk ) {
-					$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
-					self::prime_gift_recipients( $subscriptions );
-					foreach ( $subscriptions as $subscription ) {
-						$holder_id = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
-						if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
-							$cancelled_ids[] = $holder_id;
-						} else {
-							$ids[] = $holder_id;
-						}
-					}
-				}
+				$ids           = array_merge(
+					$ids,
+					Subscribers_Index::holder_ids(
+						[
+							'product_ids' => [ $product_id ],
+							'statuses'    => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold' ] ),
+							'exclude_ids' => $group_ids,
+						],
+						$per_product
+					)
+				);
+				$cancelled_ids = array_merge(
+					$cancelled_ids,
+					Subscribers_Index::holder_ids(
+						[
+							'product_ids' => [ $product_id ],
+							'statuses'    => $this->wcs_statuses_for( [ 'cancelled' ] ),
+							'exclude_ids' => $group_ids,
+						],
+						$per_product
+					)
+				);
 			}
 		}
 
@@ -2744,55 +2717,41 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * Reduced like customer_ids_for_plans(): a cancelled comp qualifies its holder only
 	 * when nothing live remains, since the Subscription column hides it otherwise. A
-	 * group's members inherit its stamp, as they inherit its status. Walked a chunk at
-	 * a time up to FILTER_INCLUDE_CAP, as in customer_ids_for_raw_statuses().
+	 * group's members inherit its stamp, as they inherit its status. Read in SQL, up to
+	 * FILTER_INCLUDE_CAP holders.
 	 *
 	 * @return int[]
 	 */
 	private function customer_ids_for_complimentary(): array {
-		$ids           = [];
-		$cancelled_ids = [];
-		$groups        = $this->get_group_subscriptions();
-		foreach ( $groups as $group ) {
-			if ( ! Complimentary_Access::is_complimentary_order( $group['subscription'] ) ) {
-				continue;
-			}
-			$members = array_map( 'intval', Group_Subscription::get_all_members( $group['subscription'] ) );
-			if ( 'cancelled' === self::map_subscription_status( $group['subscription']->get_status() ) ) {
-				$cancelled_ids = array_merge( $cancelled_ids, $members );
-			} else {
-				$ids = array_merge( $ids, $members );
-			}
-		}
-		$can_scan = function_exists( 'wcs_get_subscriptions' );
-		for ( $page = 1; $can_scan && ( $page - 1 ) * self::FILTER_SCAN_CHUNK < self::FILTER_INCLUDE_CAP; $page++ ) {
-			$subs = \wcs_get_subscriptions(
+		$group_ids     = $this->group_subscription_ids();
+		$ids           = Subscribers_Index::people(
+			Subscribers_Index::ids_where(
+				$group_ids,
 				[
-					'subscriptions_per_page' => self::FILTER_SCAN_CHUNK,
-					'offset'                 => ( $page - 1 ) * self::FILTER_SCAN_CHUNK,
-					'orderby'                => 'ID',
-					'subscription_status'    => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold', 'cancelled' ] ),
-					'meta_query'             => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-						[
-							'key'   => Complimentary_Access::META_KEY,
-							'value' => 'yes',
-						],
-					],
+					'complimentary' => true,
+					'statuses'      => [ 'active', 'pending', 'on-hold' ],
 				]
-			);
-			foreach ( $subs as $subscription ) {
-				if ( isset( $groups[ (int) $subscription->get_id() ] ) ) {
-					continue; // Counted with its members above.
-				}
-				if ( 'cancelled' === self::map_subscription_status( $subscription->get_status() ) ) {
-					$cancelled_ids[] = (int) $subscription->get_customer_id();
-				} else {
-					$ids[] = (int) $subscription->get_customer_id();
-				}
-			}
-			if ( count( $subs ) < self::FILTER_SCAN_CHUNK ) {
-				break;
-			}
+			)
+		);
+		$cancelled_ids = Subscribers_Index::people(
+			Subscribers_Index::ids_where(
+				$group_ids,
+				[
+					'complimentary' => true,
+					'statuses'      => [ 'cancelled' ],
+				]
+			)
+		);
+		// Individual comps, by customer. Group subscriptions are left out: they are
+		// counted with their members above.
+		if ( function_exists( 'wcs_get_subscription' ) ) {
+			$individual    = [
+				'complimentary' => true,
+				'exclude_ids'   => $group_ids,
+				'customer'      => true,
+			];
+			$ids           = array_merge( $ids, Subscribers_Index::holder_ids( $individual + [ 'statuses' => $this->wcs_statuses_for( [ 'active', 'pending', 'on-hold' ] ) ], self::FILTER_INCLUDE_CAP ) );
+			$cancelled_ids = array_merge( $cancelled_ids, Subscribers_Index::holder_ids( $individual + [ 'statuses' => $this->wcs_statuses_for( [ 'cancelled' ] ) ], self::FILTER_INCLUDE_CAP ) );
 		}
 		if ( ! empty( $cancelled_ids ) ) {
 			$ids = array_merge( $ids, array_diff( $cancelled_ids, $this->customer_ids_for_raw_statuses( [ 'active', 'pending', 'on-hold' ] ) ) );
@@ -2843,16 +2802,19 @@ class Subscribers_Wizard extends Wizard {
 	 */
 	private function wcs_statuses_for( array $prototype_statuses ) {
 		// on-hold is the catch-all display bucket in map_subscription_status(), so its
-		// inverse carries the extra WCS statuses that also render as on-hold (e.g. a
-		// mid-switch 'switched' subscription) to keep display and filter in step. Truly
-		// unknown/custom statuses still can't be enumerated here — they display as
-		// on-hold but aren't reachable by the individual-subscription filter scan.
+		// inverse carries every other registered WCS status that also renders as
+		// on-hold (a mid-switch 'switched' subscription, a plugin's custom status) to
+		// keep display and filter in step.
 		$map = [
 			'active'    => [ 'active', 'pending-cancel' ],
 			'pending'   => [ 'pending' ],
 			'on-hold'   => [ 'on-hold', 'switched' ],
 			'cancelled' => [ 'cancelled', 'expired' ],
 		];
+		if ( function_exists( 'wcs_get_subscription_statuses' ) ) {
+			$registered     = array_map( fn( $status ) => preg_replace( '/^wc-/', '', $status ), array_keys( \wcs_get_subscription_statuses() ) );
+			$map['on-hold'] = array_values( array_unique( array_merge( $map['on-hold'], array_diff( $registered, array_merge( ...array_values( $map ) ) ) ) ) );
+		}
 		$wcs = [];
 		foreach ( $prototype_statuses as $status ) {
 			if ( isset( $map[ $status ] ) ) {

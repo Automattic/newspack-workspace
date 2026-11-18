@@ -1,3 +1,17 @@
+## newspack-popups [3.20.6](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.5...newspack-popups@3.20.6) (2026-11-12)
+
+
+### Bug Fixes
+
+* **popups:** match donor merge field setting case-insensitively (Part of NPPM-2876, [#1569](https://github.com/Automattic/newspack-workspace/issues/1569)) ([f65c812](https://github.com/Automattic/newspack-workspace/commit/f65c812b799aad90728bfc0e762b19d57a30fe42))
+
+## newspack-popups [3.20.5](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.4...newspack-popups@3.20.5) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
 ## newspack-popups [3.20.4](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.3...newspack-popups@3.20.4) (2026-10-27)
 
 

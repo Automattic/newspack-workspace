@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
  */
 import apiFetch from '@wordpress/api-fetch';
 import { select, useDispatch } from '@wordpress/data';
-import { useLayoutEffect, useState } from '@wordpress/element';
+import { lazy, Suspense, useLayoutEffect, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies.
@@ -356,5 +356,50 @@ describe( 'Wizard tab bar on hidden routes', () => {
 		} );
 		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'tab', { name: 'Other' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'Wizard lazy sections', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( {} );
+	} );
+
+	afterEach( () => {
+		window.location.hash = '';
+	} );
+
+	it( 'keeps following hash links after a lazy section loads', async () => {
+		let loadLazySection;
+		const LazySection = lazy(
+			() =>
+				new Promise( resolve => {
+					loadLazySection = () => resolve( { default: () => <a href="#/lazy/new">Add item</a> } );
+				} )
+		);
+
+		window.location.hash = '#/list';
+		// The app wraps every wizard in a Suspense at its root, as wizards/index.tsx does.
+		render(
+			<Suspense fallback={ <div>App loading</div> }>
+				<Wizard
+					headerText="Test wizard"
+					sections={ [
+						{ label: 'List', path: '/list', exact: true, render: () => <div>List view</div> },
+						{ label: 'Lazy', path: '/lazy', exact: true, render: LazySection },
+						{ path: '/lazy/new', isHidden: true, render: () => <div>New item view</div> },
+					] }
+				/>
+			</Suspense>
+		);
+		expect( await screen.findByText( 'List view' ) ).toBeInTheDocument();
+
+		act( () => {
+			window.location.hash = '#/lazy';
+			window.dispatchEvent( new HashChangeEvent( 'hashchange' ) );
+		} );
+		await act( async () => loadLazySection() );
+		fireEvent.click( await screen.findByRole( 'link', { name: 'Add item' } ) );
+		expect( await screen.findByText( 'New item view' ) ).toBeInTheDocument();
 	} );
 } );
