@@ -800,7 +800,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 						'name'        => $segment['name'],
 						'entity_type' => $entity_type,
 						'parent_id'   => $segment['list_id'],
-						'count'       => $segment['member_count'],
+						// Missing for segments created since the cached counts were fetched; Send_List then omits the count.
+						'count'       => $segment['member_count'] ?? null,
 					];
 					if ( $admin_url && $audience['web_id'] ) {
 						$config['edit_link'] = $admin_url . 'audience/segments/?id=' . $audience['web_id'];
