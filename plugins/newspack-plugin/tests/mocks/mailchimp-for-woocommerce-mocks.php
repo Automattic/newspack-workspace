@@ -85,11 +85,12 @@ if ( ! class_exists( 'MailChimp_Service' ) ) {
 		/**
 		 * In the plugin, sends the user's stored opt-in to Mailchimp when a REST request saves it.
 		 *
-		 * @param int    $meta_id  Meta ID.
-		 * @param int    $user_id  User ID.
-		 * @param string $meta_key Meta key.
+		 * @param int    $meta_id    Meta ID.
+		 * @param int    $user_id    User ID.
+		 * @param string $meta_key   Meta key.
+		 * @param mixed  $meta_value Meta value.
 		 */
-		public function handleUserMetaUpdated( $meta_id, $user_id, $meta_key ) {
+		public function handleUserMetaUpdated( $meta_id, $user_id, $meta_key, $meta_value ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Matches the plugin's signature.
 			if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
 				$this->saved_opt_ins[] = $user_id;
 			}

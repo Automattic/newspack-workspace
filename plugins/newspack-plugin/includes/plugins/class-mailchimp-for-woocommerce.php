@@ -21,11 +21,11 @@ class Mailchimp_For_WooCommerce {
 	private static bool $removed_profile_update_handler = false;
 
 	/**
-	 * The user meta hook this class removed MC4WC's stored opt-in handler from, if any.
+	 * The user meta hooks this class removed MC4WC's stored opt-in handler from for a block checkout.
 	 *
-	 * @var string|null
+	 * @var string[]
 	 */
-	private static ?string $removed_user_meta_handler_from = null;
+	private static array $checkout_removed_user_meta_hooks = [];
 
 	/**
 	 * Mailchimp statuses read during this request, keyed by email address.
@@ -43,10 +43,8 @@ class Mailchimp_For_WooCommerce {
 		add_action( 'wp_loaded', [ __CLASS__, 'remove_account_details_opt_in' ] );
 		add_action( 'profile_update', [ __CLASS__, 'skip_profile_update_without_opt_in' ], 99 );
 		add_action( 'profile_update', [ __CLASS__, 'restore_profile_update_handler' ], 101 );
-		foreach ( [ 'added_user_meta', 'updated_user_meta' ] as $user_meta_hook ) {
-			add_action( $user_meta_hook, [ __CLASS__, 'skip_opt_in_save_without_opt_in' ], 9, 4 );
-			add_action( $user_meta_hook, [ __CLASS__, 'restore_user_meta_handler' ], 11, 3 );
-		}
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'skip_checkout_opt_in_save' ], 9 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'restore_checkout_opt_in_handler' ], 11 );
 		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'keep_subscribed_customer_subscribed' ] );
 		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'send_only_complete_address' ], 10, 2 );
 	}
@@ -93,45 +91,35 @@ class Mailchimp_For_WooCommerce {
 	}
 
 	/**
-	 * Stop MC4WC from unsubscribing a reader when it saves a stored opt-in that is not "subscribed".
+	 * Stop MC4WC from unsubscribing a reader who buys through the block checkout.
 	 *
-	 * When a REST request saves the stored opt-in, MC4WC sends it to Mailchimp, and sends ""
-	 * (none) or "0" as "transactional". Its block checkout saves the opt-in checkbox there on
-	 * every order, as "" when the box is not ticked, so a subscribed reader who buys something
-	 * would be unsubscribed. An unticked box is not a choice to stop receiving newsletters. The
-	 * order MC4WC sends next keeps a subscribed customer subscribed, see
-	 * keep_subscribed_customer_subscribed(). The skipped handler also records when the stored
-	 * opt-in changed, so the order's customer keeps the time of the last "subscribed" save.
-	 *
-	 * @param int    $meta_id    Meta ID.
-	 * @param int    $user_id    User ID.
-	 * @param string $meta_key   Meta key.
-	 * @param mixed  $meta_value Meta value.
+	 * At a block checkout, MC4WC saves its newsletter checkbox to the customer's stored opt-in,
+	 * as "" when the box is not ticked or not shown. A save of the stored opt-in in a REST request
+	 * makes MC4WC send it to Mailchimp, with "" as "transactional", so a subscribed reader who
+	 * buys something would be unsubscribed. An unticked box is not a choice to stop receiving
+	 * newsletters. MC4WC's handler is off for that save only. A ticked box still subscribes the
+	 * customer, because the checkout queues that subscription itself, and the order MC4WC sends
+	 * next keeps a subscribed customer subscribed, see keep_subscribed_customer_subscribed().
 	 */
-	public static function skip_opt_in_save_without_opt_in( $meta_id, $user_id, $meta_key, $meta_value ) {
-		if ( 'mailchimp_woocommerce_is_subscribed' !== $meta_key || ! \class_exists( '\MailChimp_Service' ) ) {
+	public static function skip_checkout_opt_in_save() {
+		if ( ! \class_exists( '\MailChimp_Service' ) ) {
 			return;
 		}
-		if ( in_array( $meta_value, [ '', '0', false ], true ) && remove_action( current_action(), [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10 ) ) {
-			self::$removed_user_meta_handler_from = current_action();
+		foreach ( [ 'added_user_meta', 'updated_user_meta' ] as $user_meta_hook ) {
+			if ( remove_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10 ) ) {
+				self::$checkout_removed_user_meta_hooks[] = $user_meta_hook;
+			}
 		}
 	}
 
 	/**
-	 * Re-hook MC4WC's stored opt-in handler once the save that skipped it is done.
-	 *
-	 * A save of another meta key during that save leaves the handler off.
-	 *
-	 * @param int    $meta_id  Meta ID.
-	 * @param int    $user_id  User ID.
-	 * @param string $meta_key Meta key.
+	 * Re-hook MC4WC's stored opt-in handler once the checkout has saved the opt-in.
 	 */
-	public static function restore_user_meta_handler( $meta_id, $user_id, $meta_key ) {
-		if ( 'mailchimp_woocommerce_is_subscribed' !== $meta_key || current_action() !== self::$removed_user_meta_handler_from ) {
-			return;
+	public static function restore_checkout_opt_in_handler() {
+		foreach ( self::$checkout_removed_user_meta_hooks as $user_meta_hook ) {
+			add_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 4 );
 		}
-		self::$removed_user_meta_handler_from = null;
-		add_action( current_action(), [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 4 );
+		self::$checkout_removed_user_meta_hooks = [];
 	}
 
 	/**
