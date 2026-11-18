@@ -40,7 +40,7 @@ describe( 'build.js', () => {
 	it.each( [
 		[ 'the package imports the replaced file', useHooks ],
 		[
-			'the replacement is concatenated into the entry and the package imports it from a lazy chunk',
+			'the package file that imports it is concatenated into a lazy chunk',
 			"import replacement from './replacement.js';\nimport( '@wordpress/hooks/build-module/createAddHook.mjs' ).then( module => console.log( module, replacement ) );\n",
 		],
 		[ 'the prototype imports the replaced file by its key', "import * as validateNamespace from '@wordpress/hooks/build-module/validateNamespace.mjs';\nconsole.log( validateNamespace );\n" ],
