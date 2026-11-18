@@ -31,9 +31,9 @@
 			background:
 				linear-gradient(var(--newspack-ui-otp-caret, transparent), var(--newspack-ui-otp-caret, transparent))
 				calc(var(--newspack-ui-otp-gap) + (var(--newspack-ui-otp-slots, 7) - 1) * var(--newspack-ui-otp-advance) + var(--newspack-ui-otp-digit) + 2px) 50% / 1.5px 1.1em no-repeat,
-				linear-gradient(var(--newspack-ui-color-text), var(--newspack-ui-color-text))
+				linear-gradient(var(--newspack-ui-field-ink), var(--newspack-ui-field-ink))
 				calc(var(--newspack-ui-otp-gap) + var(--newspack-ui-otp-split, 3) * var(--newspack-ui-otp-advance)) 50% / var(--newspack-ui-otp-digit) 2px no-repeat,
-				var(--newspack-ui-color-input-bg);
+				var(--newspack-ui-field-bg);
 			background-origin: padding-box;
 			direction: ltr;
 			font-size: var(--newspack-ui-font-size-title-m);
@@ -70,6 +70,7 @@
 
 		color: var(--newspack-ui-color-text-muted);
 		display: block;
+		font-family: var(--newspack-ui-font-family-body);
 		font-size: var(--newspack-ui-font-size-small);
 		font-weight: var(--newspack-ui-font-weight-regular);
 		line-height: var(--newspack-ui-line-height-small);

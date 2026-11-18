@@ -85,9 +85,9 @@ body .jetpack-instant-search {
 	}
 
 	&__overlay {
-		background: var(--wp--custom--color--overlay-70) !important;
+		background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50)) !important;
 		color: var(--jp--color--text);
-		font-family: var(--newspack-ui-font-family, var(--wp--preset--font-family--inter, system-ui, sans-serif));
+		font-family: var(--newspack-ui-font-family-body, var(--wp--preset--font-family--inter, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		line-height: var(--newspack-ui-line-height-s, 1.5);
 		padding: var(--wp--preset--spacing--30);
@@ -369,7 +369,7 @@ body .jetpack-instant-search {
 
 			&.jetpack-instant-search__search-results-secondary--show-as-modal {
 				border-color: var(--jp--color--border);
-				box-shadow: var(--wp--preset--shadow--elevation-3);
+				box-shadow: var(--wp--preset--shadow--elevation-2);
 				inset: var(--wp--custom--spacing--05) var(--wp--preset--spacing--20) auto;
 				min-width: 1px;
 				padding: 0 var(--wp--preset--spacing--30);
@@ -614,8 +614,9 @@ body .jetpack-instant-search {
 
 		&-text {
 			color: inherit;
-			font-size: var(--newspack-ui-font-size-2xs, 12px);
-			line-height: var(--newspack-ui-line-height-2xs, 1.3333);
+			font-family: var(--newspack-ui-font-family-fine, inherit);
+			font-size: var(--newspack-ui-font-size-fine, 12px);
+			line-height: var(--newspack-ui-line-height-fine, 1.3333);
 		}
 	}
 }

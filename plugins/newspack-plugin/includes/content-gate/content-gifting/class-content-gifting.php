@@ -307,6 +307,9 @@ class Content_Gifting {
 			'style'                => Content_Gifting_CTA::get_style(),
 			'bg_color'             => Content_Gifting_CTA::get_bg_color(),
 			'button_color'         => Content_Gifting_CTA::get_button_color(),
+			'text_color'           => Content_Gifting_CTA::get_text_color(),
+			'button_text_color'    => Content_Gifting_CTA::get_button_text_color(),
+			'shadow'               => Content_Gifting_CTA::get_shadow(),
 		];
 	}
 
