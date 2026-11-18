@@ -2,6 +2,7 @@ const fs = require( 'fs' );
 const os = require( 'os' );
 const path = require( 'path' );
 const { loadConfig } = require( './config' );
+const { packageRoot } = require( './pinned' );
 
 describe( 'loadConfig', () => {
 	let dir;
@@ -24,6 +25,7 @@ describe( 'loadConfig', () => {
 			title: 'Demo',
 			entry: path.join( dir, 'src/entry.js' ),
 			aliases: { '@shared': path.join( dir, 'shared' ) },
+			replace: {},
 		} );
 	} );
 
@@ -67,5 +69,33 @@ describe( 'loadConfig', () => {
 
 	it( 'throws when there is no config', () => {
 		expect( () => loadConfig( dir ) ).toThrow( `playground: no playground.config.js in ${ dir }` );
+	} );
+
+	describe( 'replace', () => {
+		const key = '@wordpress/global-styles-ui/build-module/color-palette-panel.mjs';
+		const original = path.join( packageRoot( '@wordpress/global-styles-ui' ), 'build-module/color-palette-panel.mjs' );
+
+		it( "maps the pinned package's file to the replacement, relative to the config", () => {
+			write( 'entry.js' );
+			write( 'shared/panel.js' );
+			writeConfig( { entry: './entry.js', replace: { [ key ]: './shared/panel.js' } } );
+			expect( loadConfig( dir ).replace ).toEqual( { [ original ]: path.join( dir, 'shared/panel.js' ) } );
+		} );
+
+		it.each( [
+			[ 'the package is not pinned', '@wordpress/compose/build-module/index.mjs', () => '@wordpress/compose is not a package the playground pins' ],
+			[
+				'the file is not in the package',
+				'@wordpress/global-styles-ui/build-module/nope.mjs',
+				() => `no file at ${ path.join( packageRoot( '@wordpress/global-styles-ui' ), 'build-module/nope.mjs' ) }`,
+			],
+			[ 'the replacement does not exist', key, () => `${ path.join( dir, 'missing.js' ) } does not exist` ],
+		] )( 'throws, naming the key and the config, when %s', ( label, specifier, reason ) => {
+			write( 'entry.js' );
+			write( 'shared/panel.js' );
+			const target = specifier === key ? './missing.js' : './shared/panel.js';
+			writeConfig( { entry: './entry.js', replace: { [ specifier ]: target } } );
+			expect( () => loadConfig( dir ) ).toThrow( `playground: replace "${ specifier }" in ${ path.join( dir, 'playground.config.js' ) }: ${ reason() }` );
+		} );
 	} );
 } );

@@ -39,7 +39,7 @@ process.chdir( path.resolve( __dirname, '../../..' ) );
 const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
 const createWebpackConfig = require( '../src/webpack.config' );
 
-webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.aliases } ), ( error, stats ) => {
+webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.aliases, replace: config.replace } ), ( error, stats ) => {
 	if ( error ) {
 		fail( error.stack || error.message );
 	}

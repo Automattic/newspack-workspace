@@ -16,6 +16,18 @@ module.exports = {
 
 `@np` (`packages/components/src`), `@plugin` (`plugins/newspack-plugin/src`), `@themes` (`themes/`), `newspack-playground/bridge` and `newspack-playground/theme` are always available. A prototype's `aliases` are merged over them.
 
+`replace` swaps one file inside a pinned package for the prototype's own version, for a change the package has no prop or hook for:
+
+```js
+replace: {
+	'@wordpress/global-styles-ui/build-module/color-palette-panel.mjs': './shared/color-palette-panel.js',
+},
+```
+
+The key is the package name followed by the file's path inside the package, extension included. It points at the playground's pinned copy, so the package's own imports of that file get the replacement too, not only the prototype's. The value is relative to the config file. The build fails if the package isn't pinned, the file isn't in it, or the replacement doesn't exist.
+
+The replacement must keep the original's exports. To reach the rest of the package, it imports the files under `build-module` by their full path, such as `@wordpress/global-styles-ui/build-module/hooks.mjs`. That works for every pinned package even though its `exports` map hides those paths, and it loads the same module instance the package uses. A replacement must not import the file it replaces.
+
 ## Build
 
 ```sh

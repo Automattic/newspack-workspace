@@ -1,41 +1,30 @@
 const path = require( 'path' );
 
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
+const { PINNED, packageDir, packageRoot } = require( './pinned' );
 
 const repo = path.resolve( __dirname, '../../..' );
-
-const packageDir = path.resolve( __dirname, '..' );
-const packageRoot = name => path.dirname( require.resolve( `${ name }/package.json`, { paths: [ packageDir ] } ) );
 
 const scriptsModules = path.resolve( packageRoot( 'newspack-scripts' ), 'node_modules' );
 
 const REMOVED_PLUGINS = [ 'DependencyExtractionWebpackPlugin', 'RtlCssPlugin', 'CopyPlugin', 'PhpFilePathsPlugin' ];
 
-// Each of these holds a store or registry, or must match one that does, so every import gets the playground's pinned copy.
-const PINNED = [
-	'@wordpress/api-fetch',
-	'@wordpress/block-editor',
-	'@wordpress/block-library',
-	'@wordpress/blocks',
-	'@wordpress/components',
-	'@wordpress/core-data',
-	'@wordpress/data',
-	'@wordpress/dataviews',
-	'@wordpress/global-styles-engine',
-	'@wordpress/global-styles-ui',
-	'@wordpress/hooks',
-	'@wordpress/interface',
-];
-
 const pinnedAliases = () =>
 	Object.fromEntries(
 		PINNED.flatMap( name => {
 			const root = packageRoot( name );
-			return [ [ `${ name }$`, root ], [ `${ name }/build-style`, path.join( root, 'build-style' ) ] ];
+			return [
+				[ `${ name }$`, root ],
+				[ `${ name }/build-module`, path.join( root, 'build-module' ) ],
+				[ `${ name }/build-style`, path.join( root, 'build-style' ) ],
+			];
 		} )
 	);
 
-module.exports = ( { entry, outDir, aliases = {} } ) => {
+// Webpack also matches aliases against a file's resolved absolute path, so an exact alias on it catches the package's own relative imports.
+const replaceAliases = replace => Object.fromEntries( Object.entries( replace ).map( ( [ original, replacement ] ) => [ `${ original }$`, replacement ] ) );
+
+module.exports = ( { entry, outDir, aliases = {}, replace = {} } ) => {
 	const pluginDir = path.join( repo, 'plugins/newspack-plugin' );
 	const base = getBaseWebpackConfig( { entry: { screen: entry } } );
 
@@ -64,6 +53,7 @@ module.exports = ( { entry, outDir, aliases = {} } ) => {
 				'@wordpress/route$': path.join( __dirname, 'route-stub.js' ),
 				...pinnedAliases(),
 				...aliases,
+				...replaceAliases( replace ),
 			},
 			modules: [ 'node_modules', path.join( packageDir, 'node_modules' ), path.join( pluginDir, 'node_modules' ), path.join( repo, 'node_modules' ) ],
 		},
