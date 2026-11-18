@@ -20,7 +20,10 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 		parent::set_up();
 		add_action( 'woocommerce_edit_account_form', [ MailChimp_WooCommerce_Public::instance(), 'user_my_account_opt_in' ], 100 );
 		add_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ], 100 );
+		add_action( 'added_user_meta', [ MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 3 );
+		add_action( 'updated_user_meta', [ MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 3 );
 		MailChimp_Service::instance()->updated_users      = [];
+		MailChimp_Service::instance()->saved_opt_ins      = [];
 		$GLOBALS['newspack_test_mailchimp_statuses']      = [];
 		$GLOBALS['newspack_test_mailchimp_status_lookups'] = [];
 		( new ReflectionProperty( Mailchimp_For_WooCommerce::class, 'mailchimp_statuses' ) )->setValue( null, [] );
@@ -121,6 +124,50 @@ class Newspack_Test_Mailchimp_For_WooCommerce extends WP_UnitTestCase {
 
 		$this->assertSame( [], MailChimp_Service::instance()->updated_users );
 		$this->assertSame( 100, has_action( 'profile_update', [ MailChimp_Service::instance(), 'handleUserUpdated' ] ) );
+	}
+
+	/**
+	 * The plugin's block checkout saves the opt-in checkbox to the customer's stored opt-in, ""
+	 * when it is not ticked. Saving the stored opt-in in a REST request sends it to Mailchimp,
+	 * and "" goes as "transactional", so a subscribed reader who places an order would be
+	 * unsubscribed. A ticked checkbox still goes through, and the handler stays hooked for the
+	 * next save.
+	 */
+	public function test_saving_the_opt_in_skips_the_plugin_unless_it_is_subscribed() {
+		$new_customer      = $this->create_customer( 'checkout-new@example.test', 'subscribed' );
+		$returning_reader  = $this->create_customer( 'checkout-returning@example.test', 'subscribed', '1' );
+		$opted_out_reader  = $this->create_customer( 'checkout-opted-out@example.test', 'subscribed', '' );
+		$opting_in_reader  = $this->create_customer( 'checkout-opting-in@example.test', 'subscribed', '' );
+		MailChimp_Service::instance()->saved_opt_ins = [];
+
+		update_user_meta( $new_customer->ID, 'mailchimp_woocommerce_is_subscribed', '' );
+		update_user_meta( $returning_reader->ID, 'mailchimp_woocommerce_is_subscribed', '' );
+		update_user_meta( $opted_out_reader->ID, 'mailchimp_woocommerce_is_subscribed', '0' );
+		update_user_meta( $opting_in_reader->ID, 'mailchimp_woocommerce_is_subscribed', '1' );
+
+		$this->assertSame( [ $opting_in_reader->ID ], MailChimp_Service::instance()->saved_opt_ins );
+		$this->assertSame( 10, has_action( 'added_user_meta', [ MailChimp_Service::instance(), 'handleUserMetaUpdated' ] ) );
+		$this->assertSame( 10, has_action( 'updated_user_meta', [ MailChimp_Service::instance(), 'handleUserMetaUpdated' ] ) );
+	}
+
+	/**
+	 * Another callback can save other user meta after the handler is off for an opt-in save, and
+	 * before the handler would have run. That save does not bring the handler back early.
+	 */
+	public function test_saving_the_opt_in_stays_skipped_through_a_nested_meta_save() {
+		$reader = $this->create_customer( 'checkout-nested@example.test', 'subscribed' );
+		$save_other_meta = function ( $meta_id, $user_id, $meta_key ) {
+			if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
+				update_user_meta( $user_id, 'newspack_test_other_meta', 'x' );
+			}
+		};
+		add_action( 'added_user_meta', $save_other_meta, 9, 3 );
+
+		update_user_meta( $reader->ID, 'mailchimp_woocommerce_is_subscribed', '' );
+		remove_action( 'added_user_meta', $save_other_meta, 9 );
+
+		$this->assertSame( [], MailChimp_Service::instance()->saved_opt_ins );
+		$this->assertSame( 10, has_action( 'added_user_meta', [ MailChimp_Service::instance(), 'handleUserMetaUpdated' ] ) );
 	}
 
 	/**

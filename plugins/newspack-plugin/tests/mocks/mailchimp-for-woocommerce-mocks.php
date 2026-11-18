@@ -57,6 +57,13 @@ if ( ! class_exists( 'MailChimp_Service' ) ) {
 		public $updated_users = [];
 
 		/**
+		 * Users the stored opt-in handler ran for.
+		 *
+		 * @var int[]
+		 */
+		public $saved_opt_ins = [];
+
+		/**
 		 * Get the singleton.
 		 */
 		public static function instance() {
@@ -73,6 +80,19 @@ if ( ! class_exists( 'MailChimp_Service' ) ) {
 		 */
 		public function handleUserUpdated( $user_id ) {
 			$this->updated_users[] = $user_id;
+		}
+
+		/**
+		 * In the plugin, sends the user's stored opt-in to Mailchimp when a REST request saves it.
+		 *
+		 * @param int    $meta_id  Meta ID.
+		 * @param int    $user_id  User ID.
+		 * @param string $meta_key Meta key.
+		 */
+		public function handleUserMetaUpdated( $meta_id, $user_id, $meta_key ) {
+			if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
+				$this->saved_opt_ins[] = $user_id;
+			}
 		}
 	}
 }
