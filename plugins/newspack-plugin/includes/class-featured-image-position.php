@@ -22,8 +22,13 @@ defined( 'ABSPATH' ) || exit;
  * returns empty when there is no thumbnail at all. It knows nothing about the
  * Newspack setting, so a post whose image the publisher hid shows it again.
  *
- * This class reproduces the classic resolution, suppresses the block, and drops
- * the wrapper around it so its spacing does not leave a gap behind.
+ * Three things have to go, because the templates render three things:
+ *
+ * 1. the image itself (`core/post-featured-image`);
+ * 2. its caption and photo credit (`newspack/featured-image-caption`), which
+ *    render from the attachment and so survive the image's removal;
+ * 3. the container holding them, which carries vertical spacing of its own and
+ *    would otherwise leave a gap where the image was.
  */
 class Featured_Image_Position {
 
@@ -54,7 +59,8 @@ class Featured_Image_Position {
 	 */
 	public static function init() {
 		add_action( 'after_switch_theme', [ __CLASS__, 'migrate_position_defaults' ], 10, 2 );
-		add_filter( 'render_block_core/post-featured-image', [ __CLASS__, 'filter_featured_image_block' ], 10, 3 );
+		add_filter( 'render_block_core/post-featured-image', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
+		add_filter( 'render_block_newspack/featured-image-caption', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
 		add_filter( 'render_block_core/group', [ __CLASS__, 'filter_image_wrapper' ], 10, 2 );
 		add_filter( 'render_block_core/column', [ __CLASS__, 'filter_image_wrapper' ], 10, 2 );
 	}
@@ -96,7 +102,7 @@ class Featured_Image_Position {
 	 *
 	 * Mirrors `newspack_featured_image_position()` in the classic theme:
 	 *
-	 * - it applies to singular posts and pages only;
+	 * - it applies to single posts and pages only;
 	 * - a post with no thumbnail has no position at all;
 	 * - the per-post meta wins over the site default;
 	 * - posts and pages read different defaults.
@@ -108,7 +114,12 @@ class Featured_Image_Position {
 	 * @return bool
 	 */
 	public static function is_hidden( $post_id = null ) {
-		if ( ! is_singular() ) {
+		/*
+		 * The same pair of conditionals the classic function uses. Not
+		 * `is_singular()`, which is also true for attachment pages, where
+		 * classic never resolves a position.
+		 */
+		if ( ! is_single() && ! is_page() ) {
 			return false;
 		}
 
@@ -149,14 +160,18 @@ class Featured_Image_Position {
 	}
 
 	/**
-	 * Suppress the featured image block when the position is `hidden`.
+	 * Return nothing for a block whose post has its featured image hidden.
+	 *
+	 * Registered on both the image block and Newspack's caption block: the
+	 * caption and photo credit read from the attachment, so removing the image
+	 * alone leaves them captioning nothing.
 	 *
 	 * @param string         $block_content Rendered block.
 	 * @param array          $block         Parsed block.
 	 * @param \WP_Block|null $instance      Block instance.
 	 * @return string
 	 */
-	public static function filter_featured_image_block( $block_content, $block, $instance = null ) {
+	public static function suppress_when_hidden( $block_content, $block, $instance = null ) {
 		if ( ! wp_is_block_theme() ) {
 			return $block_content;
 		}
@@ -172,17 +187,26 @@ class Featured_Image_Position {
 	}
 
 	/**
-	 * Drop the block wrapping the featured image when the image is suppressed.
+	 * Drop the block wrapping the featured image once nothing is left in it.
 	 *
-	 * The block theme's single templates wrap the image — and its caption — in
-	 * a container carrying vertical spacing of its own. Suppressing only the
-	 * image would leave that spacing behind as a gap, and would leave the
-	 * caption and photo credit floating with nothing to caption.
+	 * The block theme's single templates wrap the image and its caption in a
+	 * container carrying vertical spacing of its own, so suppressing only the
+	 * contents would leave that spacing behind as a gap.
 	 *
-	 * The wrapper is identified by what it contains rather than by its name or
-	 * class: the templates use a group in six places and a column in the
-	 * seventh, names are editable in the Site Editor, and a publisher's own
-	 * block must never be dropped because it happens to share a label.
+	 * Three conditions, cheapest first, and all three are needed:
+	 *
+	 * - the post's image is hidden, so there is something to clean up at all;
+	 * - the block contains a featured image somewhere beneath it. Identified by
+	 *   what it contains rather than by its name or class: the templates use a
+	 *   group in six places and a column in the seventh, and a block's name is
+	 *   editable in the Site Editor, so a publisher's own "Post Image" group
+	 *   must never be dropped for sharing a label;
+	 * - what it rendered is empty. This is the condition that keeps the
+	 *   containment test safe. Every ancestor of the image contains it,
+	 *   including the `<main>` group wrapping the whole article, and
+	 *   `render_block` filters fire innermost-first — so by the time an
+	 *   ancestor is filtered, the image and caption beneath it have already
+	 *   been emptied, and only a container that held nothing else is now blank.
 	 *
 	 * @param string $block_content Rendered block.
 	 * @param array  $block         Parsed block.
@@ -193,15 +217,19 @@ class Featured_Image_Position {
 			return $block_content;
 		}
 
+		if ( ! self::is_hidden() ) {
+			return $block_content;
+		}
+
 		if ( ! self::contains_featured_image( $block ) ) {
 			return $block_content;
 		}
 
-		if ( self::is_hidden() ) {
-			return '';
+		if ( ! self::renders_nothing( $block_content ) ) {
+			return $block_content;
 		}
 
-		return $block_content;
+		return '';
 	}
 
 	/**
@@ -226,6 +254,32 @@ class Featured_Image_Position {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Whether rendered markup puts nothing on the page.
+	 *
+	 * Text is not the only thing that counts: an element can be visible with no
+	 * text at all, so anything that draws or accepts input keeps the block. A
+	 * container left holding only its own markup is empty.
+	 *
+	 * @param string $block_content Rendered block.
+	 * @return bool
+	 */
+	private static function renders_nothing( $block_content ) {
+		if ( '' === trim( $block_content ) ) {
+			return true;
+		}
+
+		if ( preg_match( '#<(img|picture|video|audio|iframe|svg|canvas|object|embed|input|button|select|textarea|table|hr)[\s>/]#i', $block_content ) ) {
+			return false;
+		}
+
+		if ( false !== strpos( $block_content, 'background-image' ) ) {
+			return false;
+		}
+
+		return '' === trim( wp_strip_all_tags( $block_content ) );
 	}
 }
 
