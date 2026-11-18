@@ -934,7 +934,9 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 
 	/**
 	 * A renewal order still awaiting payment is checked out by its customer, so it
-	 * moves to the new owner; a paid one stays with whoever paid it.
+	 * moves to the new owner; a paid one stays with whoever paid it. The moved
+	 * order loses the previous owner's gateway, which a pending payment retry
+	 * would otherwise charge.
 	 */
 	public function test_change_owner_moves_unpaid_renewal_orders_only() {
 		$previous_owner_id = $this->create_reader();
@@ -943,9 +945,10 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 		$this->add_member( $new_owner_id, $group );
 		$unpaid_renewal = new WC_Order(
 			[
-				'status'      => 'pending',
-				'total'       => '120.00',
-				'customer_id' => $previous_owner_id,
+				'status'         => 'pending',
+				'total'          => '120.00',
+				'customer_id'    => $previous_owner_id,
+				'payment_method' => 'stripe',
 			]
 		);
 		$paid_renewal   = new WC_Order(
@@ -962,7 +965,31 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 
 		$this->assertSame( $new_owner_id, (int) $unpaid_renewal->get_customer_id() );
 		$this->assertSame( get_userdata( $new_owner_id )->user_email, $unpaid_renewal->get_billing_email() );
+		$this->assertSame( '', $unpaid_renewal->get_payment_method() );
 		$this->assertSame( $previous_owner_id, (int) $paid_renewal->get_customer_id() );
+	}
+
+	/**
+	 * Integrations learn about membership changes from the announcement, not the
+	 * meta, so a change of owner announces both people.
+	 */
+	public function test_change_owner_announces_both_people() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group( $previous_owner_id );
+		$this->add_member( $new_owner_id, $group );
+		wp_set_current_user( $this->create_store_admin() );
+		$announced = [];
+		$listener  = function ( $user_id, $added_ids, $removed_ids ) use ( &$announced ) {
+			$announced[ $user_id ] = [ $added_ids, $removed_ids ];
+		};
+		add_action( 'newspack_group_subscription_memberships_changed', $listener, 10, 3 );
+
+		rest_get_server()->dispatch( $this->owner_request( $group->get_id(), $new_owner_id ) );
+		remove_action( 'newspack_group_subscription_memberships_changed', $listener, 10 );
+
+		$this->assertSame( [ [ $group->get_id() ], [] ], $announced[ $previous_owner_id ] ?? null, 'The previous owner joined as a member.' );
+		$this->assertSame( [ [], [ $group->get_id() ] ], $announced[ $new_owner_id ] ?? null, 'The new owner left the member list.' );
 	}
 
 	/**
@@ -1076,8 +1103,8 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 	/**
 	 * Renewal invoices go to the subscription's billing contact, so the new owner's
 	 * billing details replace the previous owner's. Without a saved address the
-	 * account email and name stand in, and none of the previous owner's address
-	 * is left behind.
+	 * account email and name stand in, also for a saved email WooCommerce would
+	 * refuse, and none of the previous owner's address is left behind.
 	 */
 	public function test_change_owner_moves_billing_details_to_the_new_owner() {
 		$previous_owner_id = $this->create_reader();
@@ -1090,6 +1117,7 @@ class Test_Group_Subscription_Admin_API extends WP_UnitTestCase {
 			]
 		);
 		update_user_meta( $new_owner_id, '_newspack_reader', true );
+		update_user_meta( $new_owner_id, 'billing_email', 'not-an-email' );
 		$group = $this->create_group( $previous_owner_id );
 		$this->add_member( $new_owner_id, $group );
 		$group->data['billing_email']     = 'previous-owner@example.test';

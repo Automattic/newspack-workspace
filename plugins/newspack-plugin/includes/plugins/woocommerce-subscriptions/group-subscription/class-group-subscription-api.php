@@ -365,12 +365,11 @@ class Group_Subscription_API {
 	/**
 	 * Permission callback for the admin-only group routes.
 	 *
-	 * Three kinds of route use it. The member search answers about the site's user
-	 * records rather than about the subscription named in the request, and managing a
-	 * group authorizes the caller for that subscription, which is not the same object.
-	 * The seat limit is a publisher decision about what the group was sold, not
-	 * maintenance of who is in it, so neither the owner nor a manager may reach it.
-	 * Ownership carries billing, so neither the owner nor a manager may move it.
+	 * Owners and managers are refused on all three routes that use it:
+	 * - `/search-users` answers about the site's user records, while managing a
+	 *   group only authorizes the caller for that group's subscription.
+	 * - `/seat-limit` is a publisher decision about what the group was sold.
+	 * - `/owner` moves billing, which belongs to the publisher to reassign.
 	 *
 	 * @param \WP_REST_Request $request The request object.
 	 * @return bool Whether the caller is a store admin acting on a real group.
