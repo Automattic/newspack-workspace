@@ -46,6 +46,10 @@ webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.ali
 	if ( stats.hasErrors() ) {
 		fail( stats.toString( { all: false, errors: true } ) );
 	}
+	const unreached = config.replace.filter( ( { replacement } ) => ! stats.compilation.fileDependencies.has( replacement ) );
+	if ( unreached.length ) {
+		fail( unreached.map( ( { key } ) => `playground: replace "${ key }": no import in the bundle reaches that file` ).join( '\n' ) );
+	}
 	if ( stats.hasWarnings() ) {
 		console.warn( stats.toString( { all: false, warnings: true } ) );
 	}

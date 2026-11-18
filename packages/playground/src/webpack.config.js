@@ -1,3 +1,4 @@
+const fs = require( 'fs' );
 const path = require( 'path' );
 
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
@@ -22,9 +23,18 @@ const pinnedAliases = () =>
 	);
 
 // Webpack also matches aliases against a file's resolved absolute path, so an exact alias on it catches the package's own relative imports.
-const replaceAliases = replace => Object.fromEntries( Object.entries( replace ).map( ( [ original, replacement ] ) => [ `${ original }$`, replacement ] ) );
+const replaceAliases = replace => Object.fromEntries( replace.map( ( { original, replacement } ) => [ `${ original }$`, replacement ] ) );
 
-module.exports = ( { entry, outDir, aliases = {}, replace = {} } ) => {
+// The playground's own node_modules comes first so a package it declares keeps that copy; anything else resolves from the original package's dependencies.
+const replaceRules = replace =>
+	replace.map( ( { name, replacement } ) => ( {
+		include: fs.realpathSync( replacement ),
+		resolve: {
+			modules: [ path.join( packageDir, 'node_modules' ), path.resolve( packageRoot( name ), ...name.split( '/' ).map( () => '..' ) ), '...' ],
+		},
+	} ) );
+
+module.exports = ( { entry, outDir, aliases = {}, replace = [] } ) => {
 	const pluginDir = path.join( repo, 'plugins/newspack-plugin' );
 	const base = getBaseWebpackConfig( { entry: { screen: entry } } );
 
@@ -38,7 +48,7 @@ module.exports = ( { entry, outDir, aliases = {}, replace = {} } ) => {
 			...base.module,
 			parser: { ...base.module?.parser, javascript: { ...base.module?.parser?.javascript, exportsPresence: 'error' } },
 			// @wordpress/sync, which core-data loads, imports `fast-deep-equal/es6` with no extension from .mjs files.
-			rules: [ ...( base.module?.rules || [] ), { test: /\.mjs$/, resolve: { fullySpecified: false } } ],
+			rules: [ ...( base.module?.rules || [] ), { test: /\.mjs$/, resolve: { fullySpecified: false } }, ...replaceRules( replace ) ],
 		},
 		optimization: { ...base.optimization, splitChunks: false, runtimeChunk: false },
 		resolve: {

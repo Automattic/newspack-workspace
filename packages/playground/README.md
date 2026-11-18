@@ -24,9 +24,9 @@ replace: {
 },
 ```
 
-The key is the package name followed by the file's path inside the package, extension included. It points at the playground's pinned copy, so the package's own imports of that file get the replacement too, not only the prototype's. The value is relative to the config file. The build fails if the package isn't pinned, the file isn't in it, or the replacement doesn't exist.
+The key is the package name followed by the file's path inside the package, extension included. It points at the playground's pinned copy, so the package's own imports of that file get the replacement too, not only the prototype's. The value is relative to the config file. The build fails if the package isn't pinned, the file isn't in it, the replacement doesn't exist, or no import in the bundle reaches the file. The bundle follows each package's `build-module`, so a key under `build` swaps nothing and fails.
 
-The replacement must keep the original's exports. To reach the rest of the package, it imports the files under `build-module` by their full path, such as `@wordpress/global-styles-ui/build-module/hooks.mjs`. That works for every pinned package even though its `exports` map hides those paths, and it loads the same module instance the package uses. A replacement must not import the file it replaces.
+The replacement must keep the original's exports. To reach the rest of the package, it imports the files under `build-module` by their full path, such as `@wordpress/global-styles-ui/build-module/hooks.mjs`. That works for every pinned package, even where its `exports` map hides those paths, and it loads the same module instance the package uses. Packages the playground pins or declares resolve as they do anywhere else in the prototype; any other import, such as `@wordpress/compose`, resolves from the original package's own dependencies first, so it gets the version the original file uses. A replacement that imports the file it replaces still builds, but it calls itself in the browser, because the replace points that import back at the replacement.
 
 ## Build
 

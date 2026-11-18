@@ -25,7 +25,7 @@ describe( 'loadConfig', () => {
 			title: 'Demo',
 			entry: path.join( dir, 'src/entry.js' ),
 			aliases: { '@shared': path.join( dir, 'shared' ) },
-			replace: {},
+			replace: [],
 		} );
 	} );
 
@@ -73,29 +73,43 @@ describe( 'loadConfig', () => {
 
 	describe( 'replace', () => {
 		const key = '@wordpress/global-styles-ui/build-module/color-palette-panel.mjs';
-		const original = path.join( packageRoot( '@wordpress/global-styles-ui' ), 'build-module/color-palette-panel.mjs' );
+		const globalStylesUi = packageRoot( '@wordpress/global-styles-ui' );
 
 		it( "maps the pinned package's file to the replacement, relative to the config", () => {
 			write( 'entry.js' );
 			write( 'shared/panel.js' );
 			writeConfig( { entry: './entry.js', replace: { [ key ]: './shared/panel.js' } } );
-			expect( loadConfig( dir ).replace ).toEqual( { [ original ]: path.join( dir, 'shared/panel.js' ) } );
+			expect( loadConfig( dir ).replace ).toEqual( [
+				{
+					key,
+					name: '@wordpress/global-styles-ui',
+					original: path.join( globalStylesUi, 'build-module/color-palette-panel.mjs' ),
+					replacement: path.join( dir, 'shared/panel.js' ),
+				},
+			] );
 		} );
 
 		it.each( [
-			[ 'the package is not pinned', '@wordpress/compose/build-module/index.mjs', () => '@wordpress/compose is not a package the playground pins' ],
+			[ 'the key does not start with a package name', '/build-module/index.mjs', './shared/panel.js', () => 'the key must start with a package name' ],
+			[ 'the package is not pinned', '@wordpress/compose/build-module/index.mjs', './shared/panel.js', () => '@wordpress/compose is not a package the playground pins' ],
+			[
+				'the key leaves the package',
+				'@wordpress/global-styles-ui/../../../../../../package.json',
+				'./shared/panel.js',
+				() => `${ path.join( globalStylesUi, '../../../../../../package.json' ) } is outside @wordpress/global-styles-ui`,
+			],
 			[
 				'the file is not in the package',
 				'@wordpress/global-styles-ui/build-module/nope.mjs',
-				() => `no file at ${ path.join( packageRoot( '@wordpress/global-styles-ui' ), 'build-module/nope.mjs' ) }`,
+				'./shared/panel.js',
+				() => `no file at ${ path.join( globalStylesUi, 'build-module/nope.mjs' ) }`,
 			],
-			[ 'the replacement does not exist', key, () => `${ path.join( dir, 'missing.js' ) } does not exist` ],
-		] )( 'throws, naming the key and the config, when %s', ( label, specifier, reason ) => {
+			[ 'the replacement does not exist', key, './missing.js', () => `no file at ${ path.join( dir, 'missing.js' ) }` ],
+		] )( 'throws, naming the key and the config, when %s', ( label, replaceKey, target, reason ) => {
 			write( 'entry.js' );
 			write( 'shared/panel.js' );
-			const target = specifier === key ? './missing.js' : './shared/panel.js';
-			writeConfig( { entry: './entry.js', replace: { [ specifier ]: target } } );
-			expect( () => loadConfig( dir ) ).toThrow( `playground: replace "${ specifier }" in ${ path.join( dir, 'playground.config.js' ) }: ${ reason() }` );
+			writeConfig( { entry: './entry.js', replace: { [ replaceKey ]: target } } );
+			expect( () => loadConfig( dir ) ).toThrow( `playground: replace "${ replaceKey }" in ${ path.join( dir, 'playground.config.js' ) }: ${ reason() }` );
 		} );
 	} );
 } );

@@ -1,3 +1,4 @@
+const fs = require( 'fs' );
 const path = require( 'path' );
 const createWebpackConfig = require( './webpack.config' );
 const { packageRoot } = require( './pinned' );
@@ -6,8 +7,8 @@ const scriptsDir = path.dirname( require.resolve( 'newspack-scripts/package.json
 const wpScripts = path.dirname( require.resolve( '@wordpress/scripts/package.json', { paths: [ scriptsDir ] } ) );
 const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
 
-const resolverFor = webpackConfig => {
-	const resolver = webpack( webpackConfig ).resolverFactory.get( 'normal', { dependencyType: 'esm' } );
+const resolverFor = ( webpackConfig, ruleResolve = {} ) => {
+	const resolver = webpack( webpackConfig ).resolverFactory.get( 'normal', { dependencyType: 'esm', ...ruleResolve } );
 	return ( context, request ) =>
 		new Promise( ( resolve, reject ) => resolver.resolve( {}, context, request, {}, ( error, result ) => ( error ? reject( error ) : resolve( result ) ) ) );
 };
@@ -68,10 +69,12 @@ describe( 'createWebpackConfig', () => {
 	} );
 
 	describe( 'replace', () => {
-		const globalStylesUi = packageRoot( '@wordpress/global-styles-ui' );
+		const name = '@wordpress/global-styles-ui';
+		const globalStylesUi = packageRoot( name );
 		const original = path.join( globalStylesUi, 'build-module/color-palette-panel.mjs' );
 		const replacement = path.join( __dirname, '../fixtures/hello/entry.js' );
-		const resolve = resolverFor( createWebpackConfig( { entry: '/tmp/entry.js', outDir: '/tmp/out', replace: { [ original ]: replacement } } ) );
+		const replaceConfig = createWebpackConfig( { entry: '/tmp/entry.js', outDir: '/tmp/out', replace: [ { key: name, name, original, replacement } ] } );
+		const resolve = resolverFor( replaceConfig );
 
 		it( "swaps the module for the package's own relative imports of it", async () => {
 			await expect( resolve( path.join( globalStylesUi, 'build-module' ), './color-palette-panel.mjs' ) ).resolves.toBe( replacement );
@@ -79,6 +82,13 @@ describe( 'createWebpackConfig', () => {
 
 		it( 'swaps the module for a deep import of it from outside the package', async () => {
 			await expect( resolve( __dirname, '@wordpress/global-styles-ui/build-module/color-palette-panel.mjs' ) ).resolves.toBe( replacement );
+		} );
+
+		it( 'resolves a package the playground does not declare as the original file would', async () => {
+			const rule = replaceConfig.module.rules.find( ( { include } ) => include === fs.realpathSync( replacement ) );
+			const linkedCompose = fs.realpathSync( path.join( globalStylesUi, '../../@wordpress/compose' ) );
+			const resolveFromReplacement = resolverFor( replaceConfig, rule.resolve );
+			await expect( resolveFromReplacement( path.dirname( replacement ), '@wordpress/compose' ) ).resolves.toMatch( `${ linkedCompose }${ path.sep }` );
 		} );
 	} );
 
