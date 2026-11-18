@@ -72,6 +72,16 @@ class Featured_Image_Position {
 	const THEME_MOD_KEYS = [ 'featured_image_default', 'page_featured_image_default' ];
 
 	/**
+	 * Every position the classic theme recognizes, plus the empty string for
+	 * "follow the site default". Only `hidden` changes anything on a block
+	 * theme, but the others have to stay storable: the same meta drives the
+	 * classic theme, and a site can switch back.
+	 *
+	 * @var string[]
+	 */
+	const POSITIONS = [ '', 'large', 'small', 'behind', 'beside', 'above', self::HIDDEN ];
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
@@ -89,14 +99,17 @@ class Featured_Image_Position {
 	 * the moment they switch, and every one of their posts shows its image
 	 * again — which is the defect this class exists to prevent.
 	 *
-	 * Mirrors `Post_Date::migrate_date_settings()`.
+	 * Modeled on `Post_Date::migrate_date_settings()`, diverging in two ways:
+	 * the guard below reads the stored option rather than `get_theme_mod()`, and
+	 * the old theme is optional here rather than required.
 	 *
 	 * WordPress passes a `WP_Theme` in both branches of `check_theme_switched()`
 	 * — including when the old theme's files are gone, where the object exists
 	 * but `exists()` is false and `get_stylesheet()` still yields the slug, so
-	 * its stored mods are still readable. Core's own docblock warns that "the
-	 * parameters differ", which is why the second one is optional here rather
-	 * than required.
+	 * its stored mods are still readable. Core's "the parameters differ" note is
+	 * about what `$old_name` holds in that case, not about how many arguments
+	 * arrive. The second parameter is optional here purely as cheap
+	 * defensiveness, alongside the `instanceof` guard.
 	 *
 	 * @param string         $old_name  Name of the previous theme.
 	 * @param \WP_Theme|null $old_theme Previous theme object.
@@ -127,10 +140,38 @@ class Featured_Image_Position {
 
 		foreach ( self::THEME_MOD_KEYS as $key ) {
 			// Never overwrite a value the new theme already carries.
-			if ( isset( $old_mods[ $key ] ) && ! isset( $new_mods[ $key ] ) ) {
-				set_theme_mod( $key, $old_mods[ $key ] );
+			if ( ! isset( $old_mods[ $key ] ) || isset( $new_mods[ $key ] ) ) {
+				continue;
 			}
+
+			/*
+			 * And never carry a value the themes would not recognize. Nothing
+			 * sanitizes these mods on the way in — the setup wizard's
+			 * `sanitize_theme_mods()` is a pass-through, and `wp theme mod set`
+			 * writes verbatim — so a junk value can be sitting in the old row.
+			 */
+			$position = self::sanitize_position( $old_mods[ $key ] );
+			if ( '' === $position ) {
+				continue;
+			}
+
+			set_theme_mod( $key, $position );
 		}
+	}
+
+	/**
+	 * Keep a position to one the themes understand.
+	 *
+	 * Fails toward showing the image: an unrecognized value becomes '', which
+	 * means "follow the site default", so a bad value un-hides an image rather
+	 * than hiding one. That is the safe direction — the alternative would be
+	 * hiding a picture nobody asked to hide.
+	 *
+	 * @param mixed $position Submitted value.
+	 * @return string
+	 */
+	public static function sanitize_position( $position ) {
+		return in_array( $position, self::POSITIONS, true ) ? $position : '';
 	}
 
 	/**

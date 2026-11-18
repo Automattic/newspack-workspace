@@ -259,6 +259,42 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A real query loop on a hidden post's page keeps the other posts' images.
+	 *
+	 * The sibling test checks `is_hidden()` directly, which only re-tests the
+	 * queried-object comparison. This renders `core/query` and
+	 * `core/post-template` for real, so it exercises the thing that actually
+	 * makes it work: `render_block_core_post_template()` calls `the_post()` per
+	 * item, so `get_the_ID()` is the loop's post and the comparison bails.
+	 */
+	public function test_a_rendered_query_loop_keeps_other_posts_images() {
+		$other_id = $this->factory()->post->create(
+			[
+				'post_status' => 'publish',
+				'post_title'  => 'A neighbour with a picture',
+			]
+		);
+		$this->give_thumbnail( $other_id );
+
+		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
+		$this->go_to_singular( $this->post_id );
+
+		$parsed = parse_blocks(
+			'<!-- wp:query {"queryId":42,"query":{"postType":"post","perPage":10,"offset":0}} --><div class="wp-block-query">'
+			. '<!-- wp:post-template --><!-- wp:post-featured-image /--><!-- /wp:post-template -->'
+			. '</div><!-- /wp:query -->'
+		);
+
+		$rendered = ( new WP_Block( $parsed[0] ) )->render();
+
+		$this->assertStringContainsString(
+			'wp-block-post-featured-image',
+			$rendered,
+			'A loop on a hidden post\'s page still renders other posts\' featured images.'
+		);
+	}
+
+	/**
 	 * Nothing is suppressed away from a singular view.
 	 */
 	public function test_archives_are_untouched() {
@@ -470,6 +506,70 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	public function test_migration_tolerates_a_single_argument() {
 		Featured_Image_Position::migrate_position_defaults( 'some-theme' );
 		$this->assertTrue( true, 'Called with one argument without fataling.' );
+	}
+
+	/**
+	 * Only a position the themes understand survives sanitizing.
+	 */
+	public function test_unknown_positions_are_rejected() {
+		$this->assertSame( 'hidden', Featured_Image_Position::sanitize_position( 'hidden' ) );
+		$this->assertSame( 'beside', Featured_Image_Position::sanitize_position( 'beside' ) );
+		$this->assertSame( '', Featured_Image_Position::sanitize_position( '' ) );
+		$this->assertSame( '', Featured_Image_Position::sanitize_position( 'HIDDEN' ) );
+		$this->assertSame( '', Featured_Image_Position::sanitize_position( 'anything-else' ) );
+		$this->assertSame( '', Featured_Image_Position::sanitize_position( [ 'hidden' ] ) );
+		$this->assertSame( '', Featured_Image_Position::sanitize_position( null ) );
+	}
+
+	/**
+	 * The migration guard survives a hardcoded theme mod.
+	 *
+	 * This is the whole reason the guard reads the stored option instead of
+	 * `get_theme_mod()`: a theme or plugin filtering `theme_mod_*` would make
+	 * `get_theme_mod()` report a value as set, the copy would be skipped, and
+	 * the publisher's default would be lost on the switch.
+	 */
+	public function test_migration_survives_a_filtered_theme_mod() {
+		$old_theme = wp_get_theme( 'newspack-theme' );
+		update_option(
+			'theme_mods_' . $old_theme->get_stylesheet(),
+			[ 'featured_image_default' => 'hidden' ]
+		);
+		remove_theme_mod( 'featured_image_default' );
+
+		$hardcoded = function () {
+			return 'large';
+		};
+		add_filter( 'theme_mod_featured_image_default', $hardcoded );
+
+		Featured_Image_Position::migrate_position_defaults( 'Newspack', $old_theme );
+
+		remove_filter( 'theme_mod_featured_image_default', $hardcoded );
+
+		$this->assertSame(
+			'hidden',
+			get_theme_mod( 'featured_image_default' ),
+			'The copy must happen even while a filter hardcodes the value.'
+		);
+	}
+
+	/**
+	 * The migration refuses to carry a value the themes would not recognize.
+	 */
+	public function test_migration_skips_an_unknown_old_value() {
+		$old_theme = wp_get_theme( 'newspack-theme' );
+		update_option(
+			'theme_mods_' . $old_theme->get_stylesheet(),
+			[ 'featured_image_default' => 'show-it-please' ]
+		);
+		remove_theme_mod( 'featured_image_default' );
+
+		Featured_Image_Position::migrate_position_defaults( 'Newspack', $old_theme );
+
+		$this->assertFalse(
+			get_theme_mod( 'featured_image_default', false ),
+			'Junk in the old row should not be carried forward.'
+		);
 	}
 
 	/**
