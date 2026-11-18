@@ -145,10 +145,12 @@ class Featured_Image_Position {
 			}
 
 			/*
-			 * And never carry a value the themes would not recognize. Nothing
-			 * sanitizes these mods on the way in — the setup wizard's
-			 * `sanitize_theme_mods()` is a pass-through, and `wp theme mod set`
-			 * writes verbatim — so a junk value can be sitting in the old row.
+			 * And never carry a value the themes would not recognize. The
+			 * Customizer does sanitize these — both settings run through
+			 * `newspack_sanitize_feature_image_position()` — but it is not the
+			 * only writer: the setup wizard's `sanitize_theme_mods()` is a
+			 * pass-through and `wp theme mod set` writes verbatim, so a junk
+			 * value can be sitting in the old row.
 			 */
 			$position = self::sanitize_position( $old_mods[ $key ] );
 			if ( '' === $position ) {
@@ -162,10 +164,11 @@ class Featured_Image_Position {
 	/**
 	 * Keep a position to one the themes understand.
 	 *
-	 * Fails toward showing the image: an unrecognized value becomes '', which
-	 * means "follow the site default", so a bad value un-hides an image rather
-	 * than hiding one. That is the safe direction — the alternative would be
-	 * hiding a picture nobody asked to hide.
+	 * An unrecognized value becomes '', which means "follow the site default".
+	 * So it fails toward whatever the site chose, not toward showing the image:
+	 * on a site whose default is `hidden` — the state the migration below
+	 * deliberately carries across — '' resolves to hidden. That is the right
+	 * direction either way, because it never invents a per-post decision.
 	 *
 	 * @param mixed $position Submitted value.
 	 * @return string

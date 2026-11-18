@@ -129,6 +129,31 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
+	 * How many arguments a hook passes to one of this class's callbacks.
+	 *
+	 * @param string $hook   Hook name.
+	 * @param string $method Method on this class.
+	 * @return int|null
+	 */
+	private function accepted_args( $hook, $method ) {
+		global $wp_filter;
+
+		if ( ! isset( $wp_filter[ $hook ] ) ) {
+			return null;
+		}
+
+		foreach ( $wp_filter[ $hook ]->callbacks as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( [ Featured_Image_Position::class, $method ] === $callback['function'] ) {
+					return (int) $callback['accepted_args'];
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * The per-post meta suppresses the image.
 	 */
 	public function test_hidden_meta_hides_the_image() {
@@ -292,6 +317,32 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			$rendered,
 			'A loop on a hidden post\'s page still renders other posts\' featured images.'
 		);
+
+		/*
+		 * And the hidden post's own card in that loop is still suppressed, which
+		 * is what `is_hidden()` documents. Asserting only that some image
+		 * survives would also pass if suppression had stopped working entirely.
+		 */
+		$published = get_posts(
+			[
+				'post_type'      => 'post',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+			]
+		);
+		$with_images = 0;
+		foreach ( $published as $id ) {
+			if ( get_post_thumbnail_id( $id ) ) {
+				++$with_images;
+			}
+		}
+
+		$this->assertGreaterThan( 1, $with_images, 'The fixture needs more than one post with an image.' );
+		$this->assertSame(
+			$with_images - 1,
+			substr_count( $rendered, 'wp-block-post-featured-image' ),
+			'Every post with an image renders one, except the hidden post itself.'
+		);
 	}
 
 	/**
@@ -415,6 +466,17 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			$this->assertNotFalse(
 				has_filter( $hook, [ Featured_Image_Position::class, $method ] ),
 				sprintf( '%s should be filtered by %s().', $hook, $method )
+			);
+
+			/*
+			 * Three arguments, or the block instance never arrives, `$post_id`
+			 * is null, and the callback silently falls back to the page's post
+			 * instead of the block's own.
+			 */
+			$this->assertSame(
+				3,
+				$this->accepted_args( $hook, $method ),
+				sprintf( '%s needs the block instance, so three arguments.', $hook )
 			);
 		}
 
