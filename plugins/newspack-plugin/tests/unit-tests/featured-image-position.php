@@ -44,25 +44,27 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		$this->original_theme = get_stylesheet();
 
 		/*
-		 * These tests have to run on newspack-block-theme itself: the filters
-		 * only run on a block theme at all, and one test reads the shipped
-		 * `templates/single.html`. The test WordPress install has its own
-		 * themes directory holding only core's themes, so the monorepo's
-		 * themes directory has to be registered. It is mounted at a different
-		 * path inside the container than it sits at on disk, so try both.
+		 * The filters only run on a block theme, so the tests have to be on one
+		 * too — otherwise they exercise the guard rather than the behavior.
+		 * Any block theme does: none of this reads the active theme's files.
+		 *
+		 * Deliberately not newspack-block-theme. Its `style.css` is generated
+		 * by the webpack build and not tracked, so `WP_Theme::exists()` is
+		 * false in a fresh checkout and CI never builds it — requiring it here
+		 * would fail every test in this file on the PR while passing locally,
+		 * where the container mounts an already-built copy. The one test that
+		 * needs our template reads the tracked file from disk instead.
 		 */
-		$this->block_theme = 'newspack-block-theme';
-
-		foreach ( [ '/newspack-themes', dirname( NEWSPACK_ABSPATH, 3 ) . '/themes' ] as $candidate ) {
-			if ( is_dir( $candidate . '/' . $this->block_theme ) ) {
-				register_theme_directory( $candidate );
-				wp_clean_themes_cache();
+		$this->block_theme = '';
+		foreach ( wp_get_themes() as $slug => $theme ) {
+			if ( $theme->is_block_theme() ) {
+				$this->block_theme = $slug;
 				break;
 			}
 		}
 
-		if ( ! wp_get_theme( $this->block_theme )->exists() ) {
-			$this->fail( 'newspack-block-theme was not found; the monorepo themes directory is not visible to the tests.' );
+		if ( ! $this->block_theme ) {
+			$this->fail( 'No block theme is available, so these filters cannot be exercised.' );
 		}
 
 		switch_theme( $this->block_theme );
@@ -76,7 +78,7 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Put the theme back, so a switch here cannot colour another test file.
+	 * Put the theme back, so a switch here cannot color another test file.
 	 */
 	public function tear_down() {
 		if ( $this->original_theme && get_stylesheet() !== $this->original_theme ) {
@@ -180,18 +182,6 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		}
 
 		return null;
-	}
-
-	/**
-	 * Call the class's private containment test.
-	 *
-	 * @param array $block Parsed block.
-	 * @return bool
-	 */
-	private function contains_featured_image( $block ) {
-		$method = new ReflectionMethod( Featured_Image_Position::class, 'contains_featured_image' );
-		$method->setAccessible( true );
-		return $method->invoke( null, $block );
 	}
 
 	/**
@@ -305,6 +295,12 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 
 	/**
 	 * A hidden post keeps its thumbnail inside someone else's loop.
+	 *
+	 * Nothing reads block context to get this right: `core/group` and
+	 * `core/column` declare no `usesContext`, so their `WP_Block::$context` is
+	 * always empty. It holds because `render_block_core_post_template()` calls
+	 * `$query->the_post()` for each item, so `get_the_ID()` is the loop's post
+	 * and the queried-object comparison in `is_hidden()` bails.
 	 */
 	public function test_other_posts_in_a_loop_keep_their_image() {
 		$other_id = $this->factory()->post->create( [ 'post_status' => 'publish' ] );
@@ -330,53 +326,100 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An emptied wrapper goes — whatever block it is.
+	 * The image's container goes — whatever block it is.
 	 *
-	 * Six of the block theme's single templates wrap the image in a group and
-	 * one uses a column, so the filter must not care which.
+	 * Five of the block theme's single templates wrap the image in a group and
+	 * one uses a column, so the filter must not care which. Nor does it care
+	 * what the container rendered: the decision is structural.
 	 */
-	public function test_wrapper_dropped_for_group_and_column() {
+	public function test_image_box_dropped_for_group_and_column() {
 		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
 		$this->go_to_singular( $this->post_id );
 
 		foreach ( [ 'core/group', 'core/column' ] as $block_name ) {
+			foreach ( [ '', '<div class="wp-block-group"></div>', '<div><img src="x.jpg" /></div>' ] as $rendered ) {
+				$this->assertSame(
+					'',
+					Featured_Image_Position::filter_image_wrapper( $rendered, $this->wrapper_block( $block_name ) ),
+					sprintf( 'A %s holding only the featured image is dropped.', $block_name )
+				);
+			}
+		}
+	}
+
+	/**
+	 * A container holding anything besides the image is never dropped.
+	 *
+	 * This is the case a rendered-emptiness test gets wrong. An ad slot renders
+	 * a bare `<div id="div-gpt-ad-…">` and an embed loader renders only a
+	 * script: no text, nothing that looks like content, yet dropping the
+	 * container would take them with it. Someone moving the above-content ad
+	 * slot into the image's group in the Site Editor is an ordinary edit.
+	 */
+	public function test_container_holding_anything_else_is_kept() {
+		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
+		$this->go_to_singular( $this->post_id );
+
+		$neighbours = [
+			'an ad slot'      => 'newspack-ads/ad-slot',
+			'the content'     => 'core/post-content',
+			'a paragraph'     => 'core/paragraph',
+			'a cover'         => 'core/cover',
+			'a pattern'       => 'core/pattern',
+			'a synced block'  => 'core/block',
+			'a template part' => 'core/template-part',
+		];
+
+		foreach ( $neighbours as $label => $block_name ) {
+			$box                  = $this->wrapper_block();
+			$box['innerBlocks'][] = [
+				'blockName'   => $block_name,
+				'attrs'       => [],
+				'innerBlocks' => [],
+			];
+
 			$this->assertSame(
-				'',
-				Featured_Image_Position::filter_image_wrapper(
-					'<div class="wp-block-group"><div class="wp-block-group"></div></div>',
-					$this->wrapper_block( $block_name )
-				),
-				sprintf( 'A %s left holding nothing should be dropped.', $block_name )
+				'<div>kept</div>',
+				Featured_Image_Position::filter_image_wrapper( '<div>kept</div>', $box ),
+				sprintf( 'A container that also holds %s must be kept.', $label )
 			);
 		}
 	}
 
 	/**
-	 * A block that still renders something is never dropped.
+	 * Markup between the blocks counts as content, unless it is whitespace.
 	 *
-	 * Every ancestor of the image contains the image, the article wrapper
-	 * included. What separates the image's own container from the rest of the
-	 * page is that it has nothing left in it.
+	 * `parse_blocks()` gives the template's own indentation a nameless node, so
+	 * blank ones have to be ignored — but a nameless node carrying actual
+	 * markup is something a publisher put there.
 	 */
-	public function test_block_still_rendering_content_is_kept() {
+	public function test_nameless_nodes_are_whitespace_only() {
 		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
 		$this->go_to_singular( $this->post_id );
 
-		$cases = [
-			'text'           => '<main class="wp-block-group"><h1>Headline</h1><p>The article.</p></main>',
-			'an image'       => '<div class="wp-block-group"><img src="https://example.com/other.jpg" alt="" /></div>',
-			'an embed'       => '<div class="wp-block-group"><iframe src="https://example.com/"></iframe></div>',
-			'a background'   => '<div class="wp-block-group" style="background-image:url(x.jpg)"></div>',
-			'a form control' => '<div class="wp-block-group"><input type="email" /></div>',
+		$indented                  = $this->wrapper_block();
+		$indented['innerBlocks'][] = [
+			'blockName'   => null,
+			'innerHTML'   => "\n\t\t",
+			'innerBlocks' => [],
 		];
+		$this->assertSame(
+			'',
+			Featured_Image_Position::filter_image_wrapper( '<div></div>', $indented ),
+			'Indentation between blocks does not keep the container.'
+		);
 
-		foreach ( $cases as $label => $content ) {
-			$this->assertSame(
-				$content,
-				Featured_Image_Position::filter_image_wrapper( $content, $this->wrapper_block() ),
-				sprintf( 'A wrapper still rendering %s must be kept.', $label )
-			);
-		}
+		$with_markup                  = $this->wrapper_block();
+		$with_markup['innerBlocks'][] = [
+			'blockName'   => null,
+			'innerHTML'   => '<img src="https://example.com/pixel.gif" alt="" />',
+			'innerBlocks' => [],
+		];
+		$this->assertSame(
+			'<div>kept</div>',
+			Featured_Image_Position::filter_image_wrapper( '<div>kept</div>', $with_markup ),
+			'Raw markup between the blocks keeps the container.'
+		);
 	}
 
 	/**
@@ -419,9 +462,23 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	 * caught that, so this test reads the shipped template.
 	 */
 	public function test_real_single_template_keeps_the_article() {
-		$template = get_theme_file_path( 'templates/single.html' );
-		if ( ! file_exists( $template ) ) {
-			$this->fail( 'templates/single.html was not found in the block theme.' );
+		/*
+		 * Read the tracked template straight off disk. It is checked in, unlike
+		 * the theme's generated `style.css`, so this works in a fresh checkout
+		 * whether or not newspack-block-theme is installable. Two candidate
+		 * roots: the monorepo layout, and the path the dev container mounts.
+		 */
+		$template = '';
+		foreach ( [ dirname( NEWSPACK_ABSPATH, 2 ) . '/themes', '/newspack-themes' ] as $root ) {
+			$candidate = $root . '/newspack-block-theme/templates/single.html';
+			if ( file_exists( $candidate ) ) {
+				$template = $candidate;
+				break;
+			}
+		}
+
+		if ( ! $template ) {
+			$this->fail( 'newspack-block-theme/templates/single.html was not found next to the plugin.' );
 		}
 
 		$blocks = parse_blocks( file_get_contents( $template ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- A local template file in the active theme, read once in a test.
@@ -442,9 +499,15 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		);
 		$this->assertNotNull( $image_box, 'The template should carry a block holding the featured image.' );
 
-		// Both contain the image, which is why containment alone is not enough.
-		$this->assertTrue( $this->contains_featured_image( $main ), 'The article wrapper contains the featured image.' );
-		$this->assertTrue( $this->contains_featured_image( $image_box ), 'The image box contains the featured image.' );
+		/*
+		 * Both of them contain the featured image somewhere beneath them, which
+		 * is exactly why "contains the image" cannot be the test on its own.
+		 */
+		$finder = function ( $block ) {
+			return 'core/post-featured-image' === $block['blockName'];
+		};
+		$this->assertNotNull( $this->find_block( $main['innerBlocks'], $finder ), 'The article wrapper contains the featured image.' );
+		$this->assertNotNull( $this->find_block( $image_box['innerBlocks'], $finder ), 'The image box contains the featured image.' );
 
 		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
 		$this->go_to_singular( $this->post_id );
@@ -459,7 +522,7 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		$this->assertSame(
 			'',
 			Featured_Image_Position::filter_image_wrapper( '<div class="wp-block-group alignfull post-image"><div class="wp-block-group"></div></div>', $image_box ),
-			'The image box, left holding nothing, is dropped.'
+			'The image box is dropped.'
 		);
 	}
 
@@ -503,9 +566,59 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A post type the classic theme exempts is never hidden.
+	 *
+	 * Classic's `large`-to-`small` downgrade is an `||` whose second branch
+	 * overwrites any position, `hidden` included, for a post type outside
+	 * `newspack_theme_featured_image_post_types`. So on classic a site-wide
+	 * `hidden` still shows a small image on such a post type, and stripping it
+	 * here would be a regression rather than parity.
+	 */
+	public function test_unsupported_post_types_are_never_hidden() {
+		register_post_type(
+			'fip_widget',
+			[
+				'public'   => true,
+				'supports' => [ 'title', 'editor', 'thumbnail' ],
+			]
+		);
+
+		$widget_id = $this->factory()->post->create(
+			[
+				'post_type'   => 'fip_widget',
+				'post_status' => 'publish',
+			]
+		);
+		$this->give_thumbnail( $widget_id );
+		update_post_meta( $widget_id, Featured_Image_Position::META_KEY, 'hidden' );
+
+		$this->go_to_singular( $widget_id );
+
+		$this->assertFalse(
+			Featured_Image_Position::is_hidden( $widget_id ),
+			'A post type outside the supported list keeps its image, as it does on classic.'
+		);
+
+		// Until a plugin adds it, exactly as newspack-newsletters does.
+		$add = function ( $types ) {
+			$types[] = 'fip_widget';
+			return $types;
+		};
+		add_filter( 'newspack_theme_featured_image_post_types', $add );
+
+		$this->assertTrue(
+			Featured_Image_Position::is_hidden( $widget_id ),
+			'A post type added through the theme filter does honor the position.'
+		);
+
+		remove_filter( 'newspack_theme_featured_image_post_types', $add );
+		unregister_post_type( 'fip_widget' );
+	}
+
+	/**
 	 * Every filter the feature needs is actually registered.
 	 *
-	 * The behaviour tests call the callbacks directly, so they would all still
+	 * The behavior tests call the callbacks directly, so they would all still
 	 * pass if a registration were dropped — and a dropped caption filter is
 	 * exactly the kind of regression that leaves a caption floating under no
 	 * image.
@@ -538,8 +651,14 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	 * the switch to the block theme — silently, and for every post.
 	 */
 	public function test_defaults_migrate_across_a_theme_switch() {
-		// A theme other than the active one, which is what a real switch means.
+		/*
+		 * A theme other than the active one, which is what a real switch means.
+		 * It does not have to be installed: the migration only ever reads the
+		 * object's stylesheet to build the option name, and the monorepo nests
+		 * the classic theme a level deeper than a theme root anyway.
+		 */
 		$old_theme = wp_get_theme( 'newspack-theme' );
+		$this->assertSame( 'newspack-theme', $old_theme->get_stylesheet() );
 		update_option(
 			'theme_mods_' . $old_theme->get_stylesheet(),
 			[
