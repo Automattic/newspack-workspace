@@ -16,6 +16,18 @@ module.exports = {
 
 `@np` (`packages/components/src`), `@plugin` (`plugins/newspack-plugin/src`), `@themes` (`themes/`), `newspack-playground/bridge` and `newspack-playground/theme` are always available. A prototype's `aliases` are merged over them.
 
+`replace` swaps one file inside a pinned package for the prototype's own version, for a change the package has no prop or hook for:
+
+```js
+replace: {
+	'@wordpress/global-styles-ui/build-module/color-palette-panel.mjs': './shared/color-palette-panel.js',
+},
+```
+
+The key is the package name followed by the file's path inside the package, extension included. It points at the playground's pinned copy, so the package's own imports of that file get the replacement too, not only the prototype's. The value is relative to the config file. The build fails if the package isn't pinned, the file isn't in it, the replacement doesn't exist, or nothing imports the file, from inside the package or by the key itself. The bundle follows each package's `build-module`, so a key under `build` swaps nothing and fails, even when the prototype imports the replacement itself.
+
+The replacement must keep the original's exports. To reach the rest of the package, it imports the files under `build-module` by their full path, such as `@wordpress/global-styles-ui/build-module/hooks.mjs`. That works for every pinned package, even where its `exports` map hides those paths, and it loads the same module instance the package uses. Packages the playground pins or declares resolve as they do anywhere else in the prototype. Any other package, such as `@wordpress/compose`, comes from the original package's dependencies, then from those of the other pinned packages, which share its release, and only then from the workspace's own copy. Only the replacement file resolves this way. A helper it imports resolves like the rest of the prototype, so imports from other packages belong in the replacement file. A replacement that imports the file it replaces still builds, but it calls itself in the browser, because the replace points that import back at the replacement.
+
 ## Build
 
 ```sh

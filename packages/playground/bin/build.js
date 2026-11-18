@@ -2,6 +2,7 @@
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { loadConfig } = require( '../src/config' );
+const { packageRoot } = require( '../src/pinned' );
 
 process.env.NODE_ENV ??= 'production';
 
@@ -14,6 +15,20 @@ const args = process.argv.slice( 2 );
 const outIndex = args.indexOf( '--out' );
 const out = outIndex === -1 ? null : args[ outIndex + 1 ];
 const dir = args.find( ( arg, i ) => ! arg.startsWith( '--' ) && i !== outIndex + 1 );
+
+// Module concatenation moves connections onto the concatenated module, so only the resolved modules still name the files involved.
+const importsOriginal = ( compilation, { key, name, replacement } ) => {
+	const target = fs.realpathSync( replacement );
+	const inside = `${ fs.realpathSync( packageRoot( name ) ) }${ path.sep }`;
+	return [ ...compilation.modules ]
+		.flatMap( module => [ module, ...( module.modules || [] ) ] )
+		.flatMap( module => [ ...compilation.moduleGraph.getIncomingConnections( module ) ] )
+		.some(
+			connection =>
+				connection.resolvedModule?.resource === target &&
+				( connection.resolvedOriginModule?.resource?.startsWith( inside ) || connection.dependency?.request === key )
+		);
+};
 
 const fail = message => {
 	console.error( message );
@@ -39,12 +54,16 @@ process.chdir( path.resolve( __dirname, '../../..' ) );
 const webpack = require( require.resolve( 'webpack', { paths: [ wpScripts ] } ) );
 const createWebpackConfig = require( '../src/webpack.config' );
 
-webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.aliases } ), ( error, stats ) => {
+webpack( createWebpackConfig( { entry: config.entry, outDir, aliases: config.aliases, replace: config.replace } ), ( error, stats ) => {
 	if ( error ) {
 		fail( error.stack || error.message );
 	}
 	if ( stats.hasErrors() ) {
 		fail( stats.toString( { all: false, errors: true } ) );
+	}
+	const unreached = config.replace.filter( entry => ! importsOriginal( stats.compilation, entry ) );
+	if ( unreached.length ) {
+		fail( unreached.map( ( { key, name } ) => `playground: replace "${ key }" in ${ config.file }: nothing in ${ name } imports that file` ).join( '\n' ) );
 	}
 	if ( stats.hasWarnings() ) {
 		console.warn( stats.toString( { all: false, warnings: true } ) );
