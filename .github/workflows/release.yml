@@ -196,7 +196,10 @@ jobs:
           # Fail loud on any pipeline/log/grep error: a false "no release" here
           # would silently skip a real release, the one outcome we must avoid.
           set +e
-          pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
+          # The playground package is private tooling with no release config, so it is left out here
+          # and in the release call below (keep both in sync). --ignore-private-packages would also
+          # drop newspack-ads and newspack-theme, which release.
+          pnpm exec multi-semantic-release --dry-run --sequential-init --ignore-packages='packages/playground/**' 2>&1 | tee msr-dryrun.log
           # Copy the whole array in one go: PIPESTATUS is rebuilt after every
           # command, and an assignment is a command, so reading [1] on the line
           # after reading [0] returns empty and the tee check below never fires.
@@ -323,7 +326,7 @@ jobs:
         run: git tag > "$RUNNER_TEMP/tags-before.txt"
       - name: Release
         if: steps.plan.outputs.release_needed == 'true'
-        run: pnpm exec multi-semantic-release --sequential-init
+        run: pnpm exec multi-semantic-release --sequential-init --ignore-packages='packages/playground/**'
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
