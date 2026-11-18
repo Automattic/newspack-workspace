@@ -1205,16 +1205,16 @@ class Group_Subscription {
 	 * ceasing to be the owner changes their standing in the group all the same.
 	 *
 	 * @param int   $user_id     The reader.
-	 * @param int[] $added_ids   Subscription IDs of the groups they joined.
-	 * @param int[] $removed_ids Subscription IDs of the groups they left.
+	 * @param int[] $added_ids   Subscription IDs of groups that gained their membership record.
+	 * @param int[] $removed_ids Subscription IDs of groups that lost their membership record. An owner holds no such record, so a member who becomes owner is listed here while staying in the group.
 	 */
 	public static function announce_memberships_changed( int $user_id, array $added_ids, array $removed_ids ): void {
 		/**
 		 * Fires after a reader joins or leaves group subscriptions.
 		 *
 		 * @param int   $user_id     The reader.
-		 * @param int[] $added_ids   Subscription IDs of the groups they joined.
-		 * @param int[] $removed_ids Subscription IDs of the groups they left.
+		 * @param int[] $added_ids   Subscription IDs of groups that gained their membership record.
+		 * @param int[] $removed_ids Subscription IDs of groups that lost their membership record. An owner holds no such record, so a member who becomes owner is listed here while staying in the group.
 		 */
 		\do_action( 'newspack_group_subscription_memberships_changed', $user_id, $added_ids, $removed_ids );
 	}
