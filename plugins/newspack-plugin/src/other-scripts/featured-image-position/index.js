@@ -79,7 +79,7 @@ const PositionControl = () => {
 	return (
 		<RadioControl
 			className="newspack-featured-image-position"
-			label={ __( 'Visibility', 'newspack-plugin' ) }
+			label={ __( 'Image visibility', 'newspack-plugin' ) }
 			help={ __( 'Where a visible image appears is set by the template. Only hiding it is a per-post choice.', 'newspack-plugin' ) }
 			selected={ selected }
 			options={ [
