@@ -90,6 +90,24 @@ else
 	ok "$desc"
 fi
 
+# A worktree switched to another branch still has its own branch deleted, so the
+# line the user confirms against must name that one, not the checked-out one.
+new_sandbox wt-retarget
+make_worktree foo
+git -C "$SANDBOX/worktrees/foo" switch -q -c bar
+status=0
+out=$(run_worktree remove foo --yes) || status=$?
+desc="remove foo --yes on a worktree switched to bar names foo as deleted"
+if [[ "$status" -ne 0 ]]; then
+	fail "$desc — want exit 0, got $status: $out"
+elif [[ "$out" != *"Branch:   foo (will be deleted)"* ]]; then
+	fail "$desc — got: $out"
+elif [[ -n "$(sha_of foo)" || -z "$(sha_of bar)" ]]; then
+	fail "$desc — want foo deleted and bar kept"
+else
+	ok "$desc"
+fi
+
 # A mistyped flag before the branch would land in the ignored legacy repo slot,
 # so the branch it was meant to keep would be deleted.
 new_sandbox wt-typo

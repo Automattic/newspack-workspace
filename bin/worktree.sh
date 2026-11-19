@@ -236,10 +236,18 @@ case $1 in
             exit 1
         fi
         echo "Worktree: $worktree_dir"
-        # env destroy passes the directory-safe name (feat-foo for feat/foo),
-        # so name the branch actually checked out there.
-        shown_branch=$(git -C "$worktree_dir" branch --show-current 2>/dev/null)
-        shown_branch="${shown_branch:-$branch}"
+        # env destroy passes the directory-safe name (feat-foo for feat/foo). With
+        # --keep-branch nothing is deleted, so name the real branch, but only when
+        # it is the given one: a worktree switched to another branch would
+        # otherwise show a name that is not the one kept. When deleting, the line
+        # must name exactly what `git branch -D` below acts on.
+        shown_branch="$branch"
+        if [[ "$keep_branch" == true ]]; then
+            checked_out=$(git -C "$worktree_dir" branch --show-current 2>/dev/null)
+            if [[ -n "$checked_out" && "$(sanitize_branch "$checked_out")" == "$safe_branch" ]]; then
+                shown_branch="$checked_out"
+            fi
+        fi
         if [[ "$keep_branch" == true ]]; then
             echo "Branch:   $shown_branch (kept)"
         else
