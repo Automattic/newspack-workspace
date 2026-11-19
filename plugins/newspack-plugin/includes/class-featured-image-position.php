@@ -202,10 +202,31 @@ class Featured_Image_Position {
 			return;
 		}
 
-		$post_types = self::get_supported_post_types();
+		$registered = [];
 
-		foreach ( $post_types as $post_type ) {
-			register_post_meta(
+		foreach ( self::get_supported_post_types() as $post_type ) {
+			/*
+			 * A post type without `custom-fields` support has no `meta` field on
+			 * its REST route at all: `WP_REST_Posts_Controller::get_item_schema()`
+			 * adds `$schema['properties']['meta']` only under `case 'custom-fields'`,
+			 * and both write paths are gated on that property existing. Registering
+			 * would still succeed here — `register_post_meta()` never looks at the
+			 * post type — so the control would load and the editor's write would be
+			 * dropped with a 200, which is the silent save-then-lose this record
+			 * exists to prevent, reached by a different door.
+			 *
+			 * `post` and `page` both support it, as do both first-party users of
+			 * the filter above, so this is about a post type a third party adds.
+			 * Suppression still applies to such a type — `resolve_hidden()` reads
+			 * the filter, not this record — so a value set by other means is still
+			 * honored. Only the editor control goes away, which is the right half
+			 * to lose when REST would refuse to store what it writes.
+			 */
+			if ( ! post_type_supports( $post_type, 'custom-fields' ) ) {
+				continue;
+			}
+
+			$ok = register_post_meta(
 				$post_type,
 				self::META_KEY,
 				[
@@ -229,9 +250,21 @@ class Featured_Image_Position {
 					'auth_callback'     => [ __CLASS__, 'auth_callback' ],
 				]
 			);
+
+			/*
+			 * What registered, not what was asked for. `register_meta()` runs the
+			 * arguments through the `register_meta_args` filter before any of its
+			 * own checks, so a third party can make it return false without
+			 * registering — a narrowed schema the `''` default no longer validates
+			 * against is enough. Recording the request instead of the result is
+			 * the one way this record could come to name a key REST never took.
+			 */
+			if ( $ok ) {
+				$registered[] = $post_type;
+			}
 		}
 
-		self::$registered_for = $post_types;
+		self::$registered_for = $registered;
 	}
 
 	/**
@@ -260,7 +293,13 @@ class Featured_Image_Position {
 	 * stack up in the same panel.
 	 */
 	public static function enqueue_editor_assets() {
-		// What was registered, not what would be registered if asked again now.
+		/*
+		 * What was registered, not what would be registered if asked again now.
+		 * This is the earlier of two gates rather than the load-bearing one: an
+		 * empty record would reach the editor as an empty `postTypes`, and the
+		 * control's own check on that list is what the tests pin. This return
+		 * just saves enqueueing a script that would render nothing.
+		 */
 		if ( null === self::$registered_for ) {
 			return;
 		}
@@ -284,13 +323,24 @@ class Featured_Image_Position {
 			return;
 		}
 
-		$path = NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.js';
-		if ( ! file_exists( $path ) ) {
+		/*
+		 * Both halves of the build, because the next statement `include`s the
+		 * asset file. Checking only the script would let a half-shipped build
+		 * through to a failed include: a warning on every editor page load, and
+		 * `?? false` for the version, which enqueues the bundle with no
+		 * cache-buster and leaves browsers and the edge serving whatever copy
+		 * they already hold. The two are emitted as a pair, so this should never
+		 * fire — it is cheap insurance on a plugin where one build reaches every
+		 * site.
+		 */
+		$script = NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.js';
+		$asset_path = NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.asset.php';
+		if ( ! file_exists( $script ) || ! file_exists( $asset_path ) ) {
 			return;
 		}
 
 		$handle = 'newspack-featured-image-position';
-		$asset  = include NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.asset.php';
+		$asset  = include $asset_path;
 
 		wp_enqueue_script(
 			$handle,

@@ -687,6 +687,106 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
 			'With nobody else registering it, the plugin does.'
 		);
+
+		/*
+		 * And at priority 0, which is what makes the comparison in
+		 * `owns_the_setting()` strict. `has_action()` returns the priority, so a
+		 * callback at 0 yields int 0 and a loose `!` would read it as "nobody is
+		 * registering this" — claiming ownership while the classic theme held it.
+		 * Hooked here rather than at the default so that the strictness is pinned
+		 * by something, not only argued for in a comment.
+		 */
+		foreach ( [ 'post', 'page' ] as $post_type ) {
+			unregister_post_meta( $post_type, Featured_Image_Position::META_KEY );
+		}
+
+		add_action( 'init', 'newspack_register_meta', 0 );
+		Featured_Image_Position::register_meta();
+		$this->assertFalse(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'A classic registration at priority 0 still counts as the classic theme owning the key.'
+		);
+		remove_action( 'init', 'newspack_register_meta', 0 );
+	}
+
+	/**
+	 * A post type REST will not take the meta for is not registered for.
+	 *
+	 * `register_post_meta()` never looks at the post type, so without the gate
+	 * this records a post type whose REST route has no `meta` field at all, the
+	 * control loads, and the editor's write is dropped with a 200.
+	 */
+	public function test_a_post_type_without_custom_fields_is_skipped() {
+		register_post_type(
+			'np_no_custom_fields',
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+				'supports'     => [ 'title', 'editor', 'thumbnail' ],
+			]
+		);
+
+		add_filter(
+			'newspack_theme_featured_image_post_types',
+			function ( $post_types ) {
+				$post_types[] = 'np_no_custom_fields';
+				return $post_types;
+			}
+		);
+
+		Featured_Image_Position::register_meta();
+
+		$this->assertFalse(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'np_no_custom_fields' ),
+			'A post type with no custom-fields support should not be registered for.'
+		);
+		$this->assertNotContains(
+			'np_no_custom_fields',
+			Featured_Image_Position::get_editor_config( 'post' )['postTypes'],
+			'And it should not be offered the control either.'
+		);
+		$this->assertTrue(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'The supported types alongside it still register.'
+		);
+
+		unregister_post_type( 'np_no_custom_fields' );
+	}
+
+	/**
+	 * A registration that fails is not recorded as one that happened.
+	 *
+	 * `register_meta()` runs its arguments through `register_meta_args` before
+	 * its own checks, so a third party can make it return false without
+	 * registering. The record has to follow the result, not the request.
+	 */
+	public function test_a_failed_registration_is_not_recorded() {
+		$this->setExpectedIncorrectUsage( 'register_meta' );
+
+		// Narrow the enum so the '' default no longer validates against it.
+		add_filter(
+			'register_meta_args',
+			function ( $args, $defaults, $object_type, $meta_key ) {
+				if ( Featured_Image_Position::META_KEY === $meta_key ) {
+					$args['show_in_rest']['schema']['enum'] = [ Featured_Image_Position::HIDDEN ];
+				}
+				return $args;
+			},
+			10,
+			4
+		);
+
+		Featured_Image_Position::register_meta();
+
+		$this->assertFalse(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'Core should have refused this registration.'
+		);
+		$this->assertSame(
+			[],
+			Featured_Image_Position::get_editor_config( 'post' )['postTypes'],
+			'So the editor should be told nothing was registered.'
+		);
 	}
 
 	/**
