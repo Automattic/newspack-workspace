@@ -126,11 +126,12 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		expect( screen.getByText( 'Premium newsletters need accounts.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'omits the action rather than rendering a dead link when the URL is missing', () => {
+	it( 'sends a user with no setup link to an administrator instead of a dead link', () => {
 		render( <AudienceManagementRequired description={ GATES_COPY } setupUrl="" /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
 		expect( screen.queryByText( ACTION_LABEL ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Ask a site administrator to turn it on.' ) ).toBeInTheDocument();
 	} );
 } );
 
