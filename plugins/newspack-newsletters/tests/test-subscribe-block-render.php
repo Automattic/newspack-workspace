@@ -49,6 +49,11 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 	 * Remove the filter and forget the hidden lists.
 	 */
 	public function tear_down() {
+		if ( null !== $this->original_theme ) {
+			switch_theme( $this->original_theme );
+			$this->original_theme = null;
+		}
+		wp_clean_themes_cache();
 		remove_filter( 'newspack_newsletters_subscription_lists', [ $this, 'hide_lists' ] );
 		remove_filter( 'newspack_newsletters_subscription_list_gates', [ $this, 'report_premium_lists' ] );
 		$this->hidden_list_ids    = [];
@@ -778,5 +783,63 @@ class Subscribe_Block_Render_Test extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '7', $html ) );
 		$this->assertNotSame( '', $this->get_checkbox_row( '8', $html ) );
 		$this->assertStringNotContainsString( 'newspack-ui__badge', $this->get_checkbox_row( '8', $html ) );
+	}
+	/**
+	 * Theme to restore after each test.
+	 *
+	 * @var string|null
+	 */
+	private $original_theme = null;
+
+	/**
+	 * Switch theme, skipping when it is not available.
+	 *
+	 * @param string $slug Theme slug.
+	 */
+	private function use_theme( $slug ) {
+		if ( ! wp_get_theme( $slug )->exists() ) {
+			$this->markTestSkipped( $slug . ' is not available in this environment.' );
+		}
+		$this->original_theme = get_stylesheet();
+		switch_theme( $slug );
+	}
+
+	/**
+	 * Get the opening tag of the rendered submit button.
+	 *
+	 * @param array $overrides Attributes to set.
+	 *
+	 * @return string
+	 */
+	private function get_button_tag( $overrides = [] ) {
+		$lists = [ $this->get_list( 'only_mailchimp' )->get_public_id() ];
+		$html  = $this->render( $this->get_attrs( [ 'lists' => $lists ] + $overrides ) );
+		preg_match( '/<button[^>]*type="submit"[^>]*>/', $html, $matches );
+		return $matches[0];
+	}
+
+	/**
+	 * The button classes mark which colors are set, which the stylesheet relies on to pick the site's button or the block's own colors.
+	 */
+	public function test_button_classes_mark_which_colors_are_set() {
+		$this->use_theme( 'twentytwentyfive' );
+
+		$text_only = $this->get_button_tag( [ 'textColor' => '#000000' ] );
+		$this->assertStringContainsString( 'has-text-color', $text_only );
+		$this->assertStringNotContainsString( 'has-background-color', $text_only );
+		$this->assertStringContainsString( 'color: #000000;', $text_only );
+
+		$background_only = $this->get_button_tag( [ 'backgroundColor' => '#6c6c6c' ] );
+		$this->assertStringContainsString( 'has-background-color', $background_only );
+		$this->assertStringNotContainsString( 'has-text-color', $background_only );
+
+		$both = $this->get_button_tag(
+			[
+				'backgroundColor' => '#6c6c6c',
+				'textColor'       => '#000000',
+			]
+		);
+		$this->assertStringContainsString( 'has-background-color', $both );
+		$this->assertStringContainsString( 'has-text-color', $both );
 	}
 }

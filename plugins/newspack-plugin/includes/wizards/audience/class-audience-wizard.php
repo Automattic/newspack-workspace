@@ -736,6 +736,15 @@ class Audience_Wizard extends Wizard {
 			if ( isset( $args['content_gifting']['button_color'] ) ) {
 				Content_Gifting_CTA::set_button_color( $args['content_gifting']['button_color'] );
 			}
+			if ( isset( $args['content_gifting']['text_color'] ) ) {
+				Content_Gifting_CTA::set_text_color( $args['content_gifting']['text_color'] );
+			}
+			if ( isset( $args['content_gifting']['button_text_color'] ) ) {
+				Content_Gifting_CTA::set_button_text_color( $args['content_gifting']['button_text_color'] );
+			}
+			if ( isset( $args['content_gifting']['shadow'] ) ) {
+				Content_Gifting_CTA::set_shadow( $args['content_gifting']['shadow'] );
+			}
 		}
 		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {
 			Content_Gate_Advanced_Settings::update_settings( [ 'newsletter_link_bypass_enabled' => (bool) $args['newsletter_link_bypass_enabled'] ] );

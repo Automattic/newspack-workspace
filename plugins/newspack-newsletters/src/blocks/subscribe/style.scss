@@ -110,13 +110,24 @@
 		}
 	}
 	button[type="submit"] {
-		background-color: #d33;
-		color: white;
 		cursor: pointer;
 		flex: 1 1 100%;
 
 		@media ( min-width: 782px ) {
 			flex: 0 0 auto;
+		}
+
+		&:not(.wp-element-button) {
+			background-color: #d33;
+			color: white;
+		}
+
+		&.has-background-color {
+			color: white;
+		}
+
+		&.has-text-color {
+			background-color: #d33;
 		}
 	}
 	input[disabled] {
@@ -137,11 +148,11 @@
 	}
 
 	.newspack-newsletters-lists {
-		background: white;
-		border: 1px solid wp-colors.$gray-200;
+		background: var(--newspack-ui-color-surface, white);
+		border: 1px solid var(--newspack-ui-color-border, wp-colors.$gray-200);
 		border-radius: 2px;
 		box-sizing: border-box;
-		color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+		color: var(--newspack-ui-color-text, #1e1e1e);
 		flex: 1 1 100%;
 		font-size: 0.8rem;
 		padding: 0.5em;
@@ -254,15 +265,26 @@
 
 			&.status-400,
 			&.status-500 {
-				color: var(--newspack-ui-color-error-50, #d63638);
+				color: var(--newspack-ui-color-error-text, #b32d2e);
 			}
 		}
 	}
 
 	& &__continue {
-		background-color: #d33;
-		color: white;
 		cursor: pointer;
+
+		&:not(.wp-element-button) {
+			background-color: #d33;
+			color: white;
+		}
+
+		&.has-background-color {
+			color: white;
+		}
+
+		&.has-text-color {
+			background-color: #d33;
+		}
 	}
 
 	.nphp {
@@ -285,7 +307,7 @@
 		text-align: center;
 		font-size: 0.8em;
 		margin: 0;
-		color: var(--newspack-ui-color-error-50, #d63638);
+		color: var(--newspack-ui-color-error-text, #b32d2e);
 	}
 }
 
