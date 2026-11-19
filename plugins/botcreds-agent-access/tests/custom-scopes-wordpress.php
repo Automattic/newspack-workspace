@@ -91,6 +91,8 @@ try {
 	$uuid = wp_generate_uuid4();
 	Agent_Access_Scope::save( $uid, $uuid, array( 'post', $custom, '/wc/v3/*' ) );
 	aa_check( array( 'post', $custom, '/wc/v3/*' ) === Agent_Access_Scope::get( $uid, $uuid ), 'real database scope roundtrip' );
+	Agent_Access_Scope::save( $uid, $uuid, array( '*' ) );
+	aa_check( array( '*' ) === Agent_Access_Scope::get( $uid, $uuid ), 'full access survives database roundtrip' );
 	update_user_meta( $uid, Agent_Access_Scope::META_PREFIX . $uuid, 'posts_media' );
 	aa_check( array( 'post', 'attachment' ) === Agent_Access_Scope::get( $uid, $uuid ), 'legacy database migration' );
 	unset( $GLOBALS['_agent_access_pro_token_row'] );
@@ -117,6 +119,8 @@ try {
 	wp_set_current_user( 0 ); wp_set_current_user( $uid );
 	$response = aa_ajax( $admin, array( 'user_id' => $uid, 'scope_all_custom' => '1' ) );
 	aa_check( true === $response['success'] && array( $custom ) === Agent_Access_Scope::get( $uid, $uuid ), 'all-custom grant persisted without full access' );
+	$response = aa_ajax( $admin, array( 'user_id' => $uid, 'scope_full' => '1' ) );
+	aa_check( true === $response['success'] && array( '*' ) === Agent_Access_Scope::get( $uid, $uuid ), 'administrator full-access grant persisted' );
 	wp_set_current_user( 0 );
 	$response = rest_do_request( new WP_REST_Request( 'PUT', '/newspack-workflows/v1/aa-scope-probe' ) );
 	aa_check( in_array( $response->get_status(), array( 401, 403 ), true ), 'endpoint still enforces native WordPress permission callback' );
