@@ -606,6 +606,26 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Junk already in the new theme's row does not block the migration.
+	 *
+	 * "Never overwrite" is about not clobbering a publisher's choice. A value
+	 * the themes cannot recognize is not one, and treating it as though it were
+	 * would keep the real setting out for good.
+	 */
+	public function test_migration_replaces_an_unrecognized_new_value() {
+		$old_theme = wp_get_theme( 'newspack-theme' );
+		update_option(
+			'theme_mods_' . $old_theme->get_stylesheet(),
+			[ 'featured_image_default' => 'hidden' ]
+		);
+		set_theme_mod( 'featured_image_default', 'show-it-please' );
+
+		Featured_Image_Position::migrate_position_defaults( 'Newspack', $old_theme );
+
+		$this->assertSame( 'hidden', get_theme_mod( 'featured_image_default' ) );
+	}
+
+	/**
 	 * The migration refuses to carry a value the themes would not recognize.
 	 */
 	public function test_migration_skips_an_unknown_old_value() {

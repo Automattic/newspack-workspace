@@ -139,8 +139,17 @@ class Featured_Image_Position {
 		}
 
 		foreach ( self::THEME_MOD_KEYS as $key ) {
-			// Never overwrite a value the new theme already carries.
-			if ( ! isset( $old_mods[ $key ] ) || isset( $new_mods[ $key ] ) ) {
+			if ( ! isset( $old_mods[ $key ] ) ) {
+				continue;
+			}
+
+			/*
+			 * Never overwrite a choice the new theme already carries — but a
+			 * value it cannot recognize is not a choice, so it does not block
+			 * the migration. Otherwise junk in the destination row would keep a
+			 * publisher's real setting out forever.
+			 */
+			if ( isset( $new_mods[ $key ] ) && '' !== self::sanitize_position( $new_mods[ $key ] ) ) {
 				continue;
 			}
 
