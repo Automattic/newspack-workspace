@@ -1,3 +1,10 @@
+## newspack-story-budget [1.3.11](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.10...newspack-story-budget@1.3.11) (2026-11-19)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
 ## newspack-story-budget [1.3.10](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.9...newspack-story-budget@1.3.10) (2026-11-16)
 
 

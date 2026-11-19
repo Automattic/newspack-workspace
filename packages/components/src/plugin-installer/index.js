@@ -5,6 +5,7 @@
 /**
  * WordPress dependencies.
  */
+import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { Component } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -13,7 +14,7 @@ import { Badge } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import { ActionCard, Button, Waiting } from '../';
+import { ActionCard, Button, Notice, Waiting } from '../';
 import './style.scss';
 
 const PLUGIN_STATE_NONE = 0;
@@ -25,6 +26,14 @@ const PLUGIN_STATE_ERROR = 3;
  * External dependencies.
  */
 import classnames from 'classnames';
+
+/**
+ * The message shown, and announced, when plugin information can't be retrieved.
+ *
+ * @param {Object} error The rejected apiFetch value.
+ * @return {string} The message.
+ */
+const errorMessage = error => error?.message || __( 'Plugin information could not be retrieved.', 'newspack-plugin' );
 
 /**
  * Plugin installer.
@@ -47,9 +56,15 @@ class PluginInstaller extends Component {
 		} );
 	};
 
-	componentDidUpdate = prevProps => {
+	componentDidUpdate = ( prevProps, prevState ) => {
 		const { autoInstall, plugins } = this.props;
-		const { installationInitialized } = this.state;
+		const { installationInitialized, error } = this.state;
+		// Announced once the notice is on screen, not when the fetch fails: a
+		// caller that steps aside on the failure unmounts the installer first,
+		// and its users should hear nothing.
+		if ( error && ! prevState.error ) {
+			speak( errorMessage( error ), 'assertive' );
+		}
 		if ( plugins !== prevProps.plugins ) {
 			this.retrievePluginInfo( plugins );
 		}
@@ -60,19 +75,30 @@ class PluginInstaller extends Component {
 
 	retrievePluginInfo = plugins => {
 		return new Promise( resolve => {
-			apiFetch( { path: '/newspack/v1/plugins/' } ).then( response => {
-				const pluginInfo = Object.keys( response ).reduce( ( result, slug ) => {
-					if ( plugins.indexOf( slug ) === -1 ) {
+			apiFetch( { path: '/newspack/v1/plugins/' } )
+				.then( response => {
+					const pluginInfo = Object.keys( response ).reduce( ( result, slug ) => {
+						if ( plugins.indexOf( slug ) === -1 ) {
+							return result;
+						}
+						result[ slug ] = {
+							...response[ slug ],
+							installationStatus: response[ slug ].Status === 'active' ? PLUGIN_STATE_ACTIVE : PLUGIN_STATE_NONE,
+						};
 						return result;
-					}
-					result[ slug ] = {
-						...response[ slug ],
-						installationStatus: response[ slug ].Status === 'active' ? PLUGIN_STATE_ACTIVE : PLUGIN_STATE_NONE,
-					};
-					return result;
-				}, {} );
-				this.updatePluginInfo( pluginInfo ).then( () => resolve() );
-			} );
+					}, {} );
+					this.setState( { error: null } );
+					this.updatePluginInfo( pluginInfo ).then( () => resolve() );
+				} )
+				// Every fetch reports a status; a caller waiting on one would otherwise
+				// stay on its loading state.
+				// The caller hears first, so one that steps aside unmounts the installer
+				// before its error renders, whether or not the root batches updates.
+				.catch( error => {
+					this.props.onStatus( { complete: false, pluginInfo: {}, error } );
+					this.setState( { error } );
+					resolve();
+				} );
 		} );
 	};
 
@@ -163,7 +189,10 @@ class PluginInstaller extends Component {
 	 */
 	render() {
 		const { autoInstall, isSmall, withoutFooterButton } = this.props;
-		const { pluginInfo } = this.state;
+		const { pluginInfo, error } = this.state;
+		if ( error ) {
+			return <Notice isError noticeText={ errorMessage( error ) } />;
+		}
 		const { is_managed: isManaged } = window.newspack_aux_data || {};
 		const slugs = Object.keys( pluginInfo );
 
