@@ -323,25 +323,16 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		 * is what `is_hidden()` documents. Asserting only that some image
 		 * survives would also pass if suppression had stopped working entirely.
 		 */
-		$published = get_posts(
-			[
-				'post_type'      => 'post',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-			]
-		);
-		$with_images = 0;
-		foreach ( $published as $id ) {
-			if ( get_post_thumbnail_id( $id ) ) {
-				++$with_images;
-			}
-		}
-
-		$this->assertGreaterThan( 1, $with_images, 'The fixture needs more than one post with an image.' );
+		/*
+		 * Two posts in this transaction carry a thumbnail — the queried one and
+		 * its neighbour — and the queried one is hidden, so exactly one image
+		 * survives. A post without a thumbnail renders nothing either way, so
+		 * any the suite installed do not affect the count.
+		 */
 		$this->assertSame(
-			$with_images - 1,
+			1,
 			substr_count( $rendered, 'wp-block-post-featured-image' ),
-			'Every post with an image renders one, except the hidden post itself.'
+			'The neighbour keeps its image and the hidden post does not.'
 		);
 	}
 
