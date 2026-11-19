@@ -1,3 +1,10 @@
+## newspack-ads [3.15.8](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.7...newspack-ads@3.15.8) (2026-11-19)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
 ## newspack-ads [3.15.7](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.6...newspack-ads@3.15.7) (2026-11-10)
 
 

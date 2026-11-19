@@ -73,10 +73,13 @@ const AudienceManagementRequired = ( {
 			<EmptyState.Actions orientation="column" gap="lg">
 				{ /* Rendered only with a real destination: a primary CTA pointing at href=""
 				     reloads this same screen, which is worse than offering no button. */ }
-				{ setupUrl && (
+				{ setupUrl ? (
 					<Button variant="primary" href={ setupUrl }>
 						{ __( 'Set up Audience Management', 'newspack-plugin' ) }
 					</Button>
+				) : (
+					// No link means this user can't open the setup flow, so name who can.
+					<p>{ __( 'Ask a site administrator to turn it on.', 'newspack-plugin' ) }</p>
 				) }
 				<ExternalLink href={ learnMoreUrl } aria-label={ learnMoreLabel }>
 					{ __( 'Learn more', 'newspack-plugin' ) }
