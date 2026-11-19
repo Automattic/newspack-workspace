@@ -34,11 +34,18 @@ export const getSelectedOption = ( position, shownValue, hiddenValue ) => {
  * positions differently, so a publisher gets no feedback from overwriting one —
  * the damage only surfaces if the site ever returns to the classic theme.
  *
- * It also refuses a candidate outside the known vocabulary. Nothing sanitizes
- * these values on the way in while a classic theme is active — that theme
- * registers the meta with no sanitize callback at all — so a post or a theme mod
- * can hold junk. Writing that back would fail the REST enum and take the whole
- * post save with it, not just this field.
+ * It also refuses a candidate outside the known vocabulary, which is about the
+ * site default rather than the post. Nothing sanitizes the theme mod on the way
+ * in — the Customizer does, but the setup wizard's `sanitize_theme_mods()` is a
+ * pass-through and `wp theme mod set` writes verbatim — so it can hold junk, and
+ * writing that back would fail the REST enum.
+ *
+ * The stored position cannot arrive here as junk. Once the plugin owns the
+ * registration, REST validates on the way out: the meta field's prepare callback
+ * returns null for a value outside the enum, which the control reads as ''. So
+ * the `position` branch is defense against a shape that no longer occurs, kept
+ * because the two arguments are clamped by the same helper and splitting them
+ * would be the more fragile thing.
  *
  * @param {string}   position      The stored position.
  * @param {string}   siteDefault   What the site-wide default resolves to.

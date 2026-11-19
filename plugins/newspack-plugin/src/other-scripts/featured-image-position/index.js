@@ -48,10 +48,17 @@ const PositionControl = () => {
 	const { editPost } = useDispatch( 'core/editor' );
 
 	/*
-	 * Fail closed on anything malformed. `postTypes` and `positions` are both
-	 * used as arrays below, and a partial object would either throw inside the
-	 * Featured image panel or let the clamp collapse every option to '', which
-	 * renders two options sharing one value.
+	 * Fail closed on anything malformed. Two separate hazards, and the guard
+	 * covers both. `postTypes` and `positions` are used as arrays below, so a
+	 * partial object would throw — inside core's Featured image panel, which
+	 * takes the whole panel down with it. And `fallbackValue` is what
+	 * `getShownValue()` falls back to: if it is not in the vocabulary that
+	 * function returns '', which is already the first option's value, so
+	 * "Shown" could never be selected and clicking it would write ''.
+	 *
+	 * The second cannot happen with the config PHP sends today, where the
+	 * fallback is a literal `large` or `small`. It is checked because the site
+	 * default was a literal once too, and became a theme mod.
 	 */
 	const config = window.newspackFeaturedImagePosition;
 	if (
@@ -60,6 +67,7 @@ const PositionControl = () => {
 		! Array.isArray( config.positions ) ||
 		! config.positions.length ||
 		! config.hiddenValue ||
+		! config.positions.includes( config.fallbackValue ) ||
 		! config.postTypes.includes( postType )
 	) {
 		return null;
