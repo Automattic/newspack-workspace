@@ -11,64 +11,15 @@ else
     DOCKER_IT=""
 fi
 
-# Determine target container based on current directory
-# If inside a worktree, find the environment whose compose file mounts that
-# exact worktree path; otherwise use newspack_dev.
-#
-# Earlier versions used a 2-segment regex prefix that collapsed branches with
-# slashes (e.g. `jl/news-2239-pr1b-frontend` -> `jl`), causing false matches
-# when multiple envs mounted `jl/*` worktrees. This version reads each compose
-# file's actual mount lines and picks the LONGEST absolute path that PWD
-# starts with — unambiguous regardless of branch-name shape.
+# Route to the isolated env whose compose file mounts the current directory
+# (see env_for_path in bin/_common.sh), otherwise to newspack_dev.
 get_target_container() {
-    if [[ "$PWD" == "$NABSPATH/worktrees/"* || "$PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
-        local best_match="" best_env=""
-        for f in "$NABSPATH"/docker-compose.env-*.yml; do
-            [[ -f "$f" ]] || continue
-            while IFS= read -r mount; do
-                # Mounts can take three shapes — pre-monorepo per-plugin worktrees
-                # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>), monorepo
-                # workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
-                # or .../themes/<name>:/newspack-themes/<name>), and standalone
-                # repos/ worktrees (./worktrees-repos/<name>/<safe_branch>:/newspack-repos/<kind>/<name>).
-                # For the monorepo shape, the env mounts a per-plugin subdir but we
-                # also want to route correctly from elsewhere inside the
-                # worktree (its root, bin/, packages/, sibling plugins). Match
-                # by the enclosing worktree root instead of only the mounted
-                # subdir. Regex extraction tolerates tabs/multi-space and cuts
-                # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
-                # trailing comments don't corrupt the captured paths.
-                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
-                local rel="worktrees${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-                local container_type="${BASH_REMATCH[3]}"
-                local abs="$NABSPATH/$rel"
-                local worktree_root="$abs"
-                case "$container_type" in
-                    plugins|themes)
-                        worktree_root="${abs%/plugins/*}"
-                        worktree_root="${worktree_root%/themes/*}"
-                        ;;
-                esac
-                # Prefer the deeper mounted-subpath match (more specific) so
-                # PWD inside a mounted plugin/theme routes to that env even
-                # when a sibling env mounts a different plugin from the same
-                # worktree. Fall back to the worktree root for PWDs in
-                # shared dirs (bin/, packages/, the worktree root itself).
-                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
-                    best_match="$abs"
-                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
-                elif [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
-                    best_match="$worktree_root"
-                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
-                fi
-            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
-        done
-        if [ -n "$best_env" ]; then
-            echo "newspack_env_${best_env}" | tr '-' '_'
-            return
-        fi
+    local env_name
+    if env_name=$(env_for_path "$PWD"); then
+        echo "newspack_env_${env_name}" | tr '-' '_'
+    else
+        echo "newspack_dev"
     fi
-    echo "newspack_dev"
 }
 
 # Cache the target container for this invocation
@@ -126,6 +77,9 @@ if [[ "$PWD" == *"manager-html"* ]]; then
     path_param="--path=$current_site_path"
 fi
 
+# Commands run from the workspace root, so keep where the caller was for the
+# ones that resolve an env from it (`n env which`).
+export N_CALLER_PWD="$PWD"
 cd "$(dirname "$0")"
 source .env
 
@@ -552,7 +506,7 @@ case $1 in
         echo ""
         echo "Isolated Environments:"
         echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
-        echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
+        echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, which, cleanup)."
         echo ""
         echo "Other:"
         echo "  root                         Print the absolute path to the workspace root directory."
