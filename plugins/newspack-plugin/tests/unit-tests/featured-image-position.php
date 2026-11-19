@@ -84,6 +84,19 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			switch_theme( $this->original_theme );
 		}
 
+		/*
+		 * `$wp_meta_keys` is a process global, so the test transaction does not
+		 * roll it back. Tests here both register and unregister the key, which
+		 * would otherwise make this file's order matter to every file after it.
+		 */
+		foreach ( [ 'post', 'page' ] as $post_type ) {
+			unregister_post_meta( $post_type, Featured_Image_Position::META_KEY );
+		}
+
+		// Same reasoning: WP_UnitTestCase does not reset the REST server either.
+		global $wp_rest_server;
+		$wp_rest_server = null;
+
 		parent::tear_down();
 	}
 
@@ -452,6 +465,28 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 			'render_block_newspack/featured-image-caption' => 'suppress_when_hidden',
 		];
 
+		$actions = [
+			'init'                        => 'register_meta',
+			'enqueue_block_editor_assets' => 'enqueue_editor_assets',
+		];
+
+		foreach ( $actions as $hook => $method ) {
+			$this->assertNotFalse(
+				has_action( $hook, [ Featured_Image_Position::class, $method ] ),
+				sprintf( '%s should run %s().', $hook, $method )
+			);
+		}
+
+		/*
+		 * Priority 20 is argued for in the code — it is what lets a post type
+		 * added to the filter from another plugin's own init still be seen.
+		 */
+		$this->assertSame(
+			20,
+			has_action( 'init', [ Featured_Image_Position::class, 'register_meta' ] ),
+			'register_meta() should run late enough to see every supported post type.'
+		);
+
 		foreach ( $expected as $hook => $method ) {
 			$this->assertNotFalse(
 				has_filter( $hook, [ Featured_Image_Position::class, $method ] ),
@@ -558,6 +593,266 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	public function test_migration_tolerates_a_single_argument() {
 		Featured_Image_Position::migrate_position_defaults( 'some-theme' );
 		$this->assertTrue( true, 'Called with one argument without fataling.' );
+	}
+
+	/**
+	 * The position is exposed to REST, so the editor can read and write it.
+	 */
+	public function test_meta_is_registered_for_rest() {
+		Featured_Image_Position::register_meta();
+
+		foreach ( [ 'post', 'page' ] as $post_type ) {
+			$this->assertTrue(
+				registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, $post_type ),
+				sprintf( 'The position should be registered for %s.', $post_type )
+			);
+
+			$args = get_registered_meta_keys( 'post', $post_type )[ Featured_Image_Position::META_KEY ];
+			$this->assertTrue( $args['single'] );
+			$this->assertSame( 'string', $args['type'] );
+
+			/*
+			 * The enum is what makes REST reject an unknown position instead of
+			 * coercing it to '' and clearing a stored `hidden`.
+			 */
+			$this->assertSame(
+				Featured_Image_Position::POSITIONS,
+				$args['show_in_rest']['schema']['enum'],
+				'REST should accept only the positions the themes understand.'
+			);
+
+			// The classic theme registers neither of these, so a collision would drop them.
+			$this->assertSame( [ Featured_Image_Position::class, 'sanitize_position' ], $args['sanitize_callback'] );
+			$this->assertSame( [ Featured_Image_Position::class, 'auth_callback' ], $args['auth_callback'] );
+		}
+	}
+
+	/**
+	 * The plugin stands down whenever the classic theme is registering the key.
+	 *
+	 * Two independent halves, both exercised here: the theme kind, and whether
+	 * the classic theme's own `init` registration is hooked. The second is what
+	 * matters for a block child theme of the classic parent, which reports as a
+	 * block theme while still loading the parent's `functions.php`.
+	 */
+	public function test_meta_is_not_registered_on_a_classic_theme() {
+		foreach ( [ 'post', 'page' ] as $post_type ) {
+			unregister_post_meta( $post_type, Featured_Image_Position::META_KEY );
+		}
+
+		switch_theme( 'default' );
+		if ( wp_is_block_theme() ) {
+			$this->fail( 'The fallback theme is a block theme, so this gate cannot be exercised.' );
+		}
+
+		Featured_Image_Position::register_meta();
+
+		$this->assertFalse(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'The plugin should not register the key while a classic theme owns it.'
+		);
+
+		/*
+		 * Back on a block theme, with the classic theme's own hook in place:
+		 * the block-child-of-a-classic-parent case.
+		 */
+		switch_theme( $this->block_theme );
+
+		/*
+		 * The callback is the classic theme's and is undefined here, which is
+		 * fine: the gate only asks whether the hook carries it, and nothing in
+		 * this file re-fires `init`. If that ever changes, this will fatal.
+		 */
+		add_action( 'init', 'newspack_register_meta' );
+
+		Featured_Image_Position::register_meta();
+		$this->assertFalse(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'The classic theme registering the key is enough to stand down, whatever the theme kind.'
+		);
+
+		remove_action( 'init', 'newspack_register_meta' );
+		Featured_Image_Position::register_meta();
+		$this->assertTrue(
+			registered_meta_key_exists( 'post', Featured_Image_Position::META_KEY, 'post' ),
+			'With nobody else registering it, the plugin does.'
+		);
+	}
+
+	/**
+	 * Changing a post's position needs permission to edit that post.
+	 */
+	public function test_auth_callback_requires_edit_post() {
+		$author = $this->factory()->user->create( [ 'role' => 'author' ] );
+		$editor = $this->factory()->user->create( [ 'role' => 'editor' ] );
+
+		// Core passes the user it is asking about, which need not be the current one.
+		$this->assertTrue(
+			Featured_Image_Position::auth_callback( false, Featured_Image_Position::META_KEY, $this->post_id, $editor ),
+			'An editor can reposition the image.'
+		);
+		$this->assertFalse(
+			Featured_Image_Position::auth_callback( true, Featured_Image_Position::META_KEY, $this->post_id, $author ),
+			'An author cannot reposition the image on someone else\'s post.'
+		);
+
+		// With no user named it answers about the current one, as a filter would.
+		wp_set_current_user( $editor );
+		$this->assertTrue( Featured_Image_Position::auth_callback( false, Featured_Image_Position::META_KEY, $this->post_id ) );
+		wp_set_current_user( $author );
+		$this->assertFalse( Featured_Image_Position::auth_callback( true, Featured_Image_Position::META_KEY, $this->post_id ) );
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The supported post types come from the theme's filter.
+	 */
+	public function test_supported_post_types_follow_the_filter() {
+		$this->assertSame( [ 'post', 'page' ], Featured_Image_Position::get_supported_post_types() );
+
+		$add = function ( $types ) {
+			$types[] = 'fip_other';
+			return $types;
+		};
+		add_filter( 'newspack_theme_featured_image_post_types', $add );
+		$this->assertContains( 'fip_other', Featured_Image_Position::get_supported_post_types() );
+		remove_filter( 'newspack_theme_featured_image_post_types', $add );
+	}
+
+	/**
+	 * A list filtered into non-sequential keys still reaches JavaScript as a list.
+	 *
+	 * `wp_localize_script()` JSON-encodes a keyed array as an object, and the
+	 * control calls `.includes()` on it — which would throw and take the whole
+	 * Featured image panel down with it.
+	 */
+	public function test_supported_post_types_is_always_a_list() {
+		$unset_one = function ( $types ) {
+			unset( $types[0] );
+			return $types;
+		};
+		add_filter( 'newspack_theme_featured_image_post_types', $unset_one );
+
+		$types = Featured_Image_Position::get_supported_post_types();
+		$this->assertSame( array_keys( $types ), range( 0, count( $types ) - 1 ) );
+
+		remove_filter( 'newspack_theme_featured_image_post_types', $unset_one );
+	}
+
+	/**
+	 * REST refuses an unknown position rather than clearing the stored one.
+	 *
+	 * Without the enum in `show_in_rest` the value passes validation, the
+	 * sanitize callback coerces it to '', and the response is 200 — so a typo
+	 * from a script silently un-hides an image with no error anywhere.
+	 */
+	public function test_rest_rejects_an_unknown_position() {
+		Featured_Image_Position::register_meta();
+
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		wp_set_current_user( $this->factory()->user->create( [ 'role' => 'administrator' ] ) );
+		update_post_meta( $this->post_id, Featured_Image_Position::META_KEY, 'hidden' );
+
+		$request = new WP_REST_Request( 'POST', '/wp/v2/posts/' . $this->post_id );
+		$request->set_body_params( [ 'meta' => [ Featured_Image_Position::META_KEY => 'Hidden' ] ] );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status(), 'An unknown position should be refused.' );
+		$this->assertSame(
+			'hidden',
+			get_post_meta( $this->post_id, Featured_Image_Position::META_KEY, true ),
+			'The stored position must survive a refused write.'
+		);
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The editor is told the right defaults for the post type it is editing.
+	 *
+	 * This is the computation behind the control's "Site default (…)" label and
+	 * its last-resort "Shown" value, and it differs between posts and pages.
+	 */
+	public function test_editor_config_follows_the_post_type() {
+		set_theme_mod( 'featured_image_default', 'beside' );
+		set_theme_mod( 'page_featured_image_default', 'hidden' );
+
+		$post_config = Featured_Image_Position::get_editor_config( 'post' );
+		$this->assertSame( 'beside', $post_config['siteDefault'], 'Posts read the post default.' );
+		$this->assertSame( 'large', $post_config['fallbackValue'] );
+		$this->assertSame( 'hidden', $post_config['hiddenValue'] );
+		$this->assertSame( [ 'post', 'page' ], $post_config['postTypes'] );
+
+		$page_config = Featured_Image_Position::get_editor_config( 'page' );
+		$this->assertSame( 'hidden', $page_config['siteDefault'], 'Pages read the page default.' );
+		$this->assertSame( 'small', $page_config['fallbackValue'] );
+
+		// Every value handed to JavaScript is a string or a list, never a boolean.
+		foreach ( [ 'siteDefault', 'fallbackValue', 'hiddenValue' ] as $key ) {
+			$this->assertIsString( $post_config[ $key ], sprintf( '%s must be a string.', $key ) );
+		}
+		$this->assertSame(
+			array_keys( $post_config['postTypes'] ),
+			range( 0, count( $post_config['postTypes'] ) - 1 ),
+			'postTypes must be a list, or it reaches JavaScript as an object.'
+		);
+	}
+
+	/**
+	 * An unknown site default never reaches the editor.
+	 *
+	 * Nothing sanitizes these theme mods on the way in — the setup wizard's
+	 * `sanitize_theme_mods()` is a pass-through and `wp theme mod set` writes
+	 * verbatim — so the config has to clamp. Otherwise the control would offer
+	 * to write that value and REST would refuse it, failing the whole post save.
+	 */
+	public function test_editor_config_clamps_an_unknown_site_default() {
+		set_theme_mod( 'featured_image_default', 'show-it-please' );
+
+		$config = Featured_Image_Position::get_editor_config( 'post' );
+
+		$this->assertSame( 'large', $config['siteDefault'], 'An unknown default falls back.' );
+		$this->assertContains( $config['siteDefault'], Featured_Image_Position::POSITIONS );
+		$this->assertSame(
+			Featured_Image_Position::POSITIONS,
+			$config['positions'],
+			'The control needs the vocabulary so it can refuse to write outside it.'
+		);
+	}
+
+	/**
+	 * The editor is told what was registered, not what would be registered now.
+	 *
+	 * These used to be derived independently at two different times and could
+	 * disagree. A post type added to the filter after `init` 20 would get the
+	 * control with no REST registration behind it, so a publisher would pick a
+	 * position, save, get a 200, and lose it silently — core iterates only
+	 * registered meta fields and drops an unknown key without an error.
+	 */
+	public function test_the_editor_is_told_only_what_was_registered() {
+		Featured_Image_Position::register_meta();
+		$before = Featured_Image_Position::get_editor_config( 'post' )['postTypes'];
+		$this->assertContains( 'post', $before );
+
+		$late = function ( $types ) {
+			$types[] = 'fip_registered_too_late';
+			return $types;
+		};
+		add_filter( 'newspack_theme_featured_image_post_types', $late );
+
+		$after = Featured_Image_Position::get_editor_config( 'post' )['postTypes'];
+
+		remove_filter( 'newspack_theme_featured_image_post_types', $late );
+
+		$this->assertSame( $before, $after, 'A late filter must not reach the editor.' );
+		$this->assertNotContains(
+			'fip_registered_too_late',
+			$after,
+			'Offering the control for an unregistered post type loses the publisher\'s choice silently.'
+		);
 	}
 
 	/**
