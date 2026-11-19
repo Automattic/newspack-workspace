@@ -552,14 +552,14 @@ class Agent_Access_Admin {
 	 *
 	 * @param int $user_id Dedicated agent account.
 	 */
-	private function render_site_management_control( $user_id ) {
+	private function render_site_management_control( $user_id, $table_row = true ) {
 		if ( ! Agent_Access_Site_Management::can_manage( $user_id ) ) {
 			return;
 		}
 		?>
-		<tr>
+		<?php if ( $table_row ) : ?><tr>
 			<th scope="row"><?php esc_html_e( 'Site management', 'botcreds-agent-access' ); ?></th>
-			<td>
+			<td><?php endif; ?>
 				<div class="agent-access-control-row">
 				<label>
 					<input type="checkbox" class="agent-access-site-management" value="1" <?php checked( Agent_Access_Site_Management::is_enabled( $user_id ) ); ?>>
@@ -568,8 +568,7 @@ class Agent_Access_Admin {
 				<?php $this->render_help_tooltip( __( 'Site management', 'botcreds-agent-access' ), __( 'Applies to every session and credential for this Agent account on this site. Grants manage_options and edit_theme_options, not user management or plugin/theme installation. Endpoint scopes still apply. Turning this off removes only the grant from this plugin; permissions from other sources are preserved.', 'botcreds-agent-access' ) ); ?>
 				</div>
 				<p class="agent-access-brief"><?php esc_html_e( 'Applies to every session and credential for this agent account.', 'botcreds-agent-access' ); ?></p>
-			</td>
-		</tr>
+		<?php if ( $table_row ) : ?></td></tr><?php endif; ?>
 		<?php
 	}
 
@@ -593,7 +592,7 @@ class Agent_Access_Admin {
 		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
-			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Authors::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
+			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Authors::SCOPE, Agent_Access_User_Directory::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
 				$types[] = array( 'slug' => $slug, 'label' => $slug );
 			}
 		}
@@ -624,14 +623,6 @@ class Agent_Access_Admin {
 		<p class="description"><?php esc_html_e( 'Earlier SEO grant: an administrator must save this selection again to enable access across all authors.', 'botcreds-agent-access' ); ?></p>
 		<?php endif; ?>
 		<p class="agent-access-scope-summary" aria-live="polite"><?php echo esc_html( $read_only ? __( 'Read only — writes disabled.', 'botcreds-agent-access' ) : ( $seo_only ? __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ) : ( $full ? __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ) : __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ) ) ) ); ?></p>
-		<?php if ( Agent_Access_Authors::can_assign( $user_id ) ) : ?>
-		<div class="agent-access-control-row">
-		<label><input type="checkbox" name="scope_assign_authors" class="agent-access-scope-authors" value="1" <?php checked( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ); ?> <?php disabled( $read_only || $seo_only ); ?>> <?php esc_html_e( 'Allow author assignment', 'botcreds-agent-access' ); ?></label>
-		<?php $this->render_help_tooltip( __( 'Author assignment', 'botcreds-agent-access' ), __( 'Requires Co-Authors Plus. Allows ordered user and guest bylines through /agent-access/v1/authors/{id}, only on content this account can already edit and within its content scope. Does not grant editing of other authors’ posts. Existing content permissions remain unchanged. Assign the byline last: handing off ownership can remove editing access. Read-only and SEO-only modes override this permission.', 'botcreds-agent-access' ) ); ?>
-		</div>
-		<?php elseif ( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ) : ?>
-		<p><?php esc_html_e( 'Author assignment — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
-		<?php endif; ?>
 		<fieldset class="agent-access-scoped-options">
 			<legend class="agent-access-scope-heading"><?php esc_html_e( 'WordPress content', 'botcreds-agent-access' ); ?></legend>
 			<?php foreach ( $types as $type ) : ?>
@@ -676,6 +667,29 @@ class Agent_Access_Admin {
 			</fieldset>
 		</fieldset>
 		<p class="agent-access-brief"><?php esc_html_e( 'Reads follow the account’s WordPress permissions. No selection means no writes.', 'botcreds-agent-access' ); ?></p>
+		<?php if ( Agent_Access_User_Directory::can_assign( $user_id ) || in_array( Agent_Access_User_Directory::SCOPE, $scope, true ) || in_array( Agent_Access_Authors::SCOPE, $scope, true ) ) : ?>
+		<details class="agent-access-additional-permissions">
+			<summary><?php esc_html_e( 'Additional permissions', 'botcreds-agent-access' ); ?></summary>
+			<?php if ( Agent_Access_User_Directory::can_assign( $user_id ) ) : ?>
+			<div class="agent-access-control-row">
+				<label><input type="checkbox" name="scope_list_users" class="agent-access-scope-list-users" value="1" <?php checked( in_array( Agent_Access_User_Directory::SCOPE, $scope, true ) ); ?>> <?php esc_html_e( 'List users', 'botcreds-agent-access' ); ?></label>
+				<?php $this->render_help_tooltip( __( 'List users', 'botcreds-agent-access' ), __( 'Allows this credential to list, search, and count site users through GET /wp/v2/users, including accounts without published posts. Returns native view-context profile fields and matching totals, not private profile details for other users. Adds no permission to create, update, or delete users or change passwords and roles. Works with read-only and SEO-only access. Does not apply to browser sessions or other credentials.', 'botcreds-agent-access' ) ); ?>
+			</div>
+			<p class="agent-access-brief"><?php esc_html_e( 'Exposes the site’s user directory to this credential.', 'botcreds-agent-access' ); ?></p>
+			<?php elseif ( in_array( Agent_Access_User_Directory::SCOPE, $scope, true ) ) : ?>
+			<p><?php esc_html_e( 'List users — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
+			<?php endif; ?>
+		<?php if ( Agent_Access_Authors::can_assign( $user_id ) ) : ?>
+		<div class="agent-access-control-row">
+		<label><input type="checkbox" name="scope_assign_authors" class="agent-access-scope-authors" value="1" <?php checked( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ); ?> <?php disabled( $read_only || $seo_only ); ?>> <?php esc_html_e( 'Allow author assignment', 'botcreds-agent-access' ); ?></label>
+		<?php $this->render_help_tooltip( __( 'Author assignment', 'botcreds-agent-access' ), __( 'Requires Co-Authors Plus. Allows ordered user and guest bylines through /agent-access/v1/authors/{id}, only on content this account can already edit and within its content scope. Does not grant editing of other authors’ posts. Existing content permissions remain unchanged. Assign the byline last: handing off ownership can remove editing access. Read-only and SEO-only modes override this permission.', 'botcreds-agent-access' ) ); ?>
+		</div>
+		<?php elseif ( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ) : ?>
+		<p><?php esc_html_e( 'Author assignment — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
+		<?php endif; ?>
+			<?php $this->render_site_management_control( $user_id, false ); ?>
+		</details>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -690,14 +704,29 @@ class Agent_Access_Admin {
 	private static function collect_scope_from_post( $user_id = 0 ) {
 		// Nonces and capabilities are checked by each AJAX caller before collection.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$read_grants = array();
+		if ( isset( $_POST['scope_list_users'] ) ) {
+			if ( ! is_string( $_POST['scope_list_users'] ) || ! in_array( $_POST['scope_list_users'], array( '0', '1' ), true ) || ! Agent_Access_User_Directory::can_assign( $user_id ) ) {
+				return new WP_Error( 'list_users_grant_forbidden', __( 'Only a signed-in user-managing administrator may enable user listing for another credential.', 'botcreds-agent-access' ) );
+			}
+			if ( '1' === $_POST['scope_list_users'] ) {
+				$read_grants[] = Agent_Access_User_Directory::SCOPE;
+			}
+		} elseif ( $user_id ) {
+			// Older/unauthorized forms cannot silently drop an existing read grant.
+			$existing = ( new Agent_Access_API() )->get_existing_password( $user_id );
+			if ( $existing && in_array( Agent_Access_User_Directory::SCOPE, Agent_Access_Scope::get( $user_id, $existing['uuid'] ), true ) ) {
+				$read_grants[] = Agent_Access_User_Directory::SCOPE;
+			}
+		}
 		if ( ! empty( $_POST['scope_read_only'] ) ) {
-			return array( '__read_only__' );
+			return array_merge( array( '__read_only__' ), $read_grants );
 		}
 		if ( ! empty( $_POST['scope_seo_only'] ) ) {
 			if ( ! Agent_Access_Yoast_SEO::can_assign( $user_id ) ) {
 				return new WP_Error( 'seo_scope_forbidden', __( 'Only a signed-in administrator with user-management permissions can assign Yoast SEO-only access to another user.', 'botcreds-agent-access' ) );
 			}
-			return array( Agent_Access_Yoast_SEO::SCOPE );
+			return array_merge( array( Agent_Access_Yoast_SEO::SCOPE ), $read_grants );
 		}
 		$author_grant = array();
 		if ( isset( $_POST['scope_assign_authors'] ) ) {
@@ -707,7 +736,7 @@ class Agent_Access_Admin {
 			$author_grant[] = Agent_Access_Authors::SCOPE;
 		}
 		if ( ! empty( $_POST['scope_full'] ) ) {
-			return array_merge( array( '*' ), $author_grant );
+			return array_merge( array( '*' ), $author_grant, $read_grants );
 		}
 		$raw_types = isset( $_POST['scope_types'] ) ? wp_unslash( $_POST['scope_types'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Strict type/allowlist validation below rejects malformed grants without widening them.
 		$raw_custom = isset( $_POST['scope_custom_routes'] ) ? wp_unslash( $_POST['scope_custom_routes'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Each line is strictly validated below, not transformed into a different grant.
@@ -725,7 +754,7 @@ class Agent_Access_Admin {
 				if ( ! Agent_Access_Scope::is_valid_custom_pattern( $slug ) ) {
 					return new WP_Error( 'invalid_scope', __( 'Use custom route prefixes such as /newspack-workflows/v1/*; core WordPress routes belong in the content scope.', 'botcreds-agent-access' ) );
 				}
-			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_Authors::SCOPE === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Yoast_SEO::LEGACY_SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
+			} elseif ( '*' !== $slug && ( sanitize_key( $slug ) !== $slug || '__read_only__' === $slug || Agent_Access_User_Directory::SCOPE === $slug || Agent_Access_Authors::SCOPE === $slug || Agent_Access_Yoast_SEO::SCOPE === $slug || Agent_Access_Yoast_SEO::LEGACY_SCOPE === $slug || Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS === $slug ) ) {
 				return new WP_Error( 'invalid_scope', __( 'Invalid scope settings.', 'botcreds-agent-access' ) );
 			}
 			$clean[] = $slug;
@@ -744,7 +773,7 @@ class Agent_Access_Admin {
 			$clean[] = Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS;
 		}
 		// An explicit empty selection must never turn into full write access.
-		return empty( $clean ) ? array( '__read_only__' ) : array_values( array_unique( $clean ) );
+		return array_values( array_unique( array_merge( empty( $clean ) ? array( '__read_only__' ) : $clean, $read_grants ) ) );
 	}
 
 	/**
@@ -892,7 +921,6 @@ class Agent_Access_Admin {
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
 					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
 					<table class="form-table agent-access-settings-table" role="presentation">
-					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
 								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
@@ -959,7 +987,6 @@ class Agent_Access_Admin {
 				<?php $admin_create_defaults = array( 'post', 'attachment' ); ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 					<table class="form-table agent-access-settings-table" role="presentation">
-					<?php $this->render_site_management_control( $user->ID ); ?>
 						<tr>
 							<th scope="row">
 								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>

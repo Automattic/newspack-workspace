@@ -113,6 +113,9 @@ class Agent_Access_API {
 		if ( $existing && in_array( Agent_Access_Authors::SCOPE, Agent_Access_Scope::get( $user->ID, $existing['uuid'] ), true ) ) {
 			$info['author_assignment'] = 'Co-Authors Plus: GET /wp-json/agent-access/v1/authors/{post_id}/available?search=NAME for current author IDs; POST {"authors":[ID,...]} to /wp-json/agent-access/v1/authors/{post_id}. Ordered byline only, on already-editable content within scope. Assign last: handing off ownership may remove editing access. Do not use core author or CAP native write endpoints.';
 		}
+		if ( $existing && in_array( Agent_Access_User_Directory::SCOPE, Agent_Access_Scope::get( $user->ID, $existing['uuid'] ), true ) ) {
+			$info['user_directory'] = 'GET /wp-json/wp/v2/users?context=view&per_page=100&page=1 to list/search users. X-WP-Total is the matching user count; X-WP-TotalPages is the page count. This permission adds no user write access.';
+		}
 		return $info;
 	}
 }

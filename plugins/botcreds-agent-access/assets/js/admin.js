@@ -126,8 +126,10 @@
 
 	/** Collect only effective controls; disabled fieldsets must not submit grants. */
 	function collectScopeFromChecklist(container) {
-		var data = { scope_assign_authors: '', scope_read_only: '', scope_seo_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
+		var data = { scope_list_users: '', scope_assign_authors: '', scope_read_only: '', scope_seo_only: '', scope_full: '', scope_all_custom: '', scope_types: [], scope_custom_routes: '' };
 		if (!container) return data;
+		var listUsers = container.querySelector('.agent-access-scope-list-users');
+		if (listUsers) data.scope_list_users = listUsers.checked ? '1' : '0';
 		if (container.querySelector('.agent-access-scope-read-only:checked')) {
 			data.scope_read_only = '1';
 			return data;
@@ -153,7 +155,7 @@
 
 	function encodeScopeParams(data) {
 		var parts = [];
-		['scope_assign_authors', 'scope_read_only', 'scope_seo_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
+		['scope_list_users', 'scope_assign_authors', 'scope_read_only', 'scope_seo_only', 'scope_full', 'scope_all_custom', 'scope_custom_routes'].forEach(function (key) {
 			if (data[key]) parts.push(key + '=' + encodeURIComponent(data[key]));
 		});
 		data.scope_types.forEach(function (type) {

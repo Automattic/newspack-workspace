@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.2
+Stable tag: 2.4.3-rc.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,13 @@ Most AI agent setups require digging into wp-config, creating users manually, or
 5. Copy the credentials and paste them into your agent's config.
 
 == Frequently Asked Questions ==
+
+= Can an agent list and count all site users without managing them? =
+
+A signed-in administrator with user-management authority can enable **List users** on another user's Agent Access credential, under **Additional permissions**. It is off by default and works with Read only and Yoast SEO only. Requests use the native endpoint: `GET /wp-json/wp/v2/users?context=view&per_page=100&page=1`. Use `search` to filter; `X-WP-Total` and `X-WP-TotalPages` report matching totals and pages. With this grant, view-context requests include accounts without published posts. Edit context remains subject to WordPress’s separate profile-editing checks; use view context for a complete directory.
+
+This exposes the site's account directory, including account names and native view-context profile fields, even for accounts without published posts. It does not grant private profile details for other accounts. It adds only `list_users` during the selected credential's users GET/HEAD request. It does not add account creation, profile editing, deletion, role/password changes, browser access, or access for other passwords. Existing permissions from other sources are unchanged. Disable the selection and Save settings to revoke it immediately without regenerating the password.
+
 
 = What is an Application Password? =
 
@@ -95,6 +102,11 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.3-rc.1 =
+* New: Administrator-approved List users permission for an individual managed credential. Lists, searches and counts site accounts through the native users REST endpoint without granting user writes.
+* UI: Group List users, author assignment and site management under collapsed Additional permissions, with contextual help and explicit directory/account-wide disclosures.
+
 
 = 2.4.2 =
 * New: Administrator-enabled author assignment for Co-Authors Plus through a dedicated byline endpoint. Supports users, guest authors and ordered bylines on existing editable content.

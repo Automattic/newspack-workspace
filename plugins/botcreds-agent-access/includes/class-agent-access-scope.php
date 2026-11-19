@@ -199,7 +199,7 @@ class Agent_Access_Scope {
 				continue;
 			}
 
-			if ( '*' === $slug || '__read_only__' === $slug || self::ALL_CUSTOM_ENDPOINTS === $slug ) {
+			if ( Agent_Access_User_Directory::SCOPE === $slug || '*' === $slug || '__read_only__' === $slug || self::ALL_CUSTOM_ENDPOINTS === $slug ) {
 				continue;
 			}
 

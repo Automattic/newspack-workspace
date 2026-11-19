@@ -297,3 +297,8 @@ body.user-edit-php #application-passwords-section {
  .agent-access-mode-options { display: block; }
  .agent-access-admin-update-status { margin-inline-start: 0; margin-top: 8px; display: block; }
 }
+
+.agent-access-additional-permissions { margin: 16px 0 8px; border-top: 1px solid #dcdcde; padding-top: 12px; }
+.agent-access-additional-permissions > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.agent-access-additional-permissions > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 2px; }
+.agent-access-additional-permissions > .agent-access-control-row { margin-top: 10px; }
