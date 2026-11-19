@@ -1,3 +1,10 @@
+## newspack [6.56.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.9...newspack@6.56.10) (2026-11-19)
+
+
+### Bug Fixes
+
+* stop MC4WC unsubscribing readers at block checkout (Ref NPPD-2490, [#1608](https://github.com/Automattic/newspack-workspace/issues/1608)) ([303ec34](https://github.com/Automattic/newspack-workspace/commit/303ec34cf59a8c188184922765d388c9021cc5f0))
+
 ## newspack [6.56.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.8...newspack@6.56.9) (2026-11-19)
 
 
