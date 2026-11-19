@@ -704,9 +704,19 @@ MIGRATE
     destroy)
         env_name="$2"
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
-            env_usage "$env_name" "Usage: n env destroy <name>"
+            env_usage "$env_name" "Usage: n env destroy <name> [--keep-branch]"
         fi
-        reject_extra_args "$@"
+        # --keep-branch is the one thing allowed after the name; anything else is
+        # refused as reject_extra_args would, before anything is removed.
+        keep_branch=false
+        for arg in "${@:3}"; do
+            if [[ "$arg" == "--keep-branch" ]]; then
+                keep_branch=true
+            else
+                echo "Unknown option: $arg"
+                exit 1
+            fi
+        done
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -775,14 +785,20 @@ MIGRATE
             else
                 # Remove the worktree DIR by its safe form (the identifier the env
                 # was bound to -- stable even if someone `git checkout`ed a
-                # different branch inside it), then delete the REAL branch
-                # separately: worktree.sh's own `git branch -D <safe>` no-ops
-                # against a slash-named branch (feat/foo vs feat-foo), which
-                # previously left the local ref dangling across create/destroy.
+                # different branch inside it), then, unless --keep-branch, delete
+                # the REAL branch separately: worktree.sh's own
+                # `git branch -D <safe>` no-ops against a slash-named branch
+                # (feat/foo vs feat-foo), which previously left the local ref
+                # dangling across create/destroy.
                 real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
-                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
-                if [[ -n "$real_branch" && "$real_branch" != "$wt_branch" ]]; then
-                    git -C "$NABSPATH" branch -D "$real_branch" 2>/dev/null && echo "Deleted branch $real_branch"
+                if [[ "$keep_branch" == true ]]; then
+                    "$NABSPATH/bin/worktree.sh" remove --yes --keep-branch "$wt_repo" "$wt_branch"
+                    echo "Kept branch ${real_branch:-$wt_branch}"
+                else
+                    "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+                    if [[ -n "$real_branch" && "$real_branch" != "$wt_branch" ]]; then
+                        git -C "$NABSPATH" branch -D "$real_branch" 2>/dev/null && echo "Deleted branch $real_branch"
+                    fi
                 fi
             fi
         done

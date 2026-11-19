@@ -334,7 +334,7 @@ n worktree remove <plugin> <branch> # Remove a worktree
 n env create <name> --worktree <repo>:<branch> [--worktree ...] [--port <port>]
 n env up <name> [--build]           # Start the environment (--build installs deps)
 n env down <name>                   # Stop the environment
-n env destroy <name>                # Stop and remove the environment
+n env destroy <name> [--keep-branch]  # Stop and remove the environment (--keep-branch keeps its branches)
 n env list                          # List all environments and their status
 ```
 
