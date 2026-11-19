@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 /**
  * WordPress dependencies.
  */
+import { speak } from '@wordpress/a11y';
 import apiFetch from '@wordpress/api-fetch';
 import { select, useDispatch } from '@wordpress/data';
 import { lazy, Suspense, useLayoutEffect, useState } from '@wordpress/element';
@@ -18,6 +19,7 @@ import { useWizardData } from './store/utils';
 import { WIZARD_STORE_NAMESPACE } from './store';
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+jest.mock( '@wordpress/a11y', () => ( { speak: jest.fn() } ) );
 
 // Localized onto every real wizard screen; the footer's ExternalLink needs a
 // string href.
@@ -42,7 +44,7 @@ const StaticSection = () => <div>Static section</div>;
 // Audience_Donations::api_get_donation_settings() does without WooCommerce.
 // Counts every wizard-endpoint GET, whatever the slug, so a test can assert that
 // a wizard given no apiSlug fetches nothing at all.
-const mockEndpoints = ( slug, initialStatus = 'inactive' ) => {
+const mockEndpoints = ( slug, initialStatus = 'inactive', { pluginsError } = {} ) => {
 	const counts = { wizard: 0 };
 	let pluginStatus = initialStatus;
 	const plugin = () => ( { Name: 'WooCommerce', Description: 'Store', Status: pluginStatus, Download: 'wporg' } );
@@ -57,7 +59,7 @@ const mockEndpoints = ( slug, initialStatus = 'inactive' ) => {
 				  } );
 		}
 		if ( path === '/newspack/v1/plugins/' ) {
-			return Promise.resolve( { woocommerce: plugin() } );
+			return pluginsError ? Promise.reject( pluginsError ) : Promise.resolve( { woocommerce: plugin() } );
 		}
 		if ( path === '/newspack/v1/plugins/woocommerce/configure/' ) {
 			pluginStatus = 'active';
@@ -98,6 +100,7 @@ const flushPending = () => act( () => new Promise( resolve => setTimeout( resolv
 describe( 'Wizard', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
+		speak.mockClear();
 	} );
 
 	it( 'refetches its API data after the installer satisfies the plugin requirements', async () => {
@@ -136,6 +139,33 @@ describe( 'Wizard', () => {
 		expect( await screen.findByText( 'Settings form' ) ).toBeInTheDocument();
 		await flushPending();
 		expect( counts.wizard ).toBe( 1 );
+	} );
+
+	it( 'renders its sections for a user who is not allowed to check plugins', async () => {
+		// The plugins endpoint answers 403 to a user without `activate_plugins`.
+		const slug = 'test-wizard-plugins-forbidden';
+		mockEndpoints( slug, 'active', {
+			pluginsError: { code: 'newspack_rest_forbidden', message: 'You cannot view this resource.', data: { status: 403 } },
+		} );
+
+		renderWizard( slug );
+
+		expect( await screen.findByText( 'Settings form' ) ).toBeInTheDocument();
+		// The installer never shows its error, so screen readers hear nothing either.
+		await flushPending();
+		expect( speak ).not.toHaveBeenCalled();
+	} );
+
+	it( 'shows why the plugin check failed instead of loading forever', async () => {
+		const slug = 'test-wizard-plugins-error';
+		mockEndpoints( slug, 'active', { pluginsError: { code: 'fetch_error', message: 'You are probably offline.' } } );
+
+		renderWizard( slug );
+
+		expect( await screen.findByText( 'You are probably offline.' ) ).toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( 'You are probably offline.', 'assertive' );
+		expect( screen.queryByText( 'Fetching…' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Settings form' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'fetches nothing for a wizard that has required plugins but no API slug', async () => {

@@ -248,7 +248,21 @@ const Wizard = (
 	// alone: that fetch saw the real site, and refetching would cost every such
 	// wizard a second request on every load.
 	const requirementsWereUnmet = useRef( false );
-	const onPluginStatus = ( { complete } ) => {
+	// A check that failed outright says nothing about which plugins are missing,
+	// so the header keeps the wizard's own title.
+	const [ pluginCheckFailed, setPluginCheckFailed ] = useState( false );
+	const onPluginStatus = ( { complete, error } ) => {
+		// Plugin status needs `activate_plugins`, which a wizard's own capability
+		// may not include. A user refused it couldn't install a missing plugin
+		// either, so the check stands aside and the sections render. Whether a
+		// missing plugin is then reported is up to each section. Any other
+		// failure stays on the installer, which shows the error.
+		if ( 'newspack_rest_forbidden' === error?.code ) {
+			setPluginRequirementsKnown( true );
+			setPluginRequirementsSatisfied( true );
+			return;
+		}
+		setPluginCheckFailed( Boolean( error ) );
 		// Leave the installer first: whatever happens to the refetch, the user
 		// should not be stranded on a required-plugins screen for a plugin they
 		// just installed.
@@ -265,7 +279,7 @@ const Wizard = (
 	};
 
 	if ( ! pluginRequirementsSatisfied ) {
-		if ( pluginRequirementsKnown ) {
+		if ( pluginRequirementsKnown && ! pluginCheckFailed ) {
 			headerText = requiredPlugins.length > 1 ? __( 'Required plugins', 'newspack-plugin' ) : __( 'Required plugin', 'newspack-plugin' );
 		}
 		displayedSections = [

@@ -55,7 +55,7 @@ class Subscriber_Only_Products_API {
 	 * @return bool
 	 */
 	public static function permissions_check() {
-		return current_user_can( 'manage_options' );
+		return current_user_can( Audience_Subscriptions::CAPABILITY );
 	}
 
 	/**

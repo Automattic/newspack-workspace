@@ -264,6 +264,7 @@ class Audience_Management_Dependency_Test extends WP_UnitTestCase {
 	 * @param callable $build_wizard_without_am Builds the same wizard with Audience Management off.
 	 */
 	public function test_script_data_reports_prerequisite_state( $wizard_class, $build_wizard_without_am ) {
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 		$enabled = ( new $wizard_class() )->get_audience_management_script_data();
 		$this->assertTrue( $enabled['audience_management_enabled'] );
 		$this->assertStringContainsString(
@@ -276,6 +277,23 @@ class Audience_Management_Dependency_Test extends WP_UnitTestCase {
 		// Strictly false, not merely falsy: this value is localized to the browser,
 		// where wp_localize_script() would stringify an integer 0 to the truthy '0'.
 		$this->assertFalse( $disabled['audience_management_enabled'] );
+	}
+
+	/**
+	 * A user who can open the screen but not the Audience Management setup flow,
+	 * such as store staff on Subscriptions, gets no setup link: the blocked screen
+	 * hides its button rather than sending them to a page they can't open.
+	 *
+	 * @dataProvider wizard_provider
+	 *
+	 * @param string $wizard_class The wizard under test.
+	 */
+	public function test_script_data_omits_the_setup_link_for_users_who_cannot_follow_it( $wizard_class ) {
+		$store_staff = $this->factory->user->create_and_get( [ 'role' => 'subscriber' ] );
+		$store_staff->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $store_staff->ID );
+
+		$this->assertSame( '', ( new $wizard_class() )->get_audience_management_script_data()['audience_management_url'] );
 	}
 
 	/**
