@@ -1,6 +1,6 @@
 {
 	"name": "newspack-newsletters",
-	"version": "3.44.1",
+	"version": "3.44.2",
 	"description": "",
 	"repository": {
 		"type": "git",
@@ -43,6 +43,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
+		"@wordpress/ui": "^0.26.0",
 		"classnames": "^2.5.1",
 		"mjml-browser": "^4.18.0",
 		"newspack-components": "workspace:*",

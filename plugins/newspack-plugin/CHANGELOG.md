@@ -1,3 +1,22 @@
+## newspack [6.56.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.9...newspack@6.56.10) (2026-11-19)
+
+
+### Bug Fixes
+
+* stop MC4WC unsubscribing readers at block checkout (Ref NPPD-2490, [#1608](https://github.com/Automattic/newspack-workspace/issues/1608)) ([303ec34](https://github.com/Automattic/newspack-workspace/commit/303ec34cf59a8c188184922765d388c9021cc5f0))
+
+## newspack [6.56.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.8...newspack@6.56.9) (2026-11-19)
+
+
+### Bug Fixes
+
+* **audience:** let store staff use Audience > Subscriptions (NPPD-2619, [#1599](https://github.com/Automattic/newspack-workspace/issues/1599)) ([807e24b](https://github.com/Automattic/newspack-workspace/commit/807e24bebb012f40eeea5b6b3b241fe7792bc6ab))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
 ## newspack [6.56.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.7...newspack@6.56.8) (2026-11-11)
 
 

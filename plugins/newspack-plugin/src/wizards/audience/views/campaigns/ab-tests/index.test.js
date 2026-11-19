@@ -4,7 +4,7 @@
  * results table, and renames a test in place.
  */
 
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import apiFetch from '@wordpress/api-fetch';
 import ABTests from './index';
@@ -72,6 +72,9 @@ const stats = {
 	comparisons: { b: { confidence: 99.12, label: 'reliable' } },
 	flags: { young_test: false, high_anonymous: false },
 };
+
+// Different numbers from `stats`, so a test can tell which load's results are shown.
+const otherStats = { ...stats, variants: { ...stats.variants, b: { ...stats.variants.b, rate: 4.12 } } };
 
 const mockRoutes = ( list, extra = {}, statsResponse = stats ) =>
 	apiFetch.mockImplementation( ( { path, method } ) => {
@@ -283,6 +286,40 @@ describe( 'A/B Tests tab', () => {
 		expect( screen.queryByRole( 'menuitem', { name: /End Test/ } ) ).not.toBeInTheDocument();
 		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Refresh Results' } ) );
 		await waitFor( () => expect( apiFetch ).toHaveBeenCalledWith( { path: '/newspack-popups/v1/ab-tests/run/stats?refresh=1' } ) );
+	} );
+
+	it( 'loads one card’s results at a time, and a refresh skips the queue', async () => {
+		const list = listResponse( [
+			test( 'one', { a: prompt( 1 ), b: prompt( 2 ) }, { started_at: '2026-10-01 00:00:00' } ),
+			test( 'two', { a: prompt( 3 ), b: prompt( 4 ) }, { started_at: '2026-10-01 00:00:00' } ),
+		] );
+		const pending = [];
+		apiFetch.mockImplementation( ( { path } ) => {
+			if ( path === '/newspack-popups/v1/ab-tests' ) {
+				return Promise.resolve( list );
+			}
+			return new Promise( resolve => pending.push( { path, resolve } ) );
+		} );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test one' } );
+		await waitFor( () => expect( pending ).toHaveLength( 1 ) );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( pending ).toHaveLength( 1 );
+
+		const [ first ] = pending;
+		const firstId = first.path.includes( '/one/' ) ? 'one' : 'two';
+		const secondId = 'one' === firstId ? 'two' : 'one';
+		first.resolve( stats );
+		await waitFor( () => expect( pending ).toHaveLength( 2 ) );
+		expect( pending[ 1 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ secondId }/stats` );
+
+		// The second card's load is still out; a refresh of the first doesn't wait for it.
+		const card = cardFor( `Test ${ firstId }` );
+		await within( card ).findByText( '2.69%' );
+		fireEvent.click( within( card ).getByRole( 'button', { name: `Test actions: Test ${ firstId }` } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Refresh Results' } ) );
+		await waitFor( () => expect( pending ).toHaveLength( 3 ) );
+		expect( pending[ 2 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ firstId }/stats?refresh=1` );
 	} );
 
 	it( 'says readers see both duplicates only when the extra prompt is published', async () => {
@@ -515,6 +552,83 @@ describe( 'Ended tests', () => {
 		const card = await screen.findByRole( 'region', { name: 'Test old' } );
 		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
 	} );
+
+	it( 'ignores a load that was out when its test ended, and drops the queued load of a card the end hid', async () => {
+		const active = id => test( id, { a: prompt( 4 ), b: prompt( 5 ) }, { started_at: '2026-10-01T00:00:00Z', status: 'active' } );
+		const list = listResponse( [ active( 'one' ), active( 'two' ) ] );
+		const pending = [];
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if ( path === '/newspack-popups/v1/ab-tests' && ! method ) {
+				return Promise.resolve( list );
+			}
+			if ( path.endsWith( '/end' ) ) {
+				const id = path.split( '/' ).at( -2 );
+				return Promise.resolve( { ...active( id ), status: 'ended', ended_at: '2026-11-08T10:00:00Z', kept: 'b' } );
+			}
+			return new Promise( resolve => pending.push( { path, resolve } ) );
+		} );
+		render( <ABTests /> );
+		await screen.findByRole( 'region', { name: 'Test one' } );
+		await waitFor( () => expect( pending ).toHaveLength( 1 ) );
+		const endedId = pending[ 0 ].path.includes( '/one/' ) ? 'one' : 'two';
+		const hiddenId = 'one' === endedId ? 'two' : 'one';
+
+		// End the test whose first load is still out; the other card's load waits behind it.
+		fireEvent.click( within( cardFor( `Test ${ endedId }` ) ).getByRole( 'button', { name: `End Test: Test ${ endedId }` } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		// The reload goes out without waiting for the load already out.
+		await waitFor( () => expect( pending ).toHaveLength( 2 ) );
+		expect( pending[ 1 ].path ).toBe( `/newspack-popups/v1/ab-tests/${ endedId }/stats` );
+
+		// The load from before the end resolves: nothing on the card changes.
+		const card = await screen.findByRole( 'region', { name: `Test ${ endedId }` } );
+		await act( async () => pending[ 0 ].resolve( otherStats ) );
+		expect( within( card ).queryByText( '4.12%' ) ).not.toBeInTheDocument();
+		expect( within( card ).getByText( 'Loading results…' ) ).toBeInTheDocument();
+		// Ending switched the list to ended tests, so the other card's queued load never goes out.
+		expect( screen.queryByRole( 'region', { name: `Test ${ hiddenId }` } ) ).not.toBeInTheDocument();
+		expect( pending.map( ( { path } ) => path ) ).not.toContain( `/newspack-popups/v1/ab-tests/${ hiddenId }/stats` );
+
+		pending[ 1 ].resolve( stats );
+		expect( await within( card ).findByText( '2.69%' ) ).toBeInTheDocument();
+	}, 15000 );
+
+	it( 'keeps the ended results when a refresh sent before the end returns after them', async () => {
+		const pending = [];
+		apiFetch.mockImplementation( ( { path, method } ) => {
+			if ( path === '/newspack-popups/v1/ab-tests' && ! method ) {
+				return Promise.resolve( listResponse( [ running() ] ) );
+			}
+			if ( path.endsWith( '/end' ) ) {
+				return Promise.resolve( { ...running(), status: 'ended', ended_at: '2026-11-08T10:00:00Z', kept: 'b' } );
+			}
+			return new Promise( resolve => pending.push( { path, resolve } ) );
+		} );
+		render( <ABTests /> );
+		const card = await screen.findByRole( 'region', { name: 'Test run' } );
+		await waitFor( () => expect( pending ).toHaveLength( 1 ) );
+		pending[ 0 ].resolve( stats );
+		await within( card ).findByText( '2.69%' );
+
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'Test actions: Test run' } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: 'Refresh Results' } ) );
+		await waitFor( () => expect( pending ).toHaveLength( 2 ) );
+		expect( pending[ 1 ].path ).toBe( '/newspack-popups/v1/ab-tests/run/stats?refresh=1' );
+
+		// End the test while the refresh is still out.
+		fireEvent.click( within( card ).getByRole( 'button', { name: 'End Test: Test run' } ) );
+		fireEvent.click( screen.getByRole( 'button', { name: 'End Test' } ) );
+		await waitFor( () => expect( pending ).toHaveLength( 3 ) );
+		expect( pending[ 2 ].path ).toBe( '/newspack-popups/v1/ab-tests/run/stats' );
+
+		const endedCard = await screen.findByRole( 'region', { name: 'Test run' } );
+		pending[ 2 ].resolve( otherStats );
+		expect( await within( endedCard ).findByText( '4.12%' ) ).toBeInTheDocument();
+		// The refresh from before the end returns last and writes nothing.
+		await act( async () => pending[ 1 ].resolve( stats ) );
+		expect( within( endedCard ).getByText( '4.12%' ) ).toBeInTheDocument();
+		expect( within( endedCard ).queryByText( '2.69%' ) ).not.toBeInTheDocument();
+	}, 15000 );
 
 	it( 'ends a test, then shows it first among ended tests, focused and announced', async () => {
 		const refetch = jest.fn();

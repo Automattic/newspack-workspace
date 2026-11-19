@@ -25,7 +25,6 @@ export { default as DebugBadge } from './debug-badge';
 export { default as Divider } from './divider';
 export { default as Drawer } from './drawer';
 export { default as EditTitleLink } from './edit-title-link';
-export { default as EmptyState } from './empty-state';
 export { default as FormTokenField } from './form-token-field';
 export { default as Footer } from './footer';
 export { default as Handoff } from './handoff';

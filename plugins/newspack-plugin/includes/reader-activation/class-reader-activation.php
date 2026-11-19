@@ -1558,10 +1558,7 @@ final class Reader_Activation {
 			<?php if ( ! $in_modal ) { ?>
 				<h2 data-action="signin"><?php echo wp_kses_post( self::get_reader_activation_labels( 'title' ) ); ?></h2>
 			<?php } ?>
-			<div class="newspack-ui__auth-success newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half newspack-ui__spacing-bottom--5" data-action="success">
-				<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
-					<?php Newspack_UI_Icons::print_svg( 'published' ); ?>
-				</span>
+			<div class="newspack-ui__auth-success newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__spacing-bottom--5" data-action="success">
 				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
 					<h2 id="<?php echo \esc_attr( $success_id ); ?>" class="success-title newspack-ui__font--m"></h2>
 					<p class="success-description newspack-ui__color-text-gray" hidden></p>

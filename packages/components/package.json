@@ -1,6 +1,6 @@
 {
 	"name": "newspack-components",
-	"version": "4.12.1",
+	"version": "4.12.2",
 	"description": "Newspack design system components",
 	"author": "Automattic",
 	"license": "GPL-2.0-or-later",
@@ -48,7 +48,7 @@
 		"@wordpress/hooks": "^4.48.0",
 		"@wordpress/html-entities": "^4.48.0",
 		"@wordpress/i18n": "^6.21.0",
-		"@wordpress/icons": "^11.0.0",
+		"@wordpress/icons": "^20.0.0",
 		"@wordpress/keycodes": "^4.48.0",
 		"@wordpress/url": "^4.48.0"
 	},

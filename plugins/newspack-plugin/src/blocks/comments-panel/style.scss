@@ -177,7 +177,7 @@
 }
 
 .comments-panel__scrim {
-	background: var(--wp--custom--color--overlay-70, var(--newspack-ui-color-overlay-70, #{colors.$overlay-700}));
+	background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #{colors.$overlay-500}));
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;

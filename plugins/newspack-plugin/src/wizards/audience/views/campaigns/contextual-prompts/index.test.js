@@ -67,7 +67,7 @@ describe( 'ContextualPrompts tab', () => {
 		apiFetch.mockResolvedValueOnce( { enabled: false, can_manage: true, fields: [] } );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Retry' } ) );
 
-		await waitFor( () => expect( screen.getByText( 'Get started with Contextual Prompts' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByText( 'Contextual Prompts are off' ) ).toBeInTheDocument() );
 	} );
 
 	it( 'keeps Save disabled until dirty and locks fields while a save is pending', async () => {

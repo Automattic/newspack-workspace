@@ -13,6 +13,26 @@ export const DASH = '—';
 export const REST_BASE = '/newspack-popups/v1/ab-tests';
 
 /**
+ * A queue that runs one request at a time, in the order they were added.
+ *
+ * The tab loads every card's results when it opens, and a results request that
+ * misses the server's hourly cache asks the stats source for several reports,
+ * so a page of cards all at once can exhaust the source's quota. A task that
+ * fails doesn't stop the ones after it.
+ *
+ * @return {Function} Takes a function that returns a promise, and returns a
+ *                    promise for its result once it has run.
+ */
+export const createRequestQueue = () => {
+	let tail = Promise.resolve();
+	return task => {
+		const run = tail.then( task );
+		tail = run.catch( () => {} );
+		return run;
+	};
+};
+
+/**
  * Card order, and the Status filter's: what needs the publisher first, ended
  * tests last.
  */

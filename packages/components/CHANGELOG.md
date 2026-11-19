@@ -1,3 +1,10 @@
+## newspack-components [4.12.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.1...newspack-components@4.12.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **audience:** let store staff use Audience > Subscriptions (NPPD-2619, [#1599](https://github.com/Automattic/newspack-workspace/issues/1599)) ([807e24b](https://github.com/Automattic/newspack-workspace/commit/807e24bebb012f40eeea5b6b3b241fe7792bc6ab))
+
 ## newspack-components [4.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.0...newspack-components@4.12.1) (2026-11-10)
 
 

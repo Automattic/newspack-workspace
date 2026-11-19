@@ -867,7 +867,7 @@ final class Newspack_Popups_AB_Tests {
 			$test_id = (string) $test_id; // PHP stores an integer-like key as an int; get_stats() compares the ID strictly.
 			$test    = [
 				'test_id'       => $test_id,
-				'name'          => $names[ $test_id ] ?? $test_id,
+				'name'          => $names[ $test_id ] ?? self::unnamed_test_name( $test_id ),
 				'goal'          => '',
 				'goal_label'    => '',
 				'control_share' => self::DEFAULT_CONTROL_SHARE,
@@ -1092,7 +1092,26 @@ final class Newspack_Popups_AB_Tests {
 		if ( '' === $test_id ) {
 			return '';
 		}
-		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? $test_id;
+		return self::get_test_names( [ $test_id ] )[ $test_id ] ?? self::unnamed_test_name( $test_id );
+	}
+
+	/**
+	 * The name shown for a test that was never named: its Test ID, readable. A
+	 * legacy ID keeps what sanitize_title() couldn't transliterate as
+	 * percent-encoded octets (caf%c3%a9), which reads as café once decoded.
+	 * Decoded bytes that aren't valid UTF-8, such as an octet sequence cut off
+	 * where sanitize_title() truncated the ID, would break the JSON response, so
+	 * those keep the ID as stored.
+	 *
+	 * @param string $test_id Test ID.
+	 * @return string
+	 */
+	private static function unnamed_test_name( $test_id ) {
+		if ( false === strpos( $test_id, '%' ) ) {
+			return $test_id;
+		}
+		$decoded = rawurldecode( $test_id );
+		return '' === wp_check_invalid_utf8( $decoded ) ? $test_id : $decoded;
 	}
 
 	/**

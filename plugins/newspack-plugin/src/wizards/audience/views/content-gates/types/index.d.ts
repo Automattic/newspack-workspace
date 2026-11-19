@@ -182,6 +182,9 @@ type ContentGiftingConfig = {
 	style?: string;
 	bg_color?: string;
 	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_type?: string;
@@ -196,6 +199,9 @@ type MeteringCountdownConfig = {
 	style?: string;
 	bg_color?: string;
 	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_url?: string;

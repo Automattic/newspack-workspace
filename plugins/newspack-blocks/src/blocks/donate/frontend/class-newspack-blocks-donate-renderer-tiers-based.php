@@ -39,7 +39,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 		$has_recommend_label   = isset( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] ) && ! empty( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] );
 		$has_description       = isset( $attributes['tiersBasedOptions'][ $index ]['description'] ) && ! empty( $attributes['tiersBasedOptions'][ $index ]['description'] );
 		$is_reverse_style      = ! $has_recommend_label && $is_any_recommended;
-		$button_style_attr     = 'style="' . self::get_button_style( $attributes, $is_reverse_style ) . '"';
+		$button_attrs          = self::get_button_attrs( $attributes, $is_reverse_style );
 
 		ob_start();
 		?>
@@ -80,7 +80,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 				name="<?php echo esc_attr( self::TIER_PARAM_PREFIX ); ?><?php echo esc_attr( $selected_frequency ); ?>"
 				value="<?php echo esc_attr( $configuration['amounts'][ $selected_frequency ][ $index ] ); ?>"
 				data-tier-index="<?php echo esc_attr( $index ); ?>"
-				<?php echo $button_style_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php self::print_button_attrs( $button_attrs ); ?>
 			>
 				<?php echo esc_html( $attributes['tiersBasedOptions'][ $index ]['buttonText'] ); ?>
 			</button>
@@ -125,7 +125,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 			$configuration['amounts'],
 			( new DateTime() )->modify( '+1 month' )->format( 'F d, Y' ),
 			( new DateTime() )->modify( '+1 year' )->format( 'F d, Y' ),
-			$attributes['buttonColor'],
+			Newspack_Blocks::donate_button_uses_site_style( $attributes ) ? '' : $attributes['buttonColor'],
 		];
 
 		$is_any_recommended = array_reduce(
