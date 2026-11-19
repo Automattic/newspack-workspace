@@ -88,10 +88,9 @@ class Featured_Image_Position {
 	 * The editor gate reads this rather than re-deriving the decision, so the
 	 * control can only ever appear where REST will accept what it writes. They
 	 * used to be worked out independently at two different times, and could
-	 * disagree: a post type added to the filter after `init` 20, or the classic
-	 * theme's hook being removed late, would load the control for a key that
-	 * was never registered. The publisher would then pick a position, save, get
-	 * a 200, and lose it silently — `WP_REST_Meta_Fields::update_value()`
+	 * disagree: a post type added to the filter after `init` 20 would load the
+	 * control for a key that was never registered. The publisher would then
+	 * pick a position, save, get a 200, and lose it silently — `WP_REST_Meta_Fields::update_value()`
 	 * iterates only registered fields, and the meta schema sets no
 	 * `additionalProperties`, so an unknown key is dropped without an error.
 	 *
@@ -148,14 +147,27 @@ class Featured_Image_Position {
 	 */
 	private static function owns_the_setting() {
 		/*
-		 * Deliberately not `function_exists( 'newspack_featured_image_position' )`.
-		 * The classic theme wraps that function in a `function_exists` guard, so
-		 * it is built to be overridden from a plugin — and an override on a
-		 * block-theme site would make this stand down with nothing to stand
-		 * down for: no registration, no control, and stored `hidden` values
-		 * still honored but no longer editable. The classic theme's
-		 * registration hook is the thing that actually matters here, and a
-		 * stray function definition cannot satisfy it.
+		 * A hook probe rather than `function_exists`, because the question is
+		 * not "is the classic theme loaded" but "is it registering this key".
+		 * Those come apart in the direction that matters: a plugin doing
+		 * `remove_action( 'init', 'newspack_register_meta' )` on a block child
+		 * of the classic parent — precisely so something else can own the
+		 * setting — leaves the function defined, so `function_exists` would
+		 * make this stand down with nobody registering the key at all: no
+		 * control, and stored `hidden` values still honored but uneditable.
+		 * (`newspack_featured_image_position()` is a worse probe again, since
+		 * the theme wraps it in its own `function_exists` guard and it is
+		 * therefore designed to be replaced.)
+		 *
+		 * One window this cannot see: a removal between the theme's `init` 10
+		 * and this class's `init` 20, on that same child-theme shape. The key
+		 * is already registered by then, so the result is two controls rather
+		 * than none. Contrived enough to document rather than code around.
+		 *
+		 * `false ===` is load-bearing. `has_action()` returns the priority, so
+		 * a callback hooked at priority 0 yields int 0, and a loose `!` would
+		 * read that as "nobody is registering it" and claim ownership while
+		 * the classic theme was actively registering the key.
 		 */
 		return wp_is_block_theme() && false === has_action( 'init', 'newspack_register_meta' );
 	}
@@ -184,6 +196,9 @@ class Featured_Image_Position {
 	 */
 	public static function register_meta() {
 		if ( ! self::owns_the_setting() ) {
+			// Record the stand-down too, so the readers below never see a
+			// stale answer from an earlier call that did register.
+			self::$registered_for = null;
 			return;
 		}
 
@@ -329,11 +344,13 @@ class Featured_Image_Position {
 		return [
 
 			/*
-			 * The registered list where there is one, so the control is offered
-			 * exactly where REST will accept it. The fallback is for a direct
-			 * call before `init` has run.
+			 * Only what was actually registered. An empty list where nothing
+			 * was is the honest answer — handing back the supported types
+			 * instead would name post types with no REST registration behind
+			 * them, which is the silent-save-then-lose this record exists to
+			 * prevent, reintroduced at the one place that could still do it.
 			 */
-			'postTypes'     => null === self::$registered_for ? self::get_supported_post_types() : self::$registered_for,
+			'postTypes'     => null === self::$registered_for ? [] : self::$registered_for,
 			'siteDefault'   => '' === $site_default ? $fallback : $site_default,
 			'fallbackValue' => $fallback,
 			'hiddenValue'   => self::HIDDEN,
@@ -352,9 +369,11 @@ class Featured_Image_Position {
 	 * the moment they switch, and every one of their posts shows its image
 	 * again — which is the defect this class exists to prevent.
 	 *
-	 * Modeled on `Post_Date::migrate_date_settings()`, diverging in two ways:
-	 * the guard below reads the stored option rather than `get_theme_mod()`, and
-	 * the old theme is optional here rather than required.
+	 * Modeled on `Post_Date::migrate_date_settings()`, diverging in three ways:
+	 * the guard below reads the stored option rather than `get_theme_mod()`, the
+	 * old theme is optional here rather than required, and an unrecognized value
+	 * is not treated as a choice. `Post_Date` needs none of that — its mods are
+	 * booleans and integers, with no vocabulary to check against.
 	 *
 	 * WordPress passes a `WP_Theme` in both branches of `check_theme_switched()`
 	 * — including when the old theme's files are gone, where the object exists
@@ -413,6 +432,11 @@ class Featured_Image_Position {
 			 * only writer: the setup wizard's `sanitize_theme_mods()` is a
 			 * pass-through and `wp theme mod set` writes verbatim, so a junk
 			 * value can be sitting in the old row.
+			 *
+			 * `sanitize_position()` checks against `POSITIONS`, which is the
+			 * per-post vocabulary and carries `''` where the Customizer's does
+			 * not. Safe to borrow here because `''` reads as "no choice" under
+			 * both, which is exactly how this guard treats it.
 			 */
 			$position = self::sanitize_position( $old_mods[ $key ] );
 			if ( '' === $position ) {

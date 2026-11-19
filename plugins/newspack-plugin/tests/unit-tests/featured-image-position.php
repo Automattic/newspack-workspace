@@ -97,6 +97,16 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = null;
 
+		/*
+		 * And the registration record, which is the third piece of process
+		 * state here. Leaving it set while the loop above unregisters the keys
+		 * would invert the one thing it promises — that it only ever names
+		 * post types REST will accept — for every test that runs afterwards.
+		 */
+		$registered_for = new ReflectionProperty( Featured_Image_Position::class, 'registered_for' );
+		$registered_for->setAccessible( true );
+		$registered_for->setValue( null, null );
+
 		parent::tear_down();
 	}
 
@@ -777,6 +787,8 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 	 * its last-resort "Shown" value, and it differs between posts and pages.
 	 */
 	public function test_editor_config_follows_the_post_type() {
+		// The post types come from the registration record, so establish it.
+		Featured_Image_Position::register_meta();
 		set_theme_mod( 'featured_image_default', 'beside' );
 		set_theme_mod( 'page_featured_image_default', 'hidden' );
 
@@ -866,6 +878,21 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		$this->assertSame( '', Featured_Image_Position::sanitize_position( 'anything-else' ) );
 		$this->assertSame( '', Featured_Image_Position::sanitize_position( [ 'hidden' ] ) );
 		$this->assertSame( '', Featured_Image_Position::sanitize_position( null ) );
+	}
+
+	/**
+	 * With nothing registered, the editor is told nothing.
+	 *
+	 * Naming the supported post types here instead would hand back a list with
+	 * no REST registration behind it, which is the silent save-then-lose the
+	 * record exists to prevent.
+	 */
+	public function test_editor_config_is_empty_when_nothing_is_registered() {
+		$registered_for = new ReflectionProperty( Featured_Image_Position::class, 'registered_for' );
+		$registered_for->setAccessible( true );
+		$registered_for->setValue( null, null );
+
+		$this->assertSame( [], Featured_Image_Position::get_editor_config( 'post' )['postTypes'] );
 	}
 
 	/**

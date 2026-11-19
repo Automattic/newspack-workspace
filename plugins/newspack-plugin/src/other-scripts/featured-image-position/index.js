@@ -47,8 +47,21 @@ const PositionControl = () => {
 
 	const { editPost } = useDispatch( 'core/editor' );
 
+	/*
+	 * Fail closed on anything malformed. `postTypes` and `positions` are both
+	 * used as arrays below, and a partial object would either throw inside the
+	 * Featured image panel or let the clamp collapse every option to '', which
+	 * renders two options sharing one value.
+	 */
 	const config = window.newspackFeaturedImagePosition;
-	if ( ! config || ! config.postTypes.includes( postType ) ) {
+	if (
+		! config ||
+		! Array.isArray( config.postTypes ) ||
+		! Array.isArray( config.positions ) ||
+		! config.positions.length ||
+		! config.hiddenValue ||
+		! config.postTypes.includes( postType )
+	) {
 		return null;
 	}
 
@@ -65,7 +78,6 @@ const PositionControl = () => {
 
 	return (
 		<RadioControl
-			__nextHasNoMarginBottom
 			className="newspack-featured-image-position"
 			label={ __( 'Visibility', 'newspack-plugin' ) }
 			help={ __( 'Where a visible image appears is set by the template. Only hiding it is a per-post choice.', 'newspack-plugin' ) }
