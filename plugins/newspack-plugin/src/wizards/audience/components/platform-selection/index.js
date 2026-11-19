@@ -45,6 +45,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
+	const [ checkFailed, setCheckFailed ] = useState( false );
 	// Only warn about Access Control when the site has something to lose. The flag is
 	// the same one behind the standing inert-gating notice, so the dialog and that
 	// notice agree about what counts as configured.
@@ -111,9 +112,14 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 						plugins={ PLATFORM_PLUGINS[ installing ] }
 						autoInstall
 						withoutFooterButton
-						onStatus={ ( { complete, pluginInfo } ) => {
+						onStatus={ ( { complete, pluginInfo, error } ) => {
 							if ( complete ) {
 								onComplete();
+								return;
+							}
+							// The installer shows why the check failed; only the way to continue is added.
+							if ( error ) {
+								setCheckFailed( true );
 								return;
 							}
 							// Some platform plugins (e.g. WooCommerce Subscriptions) can't be installed
@@ -125,6 +131,13 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 							}
 						} }
 					/>
+					{ checkFailed && (
+						<div className="newspack-buttons-card">
+							<Button isPrimary onClick={ onComplete }>
+								{ __( 'Continue', 'newspack-plugin' ) }
+							</Button>
+						</div>
+					) }
 					{ installFailed && (
 						<>
 							<Notice

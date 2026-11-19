@@ -70,14 +70,15 @@ trait Audience_Management_Dependency {
 	 *
 	 * The screen renders its blocked state entirely from these two keys. The URL
 	 * is where the admin is sent to satisfy the prerequisite, so it points at the
-	 * Audience Management setup flow rather than this screen.
+	 * Audience Management setup flow rather than this screen, and is empty for a
+	 * user who can't open that flow.
 	 *
 	 * @return array{audience_management_enabled: bool, audience_management_url: string}
 	 */
 	public function get_audience_management_script_data(): array {
 		return [
 			'audience_management_enabled' => $this->has_audience_management(),
-			'audience_management_url'     => \admin_url( 'admin.php?page=newspack-audience#/' ),
+			'audience_management_url'     => \current_user_can( \Newspack\Audience_Wizard::CAPABILITY ) ? \admin_url( 'admin.php?page=newspack-audience#/' ) : '',
 		];
 	}
 
