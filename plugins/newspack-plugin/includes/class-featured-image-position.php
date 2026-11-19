@@ -82,12 +82,332 @@ class Featured_Image_Position {
 	const POSITIONS = [ '', 'large', 'small', 'behind', 'beside', 'above', self::HIDDEN ];
 
 	/**
+	 * The post types this class registered the meta for, or null when it has
+	 * not run or stood down.
+	 *
+	 * The editor gate reads this rather than re-deriving the decision, so the
+	 * control can only ever appear where REST will accept what it writes. They
+	 * used to be worked out independently at two different times, and could
+	 * disagree: a post type added to the filter after `init` 20 would load the
+	 * control for a key that was never registered. The publisher would then
+	 * pick a position, save, get a 200, and lose it silently — `WP_REST_Meta_Fields::update_value()`
+	 * iterates only registered fields, and the meta schema sets no
+	 * `additionalProperties`, so an unknown key is dropped without an error.
+	 *
+	 * @var string[]|null
+	 */
+	private static $registered_for = null;
+
+	/**
 	 * Register hooks.
 	 */
 	public static function init() {
+		// Priority 20, so a post type added to the filter from another plugin's own init is still seen.
+		add_action( 'init', [ __CLASS__, 'register_meta' ], 20 );
+		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_editor_assets' ] );
 		add_action( 'after_switch_theme', [ __CLASS__, 'migrate_position_defaults' ], 10, 2 );
 		add_filter( 'render_block_core/post-featured-image', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
 		add_filter( 'render_block_newspack/featured-image-caption', [ __CLASS__, 'suppress_when_hidden' ], 10, 3 );
+	}
+
+	/**
+	 * The post types whose featured image can be positioned.
+	 *
+	 * Read through the classic theme's own filter, which newspack-newsletters
+	 * and newspack-listings both add to when they load — before `init` — so the
+	 * list is right whichever theme is active.
+	 *
+	 * @return string[]
+	 */
+	public static function get_supported_post_types() {
+		/**
+		 * Filters the post types whose featured image can be positioned.
+		 *
+		 * Declared by the classic theme, in
+		 * `newspack_get_featured_image_post_types()`, which is not loaded on a
+		 * block theme — so this is usually the only place the hook fires in the
+		 * whole request, hence the full contract here. The exception is a block
+		 * child of the classic parent, where both fire and this class stands
+		 * down anyway.
+		 *
+		 * `array_values()` because a filter that unsets an entry leaves
+		 * non-sequential keys, which `wp_json_encode()` then emits as an object
+		 * rather than an array, and `postTypes.includes()` in the editor script
+		 * would throw and take the whole Featured image panel with it.
+		 *
+		 * @param string[] $post_types Post type slugs. Default `[ 'post', 'page' ]`.
+		 */
+		return array_values( (array) apply_filters( 'newspack_theme_featured_image_post_types', [ 'post', 'page' ] ) );
+	}
+
+	/**
+	 * Whether the plugin, rather than the classic theme, owns this setting.
+	 *
+	 * @return bool
+	 */
+	private static function owns_the_setting() {
+		/*
+		 * A hook probe rather than `function_exists`, because the question is
+		 * not "is the classic theme loaded" but "is it registering this key".
+		 * Those come apart in the direction that matters: a plugin doing
+		 * `remove_action( 'init', 'newspack_register_meta' )` on a block child
+		 * of the classic parent — precisely so something else can own the
+		 * setting — leaves the function defined, so `function_exists` would
+		 * make this stand down with nobody registering the key at all: no
+		 * control, and stored `hidden` values still honored but uneditable.
+		 * (`newspack_featured_image_position()` is a worse probe again, since
+		 * the theme wraps it in its own `function_exists` guard and it is
+		 * therefore designed to be replaced.)
+		 *
+		 * One window this cannot see: a removal between the theme's `init` 10
+		 * and this class's `init` 20, on that same child-theme shape. The key
+		 * is already registered by then, so the result is two controls rather
+		 * than none. Contrived enough to document rather than code around.
+		 *
+		 * `false ===` is load-bearing. `has_action()` returns the priority, so
+		 * a callback hooked at priority 0 yields int 0, and a loose `!` would
+		 * read that as "nobody is registering it" and claim ownership while
+		 * the classic theme was actively registering the key.
+		 */
+		return wp_is_block_theme() && false === has_action( 'init', 'newspack_register_meta' );
+	}
+
+	/**
+	 * Expose the position to the block editor.
+	 *
+	 * Without this the meta is invisible to REST on a block theme and the editor
+	 * can neither read nor write it.
+	 *
+	 * Gated so the classic theme keeps ownership where it has it. Core does not
+	 * object to registering a key twice — `register_meta()` has no duplicate
+	 * check and simply lets the last call's arguments win. Since the classic
+	 * theme registers at `init` 10 and this runs at 20, the winner would be the
+	 * plugin: its enum and default would start governing REST on a classic-theme
+	 * site, refusing writes and nulling out reads for a theme this class is not
+	 * meant to govern. The publisher would also get two controls stacked in the
+	 * same panel.
+	 *
+	 * `wp_is_block_theme()` alone is not that test. A block child theme whose
+	 * parent is the classic theme reports true, because `is_block_theme()` looks
+	 * for `templates/index.html` in the stylesheet directory first and the child
+	 * ships one — while the parent's `functions.php` still loads and still
+	 * registers this key. `owns_the_setting()` therefore asks whether the
+	 * classic theme is registering it, not merely which kind of theme is on.
+	 */
+	public static function register_meta() {
+		if ( ! self::owns_the_setting() ) {
+			// Record the stand-down too, so the readers below never see a
+			// stale answer from an earlier call that did register.
+			self::$registered_for = null;
+			return;
+		}
+
+		$registered = [];
+
+		foreach ( self::get_supported_post_types() as $post_type ) {
+			/*
+			 * A post type without `custom-fields` support has no `meta` field on
+			 * its REST route at all: `WP_REST_Posts_Controller::get_item_schema()`
+			 * adds `$schema['properties']['meta']` only under `case 'custom-fields'`,
+			 * and both write paths are gated on that property existing. Registering
+			 * would still succeed here — `register_post_meta()` never looks at the
+			 * post type — so the control would load and the editor's write would be
+			 * dropped with a 200, which is the silent save-then-lose this record
+			 * exists to prevent, reached by a different door.
+			 *
+			 * `post` and `page` both support it, as do both first-party users of
+			 * the filter above, so this is about a post type a third party adds.
+			 * Suppression still applies to such a type — `resolve_hidden()` reads
+			 * the filter, not this record — so a value set by other means is still
+			 * honored. Only the editor control goes away, which is the right half
+			 * to lose when REST would refuse to store what it writes.
+			 */
+			if ( ! post_type_supports( $post_type, 'custom-fields' ) ) {
+				continue;
+			}
+
+			$ok = register_post_meta(
+				$post_type,
+				self::META_KEY,
+				[
+					// A closed set, declared as one. With a bare `true` the schema is
+					// any string, so an invalid value passes validation, is coerced to
+					// '' by the sanitize callback and returns 200 — silently clearing a
+					// stored `hidden` and putting the image back. The enum makes REST
+					// answer 400 and leave the stored value alone.
+					'show_in_rest'      => [
+						'schema' => [
+							'type' => 'string',
+							'enum' => self::POSITIONS,
+						],
+					],
+					'single'            => true,
+					'type'              => 'string',
+					'default'           => '',
+
+					// Still the backstop for writes that do not come through REST.
+					'sanitize_callback' => [ __CLASS__, 'sanitize_position' ],
+					'auth_callback'     => [ __CLASS__, 'auth_callback' ],
+				]
+			);
+
+			/*
+			 * What registered, not what was asked for. `register_meta()` runs the
+			 * arguments through the `register_meta_args` filter before any of its
+			 * own checks, so a third party can make it return false without
+			 * registering — a narrowed schema the `''` default no longer validates
+			 * against is enough. Recording the request instead of the result is
+			 * the one way this record could come to name a key REST never took.
+			 */
+			if ( $ok ) {
+				$registered[] = $post_type;
+			}
+		}
+
+		self::$registered_for = $registered;
+	}
+
+	/**
+	 * Who may change a post's position.
+	 *
+	 * Core attaches this with six accepted arguments and asks about a specific
+	 * user, so answer about that user rather than the current one. REST and the
+	 * editor always ask about the current user, but `user_can()` does not.
+	 *
+	 * @param bool   $allowed  Whether the user can add the post meta.
+	 * @param string $meta_key The meta key.
+	 * @param int    $post_id  Post ID.
+	 * @param int    $user_id  User being asked about.
+	 * @return bool
+	 */
+	public static function auth_callback( $allowed, $meta_key, $post_id, $user_id = 0 ) {
+		$user_id = $user_id ? $user_id : get_current_user_id();
+		return user_can( $user_id, 'edit_post', $post_id );
+	}
+
+	/**
+	 * Load the per-post control into the block editor.
+	 *
+	 * Only where the plugin owns the setting: the classic theme ships its own
+	 * control, from `js/src/extend-featured-image-editor.js`, and two would
+	 * stack up in the same panel.
+	 */
+	public static function enqueue_editor_assets() {
+		/*
+		 * What was registered, not what would be registered if asked again now.
+		 * This is the earlier of two gates rather than the load-bearing one: an
+		 * empty record would reach the editor as an empty `postTypes`, and the
+		 * control's own check on that list is what the tests pin. This return
+		 * just saves enqueueing a script that would render nothing.
+		 */
+		if ( null === self::$registered_for ) {
+			return;
+		}
+
+		$post_types = self::$registered_for;
+
+		/*
+		 * `get_current_screen()` lives in wp-admin and is not defined anywhere
+		 * else, so a front-end block editor firing this action would fatal on
+		 * the call rather than fall through the null check below. Guard the
+		 * call, then treat a missing screen as "not a post editor" and bail,
+		 * rather than guessing and loading the control with a post's defaults
+		 * on something that may be a page.
+		 */
+		if ( ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+
+		$screen = get_current_screen();
+		if ( ! $screen || ! in_array( $screen->post_type, $post_types, true ) ) {
+			return;
+		}
+
+		/*
+		 * Both halves of the build, because the next statement `include`s the
+		 * asset file. Checking only the script would let a half-shipped build
+		 * through to a failed include: a warning on every editor page load, and
+		 * `?? false` for the version, which enqueues the bundle with no
+		 * cache-buster and leaves browsers and the edge serving whatever copy
+		 * they already hold. The two are emitted as a pair, so this should never
+		 * fire — it is cheap insurance on a plugin where one build reaches every
+		 * site.
+		 */
+		$script = NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.js';
+		$asset_path = NEWSPACK_ABSPATH . 'dist/other-scripts/featured-image-position.asset.php';
+		if ( ! file_exists( $script ) || ! file_exists( $asset_path ) ) {
+			return;
+		}
+
+		$handle = 'newspack-featured-image-position';
+		$asset  = include $asset_path;
+
+		wp_enqueue_script(
+			$handle,
+			plugins_url( 'dist/other-scripts/featured-image-position.js', NEWSPACK_PLUGIN_FILE ),
+			$asset['dependencies'] ?? [],
+			$asset['version'] ?? false,
+			true
+		);
+
+		wp_localize_script( $handle, 'newspackFeaturedImagePosition', self::get_editor_config( $screen->post_type ) );
+	}
+
+	/**
+	 * What the editor control needs to know, for one post type.
+	 *
+	 * Separate from the enqueue so it can be tested: the enqueue returns early
+	 * when the built script is missing, which is how CI runs, so a test driving
+	 * the enqueue would assert nothing.
+	 *
+	 * Strings only, deliberately. `wp_localize_script()` casts scalars, so a
+	 * boolean false arrives as "" and a 0 arrives as "0" — which is truthy in
+	 * JavaScript. The control compares `siteDefault` against `hiddenValue`
+	 * rather than being handed a flag that could lie.
+	 *
+	 * `fallbackValue` is a last resort for the "Shown" option, used only when
+	 * both the post and the site default are hidden. The control prefers a
+	 * position the post already holds, then the site default, so it never pins a
+	 * layout the publisher did not choose.
+	 *
+	 * @param string $post_type Post type being edited.
+	 * @return array<string,mixed>
+	 */
+	public static function get_editor_config( $post_type ) {
+		$is_page  = 'page' === $post_type;
+		$fallback = $is_page ? 'small' : 'large';
+
+		/*
+		 * Clamped. The Customizer does sanitize these mods, through
+		 * `newspack_sanitize_feature_image_position()`, but it is not the only
+		 * writer: the setup wizard's `sanitize_theme_mods()` is a pass-through
+		 * and `wp theme mod set` writes verbatim. An unrecognized value would
+		 * otherwise become what the "Shown" option writes, which the REST enum
+		 * then refuses — failing the whole post save, not just that field.
+		 */
+		$site_default = self::sanitize_position(
+			$is_page
+				? get_theme_mod( 'page_featured_image_default', 'small' )
+				: get_theme_mod( 'featured_image_default', 'large' )
+		);
+
+		return [
+
+			/*
+			 * Only what was actually registered. An empty list where nothing
+			 * was is the honest answer — handing back the supported types
+			 * instead would name post types with no REST registration behind
+			 * them, which is the silent-save-then-lose this record exists to
+			 * prevent, reintroduced at the one place that could still do it.
+			 */
+			'postTypes'     => null === self::$registered_for ? [] : self::$registered_for,
+			'siteDefault'   => '' === $site_default ? $fallback : $site_default,
+			'fallbackValue' => $fallback,
+			'hiddenValue'   => self::HIDDEN,
+
+			// So the control can refuse to write a position REST would reject.
+			'positions'     => self::POSITIONS,
+		];
 	}
 
 	/**
@@ -99,9 +419,11 @@ class Featured_Image_Position {
 	 * the moment they switch, and every one of their posts shows its image
 	 * again — which is the defect this class exists to prevent.
 	 *
-	 * Modeled on `Post_Date::migrate_date_settings()`, diverging in two ways:
-	 * the guard below reads the stored option rather than `get_theme_mod()`, and
-	 * the old theme is optional here rather than required.
+	 * Modeled on `Post_Date::migrate_date_settings()`, diverging in three ways:
+	 * the guard below reads the stored option rather than `get_theme_mod()`, the
+	 * old theme is optional here rather than required, and an unrecognized value
+	 * is not treated as a choice. `Post_Date` needs none of that — its mods are
+	 * booleans and integers, with no vocabulary to check against.
 	 *
 	 * WordPress passes a `WP_Theme` in both branches of `check_theme_switched()`
 	 * — including when the old theme's files are gone, where the object exists
@@ -160,6 +482,11 @@ class Featured_Image_Position {
 			 * only writer: the setup wizard's `sanitize_theme_mods()` is a
 			 * pass-through and `wp theme mod set` writes verbatim, so a junk
 			 * value can be sitting in the old row.
+			 *
+			 * `sanitize_position()` checks against `POSITIONS`, which is the
+			 * per-post vocabulary and carries `''` where the Customizer's does
+			 * not. Safe to borrow here because `''` reads as "no choice" under
+			 * both, which is exactly how this guard treats it.
 			 */
 			$position = self::sanitize_position( $old_mods[ $key ] );
 			if ( '' === $position ) {
@@ -260,14 +587,7 @@ class Featured_Image_Position {
 	 * @return bool
 	 */
 	private static function resolve_hidden( $post_id ) {
-		/*
-		 * The supported post types. Read through the theme's own filter, which
-		 * newspack-newsletters and newspack-listings both add to when they
-		 * load, not gated on the active theme, so the list is right whichever
-		 * theme is running.
-		 */
-		$supported = apply_filters( 'newspack_theme_featured_image_post_types', [ 'post', 'page' ] );
-		if ( ! in_array( get_post_type( $post_id ), (array) $supported, true ) ) {
+		if ( ! in_array( get_post_type( $post_id ), self::get_supported_post_types(), true ) ) {
 			return false;
 		}
 
