@@ -43,6 +43,11 @@ class Group_Subscription {
 	const MIGRATED_TEAM_ID_META_KEY = '_newspack_migrated_team_id';
 
 	/**
+	 * Billing fields copied from the new owner when a group changes hands.
+	 */
+	private const OWNER_BILLING_FIELDS = [ 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'email', 'phone' ];
+
+	/**
 	 * Subscription meta key holding the group's slug: a stable identifier that
 	 * downstream systems (ESP fields, CRM, segments) key readers on, so a rename
 	 * never moves a group's readers to a new identifier. Like a post slug, a
@@ -601,6 +606,211 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Whether a subscription renews by charging a payment method on file.
+	 *
+	 * That payment method belongs to the owner, so a group renewing this way
+	 * cannot change owner: the new owner's group would go on charging the
+	 * previous owner's card. A manual-renewal subscription only records its
+	 * gateway, so it does not count.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return bool
+	 */
+	public static function renews_automatically( \WC_Subscription $subscription ): bool {
+		return '' !== (string) $subscription->get_payment_method() && ! $subscription->get_requires_manual_renewal();
+	}
+
+	/**
+	 * Hand a group to another reader.
+	 *
+	 * The previous owner becomes a plain member, so they keep the group's access,
+	 * unless they could not be a member at all (staff, typically): they leave the
+	 * group instead, and their seat passes to the new owner. A new owner who was a
+	 * member leaves the member list, because ownership is what includes them now.
+	 * Picking a reader from outside the group otherwise needs a free seat, also in
+	 * a group with no owner; an invitation already held by the new owner is
+	 * fulfilled by the change, so it neither counts against that seat nor survives it.
+	 *
+	 * The customer and billing details move to the new owner, on the subscription
+	 * and on any renewal order still awaiting payment, so the new owner can pay
+	 * it. Invite links the previous owner minted are re-attributed so they keep
+	 * working, and both people's ESP contacts are re-synced.
+	 *
+	 * The caller authorises the actor and checks the subscription's state.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $new_owner_id The user taking over the group.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function change_owner( \WC_Subscription|int $subscription, int $new_owner_id ): bool|\WP_Error {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$label        = self::get_label_lower( 'singular' );
+		if ( ! self::is_group_subscription( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_change_owner',
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				sprintf( __( 'That %s could not be found.', 'newspack-plugin' ), $label ),
+				[ 'status' => 404 ]
+			);
+		}
+		if ( self::renews_automatically( $subscription ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_change_owner',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s renews from the owner\'s payment method, so its owner can\'t be changed here.', 'newspack-plugin' ),
+					$label
+				),
+				[ 'status' => 409 ]
+			);
+		}
+		$previous_owner_id = (int) $subscription->get_user_id();
+		$previous_owner    = $previous_owner_id ? \get_userdata( $previous_owner_id ) : false;
+		$new_owner         = \get_userdata( $new_owner_id );
+		if ( ! $new_owner || $new_owner_id === $previous_owner_id || ! self::is_eligible_member( $new_owner ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_change_owner',
+				__( 'Only a reader who is not already the owner can become the owner.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$subscription_id = $subscription->get_id();
+		$members         = array_map( 'intval', self::get_members( $subscription ) );
+		$was_member      = in_array( $new_owner_id, $members, true );
+		$new_owner_email = strtolower( $new_owner->user_email );
+		$has_invite      = (bool) array_filter(
+			Group_Subscription_Invite::get_invites( $subscription, false ),
+			fn( $invite ) => strtolower( (string) ( $invite['email'] ?? '' ) ) === $new_owner_email
+		);
+		$previous_joins  = $previous_owner && self::is_eligible_member( $previous_owner );
+		// The owner's seat passes to the new owner only when a previous owner leaves
+		// it: one who can't be a member, or whose account is gone. A group with no
+		// owner at all has no such seat, so an outsider still needs a free one.
+		$owner_seat_free = $previous_owner_id && ! $previous_joins;
+		$capacity        = self::get_member_capacity( $subscription );
+		if ( ! $owner_seat_free && ! $was_member && ! $has_invite && null !== $capacity && Group_Subscription_API::reserved_seats( $subscription ) >= $capacity ) {
+			return new \WP_Error(
+				'newspack_group_subscription_change_owner',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s has no free seat. Raise the seat limit, or choose a current member as the new owner.', 'newspack-plugin' ),
+					$label
+				),
+				[ 'status' => 409 ]
+			);
+		}
+
+		// Renewal invoices go to the billing contact. The new owner's saved address
+		// replaces the previous owner's, with their account email and name standing
+		// in when they have none. A saved email WooCommerce would refuse counts as
+		// none, so a stale address does not block the change.
+		$fallbacks = [
+			'first_name' => $new_owner->first_name,
+			'last_name'  => $new_owner->last_name,
+			'email'      => $new_owner->user_email,
+		];
+		$billing   = [];
+		foreach ( self::OWNER_BILLING_FIELDS as $field ) {
+			$value = (string) \get_user_meta( $new_owner_id, 'billing_' . $field, true );
+			if ( 'email' === $field && ! \is_email( $value ) ) {
+				$value = '';
+			}
+			$billing[ $field ] = '' !== $value ? $value : (string) ( $fallbacks[ $field ] ?? '' );
+		}
+		// An unpaid renewal order is checked out by its customer, so it moves too.
+		// Paid orders are history and stay with whoever paid them.
+		$unpaid_renewals = array_filter(
+			(array) $subscription->get_related_orders( 'all', 'renewal' ),
+			fn( $order ) => is_object( $order ) && $order->needs_payment()
+		);
+
+		// Everything is changed in memory first: a WooCommerce setter refuses
+		// invalid data by throwing, and nothing may be written by then.
+		try {
+			// A manual-renewal group can still record the previous owner's gateway,
+			// and so can its unpaid renewal orders. Clearing it stops the new owner
+			// switching auto-renewal back on against a payment method that is not
+			// theirs, and stops a pending payment retry, which charges the gateway
+			// named on the order, from billing the previous owner for it.
+			foreach ( array_merge( [ $subscription ], $unpaid_renewals ) as $order ) {
+				$order->set_customer_id( $new_owner_id );
+				foreach ( $billing as $field => $value ) {
+					$order->{ 'set_billing_' . $field }( $value );
+				}
+				if ( '' !== (string) $order->get_payment_method() ) {
+					$order->set_payment_method( '' );
+				}
+			}
+		} catch ( \WC_Data_Exception $e ) {
+			return new \WP_Error( 'newspack_group_subscription_change_owner', $e->getMessage(), [ 'status' => 400 ] );
+		}
+		Group_Subscription_Invite::reassign_link_invites( $subscription, $previous_owner_id, $new_owner_id );
+		$subscription->add_order_note(
+			sprintf(
+				/* translators: 1: singular group label (e.g. "Group", "Team"), 2: previous owner's email address, 3: new owner's email address. */
+				__( '%1$s owner changed from %2$s to %3$s.', 'newspack-plugin' ),
+				self::get_label( 'singular' ),
+				$previous_owner ? $previous_owner->user_email : '—',
+				$new_owner->user_email
+			),
+			0,
+			true
+		);
+		$subscription->save();
+
+		// The previous owner joins as a plain member. An ownerless group, one whose
+		// owner account is gone, or one whose owner can't be a member has nobody to move.
+		// This runs before the renewal orders are saved, so a failing order save
+		// cannot leave the previous owner with no place in the group.
+		$previous_owner_joined = $previous_joins && ! in_array( $previous_owner_id, $members, true );
+		if ( $previous_owner_joined ) {
+			\add_user_meta( $previous_owner_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription_id );
+			\update_user_meta( $previous_owner_id, self::get_member_joined_meta_key( $subscription_id ), time() );
+		}
+		// The owner is in the group by owning it, not as a member or a manager, so
+		// those records would describe a role they no longer hold.
+		\delete_user_meta( $new_owner_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription_id );
+		\delete_user_meta( $new_owner_id, self::get_member_joined_meta_key( $subscription_id ) );
+		\delete_user_meta( $new_owner_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription_id );
+		self::reset_cache();
+		if ( $previous_owner ) {
+			self::announce_memberships_changed( $previous_owner_id, $previous_owner_joined ? [ $subscription_id ] : [], [] );
+		}
+		self::announce_memberships_changed( $new_owner_id, [], $was_member ? [ $subscription_id ] : [] );
+
+		foreach ( $unpaid_renewals as $order ) {
+			$order->save();
+		}
+		if ( $has_invite ) {
+			$cancelled = Group_Subscription_Invite::cancel_invite( $subscription, $new_owner->user_email );
+			if ( \is_wp_error( $cancelled ) ) {
+				// Not fatal, since the owner changed, but the stale invite still holds a seat.
+				\do_action(
+					'newspack_log',
+					'newspack_group_subscription_invite_cancel_failed',
+					$cancelled->get_error_message(),
+					[
+						'type' => 'error',
+						'data' => [
+							'subscription_id' => $subscription_id,
+							'member_ids'      => [ $new_owner_id ],
+						],
+					]
+				);
+			}
+		}
+		// Subscription-derived contact fields read the customer's subscriptions,
+		// which just changed for both people, and no status hook fires to sync them.
+		foreach ( array_filter( [ $previous_owner_id, $new_owner_id ] ) as $user_id ) {
+			Reader_Activation\Contact_Sync::schedule_sync( $user_id, sprintf( 'Group subscription %d changed owner.', $subscription_id ), 0 );
+		}
+		return true;
+	}
+
+	/**
 	 * Get the group subscriptions a user manages.
 	 *
 	 * The reverse of `get_managers()`: a user manages a group either by owning
@@ -990,19 +1200,21 @@ class Group_Subscription {
 	/**
 	 * Announce that a reader joined or left group subscriptions. Every write of the
 	 * membership user meta calls this, so integrations listen here instead of
-	 * watching the meta.
+	 * watching the meta. A change of owner announces both people, with empty ID
+	 * lists for whoever's membership meta did not change, because becoming or
+	 * ceasing to be the owner changes their standing in the group all the same.
 	 *
 	 * @param int   $user_id     The reader.
-	 * @param int[] $added_ids   Subscription IDs of the groups they joined.
-	 * @param int[] $removed_ids Subscription IDs of the groups they left.
+	 * @param int[] $added_ids   Subscription IDs of groups that gained their membership record.
+	 * @param int[] $removed_ids Subscription IDs of groups that lost their membership record. An owner holds no such record, so a member who becomes owner is listed here while staying in the group.
 	 */
 	public static function announce_memberships_changed( int $user_id, array $added_ids, array $removed_ids ): void {
 		/**
 		 * Fires after a reader joins or leaves group subscriptions.
 		 *
 		 * @param int   $user_id     The reader.
-		 * @param int[] $added_ids   Subscription IDs of the groups they joined.
-		 * @param int[] $removed_ids Subscription IDs of the groups they left.
+		 * @param int[] $added_ids   Subscription IDs of groups that gained their membership record.
+		 * @param int[] $removed_ids Subscription IDs of groups that lost their membership record. An owner holds no such record, so a member who becomes owner is listed here while staying in the group.
 		 */
 		\do_action( 'newspack_group_subscription_memberships_changed', $user_id, $added_ids, $removed_ids );
 	}
