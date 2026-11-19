@@ -191,6 +191,13 @@ before=$(sha_of feat/keep-slash)
 status=0
 out=$(run_destroy demo --keep-branch) || status=$?
 expect_kept "destroy demo --keep-branch keeps a slashed branch" "$status" "$out" "feat/keep-slash=$before"
+# destroy hands worktree.sh the directory-safe name, which is not a branch.
+desc="destroy demo --keep-branch names the real branch it kept"
+if [[ "$out" != *"Branch:   feat/keep-slash (kept)"* ]]; then
+	fail "$desc — got: $out"
+else
+	ok "$desc"
+fi
 
 # worktree.sh deletes a branch whose name is already directory-safe.
 new_env_sandbox env-plain

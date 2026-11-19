@@ -236,10 +236,14 @@ case $1 in
             exit 1
         fi
         echo "Worktree: $worktree_dir"
+        # env destroy passes the directory-safe name (feat-foo for feat/foo),
+        # so name the branch actually checked out there.
+        shown_branch=$(git -C "$worktree_dir" branch --show-current 2>/dev/null)
+        shown_branch="${shown_branch:-$branch}"
         if [[ "$keep_branch" == true ]]; then
-            echo "Branch:   $branch (kept)"
+            echo "Branch:   $shown_branch (kept)"
         else
-            echo "Branch:   $branch (will be deleted)"
+            echo "Branch:   $shown_branch (will be deleted)"
         fi
         if [[ -d "$worktree_dir" ]]; then
             changes=$(cd "$worktree_dir" && git status --porcelain 2>/dev/null)
