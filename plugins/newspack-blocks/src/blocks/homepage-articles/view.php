@@ -6,42 +6,108 @@
  */
 
 /**
- * Calculate the maximum width of an image in the Homepage Posts block.
+ * Fraction of its article's width that a thumbnail fills, per breakpoint.
+ *
+ * Mirrors the image position and image scale rules in view.scss. Below 600px a
+ * left or right thumbnail stays beside the text at a third of the article
+ * (a quarter at the smallest scale) unless "Stack on mobile" is on.
+ *
+ * @param array $attributes Block attributes.
+ * @return array{desktop: float, tablet: float, mobile: float}
  */
-function newspack_blocks_hpb_maximum_image_width() {
-	$max_width = 0;
-
-	global $newspack_blocks_hpb_rendering_context;
-	if ( isset( $newspack_blocks_hpb_rendering_context['attrs'] ) ) {
-		$attributes = $newspack_blocks_hpb_rendering_context['attrs'];
-		if ( empty( $attributes ) ) {
-			return $max_width;
-		}
-		if ( isset( $attributes['align'] ) && in_array( $attributes['align'], [ 'full', 'wide' ], true ) ) {
-			// For full and wide alignments, the image width is more than 100% of the content width
-			// and depends on site width. Can't make assumptions about the site width.
-			return $max_width;
-		}
-		$site_content_width  = 1200;
-		$is_image_half_width = in_array( $attributes['mediaPosition'], [ 'left', 'right' ], true );
-		if ( 'grid' === $attributes['postLayout'] ) {
-			$columns = absint( $attributes['columns'] );
-			if ( $is_image_half_width ) {
-				// If the media position is on left or right, the image is 50% of the column width.
-				$columns = $columns * 2;
-			}
-			return $site_content_width / $columns;
-		} elseif ( 'list' === $attributes['postLayout'] && $is_image_half_width ) {
-			return $site_content_width / 2;
-		}
+function newspack_blocks_hpb_image_fraction_of_article( array $attributes ): array {
+	if ( ! in_array( $attributes['mediaPosition'], [ 'left', 'right' ], true ) ) {
+		return [
+			'desktop' => 1.0,
+			'tablet'  => 1.0,
+			'mobile'  => 1.0,
+		];
 	}
-	return $max_width;
+	// A scale with no `is-N` rule keeps the base 33% at every width.
+	$scale_fractions = [
+		1 => 0.25,
+		2 => 1 / 3,
+		3 => 0.5,
+		4 => 0.75,
+	];
+	$image_scale     = absint( $attributes['imageScale'] ?? 3 );
+	$fraction        = $scale_fractions[ $image_scale ] ?? 1 / 3;
+	if ( ! empty( $attributes['mobileStack'] ) ) {
+		$mobile_fraction = 1.0;
+	} else {
+		$mobile_fraction = min( $fraction, 1 / 3 );
+	}
+	return [
+		'desktop' => $fraction,
+		'tablet'  => $fraction,
+		'mobile'  => $mobile_fraction,
+	];
 }
 
 /**
- * Set image `sizes` attribute based on the maximum image width.
+ * Fraction of the content width that one article fills, per breakpoint.
  *
- * @param array $sizes Sizes for the sizes attribute.
+ * Mirrors the grid column rules in view.scss: between 600px and 782px, three-
+ * and six-column grids show three columns and the others show two; below
+ * 600px every article is full width. The last article of a five-column grid
+ * spans the full row between 600px and 782px, but `sizes` can't single it out,
+ * so that one image may be soft at those widths.
+ *
+ * @param array $attributes Block attributes.
+ * @return array{desktop: float, tablet: float, mobile: float}
+ */
+function newspack_blocks_hpb_article_fraction_of_content( array $attributes ): array {
+	$columns = 'grid' === $attributes['postLayout'] ? max( 1, absint( $attributes['columns'] ) ) : 1;
+	if ( 1 === $columns ) {
+		$tablet_columns = 1;
+	} else {
+		$tablet_columns = in_array( $columns, [ 3, 6 ], true ) ? 3 : 2;
+	}
+	return [
+		'desktop' => 1 / $columns,
+		'tablet'  => 1 / $tablet_columns,
+		'mobile'  => 1.0,
+	];
+}
+
+/**
+ * Width of the thumbnail slot in the Homepage Posts block being rendered.
+ *
+ * The desktop width assumes a 1200px content area; below 782px the content
+ * area is assumed to be 90vw (5% side padding on each side).
+ *
+ * @return array{desktop: float, tablet: float, mobile: float}|null Desktop in px, tablet and mobile in vw;
+ *                                                                  null when the width can't be derived.
+ */
+function newspack_blocks_hpb_image_slot_widths(): ?array {
+	global $newspack_blocks_hpb_rendering_context;
+	if ( empty( $newspack_blocks_hpb_rendering_context['attrs'] ) ) {
+		return null;
+	}
+	$attributes = $newspack_blocks_hpb_rendering_context['attrs'];
+	if ( isset( $attributes['align'] ) && in_array( $attributes['align'], [ 'full', 'wide' ], true ) ) {
+		// For full and wide alignments, the image width is more than 100% of the content width
+		// and depends on site width. Can't make assumptions about the site width.
+		return null;
+	}
+	$is_image_beside_text = in_array( $attributes['mediaPosition'], [ 'left', 'right' ], true );
+	if ( 'grid' !== $attributes['postLayout'] && ! $is_image_beside_text ) {
+		// A list with full-width images: the WordPress default `sizes` already fits.
+		return null;
+	}
+	$article_fraction = newspack_blocks_hpb_article_fraction_of_content( $attributes );
+	$image_fraction   = newspack_blocks_hpb_image_fraction_of_article( $attributes );
+	return [
+		'desktop' => 1200 * $article_fraction['desktop'] * $image_fraction['desktop'],
+		'tablet'  => 90 * $article_fraction['tablet'] * $image_fraction['tablet'],
+		'mobile'  => 90 * $article_fraction['mobile'] * $image_fraction['mobile'],
+	];
+}
+
+/**
+ * Set image `sizes` attribute based on the thumbnail's width in the layout.
+ *
+ * @param string $sizes Value for the sizes attribute.
  */
 function newspack_blocks_filter_hpb_sizes( $sizes ) {
 	/**
@@ -67,18 +133,16 @@ function newspack_blocks_filter_hpb_sizes( $sizes ) {
 		// Bail if not using a Newspack theme – assumptions about the site content width can't be made then.
 		return $sizes;
 	}
-	$max_width = newspack_blocks_hpb_maximum_image_width();
-	if ( 0 !== $max_width ) {
-		// >=782px is the desktop size – set width as computed.
-		$sizes = '(min-width: 782px) ' . $max_width . 'px';
-		// Between 600-782px is the tablet size – all columns will collapse to two-column layout
-		// (assuming 5% padding on each side and between columns).
-		$sizes .= ', (min-width: 600px) 42.5vw';
-		// <=600px is the mobile size – columns will stack to full width
-		// (assumming 5% side padding on each side).
-		$sizes .= ', 90vw';
+	$slot_widths = newspack_blocks_hpb_image_slot_widths();
+	if ( ! $slot_widths ) {
+		return $sizes;
 	}
-	return $sizes;
+	return sprintf(
+		'(min-width: 782px) %spx, (min-width: 600px) %svw, %svw',
+		round( $slot_widths['desktop'] ),
+		round( $slot_widths['tablet'], 2 ),
+		round( $slot_widths['mobile'], 2 )
+	);
 }
 
 /**
