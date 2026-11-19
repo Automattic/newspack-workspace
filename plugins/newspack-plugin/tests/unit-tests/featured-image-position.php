@@ -322,8 +322,7 @@ class Test_Featured_Image_Position extends WP_UnitTestCase {
 		 * And the hidden post's own card in that loop is still suppressed, which
 		 * is what `is_hidden()` documents. Asserting only that some image
 		 * survives would also pass if suppression had stopped working entirely.
-		 */
-		/*
+		 *
 		 * Two posts in this transaction carry a thumbnail — the queried one and
 		 * its neighbour — and the queried one is hidden, so exactly one image
 		 * survives. A post without a thumbnail renders nothing either way, so
