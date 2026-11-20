@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.3-rc.1
+Stable tag: 2.4.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,7 +103,7 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 == Changelog ==
 
-= 2.4.3-rc.1 =
+= 2.4.3 =
 * New: Administrator-approved List users permission for an individual managed credential. Lists, searches and counts site accounts through the native users REST endpoint without granting user writes.
 * UI: Group List users, author assignment and site management under collapsed Additional permissions, with contextual help and explicit directory/account-wide disclosures.
 
@@ -232,6 +232,9 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 
 == Upgrade Notice ==
+
+= 2.4.3 =
+Adds administrator-approved user listing and counts without user-management access. Advanced permissions are grouped under Additional permissions. Existing credentials keep their current access; List users is off until explicitly enabled.
 
 = 2.4.1 =
 Native Application Passwords controls are hidden while Agent Access is active. Use Agent Access to generate or replace managed credentials. Existing passwords continue to work.
