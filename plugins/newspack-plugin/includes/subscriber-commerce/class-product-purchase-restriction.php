@@ -624,10 +624,7 @@ class Product_Purchase_Restriction {
 		if ( ! $product ) {
 			return $output;
 		}
-		return sprintf(
-			'<div class="woocommerce-info newspack-subscriber-only-notice">%s</div>',
-			wp_kses_post( self::get_restricted_message( $product ) )
-		);
+		return self::get_notice_html( self::get_restricted_message( $product ) );
 	}
 
 	/**
@@ -969,8 +966,23 @@ class Product_Purchase_Restriction {
 		// the message on one path doesn't suppress the other path's notice too.
 		self::$rendered_notices[ $product_id ] = true;
 
+		return self::get_notice_html( $message );
+	}
+
+	/**
+	 * Wrap a message in the notice markup.
+	 *
+	 * One `<span>` holds the whole message: themes lay `.woocommerce-info` out
+	 * as a flex row, which would make each text run and link its own item and
+	 * drop the spaces between them.
+	 *
+	 * @param string $message The message. May contain links.
+	 *
+	 * @return string The notice HTML, escaped.
+	 */
+	private static function get_notice_html( string $message ): string {
 		return sprintf(
-			'<div class="woocommerce-info newspack-subscriber-only-notice">%s</div>',
+			'<div class="woocommerce-info newspack-subscriber-only-notice"><span>%s</span></div>',
 			wp_kses_post( $message )
 		);
 	}
