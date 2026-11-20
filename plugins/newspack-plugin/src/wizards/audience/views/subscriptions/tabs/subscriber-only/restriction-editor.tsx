@@ -37,7 +37,7 @@ const restrictionTypeHelp = ( type: RestrictionType ) =>
 				"Readers without the chosen subscriptions can't buy the products or see their pages. Restriction settings decide what the product page shows and whether product lists hide them.",
 				'newspack-plugin'
 		  )
-		: __( 'Everyone can see the products and their prices. Only readers with these subscriptions can buy them.', 'newspack-plugin' );
+		: __( 'Everyone can see the products and their prices. Only readers with the chosen subscriptions can buy them.', 'newspack-plugin' );
 
 const emptyTargeting: RuleTargeting = {
 	targeting: 'products',

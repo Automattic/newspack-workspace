@@ -71,11 +71,12 @@ class Product_Purchase_Restriction {
 	private static $hidden_product_ids = null;
 
 	/**
-	 * How many covered products the hiding pass will consider.
+	 * How many products the hiding pass queries for category and "All products"
+	 * restrictions. Products a restriction names are added on top, in full.
 	 *
 	 * Hiding has to name the products to exclude, so it enumerates what the
-	 * restrictions cover: what a publisher restricted, or the whole catalog for
-	 * an "All products" rule. These are newsroom stores — books, tickets,
+	 * restrictions cover: the products a publisher named, plus a category or the
+	 * whole catalog. These are newsroom stores — books, tickets,
 	 * merchandise — so the ceiling is far above any real configuration. Past it
 	 * the excess stays listed but hidden on its own page: over-listing is the
 	 * safe failure, where a slow query is not.
@@ -123,7 +124,10 @@ class Product_Purchase_Restriction {
 		// The core REST API withholds a hidden product's content and excerpt as
 		// password-protected; its featured image goes here.
 		add_filter( 'rest_prepare_product', [ __CLASS__, 'filter_rest_product' ], 10, 2 );
-		add_filter( 'oembed_response_data', [ __CLASS__, 'filter_oembed_response' ], 10, 2 );
+		// Priority 11: after core adds the thumbnail at 10.
+		add_filter( 'oembed_response_data', [ __CLASS__, 'filter_oembed_response' ], 11, 2 );
+		// The embed iframe renders the featured image itself.
+		add_filter( 'embed_thumbnail_id', [ __CLASS__, 'filter_embed_thumbnail_id' ] );
 	}
 
 	/**
@@ -648,14 +652,16 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Whether the request is a wp-admin screen, where products are edited
-	 * rather than read. admin-ajax.php counts as admin to is_admin(), but
-	 * themes and plugins render front-end listings through it.
+	 * Whether the request is one where products are managed rather than read:
+	 * a wp-admin screen, WooCommerce's admin AJAX (order items, product search,
+	 * quick edit) or a management REST route. Other admin-ajax requests count
+	 * as the storefront, since themes render listings through them. Subscriber
+	 * discounts draw the same line.
 	 *
 	 * @return bool
 	 */
 	private static function is_admin_screen(): bool {
-		return is_admin() && ! wp_doing_ajax();
+		return ! Subscriber_Discounts_Pricing::should_adjust_prices_in_context();
 	}
 
 	/**
@@ -831,6 +837,17 @@ class Product_Purchase_Restriction {
 		}
 		unset( $data['thumbnail_url'], $data['thumbnail_width'], $data['thumbnail_height'] );
 		return $data;
+	}
+
+	/**
+	 * Leave a hidden product's featured image out of its embed iframe.
+	 *
+	 * @param int|false $thumbnail_id The attachment ID.
+	 *
+	 * @return int|false
+	 */
+	public static function filter_embed_thumbnail_id( $thumbnail_id ) {
+		return self::get_hidden_product( get_post() ) ? false : $thumbnail_id;
 	}
 
 	/**

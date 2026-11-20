@@ -367,7 +367,7 @@ function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsMo
 	const [ redirectPageId, setRedirectPageId ] = useState( settings.redirect_page_id );
 	// The page-level notice sits under this modal, so a failed save shows here.
 	const [ saveFailed, setSaveFailed ] = useState( false );
-	const { pages, failed } = usePublishedPages( 'redirect' === productPage );
+	const { pages, failed, retry } = usePublishedPages( 'redirect' === productPage );
 
 	// "Hide completely" leaves nothing to link to, so it hides from lists too.
 	const hidesFromLists = hide || 'hide' === productPage;
@@ -376,9 +376,7 @@ function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsMo
 	const isComplete = 'redirect' !== productPage || hasRedirectPage;
 
 	let redirectHelp: string = __( 'Choose the page readers go to.', 'newspack-plugin' );
-	if ( failed ) {
-		redirectHelp = __( "Pages couldn't be loaded.", 'newspack-plugin' );
-	} else if ( pages && ! pages.length ) {
+	if ( pages && ! pages.length ) {
 		redirectHelp = __( 'No published pages yet. Publish a page to redirect readers to.', 'newspack-plugin' );
 	} else if ( pages && redirectPageId > 0 && ! hasRedirectPage ) {
 		redirectHelp = __( 'The saved page is no longer published. Choose another page.', 'newspack-plugin' );
@@ -393,8 +391,13 @@ function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsMo
 					</CoreNotice>
 				) }
 				{ 'redirect' === productPage && failed && (
-					<CoreNotice status="error" isDismissible={ false } politeness="polite">
-						{ __( "Pages couldn't be loaded. Close this window and try again.", 'newspack-plugin' ) }
+					<CoreNotice
+						status="error"
+						isDismissible={ false }
+						politeness="polite"
+						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: retry } ] }
+					>
+						{ __( "Pages couldn't be loaded.", 'newspack-plugin' ) }
 					</CoreNotice>
 				) }
 				<CheckboxControl
@@ -457,6 +460,8 @@ function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsMo
 						disabled={ saving || ! isComplete }
 						accessibleWhenDisabled
 						onClick={ () => {
+							// Cleared first, so a repeated failure mounts the notice again and is announced.
+							setSaveFailed( false );
 							onSave( {
 								hide_from_product_lists: hide,
 								product_page: productPage,
@@ -485,7 +490,7 @@ interface PageOption {
 /**
  * Every published page, by title, for the redirect picker, loaded the first
  * time it is needed. `pages` is null until then and while loading; `failed`
- * is set when the list can't be loaded.
+ * is set when the list can't be loaded, and `retry` loads it again.
  *
  * @param needed Whether the picker is showing.
  */
@@ -493,6 +498,10 @@ function usePublishedPages( needed: boolean ) {
 	const [ pages, setPages ] = useState< PageOption[] | null >( null );
 	const [ failed, setFailed ] = useState( false );
 	const [ requested, setRequested ] = useState( false );
+	const retry = () => {
+		setFailed( false );
+		setRequested( false );
+	};
 
 	useEffect( () => {
 		if ( ! needed || requested ) {
@@ -527,7 +536,7 @@ function usePublishedPages( needed: boolean ) {
 			.catch( () => setFailed( true ) );
 	}, [ needed, requested ] );
 
-	return { pages, failed };
+	return { pages, failed, retry };
 }
 
 registerTab( 'subscriber-only', { render: () => <SubscriberOnlyProducts />, fullWidth: true, rendersLeafCrumb: true } );

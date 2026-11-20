@@ -107,6 +107,9 @@ class Test_Subscriber_Only_Products_API extends \WP_UnitTestCase {
 		$this->assertSame( 400, $this->save_settings( [ 'redirect_page_id' => $post_id ] )->get_status(), 'A post is not a page.' );
 		$this->assertSame( 400, $this->save_settings( [ 'redirect_page_id' => 0 ] )->get_status() );
 		$this->assertSame( $page_id, Subscriber_Only_Products::get_settings()['redirect_page_id'], 'A refused save changes nothing.' );
+
+		$this->save_settings( [ 'product_page' => Subscriber_Only_Products::PRODUCT_PAGE_HIDE ] );
+		$this->assertSame( 0, Subscriber_Only_Products::get_settings()['redirect_page_id'], 'Only a redirect keeps a page.' );
 	}
 
 	/**

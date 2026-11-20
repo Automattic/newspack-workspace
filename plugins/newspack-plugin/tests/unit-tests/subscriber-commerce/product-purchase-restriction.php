@@ -1098,21 +1098,23 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	public function test_oembed_and_admin_ajax_respect_visibility() {
 		$this->make_rule_view_restricted();
 		wp_set_current_user( $this->non_subscriber_id );
-		$oembed = Product_Purchase_Restriction::filter_oembed_response(
-			[
-				'title'         => 'Ebook',
-				'thumbnail_url' => 'https://example.com/ebook.jpg',
-			],
-			get_post( $this->restricted_product->get_id() )
-		);
-		$this->assertSame( [ 'title' => 'Ebook' ], $oembed );
+		$image_id = $this->factory->attachment->create_object( 'ebook.jpg', $this->restricted_product->get_id(), [ 'post_mime_type' => 'image/jpeg' ] );
+		set_post_thumbnail( $this->restricted_product->get_id(), $image_id );
+		$this->assertArrayNotHasKey( 'thumbnail_url', (array) get_oembed_response_data( $this->restricted_product->get_id(), 600 ) );
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertArrayHasKey( 'thumbnail_url', (array) get_oembed_response_data( $this->restricted_product->get_id(), 600 ), 'Core adds the image for a reader who can see it.' );
+		wp_set_current_user( $this->non_subscriber_id );
+		$GLOBALS['post'] = get_post( $this->restricted_product->get_id() ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertFalse( apply_filters( 'embed_thumbnail_id', 42 ), 'The embed iframe shows no image either.' );
 
 		set_current_screen( 'edit-product' );
 		$this->assertFalse( post_password_required( $this->restricted_product->get_id() ), 'wp-admin edits products.' );
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		$this->assertTrue( post_password_required( $this->restricted_product->get_id() ), 'admin-ajax serves readers.' );
-		remove_filter( 'wp_doing_ajax', '__return_true' );
-		set_current_screen( 'front' );
+		$this->assertSame( '', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ) );
+		$_REQUEST['action'] = 'woocommerce_json_search_products';
+		$this->assertSame( '$8.00', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ), "WooCommerce's admin AJAX manages products." );
+		unset( $_REQUEST['action'] );
 	}
 
 	/**
