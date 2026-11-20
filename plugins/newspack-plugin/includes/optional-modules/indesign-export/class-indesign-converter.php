@@ -81,6 +81,8 @@ class InDesign_Converter {
 		'pullquote'         => '<pstyle:pullquote>',
 		'pullquote_name'    => '<pstyle:pullquotename>',
 		'blockquote'        => '<pstyle:blockquote>',
+		'photo_caption'     => '<pstyle:PhotoCaption>',
+		'photo_credit'      => '<pstyle:PhotoCredit>',
 	];
 
 	/**
@@ -759,10 +761,10 @@ class InDesign_Converter {
 
 			$tag_content .= $this->eol;
 			if ( $caption ) {
-				$tag_content .= '<pstyle:PhotoCaption>' . $this->get_transformed_rich_text( $caption ) . $this->eol;
+				$tag_content .= $this->styles['photo_caption'] . $this->get_transformed_rich_text( $caption ) . $this->eol;
 			}
 			if ( $credit ) {
-				$tag_content .= '<pstyle:PhotoCredit>' . $this->get_transformed_plain_text( $credit ) . $this->eol;
+				$tag_content .= $this->styles['photo_credit'] . $this->get_transformed_plain_text( $credit ) . $this->eol;
 			}
 		}
 
