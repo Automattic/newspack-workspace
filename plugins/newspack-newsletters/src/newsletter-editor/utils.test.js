@@ -1,7 +1,32 @@
 /**
  * Internal dependencies
  */
-import { getSettledSendLists, validateNewsletter } from './utils';
+import { getSettledSendLists, isOpenedPostType, validateNewsletter } from './utils';
+
+// "Edit original" on a synced pattern swaps the pattern into the newsletter's
+// editor page. The newsletter plugins stand down on this check until the
+// author goes back, so it must tell the two apart.
+describe( 'isOpenedPostType', () => {
+	beforeEach( () => {
+		document.body.className = 'wp-admin post-type-newspack_nl_cpt';
+	} );
+
+	afterEach( () => {
+		document.body.className = '';
+	} );
+
+	it( 'matches the post type the page was opened for', () => {
+		expect( isOpenedPostType( 'newspack_nl_cpt' ) ).toBe( true );
+	} );
+
+	it( 'does not match a synced pattern opened in the same page', () => {
+		expect( isOpenedPostType( 'wp_block' ) ).toBe( false );
+	} );
+
+	it( 'does not match while the editor has no current post', () => {
+		expect( isOpenedPostType( null ) ).toBe( false );
+	} );
+} );
 
 // Guards the condition that decides whether a resolution check may run at all.
 // Getting this wrong in either direction is worse than the bug it supports: too
