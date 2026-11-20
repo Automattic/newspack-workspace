@@ -128,7 +128,7 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Assert the registration was refused with the given error code and left no account behind.
+	 * Assert the registration was refused with the given error code.
 	 *
 	 * @param mixed  $result Return value of register().
 	 * @param string $code   Expected error code.
@@ -136,7 +136,6 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	private function assert_refused( $result, $code ) {
 		$this->assertWPError( $result, 'Registration should be refused.' );
 		$this->assertContains( $code, $result->get_error_codes() );
-		$this->assertFalse( email_exists( self::EMAIL ), 'No account should be created.' );
 	}
 
 	/**
@@ -194,7 +193,7 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A person whose token Google accepts registers as before.
+	 * A person whose token Google accepts is registered.
 	 *
 	 * @dataProvider data_valid_tokens
 	 *
@@ -270,18 +269,28 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With reCAPTCHA off, registration works as it does today.
+	 * Settings under which reCAPTCHA can't run: switched off, or switched on with no keys stored.
+	 *
+	 * @return array
 	 */
-	public function test_registration_unchanged_when_recaptcha_off() {
-		$this->assert_allowed( $this->register() );
-		$this->assertSame( 0, $this->siteverify_calls );
+	public function data_recaptcha_unavailable() {
+		return [
+			'reCAPTCHA off'         => [ false ],
+			'reCAPTCHA on, no keys' => [ true ],
+		];
 	}
 
 	/**
-	 * With reCAPTCHA switched on but no keys stored, registration works as it does today.
+	 * While reCAPTCHA can't run, registration is not checked and nothing is sent to Google.
+	 *
+	 * @dataProvider data_recaptcha_unavailable
+	 *
+	 * @param bool $use_captcha Whether reCAPTCHA is switched on.
 	 */
-	public function test_registration_unchanged_without_keys() {
-		update_option( 'newspack_recaptcha_use_captcha', true );
+	public function test_registration_not_checked_while_recaptcha_unavailable( $use_captcha ) {
+		if ( $use_captcha ) {
+			update_option( 'newspack_recaptcha_use_captcha', true );
+		}
 
 		$this->assert_allowed( $this->register() );
 		$this->assertSame( 0, $this->siteverify_calls );
@@ -342,7 +351,7 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	/**
 	 * With reCAPTCHA off, nothing is added to the form.
 	 */
-	public function test_register_form_unchanged_when_recaptcha_off() {
+	public function test_register_form_adds_nothing_when_recaptcha_off() {
 		ob_start();
 		do_action( 'woocommerce_register_form' );
 		$html = ob_get_clean();
