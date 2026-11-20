@@ -15,7 +15,7 @@ import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { EmptyState, Stack } from '@wordpress/ui';
 import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, CheckboxControl, SelectControl } from '@wordpress/components';
+import { __experimentalHStack as HStack, CheckboxControl, Notice as CoreNotice, SelectControl } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
@@ -37,7 +37,7 @@ import RestrictionEditor from './restriction-editor';
 import type { ProductPageMode, Restriction, RestrictionSettings } from './types';
 import './style.scss';
 
-const FIT_COLUMNS = [ 'status', 'restriction_type' ];
+const FIT_COLUMNS = [ 'status' ];
 
 const DEFAULT_VIEW = {
 	type: 'table' as const,
@@ -340,7 +340,13 @@ function SubscriberOnlyProducts() {
 			) }
 
 			{ settingsOpen && (
-				<SettingsModal settings={ settings } saving={ saving } onSave={ saveSettings } onClose={ () => setSettingsOpen( false ) } />
+				<SettingsModal
+					settings={ settings }
+					saving={ saving }
+					error={ error }
+					onSave={ saveSettings }
+					onClose={ () => setSettingsOpen( false ) }
+				/>
 			) }
 		</div>
 	);
@@ -349,15 +355,19 @@ function SubscriberOnlyProducts() {
 interface SettingsModalProps {
 	settings: RestrictionSettings;
 	saving: boolean;
+	/** The latest request error, shown when a save from this modal fails. */
+	error: string;
 	onSave: ( settings: RestrictionSettings ) => Promise< boolean >;
 	onClose: () => void;
 }
 
-function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProps ) {
+function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsModalProps ) {
 	const [ hide, setHide ] = useState( settings.hide_from_product_lists );
 	const [ productPage, setProductPage ] = useState< ProductPageMode >( settings.product_page );
 	const [ redirectPageId, setRedirectPageId ] = useState( settings.redirect_page_id );
-	const { pages, failed } = usePublishedPages();
+	// The page-level notice sits under this modal, so a failed save shows here.
+	const [ saveFailed, setSaveFailed ] = useState( false );
+	const { pages, failed } = usePublishedPages( 'redirect' === productPage );
 
 	// "Hide completely" leaves nothing to link to, so it hides from lists too.
 	const hidesFromLists = hide || 'hide' === productPage;
@@ -367,7 +377,9 @@ function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProp
 
 	let redirectHelp: string = __( 'Choose the page readers go to.', 'newspack-plugin' );
 	if ( failed ) {
-		redirectHelp = __( "Pages couldn't be loaded. Close this window and try again.", 'newspack-plugin' );
+		redirectHelp = __( "Pages couldn't be loaded.", 'newspack-plugin' );
+	} else if ( pages && ! pages.length ) {
+		redirectHelp = __( 'No published pages yet. Publish a page to redirect readers to.', 'newspack-plugin' );
 	} else if ( pages && redirectPageId > 0 && ! hasRedirectPage ) {
 		redirectHelp = __( 'The saved page is no longer published. Choose another page.', 'newspack-plugin' );
 	}
@@ -375,6 +387,16 @@ function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProp
 	return (
 		<Modal title={ __( 'Restriction settings', 'newspack-plugin' ) } onRequestClose={ onClose }>
 			<Stack direction="column" gap="lg">
+				{ saveFailed && error && (
+					<CoreNotice status="error" isDismissible={ false }>
+						{ error }
+					</CoreNotice>
+				) }
+				{ 'redirect' === productPage && failed && (
+					<CoreNotice status="error" isDismissible={ false } politeness="polite">
+						{ __( "Pages couldn't be loaded. Close this window and try again.", 'newspack-plugin' ) }
+					</CoreNotice>
+				) }
 				<CheckboxControl
 					label={ __( 'Hide from product lists', 'newspack-plugin' ) }
 					help={
@@ -440,6 +462,7 @@ function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProp
 								product_page: productPage,
 								redirect_page_id: 'redirect' === productPage ? redirectPageId : 0,
 							} ).then( ( ok: boolean ) => {
+								setSaveFailed( ! ok );
 								if ( ok ) {
 									onClose();
 								}
@@ -460,14 +483,22 @@ interface PageOption {
 }
 
 /**
- * Every published page, by title, for the redirect picker. `pages` is null
- * while loading; `failed` is set when the list can't be loaded.
+ * Every published page, by title, for the redirect picker, loaded the first
+ * time it is needed. `pages` is null until then and while loading; `failed`
+ * is set when the list can't be loaded.
+ *
+ * @param needed Whether the picker is showing.
  */
-function usePublishedPages() {
+function usePublishedPages( needed: boolean ) {
 	const [ pages, setPages ] = useState< PageOption[] | null >( null );
 	const [ failed, setFailed ] = useState( false );
+	const [ requested, setRequested ] = useState( false );
 
 	useEffect( () => {
+		if ( ! needed || requested ) {
+			return;
+		}
+		setRequested( true );
 		type PageResponse = { id: number; title: { rendered: string } };
 		const toOption = ( page: PageResponse ) => ( {
 			id: page.id,
@@ -494,7 +525,7 @@ function usePublishedPages() {
 		fetchFrom( 1 )
 			.then( setPages )
 			.catch( () => setFailed( true ) );
-	}, [] );
+	}, [ needed, requested ] );
 
 	return { pages, failed };
 }

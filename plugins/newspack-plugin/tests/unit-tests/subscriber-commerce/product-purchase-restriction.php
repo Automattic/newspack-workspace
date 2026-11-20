@@ -466,9 +466,9 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * With hiding on, a reader who can't buy the product doesn't see it listed.
+	 * With hiding on, a reader who can't see the product doesn't find it listed.
 	 */
-	public function test_hiding_removes_unpurchasable_products_from_lists() {
+	public function test_hiding_removes_hidden_products_from_lists() {
 		$this->hide_view_restricted_products();
 
 		$query = $this->run_product_query();
@@ -524,8 +524,8 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A subscriber sees everything: hiding follows purchasability, so it must
-	 * not hide a product from the very readers it is sold to.
+	 * A subscriber sees everything: hiding follows visibility, so it must not
+	 * hide a product from the very readers it is sold to.
 	 */
 	public function test_hiding_leaves_subscribers_lists_intact() {
 		$this->hide_view_restricted_products();
@@ -883,7 +883,7 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	 * Shop managers always see every product, so a publisher can't hide a
 	 * product from themselves.
 	 */
-	public function test_shop_manager_can_always_view() {
+	public function test_a_store_manager_can_always_view() {
 		$this->make_rule_view_restricted();
 		$manager_id = $this->factory->user->create( [ 'role' => 'administrator' ] );
 		get_user_by( 'id', $manager_id )->add_cap( 'manage_woocommerce' );
@@ -978,8 +978,8 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 
 	/**
 	 * Where a hidden product is still listed, its price and image are withheld
-	 * in "hide content" mode, and a hidden variation drops out of its product's
-	 * options.
+	 * whatever the product page does, and a hidden variation drops out of its
+	 * product's options.
 	 */
 	public function test_a_listed_hidden_product_shows_no_price_image_or_variation() {
 		$this->make_rule_view_restricted();
@@ -1040,9 +1040,8 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		$this->assertSame( '', $collection[0]['price_html'] );
 		$this->assertSame( '$8.00', $collection[1]['price_html'], 'A product nobody hides is untouched.' );
 
-		// Through the hook, beside core's `_fields` trimming: a request naming
-		// fields without `prices` is still redacted.
-		add_filter( 'rest_post_dispatch', 'rest_filter_response_fields', 10, 3 );
+		// Through the hook, where core trims the response to `_fields`: a
+		// request naming fields without `prices` is still redacted.
 		$trimmed_request = new \WP_REST_Request( 'GET', '/wc/store/v1/products/' . $this->restricted_product->get_id() );
 		$trimmed_request->set_param( '_fields', 'id,description,images' );
 		$trimmed = apply_filters( 'rest_post_dispatch', new \WP_REST_Response( $item( $this->restricted_product ) ), rest_get_server(), $trimmed_request )->get_data();
@@ -1055,9 +1054,10 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Off its own page too, a hidden product counts as password-protected, so
-	 * WordPress withholds its content and excerpt in the REST API and feeds.
-	 * Not for a reader who can see it.
+	 * Off its own page too, outside any product-page request, a hidden product
+	 * counts as password-protected; that is what makes WordPress withhold its
+	 * content and excerpt in the REST API and feeds. Not for a reader who can
+	 * see it.
 	 */
 	public function test_a_hidden_product_is_protected_everywhere_on_the_front_end() {
 		$this->make_rule_view_restricted();
@@ -1088,6 +1088,31 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 
 		wp_set_current_user( $this->subscriber_id );
 		$this->assertSame( 42, Product_Purchase_Restriction::filter_rest_product( $response(), get_post( $this->restricted_product->get_id() ) )->get_data()['featured_media'] );
+	}
+
+	/**
+	 * A hidden product's oEmbed carries no image, and admin-ajax requests, which
+	 * themes use for front-end listings, get the reader's view rather than
+	 * wp-admin's.
+	 */
+	public function test_oembed_and_admin_ajax_respect_visibility() {
+		$this->make_rule_view_restricted();
+		wp_set_current_user( $this->non_subscriber_id );
+		$oembed = Product_Purchase_Restriction::filter_oembed_response(
+			[
+				'title'         => 'Ebook',
+				'thumbnail_url' => 'https://example.com/ebook.jpg',
+			],
+			get_post( $this->restricted_product->get_id() )
+		);
+		$this->assertSame( [ 'title' => 'Ebook' ], $oembed );
+
+		set_current_screen( 'edit-product' );
+		$this->assertFalse( post_password_required( $this->restricted_product->get_id() ), 'wp-admin edits products.' );
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$this->assertTrue( post_password_required( $this->restricted_product->get_id() ), 'admin-ajax serves readers.' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		set_current_screen( 'front' );
 	}
 
 	/**

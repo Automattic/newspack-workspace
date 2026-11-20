@@ -23,9 +23,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * A reader may buy a restricted product if they subscribe to any subscription
  * named by any restriction covering it — each restriction is an offer, not an
- * additional hurdle. The one exception, as in WooCommerce Memberships: once a "Purchase"
- * restriction covers a product, a "Purchase and visibility" audience may see it
- * but only the "Purchase" audience may buy it.
+ * additional hurdle. The one exception, as in WooCommerce Memberships: once a
+ * "Purchase" restriction covers a product, a "Purchase and visibility"
+ * audience may see it but only the "Purchase" audience may buy it.
  */
 class Product_Purchase_Restriction {
 
@@ -74,11 +74,11 @@ class Product_Purchase_Restriction {
 	 * How many covered products the hiding pass will consider.
 	 *
 	 * Hiding has to name the products to exclude, so it enumerates what the
-	 * restrictions cover. That is bounded by what a publisher restricted rather
-	 * than by the catalog, and these are newsroom stores — books, tickets,
+	 * restrictions cover: what a publisher restricted, or the whole catalog for
+	 * an "All products" rule. These are newsroom stores — books, tickets,
 	 * merchandise — so the ceiling is far above any real configuration. Past it
-	 * the excess stays listed (but still unpurchasable): over-listing is the
-	 * safe failure for an opt-in convenience, where a slow query is not.
+	 * the excess stays listed but hidden on its own page: over-listing is the
+	 * safe failure, where a slow query is not.
 	 */
 	const MAX_HIDDEN_PRODUCTS = 500;
 
@@ -123,6 +123,7 @@ class Product_Purchase_Restriction {
 		// The core REST API withholds a hidden product's content and excerpt as
 		// password-protected; its featured image goes here.
 		add_filter( 'rest_prepare_product', [ __CLASS__, 'filter_rest_product' ], 10, 2 );
+		add_filter( 'oembed_response_data', [ __CLASS__, 'filter_oembed_response' ], 10, 2 );
 	}
 
 	/**
@@ -375,7 +376,7 @@ class Product_Purchase_Restriction {
 	 * @param \WP_Query $query The query.
 	 */
 	public static function filter_product_query( $query ) {
-		if ( is_admin() || ! $query instanceof \WP_Query ) {
+		if ( self::is_admin_screen() || ! $query instanceof \WP_Query ) {
 			return;
 		}
 		// Cheapest test first: this fires on every front-end query, and the vast
@@ -475,7 +476,9 @@ class Product_Purchase_Restriction {
 		self::$hidden_product_ids = [];
 
 		$hidden = [];
-		foreach ( self::covered_product_ids() as $product_id ) {
+		$covered_product_ids = self::covered_product_ids();
+		_prime_post_caches( $covered_product_ids );
+		foreach ( $covered_product_ids as $product_id ) {
 			$product = wc_get_product( $product_id );
 			if ( $product instanceof \WC_Product && ! self::can_view( $product ) ) {
 				$hidden[] = (int) $product_id;
@@ -513,7 +516,7 @@ class Product_Purchase_Restriction {
 		$args = [
 			'post_type'      => 'product',
 			'post_status'    => 'publish',
-			// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Bounded by what the publisher restricted, not by the catalog; see MAX_HIDDEN_PRODUCTS.
+			// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Bounded by MAX_HIDDEN_PRODUCTS.
 			'posts_per_page' => self::MAX_HIDDEN_PRODUCTS,
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
@@ -637,11 +640,22 @@ class Product_Purchase_Restriction {
 	 */
 	private static function get_hidden_product( $post ) {
 		$post = get_post( $post );
-		if ( ! $post || 'product' !== $post->post_type || is_admin() || ! function_exists( 'wc_get_product' ) ) {
+		if ( ! $post || 'product' !== $post->post_type || self::is_admin_screen() || ! function_exists( 'wc_get_product' ) ) {
 			return null;
 		}
 		$product = wc_get_product( $post->ID );
 		return $product instanceof \WC_Product && ! self::can_view( $product ) ? $product : null;
+	}
+
+	/**
+	 * Whether the request is a wp-admin screen, where products are edited
+	 * rather than read. admin-ajax.php counts as admin to is_admin(), but
+	 * themes and plugins render front-end listings through it.
+	 *
+	 * @return bool
+	 */
+	private static function is_admin_screen(): bool {
+		return is_admin() && ! wp_doing_ajax();
 	}
 
 	/**
@@ -654,7 +668,7 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	private static function is_listed_as_hidden( $product ): bool {
-		return $product instanceof \WC_Product && ! is_admin() && ! self::can_view( $product );
+		return $product instanceof \WC_Product && ! self::is_admin_screen() && ! self::can_view( $product );
 	}
 
 	/**
@@ -697,24 +711,11 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	public static function filter_product_is_visible( $visible, $product_id = 0 ) {
-		if ( ! $visible || is_admin() || ! Subscriber_Commerce::is_enforcement_active() || ! Subscriber_Only_Products::hides_from_product_lists() ) {
+		if ( ! $visible || self::is_admin_screen() || ! Subscriber_Commerce::is_enforcement_active() || ! Subscriber_Only_Products::hides_from_product_lists() ) {
 			return $visible;
 		}
 		$product = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
 		return ! $product instanceof \WC_Product || self::can_view( $product );
-	}
-
-	/**
-	 * The product behind a post, when the post is a product the reader may not
-	 * see and the product page keeps its content hidden.
-	 *
-	 * @param \WP_Post|int|null $post The post or its ID.
-	 *
-	 * @return \WC_Product|null
-	 */
-	private static function get_listed_hidden_product( $post ) {
-		$product = self::get_hidden_product( $post );
-		return $product && self::is_listed_as_hidden( $product ) ? $product : null;
 	}
 
 	/**
@@ -730,7 +731,7 @@ class Product_Purchase_Restriction {
 	 * @return string
 	 */
 	public static function filter_listed_excerpt( $excerpt ) {
-		$product = self::get_listed_hidden_product( get_post() );
+		$product = self::get_hidden_product( get_post() );
 		return $product ? wpautop( wp_kses_post( self::get_restricted_message( $product ) ) ) : $excerpt;
 	}
 
@@ -744,7 +745,7 @@ class Product_Purchase_Restriction {
 	 * @return string
 	 */
 	public static function filter_listed_thumbnail( $html, $post_id = 0 ) {
-		return self::get_listed_hidden_product( $post_id ) ? '' : $html;
+		return self::get_hidden_product( $post_id ) ? '' : $html;
 	}
 
 	/**
@@ -817,6 +818,22 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
+	 * Leave a hidden product's image out of its oEmbed response.
+	 *
+	 * @param array    $data The oEmbed data.
+	 * @param \WP_Post $post The post.
+	 *
+	 * @return array
+	 */
+	public static function filter_oembed_response( $data, $post ) {
+		if ( ! is_array( $data ) || ! self::get_hidden_product( $post ) ) {
+			return $data;
+		}
+		unset( $data['thumbnail_url'], $data['thumbnail_width'], $data['thumbnail_height'] );
+		return $data;
+	}
+
+	/**
 	 * A Store API product item with the details a hidden product's page
 	 * withholds left empty.
 	 *
@@ -858,7 +875,7 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	public static function filter_variation_is_visible( $visible, $variation_id = 0, $parent_id = 0, $variation = null ) {
-		if ( ! $visible || is_admin() ) {
+		if ( ! $visible || self::is_admin_screen() ) {
 			return $visible;
 		}
 		$variation = $variation instanceof \WC_Product ? $variation : ( function_exists( 'wc_get_product' ) ? wc_get_product( $variation_id ) : null );

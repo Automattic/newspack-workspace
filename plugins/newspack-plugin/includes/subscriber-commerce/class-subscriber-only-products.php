@@ -238,7 +238,8 @@ class Subscriber_Only_Products {
 			// a "Purchase" product is meant to be seen.
 			'hide_from_product_lists' => ! empty( $settings['hide_from_product_lists'] ),
 			'product_page'            => $product_page,
-			'redirect_page_id'        => absint( $settings['redirect_page_id'] ?? 0 ),
+			// Only a redirect has a page; any other mode drops a stale one.
+			'redirect_page_id'        => self::PRODUCT_PAGE_REDIRECT === $product_page ? absint( $settings['redirect_page_id'] ?? 0 ) : 0,
 		];
 	}
 

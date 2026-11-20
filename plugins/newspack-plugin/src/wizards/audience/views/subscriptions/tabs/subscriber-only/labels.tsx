@@ -1,7 +1,7 @@
 /**
- * Search labels for the subscriber-only products list.
- *
- * What the list's search matches for a category or all-products restriction.
+ * Labels for the subscriber-only products tab: what the list's search matches
+ * for a category or all-products restriction, and the names of the
+ * restriction types.
  */
 
 /**

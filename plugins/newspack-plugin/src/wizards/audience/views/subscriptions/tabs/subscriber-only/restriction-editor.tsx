@@ -20,6 +20,7 @@ import { Button, Modal } from '../../../../../../../packages/components/src';
 import SubscriberFields from '../../components/subscriber-fields';
 import TargetingFields from '../../components/targeting-fields';
 import type { RuleTargeting, SubscriberAudience } from '../../types';
+import { restrictionTypeLabel } from './labels';
 import type { Restriction, RestrictionType } from './types';
 
 interface RestrictionEditorProps {
@@ -33,7 +34,7 @@ interface RestrictionEditorProps {
 const restrictionTypeHelp = ( type: RestrictionType ) =>
 	'view' === type
 		? __(
-				"Readers without these subscriptions can't buy the products or see their pages. Restriction settings decide what the product page shows and whether product lists hide them.",
+				"Readers without the chosen subscriptions can't buy the products or see their pages. Restriction settings decide what the product page shows and whether product lists hide them.",
 				'newspack-plugin'
 		  )
 		: __( 'Everyone can see the products and their prices. Only readers with these subscriptions can buy them.', 'newspack-plugin' );
@@ -105,8 +106,8 @@ export default function RestrictionEditor( { restriction, saving, onSave, onClos
 						setRestrictionType( next as RestrictionType );
 					} }
 					options={ [
-						{ value: 'purchase', label: __( 'Purchase', 'newspack-plugin' ) },
-						{ value: 'view', label: __( 'Purchase and visibility', 'newspack-plugin' ) },
+						{ value: 'purchase', label: restrictionTypeLabel( 'purchase' ) },
+						{ value: 'view', label: restrictionTypeLabel( 'view' ) },
 					] }
 					disabled={ saving }
 				/>

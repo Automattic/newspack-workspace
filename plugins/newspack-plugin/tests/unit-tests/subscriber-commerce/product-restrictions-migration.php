@@ -369,9 +369,9 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 					[
 						'membership_plan_id' => 'monthly',
 						'access_type'        => 'view',
-					] 
+					]
 				),
-			] 
+			]
 		);
 		$plan_id = get_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION )[0]['membership_plan_id'];
 		Subscriber_Only_Products::save_rule(
