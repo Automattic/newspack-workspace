@@ -553,7 +553,7 @@ class Content_Gifting {
 					echo esc_html(
 						sprintf(
 							// translators: %1$d is the number of gift articles limit, %2$s is the interval label.
-							__( 'You\'ve reached your limit of %1$d gifted articles %2$s.', 'newspack-plugin' ),
+							_n( 'You\'ve reached your limit of %1$d gifted article %2$s.', 'You\'ve reached your limit of %1$d gifted articles %2$s.', self::get_gifting_limit(), 'newspack-plugin' ),
 							self::get_gifting_limit(),
 							$interval_labels[0]
 						)

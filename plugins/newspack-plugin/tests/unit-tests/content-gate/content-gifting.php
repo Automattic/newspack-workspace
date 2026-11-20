@@ -113,6 +113,23 @@ class Test_Content_Gifting extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The limit-reached message agrees in number with the gifting limit.
+	 */
+	public function test_gift_modal_limit_reached_message_plural() {
+		Content_Gifting::set_gifting_limit( 1 );
+		Content_Gifting::generate_key( $this->post_id );
+		$limit_reached_error = Content_Gifting::generate_key( $this->factory->post->create() );
+		$modal_info          = Content_Gifting::get_gift_modal_info( $limit_reached_error );
+		$this->assertStringContainsString( 'limit of 1 gifted article this', $modal_info );
+
+		Content_Gifting::set_gifting_limit( 2 );
+		Content_Gifting::generate_key( $this->factory->post->create() );
+		$limit_reached_error = Content_Gifting::generate_key( $this->factory->post->create() );
+		$modal_info          = Content_Gifting::get_gift_modal_info( $limit_reached_error );
+		$this->assertStringContainsString( 'limit of 2 gifted articles this', $modal_info );
+	}
+
+	/**
 	 * Test get_key_data().
 	 */
 	public function test_get_key_data() {
