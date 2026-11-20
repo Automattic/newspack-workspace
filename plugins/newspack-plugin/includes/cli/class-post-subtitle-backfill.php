@@ -26,8 +26,7 @@ class Post_Subtitle_Backfill {
 	/**
 	 * Rows read and written per database round trip.
 	 *
-	 * Bounds how much of the result set sits in PHP memory at once: get_subtitle_meta_rows()
-	 * is paginated by this value rather than fetching every row up front.
+	 * Bounds how much of the result set sits in PHP memory at once.
 	 */
 	private const BATCH_SIZE = 200;
 
@@ -212,14 +211,19 @@ class Post_Subtitle_Backfill {
 	 * width of this one function, rather than the width of the whole batch.
 	 *
 	 * @param object $row       A row from get_subtitle_meta_rows(), with `meta_id` and
-	 *                           the `meta_value` that batch read saw.
-	 * @param string $sanitized The sanitizer's output for that `meta_value`.
+	 *                           the raw `meta_value` that batch read saw.
+	 * @param string $sanitized The sanitizer's output for that row's unserialized value.
 	 *
 	 * @return string One of 'changed', 'concurrent-change', or 'failed'.
 	 */
-	private static function write_sanitized_value( $row, string $sanitized ): string {
+	private static function write_sanitized_value( object $row, string $sanitized ): string {
 		$current = \get_metadata_by_mid( 'post', $row->meta_id );
-		if ( false === $current || $current->meta_value !== $row->meta_value ) {
+		// get_metadata_by_mid() runs maybe_unserialize() on its result, but $row->meta_value
+		// is the raw column get_subtitle_meta_rows() read — the same raw-vs-unserialized
+		// mismatch the scan loop above already normalizes for with its own maybe_unserialize()
+		// call, so this comparison needs the same treatment to avoid reporting every
+		// serialized-string row as a concurrent change that never actually happened.
+		if ( false === $current || $current->meta_value !== \maybe_unserialize( $row->meta_value ) ) {
 			return 'concurrent-change';
 		}
 
@@ -230,9 +234,9 @@ class Post_Subtitle_Backfill {
 		// must NOT wp_slash() first.
 		//
 		// This still runs $sanitized through sanitize_meta() a second time — core applies
-		// the registered sanitize_callback to every write, this one included. Verified
-		// harmless: the sanitizer is wp_kses() against a fixed inline allow-list, and
-		// re-sanitizing its own output is idempotent.
+		// the registered sanitize_callback to every write, this one included. Believed
+		// harmless, given wp_kses()'s normalize-then-strip design: it is run against a
+		// fixed inline allow-list, and re-sanitizing its own output should be idempotent.
 		if ( ! \update_metadata_by_mid( 'post', $row->meta_id, $sanitized ) ) {
 			return 'failed';
 		}
