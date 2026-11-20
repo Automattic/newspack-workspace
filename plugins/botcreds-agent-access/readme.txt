@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.3
+Stable tag: 2.4.4-rc.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,42 @@ Scoped, per-agent application passwords for AI agents, MCP clients, and automati
 
 **BotCreds Agent Access** gives your AI agent, MCP client, or automation tool a secure, scoped credential to interact with your site — no code required.
 
-Whether you're connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you a one-click setup wizard that generates a properly scoped WordPress Application Password and logs every action the agent takes.
+Whether you're connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you profile controls that generate a properly scoped WordPress Application Password and logs recognized write activity by default.
+
+**Connecting Claude, Codex, GrokBot or another agent**
+
+This page is the setup reference. Your API is on **your publisher's website**, not wordpress.org or the demo site. Agent Access issues scoped WordPress credentials; it is **not an MCP server** and does not give a chat application HTTP tools. Use an agent with authenticated HTTP tools (for example a CLI agent with a terminal) or a compatible REST/MCP connector. Client capabilities vary; a subscription or model name alone does not establish connector support.
+
+1. An administrator creates a dedicated account through **Users → Add Agent**, then opens that user's profile and clicks **Connect Agent** in Agent Access. Use a separate account per agent.
+2. Select the needed scope and additional permissions, and save. The account's WordPress permissions still apply; a route allowance is not an Administrator role.
+3. Copy the generated connection JSON and setup prompt into the agent's private credential/configuration flow. Never put passwords in public chats, screenshots, source control or support tickets. If a tool would forward credentials to another service, review that connector first.
+4. Start with read-only connection checks. Do not use a content write as a login test.
+
+**Copy/paste setup prompt**
+
+> Connect to the publisher site in the credentials I supply privately. Save the application password in your private credential store, not source code. Use HTTPS HTTP Basic Auth with the WordPress username and application password, never my browser-login password. Do not print the Authorization header or password. First GET the site's WordPress REST users/me endpoint and the supplied connection_info_url. Report the authenticated identity, configured scope, dependencies and any permission blockers. Make no writes until I request them. Do not follow authentication redirects to another host. If authenticated HTTP tools are unavailable, tell me what connector or tool is missing. Do not guess that a successful login grants permission to edit content.
+
+On Agent Access 2.4.4 or later, `GET /wp-json/agent-access/v1/connection` returns information about **only the managed application password used for that request**: scope mode, selected grants, account capabilities, dependencies, approval status, configured rate ceilings and endpoint URLs. It does not return passwords, hashes or other credentials. Browser sessions, manually created passwords and Pro tokens are not supported by this discovery endpoint. Older versions return a missing-route error; authentication can still work without discovery. Use the supplied URL when WordPress is installed in a subdirectory or uses `?rest_route=` URLs.
+
+**Endpoint cookbook**
+
+* Identity: `GET /wp-json/wp/v2/users/me`. A 200 proves authentication, not permission for another operation.
+* Public content: `GET /wp-json/wp/v2/posts?per_page=1`. This may work anonymously, so it is not a login test. Edit-context reads require separate permissions.
+* List/count accounts: with **List users** enabled, `GET /wp-json/wp/v2/users?context=view&per_page=100&page=1`. Read `X-WP-Total` and `X-WP-TotalPages`; paginate to retrieve all matches. This is not permission to create, edit or delete users.
+* Yoast-only: with Yoast active and the SEO scope selected, `GET /wp-json/agent-access/v1/yoast-seo/POST_ID`; requested writes go to that same endpoint, for example `POST {"opengraph-title":"Social title"}`. Regular post writes remain blocked.
+* Co-Authors Plus: with **Assign authors** enabled, first `GET /wp-json/agent-access/v1/authors/POST_ID/available?search=NAME`, then use returned canonical author IDs in a requested `POST {"authors":[ID,...]}` to `/wp-json/agent-access/v1/authors/POST_ID`. These are Co-Authors Plus IDs, not interchangeable WordPress user IDs. Requires already-editable content within the credential's scope. Assign authors last: handing ownership away can remove editing access.
+
+**Connection troubleshooting**
+
+* **401 / anonymous identity:** verify exact site, username and application password; use HTTPS. Check whether a proxy/firewall strips Authorization or redirects the request. Never send credentials to a redirected host automatically.
+* **403 after users/me succeeds:** the password works. Record the JSON error code and route. `agent_scope_violation` means the requested write is outside the credential scope; `agent_credential_pending` needs administrator approval. Native WordPress permission errors may require account capabilities or ownership, not broader route patterns. Do not rotate a valid password merely because a write returns 403.
+* **403 on connection discovery:** use the plugin-managed BotCreds password, not a browser cookie or a manually created password. This endpoint describes access; it cannot grant it.
+* **404 / rest_no_route:** confirm plugin version, route, method and required dependency. Check the REST index on the publisher site. Do not assume a missing discovery endpoint means the credentials are invalid.
+* **429:** respect any Retry-After information and back off; ask an administrator to review the rate tier if necessary. Do not retry in a tight loop.
+* **HTML instead of JSON:** a login page, hosting firewall or security plugin may be answering before WordPress. Record the status and sanitized response, not credentials.
+* **Working reads but no activity log:** reads are not logged by default. Managed writes appear in the log; manually created replacement passwords are not automatically managed. If a password is lost, revoke and regenerate it through Agent Access for the same user, then update the agent's private store.
+
+Scope changes normally take effect on the next request with the same password; regeneration is not required. Existing prerelease SEO-only credentials may need an administrator to re-save the current scope. For support, provide plugin version, client/tool, sanitized route and method, HTTP status, JSON error code, and whether users/me succeeded. Never provide the password or Authorization header.
 
 **Why BotCreds?**
 
@@ -22,7 +57,7 @@ Most AI agent setups require digging into wp-config, creating users manually, or
 
 **Features:**
 
-* One-click connection setup under Settings → BotCreds
+* Connection setup on user profiles; dashboard under Tools → Agent Access
 * Generates a secure, scoped Application Password for your AI agent or MCP client
 * Works with any agent that supports the WordPress REST API: Claude, ChatGPT, OpenClaw, n8n, Zapier, custom MCP servers, and more
 * User-level and site-level logging of agent actions — see exactly what your agent did and when
@@ -34,17 +69,17 @@ Most AI agent setups require digging into wp-config, creating users manually, or
 
 **Compatibility:**
 
-* Works with the Model Context Protocol (MCP)
-* Compatible with all major AI agent frameworks
+* Works with compatible REST/MCP connectors; does not include an MCP server
+* Requires a client with authenticated HTTP tools or a compatible connector
 * No third-party services or accounts required — everything stays on your site
 
 == Installation ==
 
 1. Upload the `botcreds-agent-access` folder to `/wp-content/plugins/`.
 2. Activate the plugin through the "Plugins" menu in WordPress.
-3. Go to Settings → BotCreds.
-4. Click "Connect Agent" to generate your credentials.
-5. Copy the credentials and paste them into your agent's config.
+3. Create a dedicated account under Users → Add Agent, then open its profile.
+4. In the Agent Access section, click "Connect Agent", choose the needed permissions and save.
+5. Privately copy the generated setup prompt and credentials to your agent. View connections and activity under Tools → Agent Access.
 
 == Frequently Asked Questions ==
 
@@ -102,6 +137,11 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.4-rc.1 =
+* New: Read-only discovery of the currently authenticated managed credential at agent-access/v1/connection.
+* Improved: Shared agent setup guide, safe connection prompt, endpoint recipes and permission troubleshooting.
+
 
 = 2.4.3 =
 * New: Administrator-approved List users permission for an individual managed credential. Lists, searches and counts site accounts through the native users REST endpoint without granting user writes.

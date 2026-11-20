@@ -236,7 +236,7 @@
 		if (!card) return;
 
 		var json = JSON.stringify(info, null, 4);
-		var prompt = 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:\n' + json;
+		var prompt = 'Privately save these WordPress Application Password credentials for the specified site. Use HTTPS HTTP Basic Auth. First GET current_user_url and connection_info_url; report identity, scopes and blockers without exposing secrets. Make no writes until I request them. If your client cannot make authenticated HTTP requests, explain which connector or tool is missing:\n' + json;
 
 		card.innerHTML =
 			'<p><span class="agent-access-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
@@ -385,7 +385,7 @@
 		if (!card) return;
 
 		var json   = JSON.stringify(info, null, 4);
-		var prompt = 'Save these WordPress Application Password credentials and use them to connect to this site via the WordPress REST API:\n' + json;
+		var prompt = 'Privately save these WordPress Application Password credentials for the specified site. Use HTTPS HTTP Basic Auth. First GET current_user_url and connection_info_url; report identity, scopes and blockers without exposing secrets. Make no writes until I request them. If your client cannot make authenticated HTTP requests, explain which connector or tool is missing:\n' + json;
 		var uniqueId = 'agent-access-admin-json-' + userId;
 
 		card.innerHTML =

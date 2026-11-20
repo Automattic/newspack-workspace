@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.4.3
+ * Version:     2.4.4-rc.1
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.4.3' );
+define( 'AGENT_ACCESS_VERSION', '2.4.4-rc.1' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -42,6 +42,8 @@ require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-rate-limiter
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-approval-queue.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-rollback.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-content-policy.php';
+require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-connection.php';
+Agent_Access_Connection::init();
 
 /**
  * Initialize the plugin.
@@ -106,12 +108,12 @@ function agent_access_plugins_api( $res, $action, $args ) {
 	$res->sections = array(
 		'description' =>
 			'<p><strong>BotCreds Agent Access</strong> gives your AI agent, MCP client, or automation tool a secure, scoped credential to interact with your site — no code required.</p>' .
-			'<p>Whether you\'re connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you a one-click setup wizard that generates a properly scoped WordPress Application Password and logs every action the agent takes.</p>' .
+			'<p>Whether you\'re connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you profile controls that generate a properly scoped WordPress Application Password and logs recognized write activity by default.</p>' .
 			'<h3>Why BotCreds?</h3>' .
 			'<p>Most AI agent setups require digging into wp-config, creating users manually, or sharing admin credentials. BotCreds removes all of that. Install, click, copy, paste — your agent is connected in under a minute.</p>' .
 			'<h3>Features</h3>' .
 			'<ul>' .
-				'<li>One-click connection setup under <strong>Settings → BotCreds</strong></li>' .
+				'<li>Connection setup on user profiles; dashboard under <strong>Tools → Agent Access</strong></li>' .
 				'<li>Generates a secure, scoped Application Password for your AI agent or MCP client</li>' .
 				'<li>Works with any agent that supports the WordPress REST API: Claude, ChatGPT, OpenClaw, n8n, Zapier, custom MCP servers, and more</li>' .
 				'<li>User-level and site-level logging of agent actions — see exactly what your agent did and when</li>' .
@@ -123,8 +125,8 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'</ul>' .
 			'<h3>Compatibility</h3>' .
 			'<ul>' .
-				'<li>Works with the Model Context Protocol (MCP)</li>' .
-				'<li>Compatible with all major AI agent frameworks</li>' .
+				'<li>Works with compatible REST/MCP connectors; does not include an MCP server</li>' .
+				'<li>Requires authenticated HTTP tools or a compatible connector</li>' .
 				'<li>No third-party services or accounts required — everything stays on your site</li>' .
 			'</ul>',
 
@@ -132,12 +134,15 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'<ol>' .
 				'<li>Upload the <code>botcreds-agent-access</code> folder to <code>/wp-content/plugins/</code>.</li>' .
 				'<li>Activate the plugin through the <strong>Plugins</strong> menu in WordPress.</li>' .
-				'<li>Go to <strong>Settings → BotCreds</strong>.</li>' .
-				'<li>Click <strong>Connect Agent</strong> to generate your credentials.</li>' .
+				'<li>Create a dedicated account under <strong>Users → Add Agent</strong>, then open its profile.</li>' .
+				'<li>In the Agent Access section, click <strong>Connect Agent</strong>, select the needed permissions and save.</li>' .
 				'<li>Copy the credentials and paste them into your agent\'s config.</li>' .
 			'</ol>',
 
 		'faq' =>
+			'<h3>How should an agent connect?</h3>' .
+			'<p>Use the private setup prompt from Agent Access. First authenticate with GET users/me, then GET agent-access/v1/connection to inspect this managed credential. Make no content writes as a login test. A 403 after a successful identity check is a permission problem, not a reason to rotate a working password.</p>' .
+			'<p>Agent Access is not an MCP server. Your client needs authenticated HTTP tools or a compatible connector. The complete setup guide and endpoint cookbook are on <a href="https://wordpress.org/plugins/botcreds-agent-access/">the plugin page</a>.</p>' .
 			'<h3>What is an Application Password?</h3>' .
 			'<p>Application Passwords are a built-in WordPress feature (since 5.6) that let external tools authenticate against the REST API without using your main account password. They can be revoked at any time without affecting your login.</p>' .
 
@@ -151,7 +156,7 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'<p>The plain-text password is shown once when created. WordPress stores only a hash, so the password cannot be retrieved later. If you lose it, revoke the old one and create a new connection.</p>' .
 
 			'<h3>Can I have multiple agent connections?</h3>' .
-			'<p>BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.</p>',
+			'<p>BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create a separate Agent user for each agent. Reads do not appear in the default write-only activity log.</p>',
 
 		'changelog' =>
 			'<h4>2.2.2</h4>' .
