@@ -165,6 +165,49 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A new reader gets the Subscriber role whatever the site's New User Default Role is.
+	 *
+	 * Reader sign-up must not depend on the New User Default Role, which a site may
+	 * set for the staff accounts it adds (NPPM-3796). On sites with WooCommerce,
+	 * readers get Customer instead.
+	 *
+	 * The plugin's test environment has no WooCommerce, so this exercises the fallback.
+	 */
+	public function test_register_new_reader_gets_subscriber_role_whatever_the_default_role() {
+		$this->assertFalse( function_exists( 'wc_create_new_customer' ), 'Test precondition: the non-WooCommerce registration path must be the one under test.' );
+		update_option( 'default_role', 'author' );
+
+		$user_id = Reader_Activation::register_reader( 'default-role-author@example.test', 'Default Role Reader', false );
+
+		$this->assertIsInt( $user_id );
+		$this->assertSame( [ 'subscriber' ], get_userdata( $user_id )->roles, 'A new reader must get the Subscriber role, not the New User Default Role.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * Subscriber applies only when no role was set: a role chosen through the
+	 * `newspack_register_reader_user_data` filter is kept.
+	 */
+	public function test_register_new_reader_keeps_role_set_by_filter() {
+		$this->assertFalse( function_exists( 'wc_create_new_customer' ), 'Test precondition: the non-WooCommerce registration path must be the one under test.' );
+		$set_role = function ( $user_data ) {
+			$user_data['role'] = 'contributor';
+			return $user_data;
+		};
+		add_filter( 'newspack_register_reader_user_data', $set_role );
+
+		$user_id = Reader_Activation::register_reader( 'filtered-role@example.test', 'Filtered Role Reader', false );
+
+		remove_filter( 'newspack_register_reader_user_data', $set_role );
+
+		$this->assertIsInt( $user_id );
+		$this->assertSame( [ 'contributor' ], get_userdata( $user_id )->roles, 'A role set through the user data filter must not be replaced.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
 	 * Test that verifying a reader register the proper meta.
 	 */
 	public function test_verify_reader_email() {
