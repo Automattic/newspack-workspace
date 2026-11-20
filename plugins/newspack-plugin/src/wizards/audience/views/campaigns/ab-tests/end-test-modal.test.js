@@ -24,10 +24,13 @@ const test = {
 	},
 };
 
-const stats = ( { label = 'reliable', young = false } = {} ) => ( {
+const stats = ( { label = 'reliable', young = false, rates = { a: 1.9, b: 2.69 }, confidence = 99.1, readers } = {} ) => ( {
 	source: { state: 'ok' },
-	variants: { a: { rate: 1.9, lift: null }, b: { rate: 2.69, lift: 41.6 } },
-	comparisons: { b: { confidence: 99.1, label } },
+	variants: {
+		a: { rate: rates.a, lift: null, readers },
+		b: { rate: rates.b, lift: ( ( rates.b - rates.a ) / rates.a ) * 100, readers },
+	},
+	comparisons: { b: { confidence, label } },
 	flags: { young_test: young },
 } );
 
@@ -55,6 +58,43 @@ describe( 'EndTestModal', () => {
 			"Donate banner: one-time ask. 1.90% converted. There's no reliable winner yet, so keeping the original is the safer choice."
 		);
 		expect( descriptionOf( option( 'Keep B' ) ) ).toBe( 'Donate banner: monthly ask. 2.69% converted.' );
+	} );
+
+	it( 'names an Early signal on the leading version while still recommending A', () => {
+		render(
+			<EndTestModal
+				test={ test }
+				stats={ stats( { label: 'directional', confidence: 88.2, readers: 1000 } ) }
+				onEnded={ jest.fn() }
+				onClose={ jest.fn() }
+			/>
+		);
+		expect( option( 'Keep A (Recommended)' ) ).toBeChecked();
+		expect( descriptionOf( option( 'Keep B' ) ) ).toBe(
+			'Donate banner: monthly ask. 2.69% converted. Early signal: 88.2% confident B is better than A. A reliable winner needs 95% confidence.'
+		);
+		expect( descriptionOf( option( 'Keep A (Recommended)' ) ) ).not.toMatch( /Early signal/ );
+	} );
+
+	it( 'puts the Early signal on A, after the reason, when A leads', () => {
+		render(
+			<EndTestModal
+				test={ test }
+				stats={ stats( { label: 'directional', confidence: 90, readers: 1000, rates: { a: 2.69, b: 1.9 } } ) }
+				onEnded={ jest.fn() }
+				onClose={ jest.fn() }
+			/>
+		);
+		expect( descriptionOf( option( 'Keep A (Recommended)' ) ) ).toBe(
+			"Donate banner: one-time ask. 2.69% converted. There's no reliable winner yet, so keeping the original is the safer choice. Early signal: 90.0% confident A is better than B. A reliable winner needs 95% confidence."
+		);
+	} );
+
+	it( 'says B didn’t beat A, not that A won, when B is reliably worse', () => {
+		render( <EndTestModal test={ test } stats={ stats( { rates: { a: 2.69, b: 1.9 } } ) } onEnded={ jest.fn() } onClose={ jest.fn() } /> );
+		expect( descriptionOf( option( 'Keep A (Recommended)' ) ) ).toBe(
+			"Donate banner: one-time ask. B didn't beat A: 2.69% converted, against 1.90% for B. Keeping the original is the safer choice."
+		);
 	} );
 
 	it( 'describes each version by title alone when there are no results', () => {

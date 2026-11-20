@@ -267,7 +267,7 @@ final class Newspack_Popups_AB_Dashboard {
 			'source'      => $source,
 			'window'      => $window,
 			'variants'    => $variants,
-			'comparisons' => self::compare( $variants ),
+			'comparisons' => self::compare( $variants, $ended ? null : $window ),
 			'flags'       => self::compute_flags( $test, $variants ),
 		];
 	}
@@ -431,7 +431,7 @@ final class Newspack_Popups_AB_Dashboard {
 		$variants = self::merge_counts( $test['variants'], $cached['counts']['variants'] ?? [] );
 		return [
 			'variants'    => $variants,
-			'comparisons' => self::compare( $variants ),
+			'comparisons' => self::compare( $variants, self::get_window( $test ) ),
 			'flags'       => self::compute_flags( $test, $variants ),
 		];
 	}
@@ -504,10 +504,13 @@ final class Newspack_Popups_AB_Dashboard {
 	/**
 	 * Each challenger against the control.
 	 *
-	 * @param array $variants Merged variants.
-	 * @return array Per challenger letter: `confidence`, `label`. Empty without a control.
+	 * @param array      $variants Merged variants.
+	 * @param array|null $window   The counted window of a running test, for the
+	 *                             estimate's pace; null for an ended test.
+	 * @return array Per challenger letter: `confidence`, `label`, and `estimate`
+	 *               (see estimate()). Empty without a control.
 	 */
-	private static function compare( $variants ) {
+	private static function compare( $variants, $window = null ) {
 		if ( ! isset( $variants['a'] ) ) {
 			return [];
 		}
@@ -521,9 +524,40 @@ final class Newspack_Popups_AB_Dashboard {
 			$comparisons[ $letter ] = [
 				'confidence' => $confidence,
 				'label'      => Newspack_Popups_AB_Stats::label( $confidence ),
+				'estimate'   => null === $window ? null : self::estimate( $control, $variant, $window ),
 			];
 		}
 		return $comparisons;
+	}
+
+	/**
+	 * How much longer a running comparison needs to reach each label, in
+	 * readers across both arms and in days at the pair's pace so far.
+	 *
+	 * The pace divides by every day in the window, including the newest ones
+	 * whose counts are still settling, which lengthens the days. Distinct
+	 * readers grow more slowly than days, since returning readers count once,
+	 * which shortens them. Which wins depends on the site, so the days are a
+	 * rough guide in either direction.
+	 *
+	 * @param array $control    Merged control variant.
+	 * @param array $challenger Merged challenger variant.
+	 * @param array $window     `[ 'start', 'end' ]` as Y-m-d.
+	 * @return array `directional` and `reliable`, each `[ 'readers', 'days' ]`
+	 *               or null when it can't be estimated or is already reached.
+	 */
+	private static function estimate( $control, $challenger, $window ) {
+		$days_counted = (int) round( ( strtotime( $window['end'] ) - strtotime( $window['start'] ) ) / DAY_IN_SECONDS ) + 1;
+		$pace         = ( $control['readers'] + $challenger['readers'] ) / max( 1, $days_counted );
+		$estimate     = [];
+		foreach ( [ 'directional', 'reliable' ] as $label ) {
+			$readers            = Newspack_Popups_AB_Stats::readers_to( $label, $control['readers'], $control['conversions'], $challenger['readers'], $challenger['conversions'] );
+			$estimate[ $label ] = null === $readers ? null : [
+				'readers' => $readers,
+				'days'    => $pace > 0 ? (int) max( 1, ceil( $readers / $pace ) ) : null,
+			];
+		}
+		return $estimate;
 	}
 
 	/**

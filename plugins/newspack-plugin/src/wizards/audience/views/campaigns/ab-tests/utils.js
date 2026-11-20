@@ -5,6 +5,11 @@ import { __, _n, _x, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { dateI18n, getSettings } from '@wordpress/date';
 
+/**
+ * Internal dependencies
+ */
+import { formatCount } from '../../../../../../packages/components/src/breadcrumbs/format-count';
+
 export const DASH = '—';
 
 /**
@@ -445,6 +450,178 @@ const getBars = ( letters, rates ) => {
 };
 
 /**
+ * Beyond this many days, an estimate says the test may never get there
+ * rather than giving a figure nobody should plan around.
+ */
+const MAX_ESTIMATE_DAYS = 30;
+
+/**
+ * The comparison behind a pair of versions: the challenger's against A.
+ *
+ * @param {string}  leader      The version ahead.
+ * @param {string}  other       The version it is set against.
+ * @param {?Object} comparisons Letter => comparison, from the stats route.
+ * @return {?Object} The comparison, or null when the pair doesn't include A.
+ */
+const getPairComparison = ( leader, other, comparisons ) => {
+	if ( leader !== 'a' && other !== 'a' ) {
+		return null;
+	}
+	return comparisons?.[ leader === 'a' ? other : leader ] || null;
+};
+
+/**
+ * The version ahead of a running test with no reliable winner, the version a
+ * card sets against it, and their comparison. Null when there is no leader to
+ * name: no results, a single counted version, or a tie.
+ *
+ * @param {Object}  test  The test.
+ * @param {?Object} stats Its stats, or null.
+ * @return {?{ leader: string, other: string, comparison: ?Object }} The pair.
+ */
+export const getLeadingPair = ( test, stats ) => {
+	if ( ! stats || stats.source?.state === 'unavailable' ) {
+		return null;
+	}
+	const counted = Object.keys( test.variants || {} )
+		.sort()
+		.filter( letter => ( stats.variants?.[ letter ]?.readers ?? 0 ) > 0 && null !== ( stats.variants[ letter ].rate ?? null ) );
+	if ( counted.length < 2 ) {
+		return null;
+	}
+	const rates = Object.fromEntries( counted.map( letter => [ letter, Number( stats.variants[ letter ].rate ) ] ) );
+	const leader = counted.reduce( ( top, letter ) => ( rates[ letter ] > rates[ top ] ? letter : top ) );
+	const other = getCounterpart( leader, counted, rates );
+	if ( ! other || rates[ leader ] === rates[ other ] ) {
+		return null;
+	}
+	return { leader, other, comparison: getPairComparison( leader, other, stats.comparisons ) };
+};
+
+/**
+ * The sentence naming an Early signal, such as "Early signal: 88.2% confident
+ * B is better than A. A reliable result needs 95% confidence."
+ *
+ * @param {Object}  pair   From getLeadingPair().
+ * @param {Object}  copy   The list route's `labels` and `thresholds`.
+ * @param {boolean} winner Say "a reliable winner" rather than "a reliable result".
+ * @return {?string} The sentence, or null below an Early signal.
+ */
+export const getEarlySignalText = ( pair, copy = {}, winner = false ) => {
+	if ( pair?.comparison?.label !== 'directional' || null === ( pair.comparison.confidence ?? null ) ) {
+		return null;
+	}
+	const label = copy.labels?.directional || __( 'Early signal', 'newspack-plugin' );
+	const needed = formatPercent( copy.thresholds?.reliable ?? 95, 0 );
+	const args = [ label, formatPercent( pair.comparison.confidence, 1 ), pair.leader.toUpperCase(), pair.other.toUpperCase(), needed ];
+	return winner
+		? sprintf(
+				// Translators: %1$s is a confidence label such as "Early signal", %2$s a percentage such as "88.2%", %3$s and %4$s version letters, %5$s the percentage a reliable result needs.
+				__( '%1$s: %2$s confident %3$s is better than %4$s. A reliable winner needs %5$s confidence.', 'newspack-plugin' ),
+				...args
+		  )
+		: sprintf(
+				// Translators: %1$s is a confidence label such as "Early signal", %2$s a percentage such as "88.2%", %3$s and %4$s version letters, %5$s the percentage a reliable result needs.
+				__( '%1$s: %2$s confident %3$s is better than %4$s. A reliable result needs %5$s confidence.', 'newspack-plugin' ),
+				...args
+		  );
+};
+
+/**
+ * A reader count rounded to two significant figures, since an estimate's
+ * precision is no finer than that.
+ *
+ * @param {number} readers Readers.
+ * @return {number} Rounded.
+ */
+const roundReaders = readers => {
+	if ( readers < 100 ) {
+		return readers;
+	}
+	const step = 10 ** ( Math.floor( Math.log10( readers ) ) - 1 );
+	return Math.round( readers / step ) * step;
+};
+
+/**
+ * @param {number} count Readers, or views when the source counts events.
+ * @param {string} unit  'readers' or 'events'.
+ * @return {string} Such as "2,900 more readers".
+ */
+const moreCount = ( count, unit ) => {
+	const rounded = roundReaders( count );
+	if ( unit === 'events' ) {
+		return sprintf(
+			// Translators: %s is a number of views.
+			_n( '%s more view', '%s more views', rounded, 'newspack-plugin' ),
+			formatCount( rounded )
+		);
+	}
+	return sprintf(
+		// Translators: %s is a number of readers.
+		_n( '%s more reader', '%s more readers', rounded, 'newspack-plugin' ),
+		formatCount( rounded )
+	);
+};
+
+/**
+ * @param {number} days Days.
+ * @return {string} Such as "9 days".
+ */
+const dayCount = days =>
+	sprintf(
+		// Translators: %d is a number of days.
+		_n( '%d day', '%d days', days, 'newspack-plugin' ),
+		days
+	);
+
+/**
+ * How much longer a test needs, from a comparison's server estimate: readers
+ * and days to a reliable result, and to an Early signal while it has none.
+ *
+ * @param {?Object} estimate A comparison's `estimate`.
+ * @param {string}  unit     What the source counted: 'readers' or 'events'.
+ * @return {?string} The sentence, or null without an estimate to give.
+ */
+export const getEstimateText = ( estimate, unit = 'readers' ) => {
+	const { directional, reliable } = estimate || {};
+	if ( ! reliable?.days || ( directional && ! directional.days ) ) {
+		return null;
+	}
+	const early = directional && directional.days <= MAX_ESTIMATE_DAYS ? directional : null;
+	if ( reliable.days > MAX_ESTIMATE_DAYS ) {
+		const lowTraffic = __( 'This test may not reach a reliable result at its current traffic.', 'newspack-plugin' );
+		if ( ! early ) {
+			return lowTraffic;
+		}
+		return `${ sprintf(
+			// Translators: %1$s is a number of readers or views such as "1,000 more readers", %2$s a number of days such as "3 days". "Early signal" is the name of a confidence label; translate it as that label is translated.
+			__( 'About %1$s, or about %2$s at the current pace, to reach an Early signal.', 'newspack-plugin' ),
+			moreCount( early.readers, unit ),
+			dayCount( early.days )
+		) } ${ lowTraffic }`;
+	}
+	if ( early ) {
+		return sprintf(
+			// Translators: %1$s and %3$s are numbers of readers or views such as "1,000 more readers", %2$s and %4$s numbers of days such as "3 days". "Early signal" is the name of a confidence label; translate it as that label is translated.
+			__(
+				'About %1$s, or about %2$s at the current pace, to reach an Early signal, and about %3$s, or about %4$s, to reach a reliable result.',
+				'newspack-plugin'
+			),
+			moreCount( early.readers, unit ),
+			dayCount( early.days ),
+			moreCount( reliable.readers, unit ),
+			dayCount( reliable.days )
+		);
+	}
+	return sprintf(
+		// Translators: %1$s is a number of readers or views such as "2,900 more readers", %2$s a number of days such as "9 days".
+		__( 'About %1$s, or about %2$s at the current pace, to reach a reliable result.', 'newspack-plugin' ),
+		moreCount( reliable.readers, unit ),
+		dayCount( reliable.days )
+	);
+};
+
+/**
  * What a card's Result section says: a one-line verdict, an optional detail
  * and the bars. Only a Reliable result past the young-test age names a winner,
  * so a publisher is never nudged to end a test early.
@@ -452,9 +629,10 @@ const getBars = ( letters, rates ) => {
  * @param {Object}  test   The test.
  * @param {string}  status From getTestStatus().
  * @param {?Object} stats  Its stats, or null when they are not loaded or not available.
+ * @param {Object}  copy   The list route's `labels` and `thresholds`.
  * @return {?{ answer: string, detail: ?string, bars: ?Object }} Null when the card shows a notice or nothing yet.
  */
-export const getVerdict = ( test, status, stats ) => {
+export const getVerdict = ( test, status, stats, copy = {} ) => {
 	const letters = Object.keys( test.variants || {} ).sort();
 	if ( status === 'draft' ) {
 		const unpublished = letters.filter( letter => test.variants[ letter ].status !== 'publish' ).map( letter => letter.toUpperCase() );
@@ -521,6 +699,31 @@ export const getVerdict = ( test, status, stats ) => {
 	const winner = getReliableWinner( test, usable );
 	if ( winner && counted.includes( winner ) ) {
 		const other = getCounterpart( winner, counted, rates );
+		if ( usable.flags?.young_test === false && winner === 'a' ) {
+			// A reliable result for A is the challengers falling short, not a
+			// new version to switch to, so it isn't called a win.
+			const challengers = counted.filter( letter => letter !== 'a' );
+			return {
+				answer:
+					challengers.length === 1
+						? sprintf(
+								// Translators: %1$s is the challenger's letter, %2$s its conversion rate, %3$s A's rate.
+								__( "%1$s didn't beat A. %1$s converted %2$s of readers, against %3$s for A.", 'newspack-plugin' ),
+								other.toUpperCase(),
+								formatRate( rates[ other ] ),
+								formatRate( rates.a )
+						  )
+						: sprintf(
+								// Translators: %1$s is the best challenger's letter, %2$s its conversion rate, %3$s A's rate.
+								__( 'No version beat A. The closest, %1$s, converted %2$s of readers, against %3$s for A.', 'newspack-plugin' ),
+								other.toUpperCase(),
+								formatRate( rates[ other ] ),
+								formatRate( rates.a )
+						  ),
+				detail: null,
+				bars,
+			};
+		}
 		if ( usable.flags?.young_test === false ) {
 			return {
 				answer: sprintf(
@@ -560,10 +763,20 @@ export const getVerdict = ( test, status, stats ) => {
 
 	const leader = counted.reduce( ( top, letter ) => ( rates[ letter ] > rates[ top ] ? letter : top ) );
 	const other = getCounterpart( leader, counted, rates );
-	const detail = usable.flags?.high_anonymous
-		? __( 'More readers are needed. Some may have seen both versions on different devices.', 'newspack-plugin' )
-		: __( 'More readers are needed.', 'newspack-plugin' );
-	if ( rates[ leader ] === rates[ other ] ) {
+	const comparison = getPairComparison( leader, other, usable.comparisons );
+	// Rates that read as even name no leader, so nothing is said to be ahead.
+	const even = rates[ leader ] === rates[ other ];
+	const detail = [
+		! even && getEarlySignalText( { leader, other, comparison }, copy ),
+		( ! even && getEstimateText( comparison?.estimate, usable.source?.unit ) ) ||
+			( usable.source?.unit === 'events'
+				? __( 'More views are needed.', 'newspack-plugin' )
+				: __( 'More readers are needed.', 'newspack-plugin' ) ),
+		usable.flags?.high_anonymous ? __( 'Some readers may have seen both versions on different devices.', 'newspack-plugin' ) : null,
+	]
+		.filter( Boolean )
+		.join( ' ' );
+	if ( even ) {
 		const [ first, second ] = [ leader, other ].sort();
 		return {
 			answer: sprintf(

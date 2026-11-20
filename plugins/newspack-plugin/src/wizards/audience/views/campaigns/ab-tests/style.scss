@@ -244,6 +244,15 @@
 				width: 32%;
 			}
 
+			// A header is a button, which keeps to one line and a fixed height;
+			// at the minimum width a long one would run into the next column.
+			thead .dataviews-view-table-header-button {
+				height: auto;
+				min-height: wp-vars.$button-size-compact;
+				white-space: normal;
+				text-align: inherit;
+			}
+
 			tbody td .dataviews-view-table__cell-content-wrapper {
 				align-items: flex-start;
 				min-height: var(--wpds-typography-line-height-sm, #{wp-vars.$font-line-height-small});

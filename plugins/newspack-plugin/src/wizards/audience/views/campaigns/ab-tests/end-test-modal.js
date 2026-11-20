@@ -12,7 +12,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import Modal from '../../../../../../packages/components/src/modal';
-import { REST_BASE, canEndTest, formatRate, getRecommendation } from './utils';
+import { REST_BASE, canEndTest, formatRate, getEarlySignalText, getLeadingPair, getRecommendation } from './utils';
 
 /**
  * What an option says about its version: the prompt's title, then its rate,
@@ -23,19 +23,45 @@ import { REST_BASE, canEndTest, formatRate, getRecommendation } from './utils';
  * @param {Object}  props.test           The test.
  * @param {?Object} props.stats          Its stats, or null.
  * @param {Object}  props.recommendation From getRecommendation().
+ * @param {?string} props.earlySignal    The Early signal sentence, on the leading version only.
  * @return {string} Description.
  */
-const describeOption = ( { letter, test, stats, recommendation } ) => {
+const describeOption = ( { letter, test, stats, recommendation, earlySignal } ) => {
 	const title = decodeEntities( test.variants[ letter ].title ) || __( '(no title)', 'newspack-plugin' );
 	const row = stats?.source?.state !== 'unavailable' ? stats?.variants?.[ letter ] : null;
 	const rate = row && row.rate !== null && row.rate !== undefined ? formatRate( row.rate ) : null;
 	const parts = [];
-	if ( recommendation.letter === letter && recommendation.winner ) {
-		// The runner-up: A against a winning challenger, or the best challenger
-		// against a winning A.
-		const others = Object.keys( test.variants ).filter( other => other !== letter && stats.variants?.[ other ] );
-		const other =
-			letter === 'a' ? others.reduce( ( top, l ) => ( stats.variants[ l ].rate > stats.variants[ top ].rate ? l : top ), others[ 0 ] ) : 'a';
+	if ( recommendation.letter === letter && recommendation.winner && letter === 'a' ) {
+		// A reliable result for A is the challengers falling short, so A is
+		// the original kept, not a winner.
+		const others = Object.keys( test.variants ).filter( other => other !== 'a' && stats.variants?.[ other ] );
+		const other = others.reduce( ( top, l ) => ( stats.variants[ l ].rate > stats.variants[ top ].rate ? l : top ), others[ 0 ] );
+		parts.push(
+			others.length === 1
+				? sprintf(
+						// Translators: %1$s is the challenger's letter, %2$s A's conversion rate, %3$s the challenger's rate.
+						__(
+							"%1$s didn't beat A: %2$s converted, against %3$s for %1$s. Keeping the original is the safer choice.",
+							'newspack-plugin'
+						),
+						other.toUpperCase(),
+						rate,
+						formatRate( stats.variants[ other ].rate )
+				  )
+				: sprintf(
+						// Translators: %1$s is A's conversion rate, %2$s the closest version's rate, %3$s its letter.
+						__(
+							'No version beat A: %1$s converted, against %2$s for %3$s, the closest. Keeping the original is the safer choice.',
+							'newspack-plugin'
+						),
+						rate,
+						formatRate( stats.variants[ other ].rate ),
+						other.toUpperCase()
+				  )
+		);
+	} else if ( recommendation.letter === letter && recommendation.winner ) {
+		// A winning challenger is set against A.
+		const other = 'a';
 		parts.push(
 			sprintf(
 				// Translators: %1$s is a conversion rate such as "2.69%", %2$s another, %3$s a version letter such as "A".
@@ -59,6 +85,9 @@ const describeOption = ( { letter, test, stats, recommendation } ) => {
 		if ( recommendation.letter === letter && rate ) {
 			parts.push( __( "There's no reliable winner yet, so keeping the original is the safer choice.", 'newspack-plugin' ) );
 		}
+		if ( earlySignal ) {
+			parts.push( earlySignal );
+		}
 	}
 	if ( parts.length === 0 ) {
 		return title;
@@ -75,9 +104,13 @@ const describeOption = ( { letter, test, stats, recommendation } ) => {
  * @param {?Object}  props.stats   Its stats, or null while they are loading or missing.
  * @param {Function} props.onEnded Called with the ended test the route returns.
  * @param {Function} props.onClose Called on Cancel or close.
+ * @param {Object}   props.copy    The list route's `labels` and `thresholds`.
  */
-const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
+const EndTestModal = ( { test, stats, onEnded, onClose, copy = {} } ) => {
 	const recommendation = getRecommendation( test, stats );
+	// Below a reliable winner, the version ahead says how sure the lead is.
+	const lead = recommendation.winner ? null : getLeadingPair( test, stats );
+	const earlySignal = lead ? getEarlySignalText( lead, copy, true ) : null;
 	// The selection follows the recommendation, which can change as the card's
 	// results arrive, until the user picks a version.
 	const [ picked, setPicked ] = useState( null );
@@ -182,7 +215,13 @@ const EndTestModal = ( { test, stats, onEnded, onClose } ) => {
 												__( 'Keep %s', 'newspack-plugin' ),
 												letter.toUpperCase()
 										  ),
-								description: describeOption( { letter, test, stats, recommendation } ),
+								description: describeOption( {
+									letter,
+									test,
+									stats,
+									recommendation,
+									earlySignal: lead?.leader === letter ? earlySignal : null,
+								} ),
 							} ) ) }
 						/>
 					) }
