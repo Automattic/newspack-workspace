@@ -38,6 +38,10 @@ final class Recaptcha {
 
 		// Verify reCAPTCHA when adding new payment method.
 		\add_filter( 'woocommerce_add_payment_method_form_is_valid', [ __CLASS__, 'verify_recaptcha_on_add_payment_method' ] );
+
+		// Protect WooCommerce's My Account registration form.
+		\add_action( 'woocommerce_register_form', [ __CLASS__, 'render_woocommerce_registration_fields' ] );
+		\add_filter( 'woocommerce_process_registration_errors', [ __CLASS__, 'verify_woocommerce_registration' ] );
 	}
 
 	/**
@@ -607,6 +611,54 @@ final class Recaptcha {
 			return false;
 		}
 		return $is_valid;
+	}
+
+	/**
+	 * Mark WooCommerce's registration form for the reCAPTCHA client and show Google's notice.
+	 *
+	 * Runs inside the form. The client attaches to forms with a
+	 * data-newspack-recaptcha attribute, whose value is the v3 action name.
+	 * WooCommerce's own form tag has a hook for attributes, but the copy that
+	 * Teams for WooCommerce Memberships shows on its join-team page does not;
+	 * both fire this action. The client's stylesheet hides Google's badge, which
+	 * Google allows only when this notice is shown instead.
+	 */
+	public static function render_woocommerce_registration_fields() {
+		if ( ! self::can_use_captcha() ) {
+			return;
+		}
+		\wp_print_inline_script_tag( "document.currentScript.closest( 'form' ).setAttribute( 'data-newspack-recaptcha', 'woocommerce_register' );" );
+		?>
+		<p class="newspack-recaptcha-terms"><?php echo \wp_kses_post( self::get_terms_text() ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Refuse a My Account registration without a valid reCAPTCHA response.
+	 *
+	 * WooCommerce's handler creates an account for any submission that carries
+	 * the form's nonce, whatever the "registration open" setting and Reader
+	 * Activation say, so every submission is checked while reCAPTCHA is on. The
+	 * handler applies this filter before it creates the account or sends its
+	 * email. Newspack's own sign-up and checkout create customers through
+	 * wc_create_new_customer(), which doesn't apply it, so they keep their own
+	 * checks.
+	 *
+	 * @param \WP_Error $errors Errors WooCommerce and other plugins found in the submission.
+	 *
+	 * @return \WP_Error The same errors, plus the reCAPTCHA error if verification failed.
+	 */
+	public static function verify_woocommerce_registration( $errors ) {
+		$url                   = \home_url( \add_query_arg( null, null ) );
+		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), $url, 'woocommerce_register' );
+		if ( ! $should_verify_captcha ) {
+			return $errors;
+		}
+		$check = self::verify_captcha();
+		if ( \is_wp_error( $check ) ) {
+			$errors->add( $check->get_error_code(), $check->get_error_message() );
+		}
+		return $errors;
 	}
 }
 
