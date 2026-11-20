@@ -219,6 +219,27 @@ class Newspack_Test_Reader_Data_Newsletter_Lists extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A list lookup that fails on its own is an error, not a reader on no
+	 * lists, even though the contact reads fine. ActiveCampaign reads the lists
+	 * in a request of its own and reports that request's failure this way.
+	 * Nothing is stored, so the selection the ESP holds is left alone.
+	 */
+	public function test_login_refresh_keeps_the_stored_lists_when_the_list_lookup_fails() {
+		Reader_Data::update_item( $this->user_id, 'newsletter_subscribed_lists', [ 'list-1' ] );
+		Newspack_Newsletters_Subscription::$contact_data[ $this->email ]  = [ 'email' => $this->email ];
+		Newspack_Newsletters_Subscription::$contact_lists[ $this->email ] = new \WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out' );
+		Reader_Data::check_newsletter_subscription(
+			time(),
+			[
+				'user_id' => $this->user_id,
+				'email'   => $this->email,
+			]
+		);
+		$this->assertSame( '["list-1"]', $this->stored_lists() );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'is_newsletter_subscriber' ) );
+	}
+
+	/**
 	 * The typed accessor returns the stored list as strings.
 	 */
 	public function test_get_newsletter_subscribed_lists_returns_the_stored_ids() {
