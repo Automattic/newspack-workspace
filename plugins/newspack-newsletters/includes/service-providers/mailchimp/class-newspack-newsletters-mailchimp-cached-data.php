@@ -23,6 +23,9 @@ use Newspack\Newsletters\Subscription_Lists;
  *
  * Also, as a redundant strategy, we have a CRON job that will trigger the async requests to refresh the cache for all lists every 10 minutes.
  *
+ * Contact counts for saved segments are the exception: Mailchimp is slow to compute them, so they are stored in their own option,
+ * refreshed once per self::SEGMENT_COUNTS_REFRESH_INTERVAL, and merged into the cached segments.
+ *
  * If the cache refresh fails, we will store the error in a separate option, and will only surface it to the user after 20 minutes.
  * In every admin page we will display a generic Warning message, telling the user to go to Newsletters > Settings to see the errors.
  * In Newsletters > Settings we will output the errors details.
@@ -70,6 +73,26 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 * @var int
 	 */
 	const INACTIVE_REFRESH_INTERVAL = DAY_IN_SECONDS;
+
+	/**
+	 * How long saved-segment contact counts are reused before they are fetched again
+	 *
+	 * Mailchimp computes `member_count` for every saved segment on each request, which can take 20 seconds
+	 * or more per audience, so counts are fetched far less often than the rest of the cache.
+	 *
+	 * @var int
+	 */
+	const SEGMENT_COUNTS_REFRESH_INTERVAL = DAY_IN_SECONDS;
+
+	/**
+	 * How long to wait before fetching saved-segment counts again after an attempt
+	 *
+	 * Stops a failing or slow counts request from repeating on every cache refresh, and stops
+	 * overlapping refreshes from requesting the counts at the same time.
+	 *
+	 * @var int
+	 */
+	const SEGMENT_COUNTS_RETRY_INTERVAL = HOUR_IN_SECONDS;
 
 	/**
 	 * Memoized data to be served across the same request
@@ -242,6 +265,16 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	private static function get_cache_date_key( $list_id = 'lists' ) {
 		return self::OPTION_PREFIX . '_date_' . $list_id;
+	}
+
+	/**
+	 * Get the option name holding the saved-segment contact counts for a given list
+	 *
+	 * @param string $list_id The List ID.
+	 * @return string The option name
+	 */
+	private static function get_segment_counts_key( $list_id ) {
+		return self::OPTION_PREFIX . '_segment_counts_' . $list_id;
 	}
 
 	/**
@@ -516,7 +549,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	private static function refresh_cached_data( $list_id ) {
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: Refreshing cache' );
 		try {
-			$segments            = self::fetch_segments( $list_id );
+			$segments            = self::merge_segment_counts( self::fetch_segments( $list_id ), self::maybe_refresh_segment_counts( $list_id ) );
 			$interest_categories = self::fetch_interest_categories( $list_id );
 			$tags                = self::fetch_tags( $list_id );
 			$folders             = self::fetch_folders();
@@ -538,6 +571,70 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			self::maybe_add_error( $list_id, $e->getMessage() );
 			throw $e;
 		}
+	}
+
+	/**
+	 * Gets the saved-segment contact counts for a list, fetching them again only when they are old.
+	 *
+	 * Failures are logged, not thrown, so the rest of the cache still refreshes and the
+	 * previously stored counts keep being served.
+	 *
+	 * @param string $list_id The List ID.
+	 * @return array Contact counts keyed by segment ID.
+	 */
+	private static function maybe_refresh_segment_counts( $list_id ) {
+		$key    = self::get_segment_counts_key( $list_id );
+		$stored = get_option( $key, [] );
+		$stored = is_array( $stored ) ? $stored : [];
+		$counts = $stored['counts'] ?? [];
+		$now    = time();
+
+		$is_fresh           = ! empty( $stored['date'] ) && ( $now - $stored['date'] ) < self::SEGMENT_COUNTS_REFRESH_INTERVAL;
+		$recently_attempted = ! empty( $stored['attempted'] ) && ( $now - $stored['attempted'] ) < self::SEGMENT_COUNTS_RETRY_INTERVAL;
+		if ( $is_fresh || $recently_attempted ) {
+			return $counts;
+		}
+
+		// Record the attempt before the slow request, so overlapping refreshes skip it and a failure waits for the retry interval.
+		$stored['attempted'] = $now;
+		update_option( $key, $stored, false ); // auto-load false.
+
+		try {
+			$counts = self::fetch_segment_counts( $list_id );
+			update_option(
+				$key,
+				[
+					'counts'    => $counts,
+					'date'      => $now,
+					'attempted' => $now,
+				],
+				false // auto-load false.
+			);
+			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Segment counts for list ' . $list_id . ' updated' );
+		} catch ( Exception $e ) {
+			Newspack_Newsletters_Logger::log( 'Mailchimp cache: Error fetching segment counts for list ' . $list_id . ': ' . $e->getMessage() );
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * Adds stored contact counts to saved segments
+	 *
+	 * Segments with no stored count (created since the counts were last fetched) are left without
+	 * `member_count`, so they show no count rather than a wrong one.
+	 *
+	 * @param array $segments The saved segments, without `member_count`.
+	 * @param array $counts   Contact counts keyed by segment ID.
+	 * @return array The segments.
+	 */
+	private static function merge_segment_counts( $segments, $counts ) {
+		foreach ( $segments as &$segment ) {
+			if ( isset( $segment['id'], $counts[ $segment['id'] ] ) ) {
+				$segment['member_count'] = (int) $counts[ $segment['id'] ];
+			}
+		}
+		return $segments;
 	}
 
 	/**
@@ -693,8 +790,10 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			$mc->get(
 				"lists/$list_id/segments",
 				[
-					'type'  => 'saved', // 'saved' or 'static' segments. 'static' segments are actually the same thing as tags, so we can exclude them from this request as we fetch tags separately.
-					'count' => $limit ?? 1000,
+					'type'           => 'saved', // 'saved' or 'static' segments. 'static' segments are actually the same thing as tags, so we can exclude them from this request as we fetch tags separately.
+					'count'          => $limit ?? 1000,
+					// Counts are fetched separately and less often by self::fetch_segment_counts(); computing them can make this request take 20 seconds or more.
+					'exclude_fields' => 'segments.member_count',
 				],
 				60
 			),
@@ -703,6 +802,41 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		$segments = $saved_segments_response['segments'];
 
 		return $segments;
+	}
+
+	/**
+	 * Fetches the contact counts of the saved segments for a given List from the Mailchimp server
+	 *
+	 * This is the slow part of fetching segments, so it runs once per self::SEGMENT_COUNTS_REFRESH_INTERVAL.
+	 *
+	 * @param string $list_id The audience (list) ID.
+	 *
+	 * @throws Exception In case of errors while fetching data from the server.
+	 * @return array Contact counts keyed by segment ID.
+	 */
+	public static function fetch_segment_counts( $list_id ) {
+		$mc = new Mailchimp( ( self::get_mc_instance() )->api_key() );
+
+		$response = ( self::get_mc_instance() )->validate(
+			$mc->get(
+				"lists/$list_id/segments",
+				[
+					'type'   => 'saved',
+					'count'  => 1000,
+					'fields' => 'segments.id,segments.member_count',
+				],
+				60
+			),
+			__( 'Error retrieving Mailchimp segment counts.', 'newspack_newsletters' )
+		);
+
+		$counts = [];
+		foreach ( $response['segments'] ?? [] as $segment ) {
+			if ( isset( $segment['id'], $segment['member_count'] ) ) {
+				$counts[ $segment['id'] ] = (int) $segment['member_count'];
+			}
+		}
+		return $counts;
 	}
 
 	/**
