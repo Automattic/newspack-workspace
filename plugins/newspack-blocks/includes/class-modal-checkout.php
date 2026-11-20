@@ -3647,8 +3647,8 @@ final class Modal_Checkout {
 				'variation_modal_title'      => __( 'Complete your transaction', 'newspack-blocks' ),
 				'auth_modal_title'           => __( 'Complete your transaction', 'newspack-blocks' ),
 				'signin_modal_title'         => _x(
-					'Sign in to complete transaction',
-					'Login modal title when logged out user attempts to checkout.',
+					'Sign in or create an account to continue',
+					'Title of the email step shown when a logged-out reader starts checkout. The same step signs in existing readers and registers new ones.',
 					'newspack-blocks'
 				),
 				'register_modal_title'       => _x(
