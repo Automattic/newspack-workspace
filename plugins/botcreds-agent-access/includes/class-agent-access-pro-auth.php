@@ -271,10 +271,11 @@ class Agent_Access_Pro_Auth {
 	 */
 	private static function verify_signature( $public_key_b64 ) {
 		if ( ! function_exists( 'sodium_crypto_sign_verify_detached' ) ) {
-			// libsodium unavailable (should not happen on PHP 7.2+).
-			// Fail open with a logged warning rather than silently locking out agents.
-			trigger_error( 'Agent Access Pro Auth: libsodium not available, skipping signature check.', E_USER_WARNING );
-			return true;
+			// libsodium unavailable (should not happen on PHP 7.2+). Fail closed:
+			// this token was registered with a public key, so its owner asked for
+			// every request to be signed. Accepting it unsigned would reduce a
+			// signed token to a bearer token.
+			return false;
 		}
 
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput
