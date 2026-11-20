@@ -118,6 +118,8 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		delete_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME );
 		$this->flush_caches();
 		wp_set_current_user( 0 );
+		// The REST route marker one test sets; nothing else resets $wp's query vars.
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
 		global $products_database;
 		$products_database = []; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		parent::tear_down();
@@ -1114,7 +1116,13 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		$this->assertSame( '', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ) );
 		$_REQUEST['action'] = 'woocommerce_json_search_products';
 		$this->assertSame( '$8.00', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ), "WooCommerce's admin AJAX manages products." );
-		unset( $_REQUEST['action'] );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+
+		// The core product route is public, so a REST read gets the reader's view.
+		set_current_screen( 'front' );
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/product/' . $this->restricted_product->get_id();
+		add_filter( 'wp_is_rest_endpoint', '__return_true' );
+		$this->assertTrue( post_password_required( $this->restricted_product->get_id() ), 'A REST read of a hidden product withholds its content.' );
 	}
 
 	/**

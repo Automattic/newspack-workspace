@@ -108,28 +108,8 @@ class Subscriber_Discounts_Pricing {
 		if ( is_admin() && ! wp_doing_ajax() ) {
 			return false;
 		}
-		if ( wp_doing_ajax() ) {
-			// Admin-screen AJAX that reads a price in order to write it back, or
-			// to populate an admin picker. The storefront's own AJAX (add to
-			// cart, cart fragments) is not in this list and stays discounted.
-			$admin_ajax_actions = [
-				'woocommerce_add_order_item',
-				'woocommerce_save_order_items',
-				'woocommerce_calc_line_taxes',
-				'woocommerce_json_search_products',
-				'woocommerce_json_search_products_and_variations',
-			];
-			// Quick Edit posts `action=inline-save` and marks itself with a
-			// request field rather than an action, so it is detected separately.
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading request markers only, to decide whether to price for the storefront.
-			if ( ! empty( $_REQUEST['woocommerce_quick_edit'] ) ) {
-				return false;
-			}
-			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the action only, to decide whether to price for the storefront.
-			$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
-			if ( in_array( $action, $admin_ajax_actions, true ) ) {
-				return false;
-			}
+		if ( Subscriber_Commerce::is_admin_ajax_request() ) {
+			return false;
 		}
 		if ( self::is_management_rest_request() ) {
 			return false;
