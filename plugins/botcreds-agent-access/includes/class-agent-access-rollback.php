@@ -260,14 +260,18 @@ class Agent_Access_Rollback {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// The table name is the site prefix plus a class constant, never user
+		// input. A phpcs:ignore must not sit inside the SQL string: MySQL does
+		// not treat "//" as a comment, so the query fails with a syntax error.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
 		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT s.*, u.user_login FROM `{$table}` s // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT s.*, u.user_login FROM `{$table}` s
 			 LEFT JOIN {$wpdb->users} u ON s.user_id = u.ID
 			 ORDER BY s.captured_at DESC
 			 LIMIT %d",
-			$limit
+			absint( $limit )
 		) );
+		// phpcs:enable
 
 		return $rows ?: array();
 	}
