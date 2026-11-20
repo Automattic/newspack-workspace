@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.56.10\n"
+"Project-Id-Version: Newspack 6.56.11\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-19T09:24:34+00:00\n"
+"POT-Creation-Date: 2026-11-20T10:15:54+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -366,7 +366,7 @@ msgstr ""
 #: includes/class-newspack-ui.php:1237
 #: includes/class-newspack-ui.php:1391
 #: includes/class-newspack-ui.php:1445
-#: includes/content-gate/content-gifting/class-content-gifting.php:598
+#: includes/content-gate/content-gifting/class-content-gifting.php:599
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:966
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:305
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:361
@@ -3055,7 +3055,7 @@ msgid "This article has been gifted to you by someone who values great journalis
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:149
-#: includes/content-gate/content-gifting/class-content-gifting.php:596
+#: includes/content-gate/content-gifting/class-content-gifting.php:597
 #: includes/content-gate/content-gifting/class-newspack-jetpack-gift-article.php:40
 msgid "Gift this article"
 msgstr ""
@@ -3130,8 +3130,8 @@ msgid "Days"
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:399
-#: includes/content-gate/content-gifting/class-content-gifting.php:685
-#: includes/content-gate/content-gifting/class-content-gifting.php:786
+#: includes/content-gate/content-gifting/class-content-gifting.php:686
+#: includes/content-gate/content-gifting/class-content-gifting.php:787
 msgid "Content gifting is not enabled."
 msgstr ""
 
@@ -3192,18 +3192,20 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %1$d is the number of gift articles limit, %2$s is the interval label.
-#: includes/content-gate/content-gifting/class-content-gifting.php:556
+#: includes/content-gate/content-gifting/class-content-gifting.php:557
 #, php-format
-msgid "You've reached your limit of %1$d gifted articles %2$s."
-msgstr ""
+msgid "You've reached your limit of %1$d gifted article %2$s."
+msgid_plural "You've reached your limit of %1$d gifted articles %2$s."
+msgstr[0] ""
+msgstr[1] ""
 
 #. translators: %s is the interval label.
-#: includes/content-gate/content-gifting/class-content-gifting.php:569
+#: includes/content-gate/content-gifting/class-content-gifting.php:570
 #, php-format
 msgid "New ones will be available %s."
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:607
+#: includes/content-gate/content-gifting/class-content-gifting.php:608
 #: dist/blocks.js:6
 #: dist/newspack-wizards.e2d80d2941754bf186f9.js:47
 #: src/blocks/author-social-link/index.js:21
@@ -3211,29 +3213,29 @@ msgstr ""
 msgid "Link"
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:610
+#: includes/content-gate/content-gifting/class-content-gifting.php:611
 #: dist/audience-wizards.ca6f4edd194759d47811.js:276
 msgid "Copy link"
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:689
+#: includes/content-gate/content-gifting/class-content-gifting.php:690
 msgid "You must be logged in to gift content."
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:693
+#: includes/content-gate/content-gifting/class-content-gifting.php:694
 msgid "This post does not have any restrictions."
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:697
+#: includes/content-gate/content-gifting/class-content-gifting.php:698
 msgid "User does not have access to this post."
 msgstr ""
 
-#: includes/content-gate/content-gifting/class-content-gifting.php:790
+#: includes/content-gate/content-gifting/class-content-gifting.php:791
 msgid "You are not allowed to generate a content key."
 msgstr ""
 
 #. translators: %1$d is the number of gift articles limit, %2$s is the interval.
-#: includes/content-gate/content-gifting/class-content-gifting.php:832
+#: includes/content-gate/content-gifting/class-content-gifting.php:833
 #, php-format
 msgid "You have reached the limit of %1$d gifted article for this %2$s."
 msgid_plural "You have reached the limit of %1$d gifted articles for this %2$s."

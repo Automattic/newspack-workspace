@@ -1,3 +1,10 @@
+## newspack [6.56.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.10...newspack@6.56.11) (2026-11-20)
+
+
+### Bug Fixes
+
+* **gifting:** plural form for the gift limit message (Part of NPPD-1873, [#1615](https://github.com/Automattic/newspack-workspace/issues/1615)) ([c0ef88a](https://github.com/Automattic/newspack-workspace/commit/c0ef88a20bc52b6c50c6dd22558ba3cf0acbad8d))
+
 ## newspack [6.56.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.9...newspack@6.56.10) (2026-11-19)
 
 
