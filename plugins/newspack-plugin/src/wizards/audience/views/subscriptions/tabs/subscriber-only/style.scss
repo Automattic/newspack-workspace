@@ -52,6 +52,12 @@
 	flex: 1 1 auto;
 	overflow-y: auto;
 	padding: wp-vars.$grid-unit-30;
+
+	// The fields scroll rather than squeeze: a shrunk field lets its help text
+	// run under the next field's label.
+	> * {
+		flex-shrink: 0;
+	}
 }
 
 .newspack-subscriptions-drawer__footer {
