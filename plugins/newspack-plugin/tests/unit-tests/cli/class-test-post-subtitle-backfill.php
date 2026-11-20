@@ -201,9 +201,8 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	/**
 	 * A literal backslash in the sanitized value survives the write.
 	 *
-	 * Unlike update_post_meta(), update_metadata_by_mid() does not unslash its value —
-	 * a wp_slash() call creeping back into the write path would have this silently
-	 * strip every backslash.
+	 * Unlike update_post_meta(), update_metadata_by_mid() does not unslash its value — a
+	 * wp_slash() call in the write path would silently strip every backslash.
 	 */
 	public function test_preserves_a_literal_backslash_when_live() {
 		$post_id = self::factory()->post->create();
@@ -347,5 +346,77 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 
 		$this->assertSame( 'concurrent-change', $result );
 		$this->assertSame( "An editor's newer subtitle", $this->stored_subtitle( $post_id ), 'The newer value must survive untouched.' );
+	}
+
+	/**
+	 * A genuine concurrent edit, reached through backfill() itself rather than a direct
+	 * call to the guard, is reported as left unsanitized and halts the command non-zero
+	 * — the same outcome test_write_sanitized_value_skips_a_row_that_changed_since_it_was_read()
+	 * proves for the guard in isolation, proven here for what the command does with it.
+	 */
+	public function test_backfill_reports_and_halts_on_a_concurrent_change() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+
+		// get_post_metadata_by_mid short-circuits get_metadata_by_mid() in core, so this
+		// simulates a save landing between the batch read and the write without a real
+		// second process.
+		$simulate_concurrent_edit = function () {
+			return (object) [ 'meta_value' => "An editor's newer subtitle" ]; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+		};
+		add_filter( 'get_post_metadata_by_mid', $simulate_concurrent_edit );
+		try {
+			$output = $this->run_backfill( [ 'live' => true ] );
+		} finally {
+			remove_filter( 'get_post_metadata_by_mid', $simulate_concurrent_edit );
+		}
+
+		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'The write must not run once a concurrent change is reported.' );
+		$this->assertStringContainsString( 'Rerun to catch these: ' . $post_id, $output );
+		$this->assertStringContainsString( '0 row(s) updated; 1 left unsanitized', $output );
+		$this->assertSame( 1, WP_CLI::$halt_code );
+	}
+
+	/**
+	 * A legacy subtitle stored as a serialized string — maybe_serialize() re-serializes
+	 * any string already shaped like one, so a value typed before the sanitizer shipped
+	 * can be stored this way — is still sanitized and written, not reported as a
+	 * concurrent change forever.
+	 *
+	 * Core's get_metadata_by_mid() unserializes its result; the raw batch read does not.
+	 * Without unserializing one side before the guard's comparison, the two never match,
+	 * so this row would be skipped on every run with no way to finish.
+	 */
+	public function test_sanitizes_a_legacy_subtitle_stored_as_a_serialized_string() {
+		$post_id = self::factory()->post->create();
+		$this->seed_raw_subtitle( $post_id, serialize( '<script>alert(1)</script><b>Bold</b> subtitle' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+
+		$output = $this->run_backfill( [ 'live' => true ] );
+
+		$this->assertSame( 'alert(1)<b>Bold</b> subtitle', $this->stored_subtitle( $post_id ) );
+		$this->assertStringContainsString( 'Subtitle sanitized for: ' . $post_id, $output );
+		$this->assertStringContainsString( 'Success: 1 row(s) updated.', $output );
+		$this->assertStringNotContainsString( 'Rerun to catch these', $output );
+	}
+
+	/**
+	 * A result set larger than one page is scanned and written in full, not silently
+	 * truncated to the first batch.
+	 */
+	public function test_batches_across_more_than_one_page() {
+		$post_ids = [];
+		for ( $i = 0; $i < 201; $i++ ) {
+			$post_id      = self::factory()->post->create();
+			$post_ids[]   = $post_id;
+			$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle ' . $i );
+		}
+
+		$output = $this->run_backfill( [ 'live' => true ] );
+
+		$this->assertStringContainsString( 'Scanned 201 subtitle row(s).', $output );
+		$this->assertStringContainsString( 'Success: 201 row(s) updated.', $output );
+		foreach ( $post_ids as $post_id ) {
+			$this->assertStringStartsWith( 'alert(1)<b>Bold</b> subtitle ', $this->stored_subtitle( $post_id ) );
+		}
 	}
 }
