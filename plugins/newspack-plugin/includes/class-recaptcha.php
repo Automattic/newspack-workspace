@@ -38,6 +38,9 @@ final class Recaptcha {
 
 		// Verify reCAPTCHA when adding new payment method.
 		\add_filter( 'woocommerce_add_payment_method_form_is_valid', [ __CLASS__, 'verify_recaptcha_on_add_payment_method' ] );
+
+		// Protect WordPress's own registration form (wp-login.php?action=register).
+		\add_action( 'login_form_register', [ __CLASS__, 'protect_wp_registration_form' ] );
 	}
 
 	/**
@@ -607,6 +610,77 @@ final class Recaptcha {
 			return false;
 		}
 		return $is_valid;
+	}
+
+	/**
+	 * Require reCAPTCHA on WordPress's own registration form.
+	 *
+	 * The form has no bot protection of its own and emails every account it
+	 * creates, so bot sign-ups send mail to addresses that bounce. Hooked on
+	 * `login_form_register`, which fires only for wp-login.php?action=register:
+	 * the login and lost-password screens stay as they are, and code that calls
+	 * register_new_user() without this form is not refused.
+	 */
+	public static function protect_wp_registration_form() {
+		if ( ! self::can_use_captcha() ) {
+			return;
+		}
+		\add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_wp_registration_scripts' ] );
+		\add_action( 'register_form', [ __CLASS__, 'render_wp_registration_fields' ] );
+		\add_filter( 'registration_errors', [ __CLASS__, 'verify_wp_registration' ] );
+	}
+
+	/**
+	 * Load the reCAPTCHA client on the registration screen.
+	 *
+	 * The login screens load none of what the client relies on elsewhere. If the
+	 * client doesn't run, nobody gets a token and every person is refused.
+	 */
+	public static function enqueue_wp_registration_scripts() {
+		// The client's bundle can wait on the plugin's shared webpack chunk before it runs.
+		// The chunk's stylesheet styles nothing on this screen.
+		Newspack::load_common_assets();
+		\wp_dequeue_style( 'newspack-commons' );
+		self::register_scripts();
+		// The client calls jQuery without checking for it; without it the v2 client throws before it attaches to the form.
+		\wp_enqueue_script( 'jquery' );
+	}
+
+	/**
+	 * Mark the registration form for the reCAPTCHA client and show Google's notice.
+	 *
+	 * Runs inside #registerform. The client attaches to forms with a
+	 * data-newspack-recaptcha attribute, whose value is the v3 action name, and
+	 * core offers no way to add one to its form tag. The client's stylesheet hides
+	 * Google's badge, which Google allows only when this notice is shown instead.
+	 */
+	public static function render_wp_registration_fields() {
+		\wp_print_inline_script_tag( "document.currentScript.closest( 'form' ).setAttribute( 'data-newspack-recaptcha', 'wp_register' );" );
+		?>
+		<p class="newspack-recaptcha-terms"><?php echo \wp_kses_post( self::get_terms_text() ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Refuse a registration from WordPress's form without a valid reCAPTCHA response.
+	 *
+	 * `registration_errors` runs before register_new_user() creates the account
+	 * or sends its email, so a refusal here leaves neither behind.
+	 *
+	 * @param \WP_Error $errors Errors WordPress and other plugins found in the submission.
+	 *
+	 * @return \WP_Error The same errors, plus the reCAPTCHA error if verification failed.
+	 */
+	public static function verify_wp_registration( $errors ) {
+		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), \wp_registration_url(), 'wp_register' );
+		if ( ! $should_verify_captcha ) {
+			return $errors;
+		}
+		$check = self::verify_captcha();
+		if ( \is_wp_error( $check ) ) {
+			$errors->add( $check->get_error_code(), $check->get_error_message() );
+		}
+		return $errors;
 	}
 }
 
