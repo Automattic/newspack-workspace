@@ -113,9 +113,9 @@ class Test_Content_Gifting extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The limit-reached message agrees in number with the gifting limit.
+	 * The limit-reached message uses the singular at a limit of one.
 	 */
-	public function test_gift_modal_limit_reached_message_plural() {
+	public function test_limit_reached_message_is_singular_at_a_limit_of_one() {
 		Content_Gifting::set_gifting_limit( 1 );
 		Content_Gifting::generate_key( $this->post_id );
 		$limit_reached_error = Content_Gifting::generate_key( $this->factory->post->create() );
@@ -123,6 +123,7 @@ class Test_Content_Gifting extends \WP_UnitTestCase {
 		$this->assertStringContainsString( 'limit of 1 gifted article this', $modal_info );
 
 		Content_Gifting::set_gifting_limit( 2 );
+		// The key gifted under the limit of one still counts, so one more reaches the limit of two.
 		Content_Gifting::generate_key( $this->factory->post->create() );
 		$limit_reached_error = Content_Gifting::generate_key( $this->factory->post->create() );
 		$modal_info          = Content_Gifting::get_gift_modal_info( $limit_reached_error );
