@@ -1,6 +1,7 @@
 """Real HTTPS managed-credential discovery acceptance; outputs no credentials."""
-import json,subprocess,pathlib,requests
-REPORT=pathlib.Path('/Users/bob/.openclaw/workspace/reports/agent-access-connection-20261120')
+import json,subprocess,pathlib,requests,os
+REPORT=pathlib.Path(os.environ['AA_CONNECTION_REPORT_DIR'])
+EXPECTED_VERSION=os.environ.get('AA_CONNECTION_EXPECTED_VERSION','2.4.5')
 def remote(command):
  r=subprocess.run(['python3','/tmp/aa-user-remote.py',command],capture_output=True,text=True,timeout=180)
  if r.returncode: raise RuntimeError('remote helper failed')
@@ -16,7 +17,7 @@ r=req(actor=None);check(r.status_code==401,'anonymous request denied');check('no
 for actor,mode in [('primary','read_only'),('secondary','yoast_seo_only')]:
  r=req(actor=actor);check(r.status_code==200,'managed '+actor+' authenticated');d=r.json()
  check(d['identity']['id']==f['users']['agent'] and d['scope']['mode']==mode,'own identity and credential-specific scope '+actor)
- check(d['plugin_version']=='2.4.4' and d['schema_version']==1,'version/schema '+actor)
+ check(d['plugin_version']==EXPECTED_VERSION and d['schema_version']==1,'version/schema '+actor)
  check(d['rate_limit']['tier']=='unlimited' and d['rate_limit']['per_hour']==0,'configured rate ceilings '+actor)
  check('private' in r.headers.get('Cache-Control','') and 'no-store' in r.headers.get('Cache-Control',''),'successful response private '+actor)
  check(not any(c['password'] in r.text or c['uuid'] in r.text for c in f['credentials'].values()) and 'user_email' not in r.text,'no password, UUID or email disclosure '+actor)

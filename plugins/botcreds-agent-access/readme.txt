@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.4
+Stable tag: 2.4.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -137,6 +137,10 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.4.5 =
+* Fix: Agent Write History now lists saved snapshots correctly; remove a suppression comment accidentally embedded in its SQL query.
+* Security: Signed experimental Pro Auth tokens are rejected when the Ed25519 verification function is unavailable, rather than accepted without verification. Standard Application Passwords are unchanged.
 
 = 2.4.4 =
 * New: Read-only discovery of the currently authenticated managed credential at agent-access/v1/connection.
@@ -272,6 +276,9 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 
 == Upgrade Notice ==
+
+= 2.4.5 =
+Fixes empty snapshot history and requires signature verification for signed Pro Auth tokens. Hosts without the signature verifier now reject those signed tokens; normal Application Passwords are unchanged.
 
 = 2.4.4 =
 Adds a private read-only connection discovery endpoint, safer setup prompts and an expanded agent setup guide. Existing credentials and permissions are unchanged.
