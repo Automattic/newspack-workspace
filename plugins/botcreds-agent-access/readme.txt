@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 2.4.4-rc.1
+Stable tag: 2.4.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -138,7 +138,7 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 == Changelog ==
 
-= 2.4.4-rc.1 =
+= 2.4.4 =
 * New: Read-only discovery of the currently authenticated managed credential at agent-access/v1/connection.
 * Improved: Shared agent setup guide, safe connection prompt, endpoint recipes and permission troubleshooting.
 
@@ -272,6 +272,9 @@ No. Integration scopes permit routes, not WordPress capabilities. The account's 
 
 
 == Upgrade Notice ==
+
+= 2.4.4 =
+Adds a private read-only connection discovery endpoint, safer setup prompts and an expanded agent setup guide. Existing credentials and permissions are unchanged.
 
 = 2.4.3 =
 Adds administrator-approved user listing and counts without user-management access. Advanced permissions are grouped under Additional permissions. Existing credentials keep their current access; List users is off until explicitly enabled.

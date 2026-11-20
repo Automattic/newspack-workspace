@@ -16,7 +16,7 @@ r=req(actor=None);check(r.status_code==401,'anonymous request denied');check('no
 for actor,mode in [('primary','read_only'),('secondary','yoast_seo_only')]:
  r=req(actor=actor);check(r.status_code==200,'managed '+actor+' authenticated');d=r.json()
  check(d['identity']['id']==f['users']['agent'] and d['scope']['mode']==mode,'own identity and credential-specific scope '+actor)
- check(d['plugin_version']=='2.4.4-rc.1' and d['schema_version']==1,'version/schema '+actor)
+ check(d['plugin_version']=='2.4.4' and d['schema_version']==1,'version/schema '+actor)
  check(d['rate_limit']['tier']=='unlimited' and d['rate_limit']['per_hour']==0,'configured rate ceilings '+actor)
  check('private' in r.headers.get('Cache-Control','') and 'no-store' in r.headers.get('Cache-Control',''),'successful response private '+actor)
  check(not any(c['password'] in r.text or c['uuid'] in r.text for c in f['credentials'].values()) and 'user_email' not in r.text,'no password, UUID or email disclosure '+actor)
