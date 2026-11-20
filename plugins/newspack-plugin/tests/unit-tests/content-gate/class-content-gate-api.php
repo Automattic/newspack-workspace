@@ -8,6 +8,7 @@
 use Newspack\Access_Rules;
 use Newspack\Content_Gate;
 use Newspack\Content_Gate_API;
+use Newspack\Content_Rules;
 use Newspack\Institution;
 
 /**
@@ -38,12 +39,22 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 		// test about the operator writing the gate. The ones about what an unauthorized
 		// caller may learn set their own user.
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// A taxonomy the content-rule picker doesn't offer, as one a migration can write rules for.
+		register_taxonomy(
+			'np_test_section',
+			'post',
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+			]
+		);
 	}
 
 	/**
 	 * Teardown.
 	 */
 	public function tear_down() {
+		unregister_taxonomy( 'np_test_section' );
 		$registry_property = new ReflectionProperty( Access_Rules::class, 'rules' );
 		$registry_property->setValue( null, $this->registered_rules_snapshot );
 		parent::tear_down();
@@ -349,6 +360,285 @@ class Newspack_Test_Content_Gate_API extends WP_UnitTestCase {
 			],
 			$sanitized_gate['custom_access']['access_rules']
 		);
+	}
+
+	/**
+	 * A rule for a registered taxonomy the picker doesn't offer is kept, so a gate a
+	 * migration wrote rules for doesn't lose them on its next save.
+	 */
+	public function test_sanitize_content_rule_keeps_registered_unoffered_taxonomy() {
+		$this->assertSame(
+			[
+				'slug'      => 'np_test_section',
+				'value'     => [ '12' ],
+				'exclusion' => true,
+			],
+			Content_Gate_API::sanitize_content_rule(
+				[
+					'slug'      => 'np_test_section',
+					'value'     => [ '12', '0', '' ],
+					'exclusion' => true,
+				]
+			)
+		);
+	}
+
+	/**
+	 * A slug that is no offered rule and no registered taxonomy is refused by name.
+	 */
+	public function test_sanitize_content_rule_rejects_unknown_slug_naming_it() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'not_a_taxonomy',
+				'value' => [ '1' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_slug', $result->get_error_code() );
+		$this->assertStringContainsString( 'not_a_taxonomy', $result->get_error_message() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A rule missing its slug, or with a non-array value, is refused rather than read.
+	 */
+	public function test_sanitize_content_rule_rejects_malformed_rule() {
+		$no_slug = Content_Gate_API::sanitize_content_rule( [ 'value' => [ '1' ] ] );
+		$this->assertWPError( $no_slug );
+		$this->assertSame( 'invalid_content_rule_slug', $no_slug->get_error_code() );
+
+		$bad_value = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'category',
+				'value' => '1',
+			]
+		);
+		$this->assertWPError( $bad_value );
+		$this->assertSame( 'invalid_content_rule_value', $bad_value->get_error_code() );
+	}
+
+	/**
+	 * A malformed publication date value gets the rule's own message, not the generic one.
+	 */
+	public function test_malformed_published_age_value_gets_age_specific_error() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => Content_Rules::PUBLISHED_AGE_RULE,
+				'value' => '7',
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertStringContainsString( 'The publication date rule needs', $result->get_error_message() );
+	}
+
+	/**
+	 * A post type that isn't registered right now is kept: it can't match any post
+	 * being read, and it applies again if the post type comes back.
+	 */
+	public function test_sanitize_content_rule_keeps_unregistered_post_type() {
+		$this->assertFalse( post_type_exists( 'np_gone_type' ), 'Setup: the post type is not registered.' );
+
+		$this->assertSame(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'np_gone_type' ],
+			],
+			Content_Gate_API::sanitize_content_rule(
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post', 'np_gone_type' ],
+				]
+			)
+		);
+	}
+
+	/**
+	 * A registered post type the picker doesn't offer is refused, naming the rule and the value.
+	 */
+	public function test_sanitize_content_rule_rejects_registered_unoffered_post_type() {
+		$this->assertTrue( post_type_exists( 'attachment' ), 'Setup: attachments are registered.' );
+
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'attachment' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertSame(
+			'The content rule "Post types" includes values that aren\'t available on this site: attachment.',
+			$result->get_error_message()
+		);
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * The offered-list check reads the value as it will be stored, so surrounding
+	 * whitespace doesn't hide a registered post type that isn't offered.
+	 */
+	public function test_sanitize_content_rule_rejects_unoffered_post_type_with_whitespace() {
+		$result = Content_Gate_API::sanitize_content_rule(
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', ' attachment ' ],
+			]
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'invalid_content_rule_value', $result->get_error_code() );
+		$this->assertStringContainsString( 'aren\'t available on this site: attachment.', $result->get_error_message() );
+	}
+
+	/**
+	 * A gate covering Collections can still be published after the Collections module
+	 * is turned off and its post type is no longer registered.
+	 */
+	public function test_gate_with_unregistered_collection_post_type_can_be_published() {
+		// Collections tests earlier in a run leave the post type registered. Take it out
+		// of the registry as the module being off would, and put the same object back.
+		global $wp_post_types;
+		$registered_collection_type = $wp_post_types['newspack_collection'] ?? null;
+		unset( $wp_post_types['newspack_collection'] );
+		$stored  = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post', 'newspack_collection' ],
+			],
+		];
+		$gate_id = $this->create_gate_with_content_rules( $stored );
+
+		try {
+			$this->assertFalse( post_type_exists( 'newspack_collection' ), 'Setup: the Collections post type is not registered.' );
+			$sanitized = Content_Gate_API::sanitize_gate(
+				array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => 'publish' ] ),
+				$this->gate_update_request( $gate_id )
+			);
+		} finally {
+			if ( $registered_collection_type ) {
+				$wp_post_types['newspack_collection'] = $registered_collection_type;
+			}
+		}
+
+		$this->assertIsArray( $sanitized );
+		$this->assertSame( $stored, $sanitized['content_rules'] );
+	}
+
+	/**
+	 * Dropping an unreadable content rule would widen an AND gate, so the set fails.
+	 */
+	public function test_sanitize_rules_returns_error_instead_of_dropping() {
+		$result = Content_Gate_API::sanitize_rules(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'post' ],
+				],
+				[
+					'slug'  => 'not_a_taxonomy',
+					'value' => [ '1' ],
+				],
+			],
+			'content'
+		);
+		$this->assertWPError( $result );
+	}
+
+	/**
+	 * Create a gate holding the given content rules, matched with `any`, as the
+	 * Memberships migration writes them.
+	 *
+	 * @param array $rules The content rules.
+	 *
+	 * @return int The gate ID.
+	 */
+	private function create_gate_with_content_rules( $rules ) {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Migrated gate' ] );
+		Content_Rules::update_gate_content_rules( $gate_id, $rules );
+		Content_Rules::update_gate_content_rules_match( $gate_id, 'any' );
+		return $gate_id;
+	}
+
+	/**
+	 * The gates list toggles status by posting the whole gate back; a migrated
+	 * taxonomy rule must come through that unchanged either way.
+	 */
+	public function test_status_toggle_keeps_migrated_taxonomy_rule() {
+		$stored  = [
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+			[
+				'slug'  => 'np_test_section',
+				'value' => [ '12' ],
+			],
+		];
+		$gate_id = $this->create_gate_with_content_rules( $stored );
+
+		foreach ( [ 'draft', 'publish' ] as $status ) {
+			$sanitized = Content_Gate_API::sanitize_gate(
+				array_merge( Content_Gate::get_gate( $gate_id ), [ 'status' => $status ] ),
+				$this->gate_update_request( $gate_id )
+			);
+			$this->assertIsArray( $sanitized, "Saving with status '{$status}' must not fail." );
+			$this->assertSame( $stored, $sanitized['content_rules'], "Rules must survive a save with status '{$status}'." );
+		}
+	}
+
+	/**
+	 * A rule for a taxonomy that's gone can't be published, but its gate can still be
+	 * switched off.
+	 */
+	public function test_unregistered_taxonomy_rule_blocks_publish_not_switch_off() {
+		$gate_id = $this->create_gate_with_content_rules(
+			[
+				[
+					'slug'  => 'gone_taxonomy',
+					'value' => [ '5' ],
+				],
+			]
+		);
+		$gate    = Content_Gate::get_gate( $gate_id );
+
+		$off = Content_Gate_API::sanitize_gate( array_merge( $gate, [ 'status' => 'draft' ] ), $this->gate_update_request( $gate_id ) );
+		$this->assertIsArray( $off );
+		$this->assertArrayNotHasKey( 'content_rules', $off );
+
+		$on = Content_Gate_API::sanitize_gate( array_merge( $gate, [ 'status' => 'publish' ] ), $this->gate_update_request( $gate_id ) );
+		$this->assertWPError( $on );
+		$this->assertStringContainsString( 'gone_taxonomy', $on->get_error_message() );
+	}
+
+	/**
+	 * Sanitization runs before the route's permission check, so a caller who can't
+	 * manage gates must not learn from an error whether a taxonomy slug is registered.
+	 */
+	public function test_unreadable_content_rule_error_is_hidden_from_unauthorized_caller() {
+		$payload = [
+			'status'        => 'publish',
+			'content_rules' => [
+				[
+					'slug'  => 'not_a_taxonomy',
+					'value' => [ '1' ],
+				],
+			],
+		];
+
+		wp_set_current_user( 0 );
+		$anonymous = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertIsArray( $anonymous );
+		$this->assertArrayNotHasKey( 'content_rules', $anonymous );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$subscriber = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertIsArray( $subscriber );
+		$this->assertArrayNotHasKey( 'content_rules', $subscriber );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$admin = Content_Gate_API::sanitize_gate( $payload );
+		$this->assertWPError( $admin );
+		$this->assertStringContainsString( 'not_a_taxonomy', $admin->get_error_message() );
 	}
 
 	/**

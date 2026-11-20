@@ -429,6 +429,15 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 		  );
 };
 
+// Labels for the archive pages a gate stands in for. A stored value the site no longer
+// offers has no label, so it's left out of the summary (the rule itself is kept).
+const getArchiveSummaryLines = ( rules: GateArchiveRule[] = [] ): string[] => {
+	const available = window.newspackAudienceContentGates?.available_archive_rules ?? {};
+	return rules.flatMap( rule =>
+		( available[ rule.slug ]?.options ?? [] ).filter( option => rule.value.includes( option.value ) ).map( option => option.label )
+	);
+};
+
 /**
  * Build the Content rules / Registered access / Paid access sections for a gate,
  * plus Sign-up and visibility for a premium newsletter gate.
@@ -475,6 +484,23 @@ export const getGateSummarySections = (
 				</p>
 			),
 	} );
+
+	const archiveLines = getArchiveSummaryLines( gate.archive_rules );
+	if ( archiveLines.length > 0 ) {
+		sections.push( {
+			key: 'archive_rules',
+			label: __( 'Archive pages', 'newspack-plugin' ),
+			content: (
+				<>
+					{ archiveLines.map( line => (
+						<p key={ line }>
+							<span>{ line }</span>
+						</p>
+					) ) }
+				</>
+			),
+		} );
+	}
 
 	if ( ! isNewsletter ) {
 		sections.push( {

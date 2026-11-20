@@ -241,6 +241,17 @@ class Content_Gate {
 	private static bool $overlay_gate_output = false;
 
 	/**
+	 * What {@see self::restrict_post()} decided for the post being read, keyed
+	 * by post ID: true when it restricted the post as the article, false when it
+	 * decided not to (an entitled reader, or a view metering let through). A
+	 * post it hasn't decided on has no entry. Read through
+	 * {@see self::get_article_restriction()}.
+	 *
+	 * @var array<int, bool>
+	 */
+	private static array $article_restriction = [];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -992,6 +1003,7 @@ class Content_Gate {
 			// standing would hand a subscriber a stub of the post they paid for.
 			// The restricted branch below overwrites the entry for the same reason.
 			unset( self::$restricted_content[ $post->ID ] );
+			self::$article_restriction[ $post->ID ] = false;
 			return;
 		}
 
@@ -1031,6 +1043,10 @@ class Content_Gate {
 			'gate'   => $gate_html,
 			'source' => self::STAGED_BY_ARTICLE,
 		];
+		// Recorded with the staged entry rather than at the decision, so
+		// did_restrict_post() never answers true before the teaser and gate it
+		// promises exist. Until then the post reads as undecided.
+		self::$article_restriction[ $post->ID ] = true;
 	}
 
 	/**
@@ -1985,8 +2001,10 @@ class Content_Gate {
 	public static function get_frontend_script_conditions() {
 		// is_singular() first, matching enqueue_content_banner_assets(): during a
 		// preview on an archive, has_gate() would otherwise scan the gate list and have
-		// the result thrown away by the very next operand.
-		$renders_gate = is_singular() && self::has_gate() && self::is_post_restricted();
+		// the result thrown away by the very next operand. A gated post type archive
+		// renders a gate too, in place of its list.
+		$renders_gate = ( is_singular() && self::has_gate() && self::is_post_restricted() )
+			|| null !== Content_Restriction_Control::get_archive_gate();
 		$is_preview   = Content_Gate\Gate_Preview::is_preview_request();
 		return [
 			'enqueue'      => $renders_gate || $is_preview,
@@ -2118,7 +2136,9 @@ class Content_Gate {
 	 * }
 	 */
 	public static function get_gate_metadata() {
-		$post_id = self::get_gate_post_id();
+		// get_archive_gate() is null everywhere but a gated post type archive.
+		$archive_gate = Content_Restriction_Control::get_archive_gate();
+		$post_id      = $archive_gate ? $archive_gate['gate_id'] : self::get_gate_post_id();
 		return [
 			'gate_post_id' => $post_id,
 			'logged_in'    => \is_user_logged_in() ? 'yes' : 'no',
@@ -2175,6 +2195,39 @@ class Content_Gate {
 	 */
 	public static function has_rendered() {
 		return self::$gate_rendered;
+	}
+
+	/**
+	 * What {@see self::restrict_post()} decided for the post being read on this
+	 * request.
+	 *
+	 * The decision already accounts for metering. Callers that need an answer
+	 * before the loop has reached the post should treat null as "ask
+	 * {@see self::is_post_restricted()}", so they fail closed.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool|null True if it restricted the post as the article, false if
+	 *                   it decided not to (for example, a view metering let
+	 *                   through), or null if it hasn't decided: the loop hasn't
+	 *                   reached the post, or restrict_post() stopped first.
+	 */
+	public static function get_article_restriction( int $post_id ): ?bool {
+		return self::$article_restriction[ $post_id ] ?? null;
+	}
+
+	/**
+	 * Whether {@see self::restrict_post()} restricted this post as the article
+	 * being read on this request, and staged its teaser and gate.
+	 *
+	 * A view metering lets through, and a post not decided yet, answer false.
+	 * Not {@see self::has_staged_restriction()}, which also counts the teasers a
+	 * listing stages for the posts it shows.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function did_restrict_post( int $post_id ): bool {
+		return true === self::get_article_restriction( $post_id );
 	}
 
 	/**
@@ -2304,6 +2357,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $gate_id, $gate['content_rules'] );
+		}
+
+		// Update archive rules.
+		if ( isset( $gate['archive_rules'] ) ) {
+			Content_Rules::update_gate_archive_rules( $gate_id, $gate['archive_rules'] );
 		}
 
 		// Update rule-combination mode.
@@ -2906,13 +2964,16 @@ class Content_Gate {
 	}
 
 	/**
-	 * Disable popups if rendering a restricted post.
+	 * Disable popups (Campaigns) on a restricted post or a gated archive.
 	 *
 	 * @param bool $disabled Whether popups are disabled.
 	 *
 	 * @return bool
 	 */
 	public static function disable_popups( $disabled ) {
+		if ( Content_Restriction_Control::get_archive_gate() ) {
+			return true;
+		}
 		if (
 			is_singular() &&
 			self::has_gate() &&
@@ -3139,6 +3200,7 @@ class Content_Gate {
 			'priority'            => (int) get_post_meta( $post->ID, 'gate_priority', true ),
 			'content_rules'       => Content_Rules::get_gate_content_rules( $post->ID ),
 			'content_rules_match' => Content_Rules::get_gate_content_rules_match( $post->ID ),
+			'archive_rules'       => Content_Rules::get_gate_archive_rules( $post->ID ),
 			'registration'        => self::get_registration_settings( $post->ID ),
 			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
@@ -3237,6 +3299,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update archive rules.
+		if ( isset( $gate['archive_rules'] ) ) {
+			Content_Rules::update_gate_archive_rules( $id, $gate['archive_rules'] );
 		}
 
 		// Update rule-combination mode.

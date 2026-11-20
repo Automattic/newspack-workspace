@@ -28,7 +28,7 @@ trait Trait_Restriction_Cache_Test {
 	 */
 	protected function reset_restriction_cache() {
 		Content_Restriction_Control::flush_term_descendants_memo();
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map' ] as $cache_property ) {
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'archive_gate_map' ] as $cache_property ) {
 			$cache_property_reflection = new \ReflectionProperty( Content_Restriction_Control::class, $cache_property );
 			$cache_property_reflection->setAccessible( true );
 			$cache_property_reflection->setValue( null, [] );
