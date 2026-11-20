@@ -652,17 +652,18 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Whether the request is one where products are managed rather than read:
-	 * a wp-admin screen, or WooCommerce's admin AJAX (order items, product
-	 * search, quick edit). Other admin-ajax requests count as the storefront,
-	 * since themes render listings through them. REST requests always count as
-	 * the storefront: the core product route is public, and the people who
-	 * manage products through REST can see every product anyway.
+	 * Whether the request is a wp-admin screen, where products are edited
+	 * rather than read.
+	 *
+	 * AJAX and REST requests always get the reader's view: themes render
+	 * listings over admin-ajax.php, the core product route is public, and the
+	 * markers that would tell an admin request apart are sent by the client.
+	 * Those who manage products see every product anyway, through can_view().
 	 *
 	 * @return bool
 	 */
 	private static function is_admin_screen(): bool {
-		return ( is_admin() && ! wp_doing_ajax() ) || Subscriber_Commerce::is_admin_ajax_request();
+		return is_admin() && ! wp_doing_ajax();
 	}
 
 	/**

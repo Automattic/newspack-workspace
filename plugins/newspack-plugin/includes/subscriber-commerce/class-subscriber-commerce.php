@@ -58,36 +58,6 @@ class Subscriber_Commerce {
 	}
 
 	/**
-	 * Whether the request is WooCommerce's admin-screen AJAX: a call that reads
-	 * products or prices in order to write them back, or to populate an admin
-	 * picker. The storefront's own AJAX (add to cart, cart fragments) and any
-	 * listing a theme renders over admin-ajax.php are not in this list.
-	 *
-	 * @return bool
-	 */
-	public static function is_admin_ajax_request(): bool {
-		if ( ! wp_doing_ajax() ) {
-			return false;
-		}
-		// Quick Edit posts `action=inline-save` and marks itself with a request
-		// field rather than an action, so it is detected separately.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading request markers only, to tell admin AJAX from the storefront's.
-		if ( ! empty( $_REQUEST['woocommerce_quick_edit'] ) ) {
-			return true;
-		}
-		$admin_ajax_actions = [
-			'woocommerce_add_order_item',
-			'woocommerce_save_order_items',
-			'woocommerce_calc_line_taxes',
-			'woocommerce_json_search_products',
-			'woocommerce_json_search_products_and_variations',
-		];
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the action only, to tell admin AJAX from the storefront's.
-		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
-		return in_array( $action, $admin_ajax_actions, true );
-	}
-
-	/**
 	 * Whether subscriber-commerce rules are enforced at all.
 	 *
 	 * Two things stand enforcement down, and they differ in what the publisher can

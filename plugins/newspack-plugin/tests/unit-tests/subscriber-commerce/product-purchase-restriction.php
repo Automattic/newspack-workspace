@@ -1114,8 +1114,9 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		$this->assertTrue( post_password_required( $this->restricted_product->get_id() ), 'admin-ajax serves readers.' );
 		$this->assertSame( '', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ) );
-		$_REQUEST['action'] = 'woocommerce_json_search_products';
-		$this->assertSame( '$8.00', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ), "WooCommerce's admin AJAX manages products." );
+		$_REQUEST['action']                 = 'woocommerce_json_search_products';
+		$_REQUEST['woocommerce_quick_edit'] = '1';
+		$this->assertSame( '', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ), 'Request markers a client can send open nothing.' );
 		remove_filter( 'wp_doing_ajax', '__return_true' );
 
 		// The core product route is public, so a REST read gets the reader's view.
