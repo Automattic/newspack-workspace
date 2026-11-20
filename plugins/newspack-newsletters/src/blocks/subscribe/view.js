@@ -3,6 +3,7 @@
  * Internal dependencies
  */
 import './style.scss';
+import { getRecaptchaToken } from './recaptcha';
 
 let nonce;
 
@@ -286,7 +287,12 @@ domReady( function () {
 				} );
 			};
 
-			submitSubscribe();
+			getRecaptchaToken( form, { useCaptcha: !! newspack_newsletters_subscribe_block.use_captcha } ).then( token => {
+				if ( token ) {
+					body.set( 'g-recaptcha-response', token );
+				}
+				submitSubscribe();
+			} );
 		} );
 	} );
 } );
