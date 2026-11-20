@@ -1050,6 +1050,19 @@ class Salesforce {
 	}
 
 	/**
+	 * Escape a value for interpolation into a single-quoted SOQL string literal.
+	 *
+	 * Backslashes are escaped before single quotes so the backslashes added by
+	 * the quote escaping aren't themselves re-escaped.
+	 *
+	 * @param string $value Value to escape.
+	 * @return string Escaped value.
+	 */
+	private static function escape_soql( $value ) {
+		return str_replace( [ '\\', "'" ], [ '\\\\', "\\'" ], (string) $value );
+	}
+
+	/**
 	 * Look up existing Contact records by email address.
 	 *
 	 * @param string $email Email address of the contact.
@@ -1057,7 +1070,7 @@ class Salesforce {
 	 */
 	private static function get_contacts_by_email( $email ) {
 		$query    = [
-			'q' => "SELECT Id, FirstName, LastName, Description FROM Contact WHERE Email = '" . $email . "'",
+			'q' => "SELECT Id, FirstName, LastName, Description FROM Contact WHERE Email = '" . self::escape_soql( $email ) . "'",
 		];
 		$endpoint = '/services/data/v48.0/query?' . http_build_query( $query );
 		$response = self::build_request( $endpoint );
@@ -1098,7 +1111,7 @@ class Salesforce {
 		if ( is_array( $opportunities ) ) {
 			$opportunities = array_map(
 				function( $opportunity_id ) {
-					return "'$opportunity_id'";
+					return "'" . self::escape_soql( $opportunity_id ) . "'";
 				},
 				$opportunities
 			);
@@ -1106,7 +1119,7 @@ class Salesforce {
 
 		$opportunity_ids = is_array( $opportunities ) && ! empty( $opportunities ) ? implode( ',', $opportunities ) : false;
 
-		$name        = $order_item['Name'];
+		$name        = self::escape_soql( $order_item['Name'] );
 		$amount      = $order_item['Amount'];
 		$description = $order_item['Description'];
 		$close_date  = $order_item['CloseDate'];
