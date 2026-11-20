@@ -550,11 +550,12 @@ class Content_Gifting {
 						)
 					);
 				} else {
+					$gifting_limit = self::get_gifting_limit();
 					echo esc_html(
 						sprintf(
 							// translators: %1$d is the number of gift articles limit, %2$s is the interval label.
-							__( 'You\'ve reached your limit of %1$d gifted articles %2$s.', 'newspack-plugin' ),
-							self::get_gifting_limit(),
+							_n( 'You\'ve reached your limit of %1$d gifted article %2$s.', 'You\'ve reached your limit of %1$d gifted articles %2$s.', $gifting_limit, 'newspack-plugin' ),
+							$gifting_limit,
 							$interval_labels[0]
 						)
 					);
