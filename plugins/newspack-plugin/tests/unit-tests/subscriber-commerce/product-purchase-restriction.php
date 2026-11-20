@@ -991,6 +991,9 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'ebook.jpg', Product_Purchase_Restriction::filter_listed_image( '<img src="ebook.jpg">', $this->restricted_product ) );
 		$this->assertFalse( Product_Purchase_Restriction::filter_variation_is_visible( true, $variation->get_id(), $this->restricted_product->get_id(), $variation ) );
 
+		Subscriber_Only_Products::update_settings( [ 'product_page' => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT ] );
+		$this->assertSame( '', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ), 'Whatever the product page does.' );
+
 		wp_set_current_user( $this->subscriber_id );
 		$this->assertSame( '$8.00', Product_Purchase_Restriction::filter_listed_price( '$8.00', $this->restricted_product ) );
 		$this->assertTrue( Product_Purchase_Restriction::filter_variation_is_visible( true, $variation->get_id(), $this->restricted_product->get_id(), $variation ) );
@@ -1037,6 +1040,15 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		$this->assertSame( '', $collection[0]['price_html'] );
 		$this->assertSame( '$8.00', $collection[1]['price_html'], 'A product nobody hides is untouched.' );
 
+		// Through the hook, beside core's `_fields` trimming: a request naming
+		// fields without `prices` is still redacted.
+		add_filter( 'rest_post_dispatch', 'rest_filter_response_fields', 10, 3 );
+		$trimmed_request = new \WP_REST_Request( 'GET', '/wc/store/v1/products/' . $this->restricted_product->get_id() );
+		$trimmed_request->set_param( '_fields', 'id,description,images' );
+		$trimmed = apply_filters( 'rest_post_dispatch', new \WP_REST_Response( $item( $this->restricted_product ) ), rest_get_server(), $trimmed_request )->get_data();
+		$this->assertSame( '', $trimmed['description'] );
+		$this->assertSame( [], $trimmed['images'] );
+
 		wp_set_current_user( $this->subscriber_id );
 		$this->flush_caches();
 		$this->assertSame( '<p>The whole book.</p>', $dispatch( '/wc/store/v1/products/' . $this->restricted_product->get_id(), $item( $this->restricted_product ) )['description'] );
@@ -1056,6 +1068,26 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 
 		wp_set_current_user( $this->subscriber_id );
 		$this->assertFalse( post_password_required( $this->restricted_product->get_id() ) );
+	}
+
+	/**
+	 * The core REST API leaves out a hidden product's featured image too.
+	 */
+	public function test_the_rest_api_leaves_out_a_hidden_products_image() {
+		$this->make_rule_view_restricted();
+		$response = function () {
+			$response = new \WP_REST_Response( [ 'featured_media' => 42 ] );
+			$response->add_link( 'https://api.w.org/featuredmedia', 'https://example.com/wp-json/wp/v2/media/42' );
+			return $response;
+		};
+
+		wp_set_current_user( $this->non_subscriber_id );
+		$hidden = Product_Purchase_Restriction::filter_rest_product( $response(), get_post( $this->restricted_product->get_id() ) );
+		$this->assertSame( 0, $hidden->get_data()['featured_media'] );
+		$this->assertArrayNotHasKey( 'https://api.w.org/featuredmedia', $hidden->get_links() );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertSame( 42, Product_Purchase_Restriction::filter_rest_product( $response(), get_post( $this->restricted_product->get_id() ) )->get_data()['featured_media'] );
 	}
 
 	/**

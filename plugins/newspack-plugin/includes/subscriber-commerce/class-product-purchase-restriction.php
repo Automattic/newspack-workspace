@@ -117,7 +117,12 @@ class Product_Purchase_Restriction {
 		add_filter( 'the_excerpt', [ __CLASS__, 'filter_listed_excerpt' ], 999 );
 		add_filter( 'post_thumbnail_html', [ __CLASS__, 'filter_listed_thumbnail' ], 999, 2 );
 		// The Store API serves product data to blocks and to anyone who asks.
-		add_filter( 'rest_post_dispatch', [ __CLASS__, 'filter_store_api_response' ], 10, 3 );
+		// Priority 9: before rest_filter_response_fields() trims the response to
+		// `_fields`, which could drop the keys redaction recognises a product by.
+		add_filter( 'rest_post_dispatch', [ __CLASS__, 'filter_store_api_response' ], 9, 3 );
+		// The core REST API withholds a hidden product's content and excerpt as
+		// password-protected; its featured image goes here.
+		add_filter( 'rest_prepare_product', [ __CLASS__, 'filter_rest_product' ], 10, 2 );
 	}
 
 	/**
@@ -644,22 +649,15 @@ class Product_Purchase_Restriction {
 
 	/**
 	 * Whether a product listed for this reader should show as hidden: the
-	 * reader may not see it, and the product page keeps its content hidden.
-	 *
-	 * In the 404 and redirect modes the product page itself is the protection,
-	 * as in WooCommerce Memberships, so a listed product keeps its price and
-	 * image. "Hide completely" leaves it out of lists altogether.
+	 * reader may not see it. Whatever the product page does, a listing that
+	 * still shows the product withholds its price, image and excerpt.
 	 *
 	 * @param \WC_Product $product The product (or variation).
 	 *
 	 * @return bool
 	 */
 	private static function is_listed_as_hidden( $product ): bool {
-		if ( ! $product instanceof \WC_Product || is_admin() ) {
-			return false;
-		}
-		$settings = Subscriber_Only_Products::get_settings();
-		return Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT === $settings['product_page'] && ! self::can_view( $product );
+		return $product instanceof \WC_Product && ! is_admin() && ! self::can_view( $product );
 	}
 
 	/**
@@ -796,6 +794,28 @@ class Product_Purchase_Restriction {
 			$items[ $index ] = self::redact_store_api_product( $item );
 		}
 		$response->set_data( $is_single ? $items[0] : $items );
+		return $response;
+	}
+
+	/**
+	 * Leave a hidden product's featured image out of the core REST API.
+	 *
+	 * @param \WP_REST_Response|mixed $response The response.
+	 * @param \WP_Post                $post     The product post.
+	 *
+	 * @return \WP_REST_Response|mixed
+	 */
+	public static function filter_rest_product( $response, $post ) {
+		if ( ! $response instanceof \WP_REST_Response || ! self::get_hidden_product( $post ) ) {
+			return $response;
+		}
+		$data = $response->get_data();
+		if ( isset( $data['featured_media'] ) ) {
+			$data['featured_media'] = 0;
+			$response->set_data( $data );
+		}
+		$response->remove_link( 'https://api.w.org/featuredmedia' );
+		$response->remove_link( 'https://api.w.org/attachment' );
 		return $response;
 	}
 
