@@ -2,6 +2,7 @@
  * The iframe block's retry (NPPM-3180) must leave a frame that already holds a
  * document alone, must never reset `src`, which adds a history entry, and must
  * never navigate a frame with no src of its own, which would load the page inside it.
+ * The resize listener must ignore messages until the frame has a src of its own.
  */
 
 const SRC = 'https://embed.example.test/widget';
@@ -121,5 +122,26 @@ describe( 'iframe block view script', () => {
 		expect( () => jest.advanceTimersByTime( 10000 ) ).not.toThrow();
 		expect( replace ).toHaveBeenCalledTimes( 1 );
 		expect( jest.getTimerCount() ).toBe( 0 );
+	} );
+
+	it( 'ignores messages until a lazy loader gives the frame its src', () => {
+		const { iframe } = renderIframe( { URL: 'about:blank' }, `class="perfmatters-lazy" data-src="${ SRC }"` );
+		// The embed's own resize message, which only the src check can turn away.
+		const resizeMessage = { data: { height: 500 }, origin: new URL( SRC ).origin, source: iframe.contentWindow };
+		// A listener that throws doesn't throw out of dispatchEvent: the page gets an error event, as in a browser.
+		const errors = [];
+		const onError = event => errors.push( event.message );
+		window.addEventListener( 'error', onError );
+
+		window.dispatchEvent( new MessageEvent( 'message', resizeMessage ) );
+		expect( errors ).toEqual( [] );
+		expect( iframe.style.height ).toBe( '' );
+
+		// The lazy loader copies data-src into src as the frame nears the viewport.
+		iframe.setAttribute( 'src', SRC );
+		window.dispatchEvent( new MessageEvent( 'message', resizeMessage ) );
+		expect( iframe.style.height ).toBe( '500px' );
+
+		window.removeEventListener( 'error', onError );
 	} );
 } );
