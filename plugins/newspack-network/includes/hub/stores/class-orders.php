@@ -78,6 +78,7 @@ class Orders extends Woo_Store {
 		update_post_meta( $local_id, 'currency', $order->get_currency() );
 		update_post_meta( $local_id, 'total', $order->get_total() );
 		update_post_meta( $local_id, 'payment_method_title', $order->get_payment_method_title() );
+		update_post_meta( $local_id, 'is_complimentary', $order->is_complimentary() ? 1 : 0 );
 
 		Debugger::log( 'Updating post status to ' . $order->get_status_after() );
 		$update_array = [

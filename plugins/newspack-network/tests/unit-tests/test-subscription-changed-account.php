@@ -24,11 +24,12 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 		return new Subscription_Changed(
 			'https://a.example.test',
 			[
-				'email'        => $email,
-				'user_id'      => 3,
-				'id'           => 42,
-				'status_after' => $status,
-				'products'     => [
+				'email'         => $email,
+				'user_id'       => 3,
+				'id'            => 42,
+				'status_before' => 'pending',
+				'status_after'  => $status,
+				'products'      => [
 					7 => [
 						'id'   => 7,
 						'name' => 'Premium',

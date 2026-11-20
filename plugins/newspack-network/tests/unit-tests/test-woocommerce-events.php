@@ -250,6 +250,15 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			public function get_payment_method_title() {
 				return 'Card';
 			}
+
+			/**
+			 * Meta, none of which is set.
+			 *
+			 * @return string
+			 */
+			public function get_meta() {
+				return '';
+			}
 		};
 	}
 

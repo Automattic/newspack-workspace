@@ -76,9 +76,12 @@ class Subscription_Changed extends Woo_Item_Changed {
 		// so create it rather than lose the subscription: nothing re-sends it once the account exists.
 		// Only a subscription that grants access earns an account: deleting a reader cancels their
 		// subscriptions, and that cancellation would otherwise bring the account back on every other site.
+		// A resend with an unchanged status (a complimentary access restamp) only updates what
+		// is already here: it reaches every site at once, and would otherwise bring back
+		// accounts their sites deleted.
 		$existing_user = get_user_by( 'email', $email );
 		if ( ! $existing_user ) {
-			if ( ! in_array( $this->get_status_after(), Access::ACTIVE_STATUSES, true ) ) {
+			if ( ! in_array( $this->get_status_after(), Access::ACTIVE_STATUSES, true ) || $this->get_status_before() === $this->get_status_after() ) {
 				return;
 			}
 			User_Update_Watcher::$enabled = false;
