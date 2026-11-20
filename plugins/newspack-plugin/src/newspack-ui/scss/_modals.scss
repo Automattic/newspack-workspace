@@ -190,7 +190,12 @@
 				color: inherit;
 				font-family: var(--newspack-ui-font-family-heading);
 				font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
-				margin: 0;
+
+				// Site CSS such as `.single h2 { margin-top: 80px !important; }` would otherwise
+				// push the title out of line with the close button, which is held in place the same way.
+				.newspack-ui__modal & {
+					margin: 0 !important;
+				}
 
 				&[tabindex="-1"]:focus {
 					outline: none;
