@@ -89,7 +89,10 @@ class Contact_Sync extends Sync {
 	 * Substring signatures (lowercase) that classify an ESP error message on
 	 * the push/upsert direction.
 	 *
-	 * Matched in order against the lowercased error message. The Newsletters
+	 * Matched in order against the lowercased error message, so a message
+	 * carrying two signatures takes the first class: Mailchimp's
+	 * compliance-state refusal also says "already a list member", and has to
+	 * meet 'compliance state' before the benign signatures. The Newsletters
 	 * ESP layer behind the `esp` integration discards the HTTP status that
 	 * would identify these cleanly (only a "{Title}: {detail}" string
 	 * survives), so its errors classify by text. An auth or payment status
@@ -101,7 +104,13 @@ class Contact_Sync extends Sync {
 	 *   - permanent_config:  site-level ESP account problem; actionable.
 	 *   - benign:            the contact already exists; no retry needed.
 	 *
-	 * Anything not matched here is treated as 'transient' and retried.
+	 * Anything not matched here is treated as 'transient' and retried. Some
+	 * Mailchimp errors that no retry fixes stay unmatched on purpose, because
+	 * the transient path is what pages for them: a deleted audience or group
+	 * ("Resource Not Found", "Invalid interest ID"), which the hourly health
+	 * check never looks for, and the generic "could not be validated" detail on
+	 * Mailchimp's field errors, which also covers a payload problem that fails
+	 * every contact.
 	 */
 	private const ERROR_SIGNATURES = [
 		'permanent_contact' => [
@@ -112,10 +121,16 @@ class Contact_Sync extends Sync {
 			'contact email address is not valid',
 			'email address already exists',
 			'not a valid choice',
+			'compliance state',
+			'invalid email address and cannot be imported',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
 			'payment required',
+			'api key invalid',
+			'invalid mailchimp api key',
+			'user disabled',
+			'authorization failure',
 		],
 		'benign'            => [
 			'member exists',
@@ -142,10 +157,16 @@ class Contact_Sync extends Sync {
 			'contact email address is not valid',
 			'email address already exists',
 			'not a valid choice',
+			'compliance state',
+			'invalid email address and cannot be imported',
 		],
 		'permanent_config'  => [
 			'api access has been disabled',
 			'payment required',
+			'api key invalid',
+			'invalid mailchimp api key',
+			'user disabled',
+			'authorization failure',
 		],
 		'benign'            => [
 			'was permanently deleted',
