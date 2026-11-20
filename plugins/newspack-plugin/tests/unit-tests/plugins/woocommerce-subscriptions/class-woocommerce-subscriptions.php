@@ -9,7 +9,6 @@ use Newspack\WooCommerce_Subscriptions;
 use Newspack\Reader_Activation;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
-require_once __DIR__ . '/class-newspack-test-modal-checkout.php';
 
 /**
  * Test WooCommerce Subscriptions integration functionality.
@@ -72,15 +71,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Ensure a modal checkout implementation is available to the integration under test.
-	 */
-	private function ensure_modal_checkout_available() {
-		if ( ! class_exists( 'Newspack_Blocks\Modal_Checkout' ) ) {
-			class_alias( 'Newspack_Test_Modal_Checkout', 'Newspack_Blocks\Modal_Checkout' );
-		}
-	}
-
-	/**
 	 * Test WooCommerce_Subscriptions::is_active.
 	 */
 	public function test_is_active() {
@@ -100,8 +90,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 * Trial limiting resolves serialized checkout emails outside modal checkout.
 	 */
 	public function test_limit_free_trials_resolves_serialized_email_outside_modal_checkout() {
-		$this->ensure_modal_checkout_available();
-
 		$user_id = $this->factory->user->create(
 			[
 				'user_email' => 'repeat@example.com',
@@ -129,8 +117,6 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	 * Trial limiting still resolves serialized checkout emails in modal checkout.
 	 */
 	public function test_limit_free_trials_resolves_serialized_email_in_modal_checkout() {
-		$this->ensure_modal_checkout_available();
-
 		$user_id = $this->factory->user->create(
 			[
 				'user_email' => 'repeat@example.com',
