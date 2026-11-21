@@ -1317,11 +1317,25 @@
 			"title": "Page (Wide) - No Title"
 		},
 		{
+			"name": "single/no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single (No featured image)"
+		},
+		{
 			"name": "single/large-image",
 			"postTypes": [
 				"post"
 			],
 			"title": "Single - Large Image (964px)"
+		},
+		{
+			"name": "single/large-image--no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single - Large Image (964px) (No featured image)"
 		},
 		{
 			"name": "single/wide-image",
@@ -1331,11 +1345,25 @@
 			"title": "Single - Wide Image (1296px)"
 		},
 		{
+			"name": "single/wide-image--no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single - Wide Image (1296px) (No featured image)"
+		},
+		{
 			"name": "single/full-width-image",
 			"postTypes": [
 				"post"
 			],
 			"title": "Single - Full Width Image"
+		},
+		{
+			"name": "single/full-width-image--no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single - Full Width Image (No featured image)"
 		},
 		{
 			"name": "single/50-50-image",
@@ -1345,11 +1373,32 @@
 			"title": "Single - 50/50 Image/Header"
 		},
 		{
+			"name": "single/50-50-image--no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single - 50/50 Image/Header (No featured image)"
+		},
+		{
 			"name": "single/sidebar-layout",
 			"postTypes": [
 				"post"
 			],
 			"title": "Single - Sidebar Layout"
+		},
+		{
+			"name": "single/sidebar-layout--no-featured-image",
+			"postTypes": [
+				"post"
+			],
+			"title": "Single - Sidebar Layout (No featured image)"
+		},
+		{
+			"name": "single/newsletter--no-featured-image",
+			"postTypes": [
+				"newspack_nl_cpt"
+			],
+			"title": "Single Newsletter (No featured image)"
 		}
 	],
 	"templateParts": [
