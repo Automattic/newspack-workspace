@@ -79,7 +79,7 @@ fi
 
 # Commands run from the workspace root, so keep where the caller was for the
 # ones that resolve an env from it (`n env which`).
-export N_CALLER_PWD="$PWD"
+caller_pwd="$PWD"
 cd "$(dirname "$0")"
 source .env
 
@@ -451,7 +451,7 @@ case $1 in
         "$NABSPATH/bin/worktree.sh" "${@:2}"
         ;;
     env)
-        "$NABSPATH/bin/env.sh" "${@:2}"
+        N_CALLER_PWD="$caller_pwd" "$NABSPATH/bin/env.sh" "${@:2}"
         ;;
     root)
         echo "$NABSPATH"

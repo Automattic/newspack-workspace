@@ -907,8 +907,10 @@ MIGRATE
             env_porcelain_row "$env_name"
             exit 0
         fi
-        # The same files `up` reads; .env wins. Only the user is shown: agents
-        # copy what they see into transcripts, so the password is named, not printed.
+        # The same files `up` reads; .env wins. That is the configured user, which can
+        # differ from the site admin if .env changed after install. Only the user is
+        # shown: agents copy what they see into transcripts, so the password is named,
+        # not printed.
         admin_user=$(
             # shellcheck source=/dev/null
             [[ -f "$NABSPATH/default.env" ]] && source "$NABSPATH/default.env"
@@ -921,7 +923,7 @@ MIGRATE
         echo "URL:       https://$(domain_for_env "$compose_file")/"
         worktrees=$(env_worktrees "$compose_file")
         echo "Worktrees: ${worktrees:-(none)}"
-        echo "Login:     $admin_user (password: WP_ADMIN_PASSWORD in .env)"
+        echo "Login:     $admin_user (configured; password: WP_ADMIN_PASSWORD in .env or default.env)"
         ;;
     cleanup)
         shift
@@ -1020,7 +1022,7 @@ MIGRATE
         echo "Usage: n env <create|up|down|destroy|list|which|cleanup|e2e-setup>"
         echo "  up <name> [--build]      Start an environment"
         echo "  up --all [--build]       Start all environments"
-        echo "  which [name] [--porcelain]  Show the env serving this worktree, or the named one"
+        echo "  which [name]             Show the env serving this worktree, or the named one (--porcelain for one row)"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
         ;;
