@@ -202,7 +202,8 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 * A literal backslash in the sanitized value survives the write.
 	 *
 	 * Unlike update_post_meta(), update_metadata_by_mid() does not unslash its value — a
-	 * wp_slash() call in the write path would silently strip every backslash.
+	 * stray wp_slash() call in the write path would leave an extra backslash in the
+	 * stored value, since nothing downstream removes it.
 	 */
 	public function test_preserves_a_literal_backslash_when_live() {
 		$post_id = self::factory()->post->create();
