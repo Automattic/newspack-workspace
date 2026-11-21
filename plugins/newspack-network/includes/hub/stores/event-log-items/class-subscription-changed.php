@@ -21,6 +21,16 @@ class Subscription_Changed extends Abstract_Event_Log_Item {
 	 */
 	public function get_summary() {
 		$url = empty( $this->get_node_id() ) ? get_bloginfo( 'url' ) : $this->get_node_url();
+		// A restamp resends the item with its status unchanged.
+		if ( isset( $this->get_data()->status_before ) && $this->get_data()->status_before === $this->get_data()->status_after ) {
+			return sprintf(
+				/* translators: 1: Subscription ID 2: Status, 3: site url */
+				__( 'Subscription #%1$d was re-sent with status %2$s on %3$s', 'newspack-network' ),
+				$this->get_data()->id,
+				$this->get_data()->status_after,
+				$url
+			);
+		}
 		return sprintf(
 			/* translators: 1: Subscription ID 2: Previous status, 3: New status, 4: site url */
 			__( 'Subscription #%1$d updated its status from %2$s to %3$s on %4$s', 'newspack-network' ),

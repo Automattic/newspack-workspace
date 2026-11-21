@@ -82,6 +82,7 @@ class Subscriptions extends Woo_Store {
 		update_post_meta( $local_id, 'next_payment_date', $subscription->get_next_payment_date() );
 		update_post_meta( $local_id, 'last_payment_date', $subscription->get_last_payment_date() );
 		update_post_meta( $local_id, 'end_date', $subscription->get_end_date() );
+		update_post_meta( $local_id, 'is_complimentary', $subscription->is_complimentary() ? 1 : 0 );
 
 		delete_post_meta( $local_id, 'products' );
 		foreach ( $subscription->get_products() as $product ) {
