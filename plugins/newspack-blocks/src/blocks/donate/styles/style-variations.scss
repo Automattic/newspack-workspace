@@ -461,6 +461,20 @@
 	}
 
 	&.wpbnbd--frequency-based {
+		.frequencies {
+			container: wpbnbd-frequencies / inline-size;
+		}
+
+		@container wpbnbd-frequencies ( width <= 480px ) {
+			.newspack-ui__segmented-control__tabs {
+				align-self: stretch;
+
+				.newspack-ui__button {
+					flex: 1 1 0;
+				}
+			}
+		}
+
 		form {
 			&::after {
 				background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
