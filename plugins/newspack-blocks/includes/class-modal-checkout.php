@@ -84,13 +84,16 @@ final class Modal_Checkout {
 	const ORDER_META_KEY = '_newspack_modal_checkout';
 
 	/**
-	 * The default newspack-ui button radius in pixels, used when the Theme style is off.
+	 * The express checkout button radius in pixels when the site's own radius can't be used.
+	 *
+	 * Applies when the Theme style is off, as on classic themes, or when its button radius is
+	 * not a px or rem length.
 	 *
 	 * Mirrors --newspack-ui-radius-button, which defaults to --newspack-ui-border-radius-l (8px)
 	 * in newspack-plugin's src/newspack-ui/scss/variables/_index.scss. newspack-ui has no
 	 * server-side copy of that value.
 	 */
-	const NEWSPACK_UI_BUTTON_RADIUS = 8;
+	const DEFAULT_EXPRESS_BUTTON_RADIUS = 8;
 
 	/**
 	 * Cart item keys the in-modal quantity form carries over when it re-adds the
@@ -3091,7 +3094,7 @@ final class Modal_Checkout {
 	 * @return int
 	 */
 	public static function get_express_checkout_button_radius(): int {
-		$radius = self::NEWSPACK_UI_BUTTON_RADIUS;
+		$radius = self::DEFAULT_EXPRESS_BUTTON_RADIUS;
 		if (
 			class_exists( 'Newspack\Newspack_UI_Theme_Style' )
 			&& method_exists( 'Newspack\Newspack_UI_Theme_Style', 'get_button_radius' )

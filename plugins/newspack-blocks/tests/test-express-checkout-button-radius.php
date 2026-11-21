@@ -87,8 +87,8 @@ class ExpressCheckoutButtonRadiusTest extends WP_UnitTestCase_Blocks { // phpcs:
 			'fractional' => [ '1.5px', 2 ],
 			'rem'        => [ '1.5rem', 24 ],
 			'zero'       => [ '0px', 0 ],
-			'em'         => [ '2em', \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS ],
-			'empty'      => [ '', \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS ],
+			'em'         => [ '2em', \Newspack_Blocks\Modal_Checkout::DEFAULT_EXPRESS_BUTTON_RADIUS ],
+			'empty'      => [ '', \Newspack_Blocks\Modal_Checkout::DEFAULT_EXPRESS_BUTTON_RADIUS ],
 		];
 	}
 
