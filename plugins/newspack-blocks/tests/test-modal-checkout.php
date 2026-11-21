@@ -959,21 +959,37 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * A filtered radius is a whole, non-negative number of pixels.
+	 * Filtered radius values and the pixel radius each one gives.
+	 *
+	 * @return array<string,array{0:mixed,1:int}>
 	 */
-	public function test_express_checkout_button_radius_filter_is_sanitized() {
-		$negative = static fn() => -4;
-		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $negative );
-		$from_negative = \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius();
-		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $negative );
+	public function filtered_radius_provider() {
+		$default = \Newspack_Blocks\Modal_Checkout::DEFAULT_EXPRESS_BUTTON_RADIUS;
+		return [
+			'negative'       => [ -4, 0 ],
+			'numeric string' => [ '2', 2 ],
+			'float'          => [ 2.7, 3 ],
+			'null'           => [ null, $default ],
+			'empty string'   => [ '', $default ],
+			'non-numeric'    => [ 'abc', $default ],
+		];
+	}
 
-		$numeric = static fn() => '2';
-		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $numeric );
-		$from_numeric = \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius();
-		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $numeric );
+	/**
+	 * A filtered radius is a whole, non-negative number of pixels, and a non-numeric one keeps the default.
+	 *
+	 * @dataProvider filtered_radius_provider
+	 *
+	 * @param mixed $filtered Value the filter callback returns.
+	 * @param int   $expected Expected pixel radius.
+	 */
+	public function test_express_checkout_button_radius_filter_is_sanitized( $filtered, $expected ) {
+		$callback = static fn() => $filtered;
+		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $callback );
+		$radius = \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius();
+		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $callback );
 
-		$this->assertSame( 0, $from_negative );
-		$this->assertSame( 2, $from_numeric );
+		$this->assertSame( $expected, $radius );
 	}
 
 	/**
