@@ -190,7 +190,13 @@
 				color: inherit;
 				font-family: var(--newspack-ui-font-family-heading);
 				font-weight: var(--newspack-ui-heading-font-weight, var(--newspack-ui-font-weight-strong));
-				margin: 0;
+
+				// Keeps site CSS such as `.single h2 { margin-top: 80px !important; }` from pushing the
+				// title out of line with the close button, whose margins are also `!important`. The
+				// modal ancestor raises specificity above such a rule; `!important` alone would tie.
+				.newspack-ui__modal & {
+					margin: 0 !important;
+				}
 
 				&[tabindex="-1"]:focus {
 					outline: none;
