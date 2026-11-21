@@ -160,7 +160,7 @@ n env down|destroy <name>
 n env list [--porcelain]
 n env which [name] [--porcelain]   # Env serving the current worktree
 n env cleanup                 # Interactive bulk cleanup
-n env cleanup --stale[=DAYS] [--yes]   # Only stopped envs: worktrees gone, PR merged, or unused
+n env cleanup --stale[=DAYS] [--yes]   # Only stopped envs: worktrees gone, PR merged, or unused; deletes only merged branches
 ```
 
 - Reachable at `https://<name>.test` (mkcert HTTPS) on its own loopback IP. `n start` pre-creates the aliases so envs can be created without sudo; `./bin/setup-networking.sh` removes the remaining password prompts.
