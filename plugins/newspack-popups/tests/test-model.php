@@ -41,7 +41,7 @@ class ModelTest extends WP_UnitTestCase {
 				'close_button_background_color'  => '#00000000',
 				'enable_close_button_background' => false,
 				'overlay_color'                  => '#000000',
-				'overlay_opacity'                => '30',
+				'overlay_opacity'                => '50',
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
 				'manual_only'                    => false,
@@ -235,6 +235,44 @@ class ModelTest extends WP_UnitTestCase {
 				'newspack-popup--block-theme',
 				$lightbox->getAttribute( 'class' ),
 				'Overlay popups receive the block theme class.'
+			);
+
+			$wrapper = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-popup-wrapper ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'background-color:var(--wp--preset--color--base, #fff)',
+				$wrapper->getAttribute( 'style' ),
+				'An overlay on the default white takes the site background.'
+			);
+			$close = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox__close ")]' )->item( 0 );
+			self::assertStringContainsString(
+				'color: var(--wp--preset--color--contrast, #000)',
+				$close->getAttribute( 'style' ),
+				'The close icon follows the site text color.'
+			);
+
+			$popup_object_translucent_close = Newspack_Popups_Model::create_popup_object(
+				get_post( self::$popup_id ),
+				false,
+				[
+					'placement'                      => 'center',
+					'trigger_type'                   => 'time',
+					'enable_close_button_background' => true,
+					'close_button_background_color'  => '#00000000',
+				]
+			);
+			$dom = new DomDocument();
+			@$dom->loadHTML( Newspack_Popups_Model::generate_popup( $popup_object_translucent_close ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$xpath       = new DOMXpath( $dom );
+			$close_style = $xpath->query( '//*[contains(concat(" ", normalize-space(@class), " "), " newspack-lightbox__close ")]' )->item( 0 )->getAttribute( 'style' );
+			self::assertStringContainsString(
+				'color: var(--wp--preset--color--contrast, #000)',
+				$close_style,
+				'A translucent close fill over the site background uses the site text color for its icon.'
+			);
+			self::assertStringContainsString(
+				'--newspack-lightbox-close-bg-hover: color-mix(in oklab, currentcolor',
+				$close_style,
+				'Its hover state mixes the icon color, not a color computed against white.'
 			);
 		} finally {
 			Newspack_Popups_Model::set_block_theme_override( null );
@@ -682,6 +720,81 @@ class ModelTest extends WP_UnitTestCase {
 	 */
 	public function test_foreground_color_for_background( $background, $expected ) {
 		self::assertSame( $expected, Newspack_Popups_Model::foreground_color_for_background( $background ) );
+	}
+
+	/**
+	 * Prompt backgrounds, as [ block theme, placement, background, follows the site ].
+	 */
+	public function uses_site_background_data() {
+		return [
+			'block theme overlay on default white' => [ true, 'center', '#FFFFFF', true ],
+			'block theme overlay on lowercase'     => [ true, 'bottom', '#ffffff', true ],
+			'block theme overlay on shorthand'     => [ true, 'center', '#fff', true ],
+			'block theme overlay on custom color'  => [ true, 'center', '#f0f0f0', false ],
+			'block theme overlay on black'         => [ true, 'center', '#000000', false ],
+			'block theme inline on white'          => [ true, 'inline', '#FFFFFF', false ],
+			'classic overlay on white'             => [ false, 'center', '#FFFFFF', false ],
+		];
+	}
+
+	/**
+	 * Tests that only block theme overlays on the default white follow the site's colors.
+	 *
+	 * @dataProvider uses_site_background_data
+	 *
+	 * @param bool   $is_block_theme Whether a block theme is active.
+	 * @param string $placement      Prompt placement.
+	 * @param string $background     Prompt background.
+	 * @param bool   $expected       Whether the prompt follows the site's background.
+	 */
+	public function test_uses_site_background( $is_block_theme, $placement, $background, $expected ) {
+		$popup = [
+			'options' => [
+				'placement'        => $placement,
+				'background_color' => $background,
+			],
+		];
+		Newspack_Popups_Model::set_block_theme_override( $is_block_theme );
+		add_filter( 'newspack_ui_theme_style_active', '__return_true' );
+		try {
+			self::assertSame( $expected, Newspack_Popups_Model::uses_site_background( $popup ) );
+			if ( $expected ) {
+				self::assertSame(
+					'background-color:var(--wp--preset--color--base, #fff);color:var(--wp--preset--color--contrast, #000)',
+					Newspack_Popups_Model::container_style( $popup )
+				);
+			} else {
+				self::assertStringStartsWith( 'background-color:' . $background . ';', Newspack_Popups_Model::container_style( $popup ) );
+			}
+		} finally {
+			remove_filter( 'newspack_ui_theme_style_active', '__return_true' );
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
+	}
+
+	/**
+	 * Tests that a block theme without the newspack-ui Theme style keeps the prompt's own background.
+	 */
+	public function test_uses_site_background_requires_theme_style() {
+		$popup = [
+			'options' => [
+				'placement'        => 'center',
+				'background_color' => '#FFFFFF',
+			],
+		];
+		if ( ! class_exists( '\\Newspack\\Newspack_UI_Theme_Style' ) ) {
+			eval( 'namespace Newspack; class Newspack_UI_Theme_Style { public static function is_active() { return (bool) \apply_filters( "newspack_ui_theme_style_active", false ); } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
+		}
+		Newspack_Popups_Model::set_block_theme_override( true );
+		add_filter( 'newspack_ui_theme_style_active', '__return_false' );
+		try {
+			self::assertFalse( Newspack_Popups_Model::site_background_available() );
+			self::assertFalse( Newspack_Popups_Model::uses_site_background( $popup ) );
+			self::assertStringStartsWith( 'background-color:#FFFFFF;', Newspack_Popups_Model::container_style( $popup ) );
+		} finally {
+			remove_filter( 'newspack_ui_theme_style_active', '__return_false' );
+			Newspack_Popups_Model::set_block_theme_override( null );
+		}
 	}
 
 	/**

@@ -1,3 +1,50 @@
+## newspack [6.56.11](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.10...newspack@6.56.11) (2026-11-20)
+
+
+### Bug Fixes
+
+* **gifting:** plural form for the gift limit message (Part of NPPD-1873, [#1615](https://github.com/Automattic/newspack-workspace/issues/1615)) ([c0ef88a](https://github.com/Automattic/newspack-workspace/commit/c0ef88a20bc52b6c50c6dd22558ba3cf0acbad8d))
+
+## newspack [6.56.10](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.9...newspack@6.56.10) (2026-11-19)
+
+
+### Bug Fixes
+
+* stop MC4WC unsubscribing readers at block checkout (Ref NPPD-2490, [#1608](https://github.com/Automattic/newspack-workspace/issues/1608)) ([303ec34](https://github.com/Automattic/newspack-workspace/commit/303ec34cf59a8c188184922765d388c9021cc5f0))
+
+## newspack [6.56.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.8...newspack@6.56.9) (2026-11-19)
+
+
+### Bug Fixes
+
+* **audience:** let store staff use Audience > Subscriptions (NPPD-2619, [#1599](https://github.com/Automattic/newspack-workspace/issues/1599)) ([807e24b](https://github.com/Automattic/newspack-workspace/commit/807e24bebb012f40eeea5b6b3b241fe7792bc6ab))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
+## newspack [6.56.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.7...newspack@6.56.8) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** keep a product minimum set back to an earlier value ([#1564](https://github.com/Automattic/newspack-workspace/issues/1564)) ([1004950](https://github.com/Automattic/newspack-workspace/commit/1004950369da06f99f4cecdbe87ecd556cf859f7))
+
+## newspack [6.56.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.6...newspack@6.56.7) (2026-11-11)
+
+
+### Bug Fixes
+
+* **sync:** count newer one-time gifts in last donation fields ([#1459](https://github.com/Automattic/newspack-workspace/issues/1459)) ([2c5e462](https://github.com/Automattic/newspack-workspace/commit/2c5e4624ae21905dc7f878c3dde681ba510ef8e7))
+
+## newspack [6.56.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.5...newspack@6.56.6) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** stop overwriting per-block and per-product minimums ([#1550](https://github.com/Automattic/newspack-workspace/issues/1550)) ([5d79d59](https://github.com/Automattic/newspack-workspace/commit/5d79d59d4c492b13c2dab53f6569240c4b87ea99))
+
 ## newspack [6.56.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.4...newspack@6.56.5) (2026-11-10)
 
 

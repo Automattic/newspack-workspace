@@ -1,6 +1,7 @@
 @use "../../mixins";
 
-$caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%231E1E1E'/%3E%3C/svg%3E");
+$caret: var(--newspack-ui-field-caret, var(--newspack-ui-field-caret-dark));
+$caret-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%231E1E1E'/%3E%3C/svg%3E");
 $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M15.9902 10.889L12.0022 14.307L8.01416 10.889L8.99016 9.74899L12.0022 12.331L15.0142 9.74999L15.9902 10.889Z' fill='%23555'/%3E%3C/svg%3E");
 
 .newspack-ui {
@@ -9,15 +10,15 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 		--newspack-ui-select-caret-gap: calc(var(--newspack-ui-spacer-1) * 1.25);
 
 		appearance: none;
-		background: var(--newspack-ui-color-input-bg)
+		background: var(--newspack-ui-field-bg)
 			$caret
 			no-repeat right var(--newspack-ui-select-caret-inset) center;
-		border: 1px solid var(--newspack-ui-color-input-border);
-		border-radius: var(--newspack-ui-radius-control);
-		color: var(--newspack-ui-color-text);
+		border: var(--newspack-ui-field-border-width) solid var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border));
+		border-radius: var(--newspack-ui-field-radius);
+		color: var(--newspack-ui-field-ink);
 		cursor: pointer;
 		display: block;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-field-font-family);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		margin: 0;
@@ -32,6 +33,10 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 
 		&:dir(rtl) {
 			background-position: left var(--newspack-ui-select-caret-inset) center;
+		}
+
+		@media ( prefers-contrast: more ) {
+			border-color: var(--newspack-ui-color-input-border);
 		}
 
 		@media ( hover: hover ) and ( pointer: fine ) {
@@ -61,10 +66,10 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 
 		.select2-selection--single {
 			align-items: center;
-			background: var(--newspack-ui-color-input-bg);
-			border: 1px solid var(--newspack-ui-color-input-border);
-			border-radius: var(--newspack-ui-radius-control);
-			color: var(--newspack-ui-color-text);
+			background: var(--newspack-ui-field-bg);
+			border: var(--newspack-ui-field-border-width) solid var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border));
+			border-radius: var(--newspack-ui-field-radius);
+			color: var(--newspack-ui-field-ink);
 			display: flex;
 			height: auto;
 			margin: 0;
@@ -76,17 +81,21 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 				border-color var(--newspack-ui-duration-color) ease,
 				box-shadow var(--newspack-ui-duration-color) ease;
 
+			@media ( prefers-contrast: more ) {
+				border-color: var(--newspack-ui-color-input-border);
+			}
+
 			.select2-selection__rendered {
-				color: var(--newspack-ui-color-text);
+				color: var(--newspack-ui-field-ink);
 				flex: 1;
-				font-family: var(--newspack-ui-font-family);
+				font-family: var(--newspack-ui-field-font-family);
 				font-size: var(--newspack-ui-font-size-body);
 				line-height: var(--newspack-ui-line-height-body);
 				padding: 0;
 			}
 
 			.select2-selection__placeholder {
-				color: var(--newspack-ui-color-text-subtle);
+				color: var(--newspack-ui-field-ink-subtle, var(--newspack-ui-color-text-subtle));
 			}
 
 			.select2-selection__arrow {
@@ -95,7 +104,7 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 				height: var(--newspack-ui-spacer-5);
 				inset: 50% auto auto;
 				inset-inline-end: var(--newspack-ui-select-caret-inset);
-				mask: $caret center / contain no-repeat;
+				mask: $caret-mask center / contain no-repeat;
 				pointer-events: none;
 				position: absolute;
 				transform: translateY(-50%);
@@ -151,9 +160,10 @@ $caret-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 
 	.select2-container--default .select2-dropdown {
 		background: var(--newspack-ui-color-surface);
+		color: var(--newspack-ui-color-text);
 		border: 1px solid var(--newspack-ui-color-border);
 		border-radius: var(--newspack-ui-radius-control);
-		@include mixins.newspack-ui-elevation( 1 );
+		@include mixins.newspack-ui-elevation( 2 );
 
 		overflow: hidden;
 

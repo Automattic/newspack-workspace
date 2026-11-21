@@ -18,7 +18,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $page_title   = ( 'billing' === $load_address ) ? esc_html__( 'Billing address', 'woocommerce' ) : esc_html__( 'Shipping address', 'woocommerce' );
-$button_title = ( 'billing' === $load_address ) ? esc_html__( 'Save billing address', 'woocommerce' ) : esc_html__( 'Save shipping address', 'woocommerce' );
+$button_title = ( 'billing' === $load_address ) ? esc_html__( 'Save billing address', 'newspack-plugin' ) : esc_html__( 'Save shipping address', 'newspack-plugin' );
 
 do_action( 'woocommerce_before_edit_account_address_form' ); ?>
 

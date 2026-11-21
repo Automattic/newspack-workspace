@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-11-10T18:39:11+00:00\n"
+"POT-Creation-Date: 2026-11-11T01:11:38+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -605,17 +605,17 @@ msgstr "per år"
 msgid "Could not retrieve donation settings."
 msgstr ""
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:115
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
 #: dist/editor.js:52
 msgid "One-time"
 msgstr "En gang"
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:116
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:118
 #: dist/editor.js:52
 msgid "Monthly"
 msgstr "Månedlig"
 
-#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:117
+#: src/blocks/donate/frontend/class-newspack-blocks-donate-renderer-base.php:119
 #: dist/editor.js:52
 msgid "Annually"
 msgstr "Årlig"
@@ -1815,6 +1815,10 @@ msgstr ""
 
 #: dist/editor.js:55
 msgid "Minimum donation"
+msgstr ""
+
+#: dist/editor.js:55
+msgid "Leave empty to use the site-wide minimum donation."
 msgstr ""
 
 #: dist/editor.js:55

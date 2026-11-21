@@ -38,7 +38,6 @@ import {
 	CollapsibleGroup,
 	ColorPicker,
 	DebugBadge,
-	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
@@ -566,37 +565,6 @@ class ComponentsDemo extends Component {
 						<Card>
 							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
 							<TableCardDemo />
-						</Card>
-						<Card>
-							<h2>{ __( 'Empty state', 'newspack-plugin' ) }</h2>
-							<EmptyState.Root>
-								<EmptyState.Header
-									icon={ postList }
-									title={ __( 'Get started with posts', 'newspack-plugin' ) }
-									description={ __( 'Nothing here yet. Once you publish, your posts show up in this list.', 'newspack-plugin' ) }
-									heading={ 3 }
-								/>
-								<EmptyState.Actions>
-									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
-								</EmptyState.Actions>
-							</EmptyState.Root>
-						</Card>
-						<Card>
-							<h2>{ __( 'Empty state (small, stacked actions)', 'newspack-plugin' ) }</h2>
-							<EmptyState.Root size="small">
-								<EmptyState.Header
-									icon={ postList }
-									title={ __( 'Nothing to show yet', 'newspack-plugin' ) }
-									description={ __(
-										'The small size suits an empty state standing in for a panel inside a card.',
-										'newspack-plugin'
-									) }
-								/>
-								<EmptyState.Actions orientation="column">
-									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
-									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
-								</EmptyState.Actions>
-							</EmptyState.Root>
 						</Card>
 						<Card>
 							<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>

@@ -1,7 +1,10 @@
 import {
 	canEndTest,
+	canEndTestFromMenu,
+	createRequestQueue,
 	formatConfidence,
 	formatLift,
+	formatRate,
 	getRecommendation,
 	getVerdict,
 	getStatusIntent,
@@ -10,6 +13,11 @@ import {
 	sortTests,
 	splitSummary,
 } from './utils';
+
+// Pinned so the en-US expectations below hold on a host in any locale.
+beforeEach( () => {
+	document.documentElement.lang = 'en-US';
+} );
 
 const variant = ( extra = {} ) => ( { status: 'publish', eligible: true, ...extra } );
 
@@ -39,10 +47,16 @@ describe( 'getStatusIntent', () => {
 } );
 
 describe( 'formatLift', () => {
-	it( 'always shows a sign, and a dash when there is nothing to compare', () => {
+	it( 'shows a sign on a nonzero lift, and a dash when there is nothing to compare', () => {
 		expect( formatLift( 41.6 ) ).toBe( '+41.6%' );
 		expect( formatLift( -3.25 ) ).toBe( '-3.3%' );
 		expect( formatLift( null ) ).toBe( '—' );
+	} );
+
+	it( 'leaves a zero lift unsigned, including one rounded down to negative zero', () => {
+		expect( formatLift( 0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0 ) ).toBe( '0.0%' );
+		expect( formatLift( -0.04 ) ).toBe( '0.0%' );
 	} );
 } );
 
@@ -52,6 +66,36 @@ describe( 'formatConfidence', () => {
 		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, labels ) ).toBe( '99.1% Reliable' );
 		expect( formatConfidence( { confidence: null, label: 'collecting' }, labels ) ).toBe( 'Too early' );
 		expect( formatConfidence( null, labels ) ).toBe( '—' );
+	} );
+} );
+
+describe( 'percentages in the page’s language', () => {
+	const setLang = lang => {
+		document.documentElement.lang = lang;
+	};
+
+	it( 'uses the page’s decimal mark and percent sign placement', () => {
+		setLang( 'fr-FR' );
+		expect( formatRate( 2.6912 ) ).toMatch( /^2,69\s%$/ );
+		expect( formatConfidence( { confidence: 99.12, label: 'reliable' }, { reliable: 'Fiable' } ) ).toMatch( /^99,1\s% Fiable$/ );
+		setLang( 'tr-TR' );
+		expect( formatRate( 2.6912 ) ).toBe( '%2,69' );
+	} );
+
+	it( 'keeps the sign on a lift in any language', () => {
+		setLang( 'de-DE' );
+		expect( formatLift( 41.6 ) ).toMatch( /^\+41,6\s%$/ );
+		expect( formatLift( -3.25 ) ).toMatch( /^-3,3\s%$/ );
+	} );
+
+	it( 'falls back to a shorter tag when Intl rejects the page’s locale', () => {
+		setLang( 'pt-PT-ao90' );
+		expect( formatRate( 2.6912 ) ).toBe( '2,69%' );
+	} );
+
+	it( 'shows the decimals even for a whole number', () => {
+		setLang( 'en-US' );
+		expect( formatRate( 3 ) ).toBe( '3.00%' );
 	} );
 } );
 
@@ -168,6 +212,22 @@ describe( 'canEndTest', () => {
 			{ status: 'ended', variants: { a: version(), b: version() } },
 		];
 		expect( tests.map( canEndTest ) ).toEqual( [ true, true, false, false, false, false ] );
+	} );
+} );
+
+describe( 'canEndTestFromMenu', () => {
+	const version = ( status = 'publish', eligible = true ) => ( { status, eligible } );
+	it( 'offers ending every test that has not ended but is not splitting readers', () => {
+		const tests = [
+			{ variants: { a: version(), b: version() } }, // Running: End Test is in the header.
+			{ variants: { a: version(), b: version( 'publish', false ) } }, // Needs attention, still splitting.
+			{ variants: { a: version(), b: version( 'draft', false ) } }, // Needs attention, not splitting.
+			{ variants: { a: version(), b: version( 'draft' ) } }, // Draft.
+			{ variants: { a: version() } }, // Incomplete.
+			{ variants: { b: version( 'draft' ) } }, // Incomplete, A gone.
+			{ status: 'ended', variants: { a: version(), b: version() } },
+		];
+		expect( tests.map( canEndTestFromMenu ) ).toEqual( [ false, false, true, true, true, true, false ] );
 	} );
 } );
 
@@ -320,5 +380,36 @@ describe( 'getVerdict', () => {
 	it( 'leaves incomplete and needs-attention cards to their notice', () => {
 		expect( getVerdict( twoVersions, 'incomplete', result() ) ).toBeNull();
 		expect( getVerdict( twoVersions, 'needs-attention', result() ) ).toBeNull();
+	} );
+} );
+
+describe( 'createRequestQueue', () => {
+	it( 'runs one task at a time, in order, past a failure', async () => {
+		const enqueue = createRequestQueue();
+		const started = [];
+		const resolvers = {};
+		const task = name => () => {
+			started.push( name );
+			return new Promise( ( resolve, reject ) => {
+				resolvers[ name ] = { resolve, reject };
+			} );
+		};
+		const first = enqueue( task( 'first' ) );
+		const second = enqueue( task( 'second' ) );
+		const third = enqueue( task( 'third' ) );
+		await Promise.resolve();
+		expect( started ).toEqual( [ 'first' ] );
+
+		resolvers.first.reject( new Error( 'failed' ) );
+		await expect( first ).rejects.toThrow( 'failed' );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( started ).toEqual( [ 'first', 'second' ] );
+
+		resolvers.second.resolve( 2 );
+		await expect( second ).resolves.toBe( 2 );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( started ).toEqual( [ 'first', 'second', 'third' ] );
+		resolvers.third.resolve( 3 );
+		await expect( third ).resolves.toBe( 3 );
 	} );
 } );

@@ -10,17 +10,22 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Enforces subscriber-only product restrictions.
+ * Enforces subscriber-only product restrictions, mirroring WooCommerce
+ * Memberships' product "purchase" and "view" restrictions, which Access
+ * Control replaces.
  *
- * Only the purchase is blocked: the product page, its price and the product
- * lists stay visible, and a notice on the product page tells the reader which
- * subscriptions unlock it. This mirrors WooCommerce Memberships' product
- * purchase restriction, which Access Control replaces.
+ * A "Purchase" restriction blocks only the purchase: the product page, its
+ * price and the product lists stay visible, and a notice on the product page
+ * tells the reader which subscriptions unlock it. A "Purchase and visibility"
+ * restriction also hides the product from readers outside its audience: the
+ * product page shows only the notice, answers 404 or redirects, per the
+ * product-page setting, and the product can be left out of product lists.
  *
  * A reader may buy a restricted product if they subscribe to any subscription
  * named by any restriction covering it — each restriction is an offer, not an
- * additional hurdle. Publishers can also hide restricted products from product
- * lists entirely, which goes beyond purchase restriction and is off by default.
+ * additional hurdle. The one exception, as in WooCommerce Memberships: once a
+ * "Purchase" restriction covers a product, a "Purchase and visibility"
+ * audience may see it but only the "Purchase" audience may buy it.
  */
 class Product_Purchase_Restriction {
 
@@ -33,6 +38,13 @@ class Product_Purchase_Restriction {
 	 * @var array<string, bool>
 	 */
 	private static $purchase_verdicts = [];
+
+	/**
+	 * Whether the reader may see a product, keyed like $purchase_verdicts.
+	 *
+	 * @var array<string, bool>
+	 */
+	private static $view_verdicts = [];
 
 	/**
 	 * The active restrictions. Null until first read.
@@ -59,14 +71,15 @@ class Product_Purchase_Restriction {
 	private static $hidden_product_ids = null;
 
 	/**
-	 * How many covered products the hiding pass will consider.
+	 * How many products the hiding pass queries for category and "All products"
+	 * restrictions. Products a restriction names are added on top, in full.
 	 *
 	 * Hiding has to name the products to exclude, so it enumerates what the
-	 * restrictions cover. That is bounded by what a publisher restricted rather
-	 * than by the catalog, and these are newsroom stores — books, tickets,
+	 * restrictions cover: the products a publisher named, plus a category or the
+	 * whole catalog. These are newsroom stores — books, tickets,
 	 * merchandise — so the ceiling is far above any real configuration. Past it
-	 * the excess stays listed (but still unpurchasable): over-listing is the
-	 * safe failure for an opt-in convenience, where a slow query is not.
+	 * the excess stays listed but hidden on its own page: over-listing is the
+	 * safe failure, where a slow query is not.
 	 */
 	const MAX_HIDDEN_PRODUCTS = 500;
 
@@ -84,8 +97,37 @@ class Product_Purchase_Restriction {
 		add_action( 'woocommerce_single_product_summary', [ __CLASS__, 'render_restricted_message' ], 31 );
 		// Block themes never fire the action above; the notice rides the add-to-cart block instead.
 		add_filter( 'render_block', [ __CLASS__, 'filter_add_to_cart_block' ], 10, 3 );
-		// Optional, off by default: keep restricted products out of product lists.
+		// Optional, off by default: keep hidden products out of product lists.
 		add_action( 'pre_get_posts', [ __CLASS__, 'filter_product_query' ] );
+		// The product page of a hidden product answers 404 or redirects.
+		add_action( 'template_redirect', [ __CLASS__, 'restrict_product_page' ], 10, 0 );
+		// Or it keeps the page and shows only the notice: both WooCommerce
+		// single-product templates, classic and block, swap the product for the
+		// password form when the post asks for a password.
+		add_filter( 'post_password_required', [ __CLASS__, 'filter_post_password_required' ], 10, 2 );
+		add_filter( 'the_password_form', [ __CLASS__, 'filter_password_form' ], 10, 2 );
+		// Where a hidden product is still listed, its price and image are not shown.
+		add_filter( 'woocommerce_get_price_html', [ __CLASS__, 'filter_listed_price' ], 999, 2 );
+		add_filter( 'woocommerce_product_get_image', [ __CLASS__, 'filter_listed_image' ], 999, 4 );
+		// Related products, upsells and cross-sells skip WP_Query, so list hiding
+		// reaches them through product visibility.
+		add_filter( 'woocommerce_product_is_visible', [ __CLASS__, 'filter_product_is_visible' ], 999, 2 );
+		// A hidden variation drops out of its product's options.
+		add_filter( 'woocommerce_variation_is_visible', [ __CLASS__, 'filter_variation_is_visible' ], 999, 4 );
+		// Listings outside WooCommerce's templates, such as site search.
+		add_filter( 'the_excerpt', [ __CLASS__, 'filter_listed_excerpt' ], 999 );
+		add_filter( 'post_thumbnail_html', [ __CLASS__, 'filter_listed_thumbnail' ], 999, 2 );
+		// The Store API serves product data to blocks and to anyone who asks.
+		// Priority 9: before rest_filter_response_fields() trims the response to
+		// `_fields`, which could drop the keys redaction recognises a product by.
+		add_filter( 'rest_post_dispatch', [ __CLASS__, 'filter_store_api_response' ], 9, 3 );
+		// The core REST API withholds a hidden product's content and excerpt as
+		// password-protected; its featured image goes here.
+		add_filter( 'rest_prepare_product', [ __CLASS__, 'filter_rest_product' ], 10, 2 );
+		// Priority 11: after core adds the thumbnail at 10.
+		add_filter( 'oembed_response_data', [ __CLASS__, 'filter_oembed_response' ], 11, 2 );
+		// The embed iframe renders the featured image itself.
+		add_filter( 'embed_thumbnail_id', [ __CLASS__, 'filter_embed_thumbnail_id' ] );
 	}
 
 	/**
@@ -121,13 +163,59 @@ class Product_Purchase_Restriction {
 			return true;
 		}
 
-		$user_id = null === $user_id ? get_current_user_id() : (int) $user_id;
-		// The verdict rests on Subscriber_Eligibility::user_matches_rule(), which reads
-		// `payment_recovery_grace` from the ambient evaluation context that
-		// with_evaluation_context() swaps around each gate. Key on it for the same
-		// reason that layer does, so a verdict reached inside one gate's context
-		// is never served to a caller outside it.
-		$cache_key = implode(
+		$user_id   = null === $user_id ? get_current_user_id() : (int) $user_id;
+		$cache_key = self::verdict_cache_key( $product_id, $user_id );
+		if ( ! isset( self::$purchase_verdicts[ $cache_key ] ) ) {
+			self::$purchase_verdicts[ $cache_key ] = self::evaluate_purchase( $product, $user_id );
+		}
+		return self::$purchase_verdicts[ $cache_key ];
+	}
+
+	/**
+	 * Whether the reader may see a product.
+	 *
+	 * Only a "Purchase and visibility" restriction hides a product. Its readers
+	 * are the subscribers of any restriction covering the product, either type:
+	 * a reader who may buy a product may also see it.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int|null    $user_id Optional user ID. Defaults to the current user.
+	 *
+	 * @return bool
+	 */
+	public static function can_view( $product, $user_id = null ) {
+		if ( ! Subscriber_Commerce::is_enforcement_active() || ! $product instanceof \WC_Product ) {
+			return true;
+		}
+		$product_id = (int) $product->get_id();
+		if ( ! $product_id ) {
+			return true;
+		}
+
+		$user_id   = null === $user_id ? get_current_user_id() : (int) $user_id;
+		$cache_key = self::verdict_cache_key( $product_id, $user_id );
+		if ( ! isset( self::$view_verdicts[ $cache_key ] ) ) {
+			self::$view_verdicts[ $cache_key ] = self::evaluate_view( $product, $user_id );
+		}
+		return self::$view_verdicts[ $cache_key ];
+	}
+
+	/**
+	 * The memo key for a verdict on a product for a reader.
+	 *
+	 * Verdicts rest on Subscriber_Eligibility::user_matches_rule(), which reads
+	 * `payment_recovery_grace` from the ambient evaluation context that
+	 * with_evaluation_context() swaps around each gate. Keying on it, for the
+	 * same reason that layer does, keeps a verdict reached inside one gate's
+	 * context from being served to a caller outside it.
+	 *
+	 * @param int $product_id The product ID.
+	 * @param int $user_id    The user ID.
+	 *
+	 * @return string
+	 */
+	private static function verdict_cache_key( int $product_id, int $user_id ): string {
+		return implode(
 			'_',
 			[
 				$product_id,
@@ -135,10 +223,62 @@ class Product_Purchase_Restriction {
 				Access_Rules::get_evaluation_context( 'payment_recovery_grace', true ) ? 'grace' : 'strict',
 			]
 		);
-		if ( ! isset( self::$purchase_verdicts[ $cache_key ] ) ) {
-			self::$purchase_verdicts[ $cache_key ] = self::evaluate_purchase( $product, $user_id );
+	}
+
+	/**
+	 * Work out whether a reader may see a product.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 * @param int         $user_id The user ID (0 for anonymous readers).
+	 *
+	 * @return bool
+	 */
+	private static function evaluate_view( $product, $user_id ): bool {
+		$rules    = self::get_restricting_rules( $product );
+		$can_view = empty( self::filter_rules_by_type( $rules, Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ) )
+			|| user_can( $user_id, 'manage_woocommerce' )
+			|| self::user_matches_any( $user_id, $rules );
+
+		/**
+		 * Filters whether a reader may see a product hidden by a "Purchase and
+		 * visibility" restriction. A reader who can't see it can't buy it either.
+		 *
+		 * @param bool        $can_view Whether the reader may see it.
+		 * @param \WC_Product $product  The product (or variation).
+		 * @param int         $user_id  The user ID (0 for anonymous readers).
+		 * @param array[]     $rules    The restrictions covering the product.
+		 */
+		return (bool) apply_filters( 'newspack_subscriber_only_product_can_view', $can_view, $product, $user_id, $rules );
+	}
+
+	/**
+	 * Whether a reader satisfies any of the given restrictions. Each one names
+	 * a way in, so more rules can only widen access.
+	 *
+	 * @param int     $user_id The user ID.
+	 * @param array[] $rules   The restrictions.
+	 *
+	 * @return bool
+	 */
+	private static function user_matches_any( $user_id, array $rules ): bool {
+		foreach ( $rules as $rule ) {
+			if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
+				return true;
+			}
 		}
-		return self::$purchase_verdicts[ $cache_key ];
+		return false;
+	}
+
+	/**
+	 * The restrictions of one type.
+	 *
+	 * @param array[] $rules            The restrictions.
+	 * @param string  $restriction_type One of the Subscriber_Only_Products::RESTRICTION_TYPE_* values.
+	 *
+	 * @return array[]
+	 */
+	private static function filter_rules_by_type( array $rules, string $restriction_type ): array {
+		return array_values( array_filter( $rules, fn( $rule ) => $restriction_type === $rule['restriction_type'] ) );
 	}
 
 	/**
@@ -150,25 +290,25 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	private static function evaluate_purchase( $product, $user_id ) {
-		$can_purchase = true;
-		$rules        = self::get_restricting_rules( $product );
+		$rules = self::get_restricting_rules( $product );
 
-		if ( ! empty( $rules ) ) {
+		if ( empty( $rules ) || user_can( $user_id, 'manage_woocommerce' ) ) {
 			// Shop managers always keep purchasing rights, so a restriction can't
 			// lock a publisher out of their own products (Memberships parity).
-			if ( user_can( $user_id, 'manage_woocommerce' ) ) {
-				$can_purchase = true;
-			} else {
-				// Any restriction the reader satisfies unlocks the product: each
-				// rule names a way in, so more rules can only widen access.
-				$can_purchase = false;
-				foreach ( $rules as $rule ) {
-					if ( Subscriber_Eligibility::user_matches_rule( $user_id, $rule ) ) {
-						$can_purchase = true;
-						break;
-					}
-				}
-			}
+			$can_purchase = true;
+		} elseif ( ! self::can_view( $product, $user_id ) ) {
+			// A reader who can't see a product can't buy it.
+			$can_purchase = false;
+		} else {
+			// Once a "Purchase" restriction covers the product, only its
+			// subscribers may buy it, and a "Purchase and visibility" audience may
+			// look but not buy (Memberships parity). Without one, the subscribers
+			// of the "Purchase and visibility" restrictions may buy it. Purchase
+			// always rests on a rule the reader matches, never on visibility
+			// alone, so a filter that shows a product as a teaser can't open its
+			// sale.
+			$purchase_rules = self::filter_rules_by_type( $rules, Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE );
+			$can_purchase   = self::user_matches_any( $user_id, empty( $purchase_rules ) ? $rules : $purchase_rules );
 		}
 
 		/**
@@ -217,13 +357,12 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Keep restricted products out of product lists, when the publisher asked
-	 * for it.
+	 * Keep "Purchase and visibility" products out of the product lists of
+	 * readers who can't see them, when the publisher asked for it. A
+	 * "Purchase" product is meant to be seen, so it stays listed.
 	 *
-	 * Goes beyond purchase restriction, so it is opt-in. Direct links still
-	 * work and show the product page with its notice — this only affects
-	 * listings, so a reader who has the URL is never left wondering where the
-	 * product went.
+	 * Opt-in. Direct links are left to the product-page setting
+	 * (restrict_product_page()): this only affects listings.
 	 *
 	 * Applies to every front-end product listing, not only the main query: a
 	 * "product list" here means any of them — the shop, a category archive, a
@@ -231,15 +370,17 @@ class Product_Purchase_Restriction {
 	 * would be incoherent. Singular queries are left alone so a direct link
 	 * still resolves.
 	 *
-	 * Secondary listings are in scope by the same reasoning: related products,
-	 * cross-sells and cart upsells all recommend something the reader cannot
-	 * buy. `newspack_subscriber_only_hide_from_query` is the escape hatch for a
-	 * publisher who wants hiding confined to the primary catalog.
+	 * Secondary listings are in scope by the same reasoning. Those built on
+	 * WP_Query are covered here; related products, upsells and cross-sells,
+	 * which WooCommerce builds without it, are covered by
+	 * filter_product_is_visible(). `newspack_subscriber_only_hide_from_query` is
+	 * the escape hatch for a publisher who wants hiding confined to the primary
+	 * catalog's queries.
 	 *
 	 * @param \WP_Query $query The query.
 	 */
 	public static function filter_product_query( $query ) {
-		if ( is_admin() || ! $query instanceof \WP_Query ) {
+		if ( self::is_admin_screen() || ! $query instanceof \WP_Query ) {
 			return;
 		}
 		// Cheapest test first: this fires on every front-end query, and the vast
@@ -251,23 +392,22 @@ class Product_Purchase_Restriction {
 		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
 			return;
 		}
-		$settings = Subscriber_Only_Products::get_settings();
-		if ( empty( $settings['hide_from_product_lists'] ) ) {
+		if ( ! Subscriber_Only_Products::hides_from_product_lists() ) {
 			return;
 		}
 
 		/**
-		 * Filters whether restricted products are hidden from a given product query.
+		 * Filters whether hidden products are left out of a given product query.
 		 *
 		 * Every front-end product listing is covered by default, secondary ones
 		 * included. Return false to leave a listing alone — scoping hiding to the
 		 * primary catalog and leaving related products, cross-sells or cart
 		 * upsells untouched, for instance.
 		 *
-		 * Purchase restriction is unaffected either way: a product left visible
+		 * Purchase restriction is unaffected either way: a product left listed
 		 * by this filter still cannot be bought.
 		 *
-		 * @param bool      $hide  Whether to hide restricted products from this query.
+		 * @param bool      $hide  Whether to hide products from this query.
 		 * @param \WP_Query $query The query being filtered.
 		 */
 		if ( ! apply_filters( 'newspack_subscriber_only_hide_from_query', true, $query ) ) {
@@ -307,8 +447,13 @@ class Product_Purchase_Restriction {
 	 * @return bool
 	 */
 	private static function is_product_query( $query ) {
-		$post_types = (array) $query->get( 'post_type' );
+		$post_types = array_filter( (array) $query->get( 'post_type' ) );
 		if ( in_array( 'product', $post_types, true ) ) {
+			return true;
+		}
+		// A site search lists products among everything else unless it names
+		// other post types only.
+		if ( $query->is_search() && ( empty( $post_types ) || in_array( 'any', $post_types, true ) ) ) {
 			return true;
 		}
 		// The shop and product taxonomy archives don't set post_type explicitly.
@@ -316,11 +461,11 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Get the products the current reader may not purchase, for hiding.
+	 * Get the products the current reader may not see, for hiding.
 	 *
-	 * Only products covered by a restriction are considered, so the cost is
-	 * bounded by what the publisher actually restricted rather than by the
-	 * catalog size.
+	 * Only products covered by a "Purchase and visibility" restriction are
+	 * considered, so the cost is bounded by what the publisher actually hid
+	 * rather than by the catalog size.
 	 *
 	 * @return int[] The product IDs to hide.
 	 */
@@ -335,9 +480,11 @@ class Product_Purchase_Restriction {
 		self::$hidden_product_ids = [];
 
 		$hidden = [];
-		foreach ( self::covered_product_ids() as $product_id ) {
+		$covered_product_ids = self::covered_product_ids();
+		_prime_post_caches( $covered_product_ids );
+		foreach ( $covered_product_ids as $product_id ) {
 			$product = wc_get_product( $product_id );
-			if ( $product instanceof \WC_Product && ! self::can_purchase( $product ) ) {
+			if ( $product instanceof \WC_Product && ! self::can_view( $product ) ) {
 				$hidden[] = (int) $product_id;
 			}
 		}
@@ -346,12 +493,13 @@ class Product_Purchase_Restriction {
 	}
 
 	/**
-	 * Get the IDs of every product covered by an active restriction.
+	 * Get the IDs of every product covered by an active "Purchase and
+	 * visibility" restriction.
 	 *
 	 * @return int[] The product IDs.
 	 */
 	private static function covered_product_ids() {
-		$rules = Subscriber_Only_Products::get_active_rules();
+		$rules = self::filter_rules_by_type( Subscriber_Only_Products::get_active_rules(), Subscriber_Only_Products::RESTRICTION_TYPE_VIEW );
 		if ( empty( $rules ) ) {
 			return [];
 		}
@@ -372,7 +520,7 @@ class Product_Purchase_Restriction {
 		$args = [
 			'post_type'      => 'product',
 			'post_status'    => 'publish',
-			// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Bounded by what the publisher restricted, not by the catalog; see MAX_HIDDEN_PRODUCTS.
+			// phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Bounded by MAX_HIDDEN_PRODUCTS.
 			'posts_per_page' => self::MAX_HIDDEN_PRODUCTS,
 			'fields'         => 'ids',
 			'no_found_rows'  => true,
@@ -392,6 +540,365 @@ class Product_Purchase_Restriction {
 
 		$ids = get_posts( $args );
 		return array_values( array_unique( array_merge( array_map( 'absint', $named ), array_map( 'absint', $ids ) ) ) );
+	}
+
+	/**
+	 * The product whose page is being viewed, when the reader may not see it.
+	 *
+	 * Only the product's own page: the product-page setting is about what a URL
+	 * answers, and listings are the hiding filter's business.
+	 *
+	 * @return \WC_Product|null
+	 */
+	private static function get_hidden_queried_product() {
+		if ( ! is_singular( 'product' ) || ! function_exists( 'wc_get_product' ) ) {
+			return null;
+		}
+		$product = wc_get_product( get_queried_object_id() );
+		if ( ! $product instanceof \WC_Product || self::can_view( $product ) ) {
+			return null;
+		}
+		return $product;
+	}
+
+	/**
+	 * Answer 404 or redirect on the page of a product the reader may not see,
+	 * per the product-page setting.
+	 *
+	 * "Hide content only" is left to the password filters below, and so is a
+	 * redirect whose page is gone: the product stays hidden either way.
+	 */
+	public static function restrict_product_page(): void {
+		$product = self::get_hidden_queried_product();
+		if ( ! $product ) {
+			return;
+		}
+
+		$settings = Subscriber_Only_Products::get_settings();
+		if ( Subscriber_Only_Products::PRODUCT_PAGE_HIDE === $settings['product_page'] ) {
+			global $wp_query;
+			$wp_query->set_404();
+			status_header( 404 );
+			nocache_headers();
+			return;
+		}
+
+		if ( Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT === $settings['product_page'] ) {
+			$page_id = $settings['redirect_page_id'];
+			// A page, so a stray ID can't send readers to another hidden product.
+			if ( $page_id && 'page' === get_post_type( $page_id ) && 'publish' === get_post_status( $page_id ) ) {
+				wp_safe_redirect( get_permalink( $page_id ) );
+				exit;
+			}
+		}
+	}
+
+	/**
+	 * Ask for a "password" on a product the reader may not see.
+	 *
+	 * On the product's page, both WooCommerce single-product templates render
+	 * the password form in place of the product when one is required, so this
+	 * hides the details, price and add-to-cart in classic and block themes
+	 * alike. Elsewhere, WordPress withholds a password-protected post's content
+	 * and excerpt itself: in the REST API, feeds and any template that asks. No
+	 * password is set on the post, so the title gets no "Protected" prefix, and
+	 * filter_password_form() shows the notice in place of the form.
+	 *
+	 * @param bool          $required Whether the post requires a password.
+	 * @param \WP_Post|null $post     The post.
+	 *
+	 * @return bool
+	 */
+	public static function filter_post_password_required( $required, $post ) {
+		// Cheapest test first: this runs for every post a page touches.
+		if ( $required || ! $post instanceof \WP_Post || 'product' !== $post->post_type ) {
+			return $required;
+		}
+		return null !== self::get_hidden_product( $post );
+	}
+
+	/**
+	 * Show the notice instead of a password form for a product the reader may
+	 * not see.
+	 *
+	 * @param string        $output The password form markup.
+	 * @param \WP_Post|null $post   The post.
+	 *
+	 * @return string
+	 */
+	public static function filter_password_form( $output, $post = null ) {
+		$product = self::get_hidden_product( $post );
+		if ( ! $product ) {
+			return $output;
+		}
+		return self::get_notice_html( self::get_restricted_message( $product ) );
+	}
+
+	/**
+	 * The product behind a post, when the reader may not see it. Front end only:
+	 * wp-admin edits products, it doesn't read them as a reader.
+	 *
+	 * @param \WP_Post|int|null $post The post or its ID.
+	 *
+	 * @return \WC_Product|null
+	 */
+	private static function get_hidden_product( $post ) {
+		$post = get_post( $post );
+		if ( ! $post || 'product' !== $post->post_type || self::is_admin_screen() || ! function_exists( 'wc_get_product' ) ) {
+			return null;
+		}
+		$product = wc_get_product( $post->ID );
+		return $product instanceof \WC_Product && ! self::can_view( $product ) ? $product : null;
+	}
+
+	/**
+	 * Whether the request is a wp-admin screen, where products are edited
+	 * rather than read.
+	 *
+	 * AJAX and REST requests always get the reader's view: themes render
+	 * listings over admin-ajax.php, the core product route is public, and the
+	 * markers that would tell an admin request apart are sent by the client.
+	 * Those who manage products see every product anyway, through can_view().
+	 *
+	 * @return bool
+	 */
+	private static function is_admin_screen(): bool {
+		return is_admin() && ! wp_doing_ajax();
+	}
+
+	/**
+	 * Whether a product listed for this reader should show as hidden: the
+	 * reader may not see it. Whatever the product page does, a listing that
+	 * still shows the product withholds its price, image and excerpt.
+	 *
+	 * @param \WC_Product $product The product (or variation).
+	 *
+	 * @return bool
+	 */
+	private static function is_listed_as_hidden( $product ): bool {
+		return $product instanceof \WC_Product && ! self::is_admin_screen() && ! self::can_view( $product );
+	}
+
+	/**
+	 * Leave out the price of a product the reader may not see.
+	 *
+	 * @param string           $price_html The price markup.
+	 * @param \WC_Product|null $product    The product.
+	 *
+	 * @return string
+	 */
+	public static function filter_listed_price( $price_html, $product = null ) {
+		return self::is_listed_as_hidden( $product ) ? '' : $price_html;
+	}
+
+	/**
+	 * Show the placeholder image in place of the image of a product the reader
+	 * may not see.
+	 *
+	 * @param string           $image   The image markup.
+	 * @param \WC_Product|null $product The product.
+	 * @param string|int[]     $size    The image size.
+	 * @param array            $attr    Image attributes, such as the block's alt and style.
+	 *
+	 * @return string
+	 */
+	public static function filter_listed_image( $image, $product = null, $size = 'woocommerce_thumbnail', $attr = [] ) {
+		if ( ! self::is_listed_as_hidden( $product ) ) {
+			return $image;
+		}
+		return function_exists( 'wc_placeholder_img' ) ? wc_placeholder_img( $size, (array) $attr ) : '';
+	}
+
+	/**
+	 * Leave a product the reader may not see out of the lists WooCommerce builds
+	 * without WP_Query, when list hiding is on.
+	 *
+	 * @param bool $visible    Whether the product is visible.
+	 * @param int  $product_id The product ID.
+	 *
+	 * @return bool
+	 */
+	public static function filter_product_is_visible( $visible, $product_id = 0 ) {
+		if ( ! $visible || self::is_admin_screen() || ! Subscriber_Commerce::is_enforcement_active() || ! Subscriber_Only_Products::hides_from_product_lists() ) {
+			return $visible;
+		}
+		$product = function_exists( 'wc_get_product' ) ? wc_get_product( $product_id ) : null;
+		return ! $product instanceof \WC_Product || self::can_view( $product );
+	}
+
+	/**
+	 * Show the subscriber-only notice in place of the excerpt of a product the
+	 * reader may not see, wherever a listing shows excerpts.
+	 *
+	 * The excerpt itself is already withheld, since the product counts as
+	 * password-protected; this swaps WordPress' "protected post" line for the
+	 * notice, which says how to get access.
+	 *
+	 * @param string $excerpt The excerpt markup.
+	 *
+	 * @return string
+	 */
+	public static function filter_listed_excerpt( $excerpt ) {
+		$product = self::get_hidden_product( get_post() );
+		return $product ? wpautop( wp_kses_post( self::get_restricted_message( $product ) ) ) : $excerpt;
+	}
+
+	/**
+	 * Leave out the featured image of a product the reader may not see, in
+	 * listings outside WooCommerce's templates.
+	 *
+	 * @param string $html    The image markup.
+	 * @param int    $post_id The post ID.
+	 *
+	 * @return string
+	 */
+	public static function filter_listed_thumbnail( $html, $post_id = 0 ) {
+		return self::get_hidden_product( $post_id ) ? '' : $html;
+	}
+
+	/**
+	 * Strip what a reader may not see from the Store API's product responses.
+	 *
+	 * The product's own page hides its details whatever the product-page
+	 * setting, so the API that blocks and scripts read does too: no prices,
+	 * descriptions, images or variations. The name and link stay, as they do
+	 * on the page.
+	 *
+	 * @param \WP_HTTP_Response|mixed $response The response.
+	 * @param \WP_REST_Server         $server   The server.
+	 * @param \WP_REST_Request        $request  The request.
+	 *
+	 * @return \WP_HTTP_Response|mixed
+	 */
+	public static function filter_store_api_response( $response, $server = null, $request = null ) {
+		if ( ! $response instanceof \WP_HTTP_Response || ! $request instanceof \WP_REST_Request ) {
+			return $response;
+		}
+		// The product endpoints only: their siblings under /products/ (categories,
+		// tags, reviews…) return other shapes, which the `prices` check skips.
+		if ( ! preg_match( '#^/wc/store(?:/v\d+)?/products(?:/[^/]+)?$#', $request->get_route() ) ) {
+			return $response;
+		}
+		if ( ! Subscriber_Commerce::is_enforcement_active() ) {
+			return $response;
+		}
+
+		$data = $response->get_data();
+		if ( ! is_array( $data ) ) {
+			return $response;
+		}
+		$is_single = isset( $data['id'] );
+		$items     = $is_single ? [ $data ] : $data;
+		foreach ( $items as $index => $item ) {
+			if ( ! is_array( $item ) || ! isset( $item['id'], $item['prices'] ) ) {
+				continue;
+			}
+			$product = wc_get_product( (int) $item['id'] );
+			if ( ! $product instanceof \WC_Product || self::can_view( $product ) ) {
+				continue;
+			}
+			$items[ $index ] = self::redact_store_api_product( $item );
+		}
+		$response->set_data( $is_single ? $items[0] : $items );
+		return $response;
+	}
+
+	/**
+	 * Leave a hidden product's featured image out of the core REST API.
+	 *
+	 * @param \WP_REST_Response|mixed $response The response.
+	 * @param \WP_Post                $post     The product post.
+	 *
+	 * @return \WP_REST_Response|mixed
+	 */
+	public static function filter_rest_product( $response, $post ) {
+		if ( ! $response instanceof \WP_REST_Response || ! self::get_hidden_product( $post ) ) {
+			return $response;
+		}
+		$data = $response->get_data();
+		if ( isset( $data['featured_media'] ) ) {
+			$data['featured_media'] = 0;
+			$response->set_data( $data );
+		}
+		$response->remove_link( 'https://api.w.org/featuredmedia' );
+		$response->remove_link( 'https://api.w.org/attachment' );
+		return $response;
+	}
+
+	/**
+	 * Leave a hidden product's image out of its oEmbed response.
+	 *
+	 * @param array    $data The oEmbed data.
+	 * @param \WP_Post $post The post.
+	 *
+	 * @return array
+	 */
+	public static function filter_oembed_response( $data, $post ) {
+		if ( ! is_array( $data ) || ! self::get_hidden_product( $post ) ) {
+			return $data;
+		}
+		unset( $data['thumbnail_url'], $data['thumbnail_width'], $data['thumbnail_height'] );
+		return $data;
+	}
+
+	/**
+	 * Leave a hidden product's featured image out of its embed iframe.
+	 *
+	 * @param int|false $thumbnail_id The attachment ID.
+	 *
+	 * @return int|false
+	 */
+	public static function filter_embed_thumbnail_id( $thumbnail_id ) {
+		return self::get_hidden_product( get_post() ) ? false : $thumbnail_id;
+	}
+
+	/**
+	 * A Store API product item with the details a hidden product's page
+	 * withholds left empty.
+	 *
+	 * @param array $item The product item.
+	 *
+	 * @return array
+	 */
+	private static function redact_store_api_product( array $item ): array {
+		$prices = (array) $item['prices'];
+		foreach ( [ 'price', 'regular_price', 'sale_price' ] as $price_key ) {
+			if ( array_key_exists( $price_key, $prices ) ) {
+				$prices[ $price_key ] = '';
+			}
+		}
+		if ( array_key_exists( 'price_range', $prices ) ) {
+			$prices['price_range'] = null;
+		}
+		return array_merge(
+			$item,
+			[
+				'short_description' => '',
+				'description'       => '',
+				'prices'            => (object) $prices,
+				'price_html'        => '',
+				'images'            => [],
+				'variations'        => [],
+			]
+		);
+	}
+
+	/**
+	 * Drop a variation the reader may not see from its product's options.
+	 *
+	 * @param bool             $visible      Whether the variation is visible.
+	 * @param int              $variation_id The variation ID.
+	 * @param int              $parent_id    The parent product ID.
+	 * @param \WC_Product|null $variation    The variation.
+	 *
+	 * @return bool
+	 */
+	public static function filter_variation_is_visible( $visible, $variation_id = 0, $parent_id = 0, $variation = null ) {
+		if ( ! $visible || self::is_admin_screen() ) {
+			return $visible;
+		}
+		$variation = $variation instanceof \WC_Product ? $variation : ( function_exists( 'wc_get_product' ) ? wc_get_product( $variation_id ) : null );
+		return ! $variation instanceof \WC_Product || self::can_view( $variation );
 	}
 
 	/**
@@ -495,8 +1002,23 @@ class Product_Purchase_Restriction {
 		// the message on one path doesn't suppress the other path's notice too.
 		self::$rendered_notices[ $product_id ] = true;
 
+		return self::get_notice_html( $message );
+	}
+
+	/**
+	 * Wrap a message in the notice markup.
+	 *
+	 * One `<span>` holds the whole message: themes lay `.woocommerce-info` out
+	 * as a flex row, which would make each text run and link its own item and
+	 * drop the spaces between them.
+	 *
+	 * @param string $message The message. May contain links.
+	 *
+	 * @return string The notice HTML, escaped.
+	 */
+	private static function get_notice_html( string $message ): string {
 		return sprintf(
-			'<div class="woocommerce-info newspack-subscriber-only-notice">%s</div>',
+			'<div class="woocommerce-info newspack-subscriber-only-notice"><span>%s</span></div>',
 			wp_kses_post( $message )
 		);
 	}
@@ -553,8 +1075,13 @@ class Product_Purchase_Restriction {
 			return [];
 		}
 
+		// The rules that would let the reader buy: the "Purchase" ones when any
+		// cover the product, since then nothing else does, otherwise the rest.
+		$rules          = self::get_restricting_rules( $product );
+		$purchase_rules = self::filter_rules_by_type( $rules, Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE );
+
 		$links = [];
-		foreach ( self::get_restricting_rules( $product ) as $rule ) {
+		foreach ( empty( $purchase_rules ) ? $rules : $purchase_rules as $rule ) {
 			if ( Subscriber_Commerce::covers_all_subscriptions( $rule ) ) {
 				return [];
 			}
@@ -587,6 +1114,7 @@ class Product_Purchase_Restriction {
 	 */
 	public static function flush_cache() {
 		self::$purchase_verdicts  = [];
+		self::$view_verdicts      = [];
 		self::$rules              = null;
 		self::$rendered_notices   = [];
 		self::$hidden_product_ids = null;
