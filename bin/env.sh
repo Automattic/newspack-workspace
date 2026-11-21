@@ -1129,7 +1129,7 @@ MIGRATE
                     *) printf '  %-6s  %s  (%s)\n' keep "$name" "$status"; continue ;;
                 esac
                 if env_is_dirty "$name"; then
-                    printf '  %-6s  %s  (%s)\n' keep "$name" "uncommitted changes"
+                    printf '  %-6s  %s  (%s)\n' keep "$name" "uncommitted or unreadable changes"
                     continue
                 fi
                 stale_why[$i]=$(env_stale_reasons "$name" "$stale_days")
@@ -1142,7 +1142,7 @@ MIGRATE
                 fi
             done
             if [[ -e "$STALE_GH_FAILED" ]]; then
-                echo "Warning: could not check GitHub for merged PRs (gh missing, offline or signed out), so none was selected as merged."
+                echo "Warning: could not check GitHub for some merged PRs (gh missing, offline or signed out); those envs were not selected as merged."
             fi
             rm -rf "$stale_tmp"
             unset STALE_GH_FAILED
@@ -1250,7 +1250,7 @@ MIGRATE
                         env_is_dirty "$name" || why=$(env_stale_reasons "$name" "$stale_days") ;;
                 esac
                 if [[ -z "$why" ]]; then
-                    echo "$name changed since the scan; skipping it."
+                    echo "$name no longer qualifies; skipping it."
                     continue
                 fi
             fi

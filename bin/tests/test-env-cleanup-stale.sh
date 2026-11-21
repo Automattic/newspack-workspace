@@ -303,12 +303,12 @@ expect_line after remove "unused 40 days" "merged"
 expect_line old remove "unused 40 days"
 expect_line fresh keep "(in use)"
 expect_line running keep "(running)"
-expect_line dirty keep "(uncommitted changes)"
+expect_line dirty keep "(uncommitted or unreadable changes)"
 expect_line legacy keep "(in use)"
 expect_line moved keep "(in use)"
 expect_line collide keep "(in use)"
 expect_line twin remove "unused 40 days"
-expect_line broken keep "(uncommitted changes)"
+expect_line broken keep "(uncommitted or unreadable changes)"
 
 desc="a gone worktree's branch is kept: nothing proves it merged"
 [[ "$(sha_of spec/gone)" == "$gone_sha" && ! -f "$SANDBOX/docker-compose.env-gone.yml" ]] && ok "$desc" || fail "$desc"
@@ -381,7 +381,7 @@ stale_fixture recheck
 out=$(GH_HOOK="git -C '$SANDBOX/worktrees/spec-merged' -c user.name=t -c user.email=t@example.test commit -q --allow-empty -m late" \
 	GH_HOOK_HEAD=spec/merged run_env cleanup --stale --yes)
 desc="an env that changed since the scan is skipped"
-[[ -f "$SANDBOX/docker-compose.env-merged.yml" && "$out" == *"merged changed since the scan"* ]] && ok "$desc" || fail "$desc — got: $out"
+[[ -f "$SANDBOX/docker-compose.env-merged.yml" && "$out" == *"merged no longer qualifies"* ]] && ok "$desc" || fail "$desc — got: $out"
 desc="and its branch keeps the late commit"
 [[ -n "$(sha_of spec/merged)" && "$(git -C "$SANDBOX" log -1 --format=%s spec/merged 2>/dev/null)" == late ]] && ok "$desc" || fail "$desc"
 desc="envs that did not change are still destroyed"
