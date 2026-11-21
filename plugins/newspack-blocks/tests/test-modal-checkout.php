@@ -920,7 +920,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$_REQUEST['modal_checkout'] = '1';
 		$params                     = apply_filters( $hook, [ 'button' => [ 'radius' => '4', 'height' => '48' ] ] );
 
-		$this->assertSame( 8, $params['button']['radius'] );
+		$this->assertSame( \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS, $params['button']['radius'] );
 		$this->assertSame( '48', $params['button']['height'] );
 	}
 
@@ -936,9 +936,9 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$missing                    = apply_filters( $hook, [ 'foo' => 'bar' ] );
 		$odd                        = apply_filters( $hook, [ 'button' => 'x' ] );
 
-		$this->assertSame( 8, $missing['button']['radius'] );
+		$this->assertSame( \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS, $missing['button']['radius'] );
 		$this->assertSame( 'bar', $missing['foo'] );
-		$this->assertSame( 8, $odd['button']['radius'] );
+		$this->assertSame( \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS, $odd['button']['radius'] );
 	}
 
 	/**

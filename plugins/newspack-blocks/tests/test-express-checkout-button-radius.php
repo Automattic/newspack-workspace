@@ -43,17 +43,27 @@ class ExpressCheckoutButtonRadiusTest extends WP_UnitTestCase_Blocks { // phpcs:
 	}
 
 	/**
-	 * Neutral keeps 8.
+	 * With the Theme style off, as on classic themes, the radius is newspack-ui's own default button radius.
 	 */
-	public function test_neutral_keeps_eight() {
+	public function test_neutral_uses_newspack_ui_button_radius() {
 		$this->require_stub();
+		$variables_file = dirname( __DIR__, 2 ) . '/newspack-plugin/src/newspack-ui/scss/variables/_index.scss';
+		if ( ! file_exists( $variables_file ) ) {
+			$this->markTestSkipped( 'newspack-plugin is not checked out next to newspack-blocks.' );
+		}
+		preg_match_all( '/(--newspack-ui-[\w-]+):\s*([^;]+);/', file_get_contents( $variables_file ), $declarations );
+		$newspack_ui_variables = array_combine( $declarations[1], array_map( 'trim', $declarations[2] ) );
+		$button_radius         = $newspack_ui_variables['--newspack-ui-radius-button'];
+		while ( 1 === preg_match( '/^var\((--[\w-]+)\)$/', $button_radius, $reference ) ) {
+			$button_radius = $newspack_ui_variables[ $reference[1] ];
+		}
 		\Newspack\Newspack_UI_Theme_Style::$stub_button_radius = '24px';
 
-		$this->assertSame( 8, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() );
+		$this->assertSame( $button_radius, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() . 'px' );
 	}
 
 	/**
-	 * Theme radii resolve to a pixel count, or keep 8 when unusable.
+	 * Theme radii resolve to a pixel count, or keep newspack-ui's default when unusable.
 	 *
 	 * @dataProvider theme_radius_provider
 	 *
@@ -77,8 +87,8 @@ class ExpressCheckoutButtonRadiusTest extends WP_UnitTestCase_Blocks { // phpcs:
 			'fractional' => [ '1.5px', 2 ],
 			'rem'        => [ '1.5rem', 24 ],
 			'zero'       => [ '0px', 0 ],
-			'em'         => [ '2em', 8 ],
-			'empty'      => [ '', 8 ],
+			'em'         => [ '2em', \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS ],
+			'empty'      => [ '', \Newspack_Blocks\Modal_Checkout::NEWSPACK_UI_BUTTON_RADIUS ],
 		];
 	}
 
