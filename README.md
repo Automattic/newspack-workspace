@@ -337,6 +337,7 @@ n env down <name>                   # Stop the environment
 n env destroy <name> [--keep-branch]  # Stop and remove the environment (--keep-branch keeps its branches)
 n env list                          # List all environments and their status
 n env which [name] [--porcelain]    # The env serving this worktree: status, URL, worktrees, login
+n env cleanup --stale[=DAYS] [--yes]  # Retire stopped envs whose worktrees are gone, PRs merged, or unused for DAYS (30)
 ```
 
 You can override multiple plugins in a single environment:

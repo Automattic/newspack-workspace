@@ -161,6 +161,121 @@ env_porcelain_row() {
     printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$(env_status "$name")" "$(domain_for_env "$file")" "$(env_worktrees "$file")"
 }
 
+# A file's mtime in epoch seconds (BSD stat, then GNU).
+file_mtime() {
+    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+}
+
+# Epoch seconds for an RFC 3339 time from docker (GNU date, then BSD), or
+# nothing for docker's zero time, which a container that never ran reports.
+iso_to_epoch() {
+    [[ -z "$1" || "$1" == 0001-* ]] && return 0
+    date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "${1:0:19}" +%s 2>/dev/null
+}
+
+# An env's last use in epoch seconds: the newest of its container's start and
+# finish times, its compose file's mtime, and envs/<name>/, which `up` touches.
+env_last_use() {
+    local name="$1" newest=0 t when container
+    container=$(echo "newspack_env_$name" | tr '-' '_')
+    for t in $(docker inspect -f '{{.State.StartedAt}} {{.State.FinishedAt}}' "$container" 2>/dev/null); do
+        when=$(iso_to_epoch "$t")
+        [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
+    done
+    for t in "$NABSPATH/docker-compose.env-$name.yml" "$NABSPATH/envs/$name"; do
+        [[ -e "$t" ]] || continue
+        when=$(file_mtime "$t")
+        [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
+    done
+    echo "$newest"
+}
+
+# Each worktree an env mounts, as "<dir>|<kind>", kind monorepo or repos. The
+# directory comes from the mount's host path, not from parse_worktree_mount's
+# fields, because a legacy mount (./worktrees/<repo>/<branch>) would otherwise
+# be looked for in the wrong place and read as gone.
+env_worktree_dirs() {
+    local line rel
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./(worktrees(-repos)?/[^[:space:]:]+):/newspack-(repos|plugins|themes)/ ]] || continue
+        rel="${BASH_REMATCH[1]}"
+        if [[ "${BASH_REMATCH[3]}" == repos ]]; then
+            echo "$NABSPATH/$rel|repos"
+        else
+            echo "$NABSPATH/${rel%/*/*}|monorepo"
+        fi
+    done < "$1"
+}
+
+# True when any worktree the env mounts has uncommitted or untracked changes.
+# destroy removes worktrees with --force, so those would be lost.
+env_is_dirty() {
+    local dir kind
+    while IFS='|' read -r dir kind; do
+        [[ -d "$dir" && -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]] && return 0
+    done < <(env_worktree_dirs "$NABSPATH/docker-compose.env-$1.yml")
+    return 1
+}
+
+# True only when a merged PR's head is the worktree's branch tip or a
+# descendant of it, so a branch with commits after the merge is not merged.
+# The checked-out branch must also be the one the mount names: destroy deletes
+# the branch by its mount name, so a worktree switched to a colleague's merged
+# PR would otherwise cost the unmerged branch it was created on.
+# Asked of GitHub rather than read from git ancestry, because squash merges
+# leave none. No branch, no PR, or any gh failure (absent, offline, signed
+# out) is "not merged". Monorepo worktrees ask Automattic/newspack-workspace;
+# repos/ worktrees ask their own origin.
+branch_pr_merged() {
+    local dir="$1" kind="$2" branch mounted tip host=github.com repo url oid oids
+    command -v gh >/dev/null 2>&1 || return 1
+    branch=$(git -C "$dir" branch --show-current 2>/dev/null)
+    [[ -n "$branch" ]] || return 1
+    # The mount's branch: worktrees/<safe>, worktrees-repos/<repo>/<safe>, or
+    # the legacy worktrees/<repo>/<branch>, compared in the safe form.
+    mounted="${dir#"$NABSPATH"/}"
+    if [[ "$kind" == monorepo ]]; then mounted="${mounted#*/}"; else mounted="${mounted#*/*/}"; fi
+    [[ "${branch//\//-}" == "${mounted//\//-}" ]] || return 1
+    tip=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || return 1
+    if [[ "$kind" == monorepo ]]; then
+        repo=Automattic/newspack-workspace
+    else
+        url=$(git -C "$dir" remote get-url origin 2>/dev/null) || return 1
+        [[ "$url" =~ ^(ssh://)?([^@/]+@)?([^/:]+)[:/]([^/]+/[^/]+)$ ]] || return 1
+        host="${BASH_REMATCH[3]}"
+        repo="${BASH_REMATCH[4]%.git}"
+    fi
+    oids=$(GH_HOST="$host" gh pr list --repo "$repo" --head "$branch" --state merged \
+        --json headRefOid --jq '.[].headRefOid' 2>/dev/null) || return 1
+    for oid in $oids; do
+        git -C "$dir" merge-base --is-ancestor "$tip" "$oid" 2>/dev/null && return 0
+    done
+    return 1
+}
+
+# Why an env is stale, as "worktrees gone", "merged" and "unused <N> days"
+# joined by ", ", or nothing. The first two need every bound worktree to
+# qualify, so an env with none gets neither.
+env_stale_reasons() {
+    local name="$1" days="$2" dir kind count=0 gone=0 merged=0 reasons="" last age
+    while IFS='|' read -r dir kind; do
+        count=$((count + 1))
+        if [[ ! -d "$dir" ]]; then
+            gone=$((gone + 1))
+        elif branch_pr_merged "$dir" "$kind"; then
+            merged=$((merged + 1))
+        fi
+    done < <(env_worktree_dirs "$NABSPATH/docker-compose.env-$name.yml")
+    [[ "$count" -gt 0 && "$gone" -eq "$count" ]] && reasons="worktrees gone"
+    [[ "$count" -gt 0 && "$merged" -eq "$count" ]] && reasons="${reasons:+$reasons, }merged"
+    last=$(env_last_use "$name")
+    age=$(( $(date +%s) - last ))
+    if [[ "$age" -gt $(( days * 86400 )) ]]; then
+        reasons="${reasons:+$reasons, }unused $(( age / 86400 )) days"
+    fi
+    echo "$reasons"
+}
+
 # True for an explicit help request in the name position. It matches -h and
 # --help and nothing else, so `up --all` — the one other dash-leading token read
 # from that position — still reaches its own branch below.
@@ -488,6 +603,8 @@ YAML
             echo "Error: environment '$env_name' not found. Run: n env create $env_name ..."
             exit 1
         fi
+        # `cleanup --stale` reads this directory's mtime as the env's last use.
+        [[ -d "$NABSPATH/envs/${env_name}" ]] && touch "$NABSPATH/envs/${env_name}"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
         domain=$(domain_for_env "$compose_file")
@@ -929,14 +1046,30 @@ MIGRATE
         shift
         cleanup_all=false
         cleanup_yes=false
+        cleanup_stale=false
+        stale_days=30
+        cleanup_usage="Usage: n env cleanup [--all] [--yes] | --stale[=DAYS] [--yes]"
         while [[ $# -gt 0 ]]; do
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
-                -h|--help) echo "Usage: n env cleanup [--all] [--yes]"; exit 0 ;;
-                *) echo "Usage: n env cleanup [--all] [--yes]"; exit 1 ;;
+                --stale) cleanup_stale=true; shift ;;
+                --stale=*)
+                    stale_days="${1#--stale=}"
+                    if ! [[ "$stale_days" =~ ^[1-9][0-9]*$ ]]; then
+                        echo "Invalid --stale value: $stale_days (want a number of days, 1 or more)"
+                        exit 1
+                    fi
+                    cleanup_stale=true; shift ;;
+                -h|--help) echo "$cleanup_usage"; exit 0 ;;
+                *) echo "$cleanup_usage"; exit 1 ;;
             esac
         done
+        # --all selects every env, which is exactly what --stale exists to avoid.
+        if [[ "$cleanup_stale" == true && "$cleanup_all" == true ]]; then
+            echo "--stale and --all cannot be combined"
+            exit 1
+        fi
         envs=()
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
@@ -947,16 +1080,64 @@ MIGRATE
             echo "No environments to clean up."
             exit 0
         fi
+        # --stale: select only envs that are safe to retire. stale_why[i] holds
+        # the reasons for a selected env and is empty for the rest.
+        stale_why=()
+        if [[ "$cleanup_stale" == true && "$cleanup_yes" != true ]] && { ! [ -t 0 ] || ! [ -t 1 ]; }; then
+            echo "Interactive mode requires a terminal. Use --stale --yes for non-interactive cleanup."
+            exit 1
+        fi
+        # With the daemon down every env reads as stopped with no container
+        # times, so an env in daily use could look unused from file times alone.
+        if [[ "$cleanup_stale" == true ]] && ! docker info >/dev/null 2>&1; then
+            echo "Docker is not running, so --stale cannot tell which envs are in use. Start Docker and try again."
+            exit 1
+        fi
+        if [[ "$cleanup_stale" == true ]]; then
+            echo "Stale environments: stopped, and worktrees gone, PR merged, or unused for $stale_days days."
+            for i in "${!envs[@]}"; do
+                name="${envs[$i]}"
+                stale_why[$i]=""
+                status=$(env_status "$name")
+                case "$status" in
+                    exited|created|dead|stopped) ;;
+                    *) printf '  %-6s  %s  (%s)\n' keep "$name" "$status"; continue ;;
+                esac
+                if env_is_dirty "$name"; then
+                    printf '  %-6s  %s  (%s)\n' keep "$name" "uncommitted changes"
+                    continue
+                fi
+                stale_why[$i]=$(env_stale_reasons "$name" "$stale_days")
+                if [[ -n "${stale_why[$i]}" ]]; then
+                    printf '  %-6s  %s  (%s)\n' remove "$name" "${stale_why[$i]}"
+                else
+                    printf '  %-6s  %s  (%s)\n' keep "$name" "in use"
+                fi
+            done
+        fi
         # --all: skip interactive selection (select all for removal).
         # --yes: skip final confirmation prompt.
-        if [[ "$cleanup_all" != true ]]; then
+        if [[ "$cleanup_stale" == true && "$cleanup_yes" == true ]]; then
+            to_remove=()
+            for i in "${!envs[@]}"; do
+                [[ -n "${stale_why[$i]}" ]] && to_remove+=("${envs[$i]}")
+            done
+        elif [[ "$cleanup_all" != true ]]; then
             if ! [ -t 0 ] || ! [ -t 1 ]; then
                 echo "Interactive mode requires a terminal. Use --all --yes for non-interactive cleanup."
                 exit 1
             fi
             # Interactive toggle loop.
+            # Plain cleanup starts with every env marked; --stale starts with
+            # only the ones it selected.
             keep_flags=()
-            for i in "${!envs[@]}"; do keep_flags[$i]=false; done
+            for i in "${!envs[@]}"; do
+                if [[ "$cleanup_stale" == true && -z "${stale_why[$i]}" ]]; then
+                    keep_flags[$i]=true
+                else
+                    keep_flags[$i]=false
+                fi
+            done
             while true; do
                 echo ""
                 echo "Environments (marked for REMOVAL unless toggled):"
@@ -967,10 +1148,12 @@ MIGRATE
                     status="stopped"
                     docker inspect -f '{{.State.Status}}' "$container_name" >/dev/null 2>&1 && \
                         status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null)
+                    why=""
+                    [[ -n "${stale_why[$i]:-}" ]] && why=" — ${stale_why[$i]}"
                     if [[ "${keep_flags[$i]}" == true ]]; then
-                        echo "  $((i+1)). [KEEP]    $name ($status) https://${domain}/"
+                        echo "  $((i+1)). [KEEP]    $name ($status) https://${domain}/$why"
                     else
-                        echo "  $((i+1)). [REMOVE]  $name ($status) https://${domain}/"
+                        echo "  $((i+1)). [REMOVE]  $name ($status) https://${domain}/$why"
                     fi
                 done
                 echo ""
@@ -1011,7 +1194,21 @@ MIGRATE
         for name in "${to_remove[@]}"; do
             echo ""
             echo "--- Destroying $name ---"
-            "$NABSPATH/bin/env.sh" destroy "$name"
+            if [[ "$cleanup_stale" != true ]]; then
+                "$NABSPATH/bin/env.sh" destroy "$name"
+                continue
+            fi
+            # Under --stale a branch goes only when its PR merged; every other
+            # env keeps its branches, since nothing proves their work landed.
+            why=""
+            for i in "${!envs[@]}"; do
+                [[ "${envs[$i]}" == "$name" ]] && why="${stale_why[$i]}"
+            done
+            if [[ ", $why," == *", merged,"* ]]; then
+                "$NABSPATH/bin/env.sh" destroy "$name"
+            else
+                "$NABSPATH/bin/env.sh" destroy "$name" --keep-branch
+            fi
         done
         ;;
     e2e-setup)
@@ -1024,6 +1221,7 @@ MIGRATE
         echo "  up --all [--build]       Start all environments"
         echo "  which [name]             Show the env serving this worktree, or the named one (--porcelain for one row)"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
+        echo "  cleanup --stale[=DAYS]   Select only stopped envs whose worktrees are gone, whose PRs merged, or unused for DAYS (30)"
         echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
         ;;
 esac
