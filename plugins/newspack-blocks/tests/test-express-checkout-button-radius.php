@@ -43,23 +43,41 @@ class ExpressCheckoutButtonRadiusTest extends WP_UnitTestCase_Blocks { // phpcs:
 	}
 
 	/**
-	 * With the Theme style off, as on classic themes, the radius is newspack-ui's own default button radius.
+	 * With the Theme style off, as on classic themes, the radius is the default express button radius.
 	 */
-	public function test_neutral_uses_newspack_ui_button_radius() {
+	public function test_neutral_uses_default_radius() {
 		$this->require_stub();
+		\Newspack\Newspack_UI_Theme_Style::$stub_button_radius = '24px';
+
+		$this->assertSame(
+			\Newspack_Blocks\Modal_Checkout::DEFAULT_EXPRESS_BUTTON_RADIUS,
+			\Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius()
+		);
+	}
+
+	/**
+	 * The default express button radius matches newspack-ui's default button radius.
+	 */
+	public function test_default_radius_matches_newspack_ui_button_radius() {
 		$variables_file = dirname( __DIR__, 2 ) . '/newspack-plugin/src/newspack-ui/scss/variables/_index.scss';
 		if ( ! file_exists( $variables_file ) ) {
 			$this->markTestSkipped( 'newspack-plugin is not checked out next to newspack-blocks.' );
 		}
 		preg_match_all( '/(--newspack-ui-[\w-]+):\s*([^;]+);/', file_get_contents( $variables_file ), $declarations );
 		$newspack_ui_variables = array_combine( $declarations[1], array_map( 'trim', $declarations[2] ) );
-		$button_radius         = $newspack_ui_variables['--newspack-ui-radius-button'];
-		while ( 1 === preg_match( '/^var\((--[\w-]+)\)$/', $button_radius, $reference ) ) {
-			$button_radius = $newspack_ui_variables[ $reference[1] ];
-		}
-		\Newspack\Newspack_UI_Theme_Style::$stub_button_radius = '24px';
 
-		$this->assertSame( $button_radius, \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius() . 'px' );
+		$token = '--newspack-ui-radius-button';
+		for ( $step = 0; $step < 10; $step++ ) {
+			$this->assertArrayHasKey( $token, $newspack_ui_variables, "newspack-ui does not declare $token." );
+			$value = $newspack_ui_variables[ $token ];
+			if ( 1 !== preg_match( '/^var\(\s*(--[\w-]+)\s*(?:,.*)?\)$/', $value, $reference ) ) {
+				break;
+			}
+			$token = $reference[1];
+		}
+
+		$this->assertMatchesRegularExpression( '/^\d+px$/', $value, "$token does not resolve to a px length." );
+		$this->assertSame( \Newspack_Blocks\Modal_Checkout::DEFAULT_EXPRESS_BUTTON_RADIUS . 'px', $value );
 	}
 
 	/**
