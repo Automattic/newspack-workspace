@@ -158,6 +158,7 @@ n env up <name> [--build]     # or --all
 n setup --env <name> --yes
 n env down|destroy <name>
 n env list [--porcelain]
+n env which [name] [--porcelain]   # Env serving the current worktree
 n env cleanup                 # Interactive bulk cleanup
 ```
 

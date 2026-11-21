@@ -127,6 +127,40 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
+# The container's state as docker reports it, or "stopped" when it has none.
+env_status() {
+    local container_name status
+    container_name=$(echo "newspack_env_$1" | tr '-' '_')
+    if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
+        echo "$status"
+    else
+        echo "stopped"
+    fi
+}
+
+# Comma-separated repo:branch pairs for the worktrees an env mounts.
+# each_worktree_in_env yields the mount-derived safe branch;
+# resolve_unsanitized_branch recovers the display form (e.g., feat/foo) for
+# monorepo worktrees, leaving filesystem operations to the safe form.
+env_worktrees() {
+    local worktrees="" repo safe_branch kind repos_repo branch
+    while IFS='|' read -r repo safe_branch kind; do
+        [[ "$kind" == "repos" ]] && repos_repo="$repo" || repos_repo=""
+        branch=$(resolve_unsanitized_branch "$safe_branch" "$repos_repo")
+        [[ -n "$worktrees" ]] && worktrees="$worktrees,"
+        worktrees="${worktrees}${repo}:${branch}"
+    done < <(each_worktree_in_env "$1")
+    echo "$worktrees"
+}
+
+# One env's row in `list --porcelain` and `which --porcelain`: name, status,
+# URL and worktrees, tab-separated. Both print it from here so one parser
+# reads either.
+env_porcelain_row() {
+    local name="$1" file="$NABSPATH/docker-compose.env-$1.yml"
+    printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$(env_status "$name")" "$(domain_for_env "$file")" "$(env_worktrees "$file")"
+}
+
 # True for an explicit help request in the name position. It matches -h and
 # --help and nothing else, so `up --all` — the one other dash-leading token read
 # from that position — still reaches its own branch below.
@@ -159,7 +193,7 @@ reject_extra_args() {
 # request, so move it into the name position before dispatch. cleanup and
 # e2e-setup parse their own options.
 case $1 in
-    create|up|down|destroy|list)
+    create|up|down|destroy|list|which)
         for arg in "${@:2}"; do
             if is_help_arg "$arg"; then
                 set -- "$1" "$arg"
@@ -817,29 +851,10 @@ MIGRATE
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
             name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
-            container_name=$(echo "newspack_env_${name}" | tr '-' '_')
-            domain=$(domain_for_env "$f")
-            if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
-                :
-            else
-                status="stopped"
-            fi
-            # Collect worktrees as repo:branch pairs. each_worktree_in_env
-            # yields the mount-derived safe branch; resolve_unsanitized_branch
-            # recovers the friendly display form (e.g., feat/foo) for monorepo
-            # worktrees while leaving filesystem-operation paths to the safe
-            # form.
-            worktrees=""
-            while IFS='|' read -r repo safe_branch kind; do
-                [[ "$kind" == "repos" ]] && repos_repo="$repo" || repos_repo=""
-                branch=$(resolve_unsanitized_branch "$safe_branch" "$repos_repo")
-                [[ -n "$worktrees" ]] && worktrees="$worktrees,"
-                worktrees="${worktrees}${repo}:${branch}"
-            done < <(each_worktree_in_env "$f")
             if [[ "$porcelain" == true ]]; then
-                printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
+                env_porcelain_row "$name"
             else
-                echo "  $name ($status) https://${domain}/"
+                echo "  $name ($(env_status "$name")) https://$(domain_for_env "$f")/"
                 # Show worktrees mounted by this environment.
                 while IFS='|' read -r repo safe_branch kind; do
                     [[ "$kind" == "repos" ]] && repos_repo="$repo" || repos_repo=""
@@ -849,6 +864,66 @@ MIGRATE
                 done < <(each_worktree_in_env "$f")
             fi
         done
+        ;;
+    which)
+        which_usage=(
+            "Usage: n env which [name] [--porcelain]"
+            "  Show the env that serves the current worktree, or the named one: its"
+            "  status, URL, worktrees and admin login. --porcelain prints the same"
+            "  tab-separated row as 'n env list --porcelain'."
+        )
+        is_help_arg "$2" && env_usage "$2" "${which_usage[@]}"
+        shift
+        porcelain=false
+        env_name=""
+        for arg in "$@"; do
+            case "$arg" in
+                --porcelain) porcelain=true ;;
+                -*) echo "Unknown option: $arg"; exit 1 ;;
+                *)
+                    if [[ -n "$env_name" ]]; then
+                        echo "Unknown option: $arg"
+                        exit 1
+                    fi
+                    env_name="$arg"
+                    ;;
+            esac
+        done
+        if [[ -z "$env_name" ]]; then
+            # `n` runs from the workspace root, so it passes the caller's directory.
+            caller_dir="${N_CALLER_PWD:-$PWD}"
+            if ! env_name=$(env_for_path "$caller_dir"); then
+                echo "No environment mounts $caller_dir. Run 'n env list' to see them all."
+                exit 1
+            fi
+        fi
+        validate_env_name "$env_name"
+        compose_file="$NABSPATH/docker-compose.env-$env_name.yml"
+        if [[ ! -f "$compose_file" ]]; then
+            echo "Environment '$env_name' not found."
+            exit 1
+        fi
+        if [[ "$porcelain" == true ]]; then
+            env_porcelain_row "$env_name"
+            exit 0
+        fi
+        # The same files `up` reads; .env wins. That is the configured user, which can
+        # differ from the site admin if .env changed after install. Only the user is
+        # shown: agents copy what they see into transcripts, so the password is named,
+        # not printed.
+        admin_user=$(
+            # shellcheck source=/dev/null
+            [[ -f "$NABSPATH/default.env" ]] && source "$NABSPATH/default.env"
+            # shellcheck source=/dev/null
+            [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
+            echo "${WP_ADMIN_USER:-admin}"
+        )
+        echo "Name:      $env_name"
+        echo "Status:    $(env_status "$env_name")"
+        echo "URL:       https://$(domain_for_env "$compose_file")/"
+        worktrees=$(env_worktrees "$compose_file")
+        echo "Worktrees: ${worktrees:-(none)}"
+        echo "Login:     $admin_user (configured; password: WP_ADMIN_PASSWORD in .env or default.env)"
         ;;
     cleanup)
         shift
@@ -944,9 +1019,10 @@ MIGRATE
         exec "$NABSPATH/bin/setup-local-e2e.sh" "$@"
         ;;
     *)
-        echo "Usage: n env <create|up|down|destroy|list|cleanup|e2e-setup>"
+        echo "Usage: n env <create|up|down|destroy|list|which|cleanup|e2e-setup>"
         echo "  up <name> [--build]      Start an environment"
         echo "  up --all [--build]       Start all environments"
+        echo "  which [name]             Show the env serving this worktree, or the named one (--porcelain for one row)"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
         ;;

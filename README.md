@@ -336,6 +336,7 @@ n env up <name> [--build]           # Start the environment (--build installs de
 n env down <name>                   # Stop the environment
 n env destroy <name> [--keep-branch]  # Stop and remove the environment (--keep-branch keeps its branches)
 n env list                          # List all environments and their status
+n env which [name] [--porcelain]    # The env serving this worktree: status, URL, worktrees, login
 ```
 
 You can override multiple plugins in a single environment:
