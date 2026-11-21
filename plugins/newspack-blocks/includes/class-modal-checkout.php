@@ -3091,7 +3091,16 @@ final class Modal_Checkout {
 		) {
 			$radius = (int) round( (float) $matches[1] * ( 'rem' === $matches[2] ? 16 : 1 ) );
 		}
-		return $radius;
+
+		/**
+		 * Filters the express checkout button radius, in pixels.
+		 *
+		 * Sites that change --newspack-ui-radius-button in CSS, such as a classic theme with square
+		 * buttons, return the same value here so the wallet buttons match.
+		 *
+		 * @param int $radius Radius from the Theme style, or 8 when the Theme style is off.
+		 */
+		return max( 0, (int) apply_filters( 'newspack_blocks_modal_checkout_express_button_radius', $radius ) );
 	}
 
 	/**

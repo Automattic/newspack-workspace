@@ -942,6 +942,41 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * A site can set the wallet button radius, down to square buttons.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_follows_filter( $hook ) {
+		$_REQUEST['modal_checkout'] = '1';
+		$square                     = static fn() => 0;
+		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $square );
+		$params = apply_filters( $hook, [ 'button' => [ 'radius' => '4' ] ] );
+		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $square );
+
+		$this->assertSame( 0, $params['button']['radius'] );
+	}
+
+	/**
+	 * A filtered radius is a whole, non-negative number of pixels.
+	 */
+	public function test_express_checkout_button_radius_filter_is_sanitized() {
+		$negative = static fn() => -4;
+		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $negative );
+		$from_negative = \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius();
+		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $negative );
+
+		$numeric = static fn() => '2';
+		add_filter( 'newspack_blocks_modal_checkout_express_button_radius', $numeric );
+		$from_numeric = \Newspack_Blocks\Modal_Checkout::get_express_checkout_button_radius();
+		remove_filter( 'newspack_blocks_modal_checkout_express_button_radius', $numeric );
+
+		$this->assertSame( 0, $from_negative );
+		$this->assertSame( 2, $from_numeric );
+	}
+
+	/**
 	 * Non-array params are returned untouched. Called directly: the hooks always pass arrays.
 	 */
 	public function test_express_checkout_button_radius_returns_non_array_untouched() {
