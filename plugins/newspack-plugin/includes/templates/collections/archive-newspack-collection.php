@@ -84,7 +84,9 @@ do_action( 'newspack_collections_archive_start' );
 			<?php endif; ?>
 
 			<?php
-			echo wp_kses_post( Template_Helper::render_separator() );
+			if ( $show_year_filter || $show_category || ! $highlight_latest ) {
+				echo wp_kses_post( Template_Helper::render_separator() );
+			}
 
 			/**
 			 * Fires after the filter controls in the archive template.
