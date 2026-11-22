@@ -212,6 +212,10 @@ stale_fixture() {
 	stale_env twin old
 	make_env twin "      - ./worktrees/spec-twin/plugins/newspack-plugin:/newspack-plugins/newspack-plugin
       - ./worktrees/spec-twin/plugins/newspack-blocks:/newspack-plugins/newspack-blocks"
+	# A compose file rewritten today by a migration, on an env last used 40
+	# days ago: rewriting tooling is not use.
+	stale_env rewritten old
+	touch "$SANDBOX/docker-compose.env-rewritten.yml"
 	# A worktree git cannot read: its .git points nowhere.
 	stale_env broken old
 	echo "gitdir: $WORK/nowhere" > "$SANDBOX/worktrees/spec-broken/.git"
@@ -308,6 +312,7 @@ expect_line legacy keep "(in use)"
 expect_line moved keep "(in use)"
 expect_line collide keep "(in use)"
 expect_line twin remove "unused 40 days"
+expect_line rewritten remove "unused 40 days"
 expect_line broken keep "(uncommitted or unreadable changes)"
 
 desc="a gone worktree's branch is kept: nothing proves it merged"

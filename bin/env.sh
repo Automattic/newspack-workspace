@@ -178,9 +178,10 @@ iso_to_epoch() {
     date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "${1:0:19}" +%s 2>/dev/null
 }
 
-# An env's last use in epoch seconds: the newest of its container's start and
-# finish times, its compose file's mtime, and envs/<name>/, which `up` and
-# `down` touch. 0 when none of them can be read.
+# An env's last use in epoch seconds: the newer of its container's start and
+# finish times and envs/<name>/, which create makes and `up` and `down` touch.
+# 0 when neither can be read. The compose file is left out: migrations rewrite
+# every env's at once, which would make the whole fleet read as used today.
 env_last_use() {
     local name="$1" newest=0 t when container
     container=$(echo "newspack_env_$name" | tr '-' '_')
@@ -188,11 +189,10 @@ env_last_use() {
         when=$(iso_to_epoch "$t")
         [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
     done
-    for t in "$NABSPATH/docker-compose.env-$name.yml" "$NABSPATH/envs/$name"; do
-        [[ -e "$t" ]] || continue
-        when=$(file_mtime "$t")
+    if [[ -e "$NABSPATH/envs/$name" ]]; then
+        when=$(file_mtime "$NABSPATH/envs/$name")
         [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
-    done
+    fi
     echo "$newest"
 }
 
