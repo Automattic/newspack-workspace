@@ -529,7 +529,8 @@ class API {
 			'post_type'   => 'post',
 		);
 
-		$post_id = wp_insert_post( $post_data );
+		// REST parameters arrive unslashed, but wp_insert_post() strips a level of slashes.
+		$post_id = wp_insert_post( wp_slash( $post_data ) );
 
 		if ( is_wp_error( $post_id ) ) {
 			return $post_id;

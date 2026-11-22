@@ -430,7 +430,8 @@ abstract class Abstract_Field {
 			return false;
 		}
 
-		$updated = \add_post_meta( $post_id, $this->get_post_meta_name(), $value );
+		// Field values are raw, but the post meta functions strip a level of slashes.
+		$updated = \add_post_meta( $post_id, $this->get_post_meta_name(), \wp_slash( $value ) );
 		if ( ! $updated ) {
 			return false;
 		}
@@ -450,7 +451,8 @@ abstract class Abstract_Field {
 			return false;
 		}
 
-		$updated = \update_post_meta( $post_id, $this->get_post_meta_name(), $value );
+		// Field values are raw, but the post meta functions strip a level of slashes.
+		$updated = \update_post_meta( $post_id, $this->get_post_meta_name(), \wp_slash( $value ) );
 		if ( ! $updated ) {
 			return false;
 		}

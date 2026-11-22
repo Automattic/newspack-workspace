@@ -232,7 +232,8 @@ class Editable_Field extends Abstract_Field {
 			return call_user_func( $this->save_value_callback, $post_id, $new_values );
 		}
 
-		$updated = \delete_post_meta( $post_id, $this->get_post_meta_name(), $value );
+		// delete_post_meta() strips a level of slashes from the value it matches.
+		$updated = \delete_post_meta( $post_id, $this->get_post_meta_name(), \wp_slash( $value ) );
 		if ( ! $updated ) {
 			return false;
 		}

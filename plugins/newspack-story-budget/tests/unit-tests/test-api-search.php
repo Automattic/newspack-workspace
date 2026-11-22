@@ -7,16 +7,13 @@
 
 namespace Newspack_Story_Budget;
 
+require_once dirname( __DIR__ ) . '/trait-rest-story-helpers.php';
+
 /**
  * A search term sent as JSON, as the app sends it, matches stories character for character.
  */
 class Test_API_Search extends \WP_UnitTestCase {
-	/**
-	 * Budget the test stories belong to.
-	 *
-	 * @var int
-	 */
-	private $budget_id;
+	use REST_Story_Helpers;
 
 	/**
 	 * Setup.
@@ -28,24 +25,22 @@ class Test_API_Search extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Create a story in the test budget, stored exactly as given.
+	 * Create a story in the test budget through the app's routes, and check it was stored as given.
 	 *
 	 * @param string $title       Story title.
-	 * @param string $description Description field value, if any.
+	 * @param string $description Description field value, if any, saved as the inline field editor saves it.
 	 * @return int Post ID.
 	 */
 	private function create_story( $title, $description = '' ) {
-		// The post and meta write paths unslash their input, so slash to store the values as given.
-		$post_id = self::factory()->post->create( [ 'post_title' => wp_slash( $title ) ] );
+		$post_id = $this->create_story_via_app( $title );
 		$this->assertSame( $title, get_post_field( 'post_title', $post_id, 'raw' ) );
 
 		if ( '' !== $description ) {
-			$meta_key = Fields::get_field( 'description' )->get_post_meta_name();
-			update_post_meta( $post_id, $meta_key, wp_slash( $description ) );
-			$this->assertSame( $description, get_post_meta( $post_id, $meta_key, true ) );
+			$response = $this->rest( 'POST', '/stories/' . $post_id . '/description', [ 'value' => $description ] );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( $description, get_post_meta( $post_id, $this->description_key(), true ) );
 		}
 
-		( new Story( $post_id ) )->update_budgets( [ $this->budget_id ] );
 		return $post_id;
 	}
 
@@ -57,11 +52,7 @@ class Test_API_Search extends \WP_UnitTestCase {
 	 * @return int[] Matching post IDs, sorted.
 	 */
 	private function search( $route, $term ) {
-		$request = new \WP_REST_Request( 'POST', '/' . API::NAMESPACE . sprintf( $route, $this->budget_id ) );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( wp_json_encode( [ 's' => $term ] ) );
-
-		$response = rest_get_server()->dispatch( $request );
+		$response = $this->rest( 'POST', sprintf( $route, $this->budget_id ), [ 's' => $term ] );
 		$this->assertSame( 200, $response->get_status() );
 
 		$ids = array_map( 'intval', $response->get_data()['story_ids'] );
@@ -156,5 +147,46 @@ class Test_API_Search extends \WP_UnitTestCase {
 		$this->assertSame( $expected, $this->search( $route, 'council' ) );
 		$this->assertSame( [ $in_title ], $this->search( $route, '"council votes"' ) );
 		$this->assertSame( [ $apostrophe ], $this->search( $route, "O'Brien" ) );
+	}
+
+	/**
+	 * A story saved outside the app, which already stores backslashes, is found by a backslash term.
+	 *
+	 * @dataProvider search_routes
+	 *
+	 * @param string $route Route path.
+	 */
+	public function test_story_saved_outside_app_is_found( $route ) {
+		// Core REST and the block editor send slashed data to wp_insert_post(), which unslashes it.
+		$match = wp_insert_post(
+			wp_slash(
+				[
+					'post_title'  => 'Files in C:\\drafts\\final',
+					'post_status' => 'draft',
+					'post_type'   => 'post',
+				]
+			)
+		);
+		$this->assertSame( 'Files in C:\\drafts\\final', get_post_field( 'post_title', $match, 'raw' ) );
+		( new Story( $match ) )->update_budgets( [ $this->budget_id ] );
+		$this->create_story( 'Files in the shared drive' );
+
+		$this->assertSame( [ $match ], $this->search( $route, 'C:\\drafts\\final' ) );
+	}
+
+	/**
+	 * A story the app saved before backslashes were kept is found by the stripped text, not the original.
+	 *
+	 * @dataProvider search_routes
+	 *
+	 * @param string $route Route path.
+	 */
+	public function test_story_saved_before_fix_matches_stripped_term( $route ) {
+		$match = $this->create_story( 'Quarterly archive' );
+		// What the app's save path used to store for "Archive at D:\exports\2026".
+		update_post_meta( $match, $this->description_key(), 'Archive at D:exports2026' );
+
+		$this->assertSame( [ $match ], $this->search( $route, 'D:exports2026' ) );
+		$this->assertSame( [], $this->search( $route, 'D:\\exports\\2026' ) );
 	}
 }
