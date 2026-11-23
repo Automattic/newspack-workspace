@@ -169,21 +169,24 @@ final class Web_App_Manifest {
 			if ( ! $src ) {
 				continue;
 			}
-			$icon = [
-				'src'   => $src,
-				'sizes' => "{$size}x{$size}",
-				'type'  => $type,
+			$icon    = [
+				'purpose' => 'any',
+				'src'     => $src,
+				'sizes'   => "{$size}x{$size}",
+				'type'    => $type,
 			];
-			if ( $maskable ) {
-				$icon['purpose'] = 'any maskable';
-			}
 			$icons[] = $icon;
+			// A separate entry, so the plain icon isn't cropped where it's shown as is.
+			if ( $maskable ) {
+				$icon['purpose'] = 'maskable';
+				$icons[]         = $icon;
+			}
 		}
 		return $icons;
 	}
 
 	/**
-	 * Colour for the installed app's title bar and splash screen, read the way the PWA plugin did.
+	 * Colour for the installed app's title bar and splash screen, read the way the PWA plugin did, white when the theme sets none.
 	 *
 	 * @return string
 	 */
@@ -200,7 +203,7 @@ final class Web_App_Manifest {
 				return '#' . $background_color;
 			}
 		}
-		return '';
+		return '#fff';
 	}
 
 	/**

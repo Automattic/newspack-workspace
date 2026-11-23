@@ -64,7 +64,7 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 			$this->assertSame( "{$size}x{$size}", $manifest['icons'][ $index ]['sizes'] );
 			$this->assertSame( get_site_icon_url( $size ), $manifest['icons'][ $index ]['src'] );
 			$this->assertSame( $type, $manifest['icons'][ $index ]['type'] );
-			$this->assertArrayNotHasKey( 'purpose', $manifest['icons'][ $index ] );
+			$this->assertSame( 'any', $manifest['icons'][ $index ]['purpose'] );
 		}
 	}
 
@@ -85,13 +85,13 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Icons marked maskable can be cropped to the device's icon shape.
+	 * Maskable icons get their own entries, so the plain icon isn't cropped where it's shown as is.
 	 */
 	public function test_maskable_icons() {
 		update_option( 'site_icon_maskable', true );
-		foreach ( Web_App_Manifest::get_manifest()['icons'] as $icon ) {
-			$this->assertSame( 'any maskable', $icon['purpose'] );
-		}
+		$icons = Web_App_Manifest::get_manifest()['icons'];
+		$this->assertSame( [ 'any', 'maskable', 'any', 'maskable' ], wp_list_pluck( $icons, 'purpose' ) );
+		$this->assertSame( [ '192x192', '192x192', '512x512', '512x512' ], wp_list_pluck( $icons, 'sizes' ) );
 	}
 
 	/**
@@ -121,12 +121,12 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The theme's background colour tints the app's title bar and splash screen.
+	 * The theme's background colour tints the app's title bar and splash screen, white when the theme sets none.
 	 */
 	public function test_theme_color_from_custom_background() {
 		$manifest = Web_App_Manifest::get_manifest();
-		$this->assertArrayNotHasKey( 'theme_color', $manifest );
-		$this->assertArrayNotHasKey( 'background_color', $manifest );
+		$this->assertSame( '#fff', $manifest['theme_color'] );
+		$this->assertSame( '#fff', $manifest['background_color'] );
 
 		add_theme_support( 'custom-background' );
 		set_theme_mod( 'background_color', '112233' );
