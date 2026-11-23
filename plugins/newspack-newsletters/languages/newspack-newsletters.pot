@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.44.2\n"
+"Project-Id-Version: Newspack Newsletters 3.45.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-26T18:21:03+00:00\n"
+"POT-Creation-Date: 2026-11-23T14:31:52+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -58,7 +58,7 @@ msgid "An advertiser cannot be its own parent."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:125
-#: includes/class-newspack-newsletters.php:1138
+#: includes/class-newspack-newsletters.php:1145
 msgid "Please select a newsletter service provider."
 msgstr ""
 
@@ -67,12 +67,12 @@ msgid "Unknown service provider."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:145
-#: includes/class-newspack-newsletters.php:1163
+#: includes/class-newspack-newsletters.php:1170
 msgid "The selected service provider is not available on this site."
 msgstr ""
 
 #: includes/admin/class-settings-rest.php:158
-#: includes/class-newspack-newsletters.php:1152
+#: includes/class-newspack-newsletters.php:1159
 msgid "Please input credentials."
 msgstr ""
 
@@ -142,7 +142,7 @@ msgstr ""
 
 #: includes/admin/pages/class-newsletters-list-page.php:35
 #: includes/admin/pages/class-newsletters-list-page.php:103
-#: includes/class-newspack-newsletters.php:653
+#: includes/class-newspack-newsletters.php:660
 #: dist/admin-shell.js:211
 #: src/admin-shell/screens/index.js:18
 msgid "All Newsletters"
@@ -798,7 +798,7 @@ msgid "List title is required."
 msgstr ""
 
 #: includes/class-newspack-newsletters-subscription.php:466
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2503
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2596
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:574
 #: dist/admin-shell.js:206
 #: dist/wizard-bridge.js:1
@@ -888,187 +888,187 @@ msgstr ""
 msgid "Your subscriptions were updated."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:258
+#: includes/class-newspack-newsletters.php:265
 msgid "No newsletter service provider configured."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:643
+#: includes/class-newspack-newsletters.php:650
 msgctxt "post type general name"
 msgid "Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:644
+#: includes/class-newspack-newsletters.php:651
 msgctxt "post type singular name"
 msgid "Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:645
+#: includes/class-newspack-newsletters.php:652
 msgctxt "admin menu"
 msgid "Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:646
+#: includes/class-newspack-newsletters.php:653
 msgctxt "add new on admin bar"
 msgid "Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:647
+#: includes/class-newspack-newsletters.php:654
 msgctxt "newsletter"
 msgid "Add New"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:648
+#: includes/class-newspack-newsletters.php:655
 #: dist/admin-shell.js:211
 #: src/admin-shell/screens/newsletters-list/index.js:75
 #: src/admin-shell/screens/newsletters-list/index.js:101
 msgid "Add Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:649
+#: includes/class-newspack-newsletters.php:656
 msgid "New Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:650
+#: includes/class-newspack-newsletters.php:657
 msgid "Edit Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:651
+#: includes/class-newspack-newsletters.php:658
 msgid "View Newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:652
+#: includes/class-newspack-newsletters.php:659
 msgid "View Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:654
+#: includes/class-newspack-newsletters.php:661
 msgid "Search Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:655
+#: includes/class-newspack-newsletters.php:662
 msgid "Parent Newsletters:"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:656
+#: includes/class-newspack-newsletters.php:663
 msgid "No newsletters found."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:657
+#: includes/class-newspack-newsletters.php:664
 msgid "No newsletters found in Trash."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:658
+#: includes/class-newspack-newsletters.php:665
 msgid "Newsletter Archives"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:659
+#: includes/class-newspack-newsletters.php:666
 msgid "Newsletter Attributes"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:660
+#: includes/class-newspack-newsletters.php:667
 msgid "Insert into newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:661
+#: includes/class-newspack-newsletters.php:668
 msgid "Uploaded to this newsletter"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:662
+#: includes/class-newspack-newsletters.php:669
 msgid "Filter newsletters list"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:663
+#: includes/class-newspack-newsletters.php:670
 msgid "Newsletters list navigation"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:664
+#: includes/class-newspack-newsletters.php:671
 msgid "Newsletters list"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:665
+#: includes/class-newspack-newsletters.php:672
 msgid "Newsletter sent."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:666
+#: includes/class-newspack-newsletters.php:673
 msgid "Newsletter published privately."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:667
+#: includes/class-newspack-newsletters.php:674
 msgid "Newsletter reverted to draft."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:668
+#: includes/class-newspack-newsletters.php:675
 msgid "Newsletter scheduled."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:669
+#: includes/class-newspack-newsletters.php:676
 #: dist/admin-shell.js:197
 #: src/admin-shell/screens/newsletters-list/quick-edit-panel.js:157
 msgid "Newsletter updated."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:670
+#: includes/class-newspack-newsletters.php:677
 msgid "Newsletter Link"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:671
+#: includes/class-newspack-newsletters.php:678
 msgid "A link to a newsletter."
 msgstr ""
 
 #. translators: Relative time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:812
+#: includes/class-newspack-newsletters.php:819
 #, php-format
 msgid "Sent %1$s ago"
 msgstr ""
 
 #. translators:  Absolute time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:815
+#: includes/class-newspack-newsletters.php:822
 #, php-format
 msgid "Sent %1$s"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:830
+#: includes/class-newspack-newsletters.php:837
 msgid "Public page"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:857
+#: includes/class-newspack-newsletters.php:864
 msgid "No"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:857
+#: includes/class-newspack-newsletters.php:864
 msgid "Yes"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:915
+#: includes/class-newspack-newsletters.php:922
 msgid "When true, return only the bundled prebuilt layouts and skip the saved-posts query."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1058
+#: includes/class-newspack-newsletters.php:1065
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:539
 msgid "Newsletter not found."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1066
+#: includes/class-newspack-newsletters.php:1073
 msgid "Failed to render the newsletter."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1230
-#: includes/class-newspack-newsletters.php:1249
-#: includes/class-newspack-newsletters.php:1274
-#: includes/class-newspack-newsletters.php:1299
+#: includes/class-newspack-newsletters.php:1237
+#: includes/class-newspack-newsletters.php:1256
+#: includes/class-newspack-newsletters.php:1281
+#: includes/class-newspack-newsletters.php:1311
 msgid "You cannot use this resource."
 msgstr ""
 
 #. translators: urge users to input their API credentials on settings page.
-#: includes/class-newspack-newsletters.php:1401
+#: includes/class-newspack-newsletters.php:1439
 #, php-format
 msgid "Thank you for activating Newspack Newsletters. Please <a href=\"%s\">head to settings</a> to set up your API credentials."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1567
+#: includes/class-newspack-newsletters.php:1660
 msgid "Lists not available while using manual configuration."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1573
+#: includes/class-newspack-newsletters.php:1666
 msgid "Lists not available for the current Newsletters setup."
 msgstr ""
 
@@ -1283,419 +1283,419 @@ msgctxt "font size name"
 msgid "XXXXXX Large"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:183
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:196
 msgid "personalization tag"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:189
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:202
 msgid "Inserts the contact's email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:193
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:206
 msgid "Inserts the contact's first name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:198
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:211
 msgid "Inserts the contact's last name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:203
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:216
 msgid "Inserts the contact's full name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:208
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:221
 msgid "Inserts the contact's phone number."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:213
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:226
 msgid "Inserts the contact's organization name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:219
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:232
 msgid "Inserts the date the contact subscribed to the list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:223
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:236
 msgid "Inserts the time the contact subscribed to the list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:228
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:241
 msgid "Inserts the unsubscribe link required in every email."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:232
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:245
 msgid "Inserts a link to view this campaign in a web browser (web copy link)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:237
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:250
 msgid "Inserts a web copy link without social-share links."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:241
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:254
 msgid "Inserts a link to the contact's subscription preferences page."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:246
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:259
 msgid "Inserts a link that lets the contact forward this email to a friend."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:252
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:265
 msgid "Inserts the deal owner's first name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:256
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:269
 msgid "Inserts the deal owner's last name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:260
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:273
 msgid "Inserts the deal owner's email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:264
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:277
 msgid "Inserts the deal title."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:268
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:281
 msgid "Inserts the deal description."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:272
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:285
 msgid "Inserts the deal value."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:276
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:289
 msgid "Inserts the deal status."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:280
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:293
 msgid "Inserts the deal pipeline."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:284
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:297
 msgid "Inserts the deal stage."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:288
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:301
 msgid "Inserts the deal created date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:292
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:305
 msgid "Inserts the deal last-updated date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:297
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:310
 msgid "Inserts the account name."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:302
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:315
 msgid "Inserts the account URL."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:306
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:319
 msgid "Inserts the account created date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:310
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:323
 msgid "Inserts the account last-updated date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:314
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:327
 msgid "Inserts the account address line 1."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:318
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:331
 msgid "Inserts the account address line 2."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:322
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:335
 msgid "Inserts the account city."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:326
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:339
 msgid "Inserts the account state or province."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:331
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:344
 msgid "Inserts the account postal code."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:336
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:349
 msgid "Inserts the account number of employees."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:340
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:353
 msgid "Inserts the account annual revenue."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:344
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:357
 msgid "Inserts the account industry or vertical."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:348
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:361
 msgid "Inserts the account country."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:353
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:366
 msgid "Inserts the full set of social-share submit links."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:358
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:371
 msgid "Inserts a Facebook Like button."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:363
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:376
 msgid "Inserts a Share on Facebook link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:368
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:381
 msgid "Inserts a Share on Facebook link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:373
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:386
 msgid "Inserts a Share on X (formerly Twitter) link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:378
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:391
 msgid "Inserts a Share on X (formerly Twitter) link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:383
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:396
 msgid "Inserts a Share on Digg link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:388
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:401
 msgid "Inserts a Share on Digg link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:393
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:406
 msgid "Inserts a Share on Reddit link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:398
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:411
 msgid "Inserts a Share on Reddit link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:403
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:416
 msgid "Inserts a Share on del.icio.us link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:408
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:421
 msgid "Inserts a Share on del.icio.us link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:413
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:426
 msgid "Inserts a Share on Google+ link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:418
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:431
 msgid "Inserts a Share on Google+ link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:423
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:436
 msgid "Inserts a Share on StumbleUpon link/icon."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:428
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:441
 msgid "Inserts a Share on StumbleUpon link (no icon)."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:434
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:447
 msgid "Inserts today's date."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:439
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:452
 msgid "Inserts today's date plus N days. Replace 1 with the number of days you want to add."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:444
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:457
 msgid "Inserts today's date minus N days. Replace 1 with the number of days you want to subtract."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:450
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:463
 msgid "Inserts the sender / list contact info."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:455
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:468
 msgid "Inserts the sender / list contact info on a single line."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:460
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:473
 msgid "Inserts the list's permission reminder."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:466
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:479
 msgid "Inserts the contact's IP address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:471
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:484
 msgid "Inserts the name of the contact's list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:476
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:489
 msgid "Inserts the contact's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:481
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:494
 msgid "Inserts the campaign's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:485
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:498
 msgid "Inserts the message's unique ID."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:517
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:530
 msgid "Active Campaign API credentials are missing."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:594
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:607
 msgid "ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign's end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:620
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1435
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1599
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:633
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1448
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1612
 msgid "ActiveCampaign API credentials are missing."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:685
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:690
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:698
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:703
 msgid "An error occurred while communicating with ActiveCampaign."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1000
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1013
 msgid "Please input ActiveCampaign API URL and Key."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1085
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1098
 msgid "ActiveCampaign supports searching by a single search term only."
 msgstr ""
 
 #. Translators: %s is the segment ID.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1126
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1139
 #, php-format
 msgid "Untitled %s"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1316
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1329
 msgid "Missing or invalid ActiveCampign credentials."
 msgstr ""
 
 #. translators: %d is the maximum number of test email recipients.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1444
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1457
 #, php-format
 msgid "ActiveCampaign test emails can be sent to up to %d addresses."
 msgstr ""
 
 #. translators: %s are the failed emails, each with the reason.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1550
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1563
 #, php-format
 msgid "Sending test campaign failed: %s"
 msgstr ""
 
 #. translators: %s are comma-separated emails.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1556
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1569
 #, php-format
 msgid "Not sent to: %s."
 msgstr ""
 
 #. translators: %s are comma-separated emails.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1565
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1578
 #, php-format
 msgid "ActiveCampaign test message sent successfully to %s."
 msgstr ""
 
 #. translators: %s are the failed emails, each with the reason.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1571
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1584
 #, php-format
 msgid "Sending failed for: %s"
 msgstr ""
 
 #. translators: %s are comma-separated emails.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1578
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1591
 #, php-format
 msgid "Not sent to: %s. Try these again."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1605
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1618
 #: includes/service-providers/campaign_monitor/class-newspack-newsletters-campaign-monitor.php:572
 #: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:890
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1191
 msgid "The newsletter subject cannot be empty."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1645
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1658
 msgid "Please input sender name and email address."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1651
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1664
 msgid "Please select a list."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1680
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1693
 msgid "ActiveCampaign sync error: "
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1711
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1724
 msgid "Error creating campaign: Message HTML is missing. Campaign not sent."
 msgstr ""
 
 #. Translators: %s is the upstream error message from ActiveCampaign.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1749
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1762
 #, php-format
 msgid "Could not verify the selected segment with ActiveCampaign (%s). Sending was aborted to avoid sending to the entire audience."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1757
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1770
 msgid "The selected segment could not be found in ActiveCampaign. Sending was aborted to avoid sending to the entire audience. Please re-select a segment and try again."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1829
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1842
 msgid "Campaign is not deletable."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1908
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1921
 msgid "Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1975
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:1988
 msgid "This newsletter's ActiveCampaign campaign is in an unexpected state (paused or stopped) and may have already partially sent. To avoid sending it twice, Newspack did not resend it. Please review the campaign in ActiveCampaign before trying again."
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2498
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2591
 msgid "Active Campaign List"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2499
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2592
 msgid "Active Campaign Tag"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2500
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2593
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:571
 #: src/newsletter-editor/sidebar/send-to.js:44
 #: src/newsletter-editor/utils.js:104
 msgid "list"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2501
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2594
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:572
 msgid "lists"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2502
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2595
 msgid "segment"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2504
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2597
 #: includes/service-providers/class-newspack-newsletters-service-provider.php:575
 msgid "Lists"
 msgstr ""
 
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2505
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2598
 msgid "Segments"
 msgstr ""
 
 #. translators: %1$s and %2$s are opening and closing link tag to Active Campaign documentation.
-#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2524
+#: includes/service-providers/active_campaign/class-newspack-newsletters-active-campaign.php:2617
 #, php-format
 msgid "Note for Active Campaign: You need to manually create a segment using the above tag to be able to send campaigns to this list. %1$sLearn more%2$s"
 msgstr ""
@@ -1841,15 +1841,15 @@ msgstr ""
 msgid "Tag created for this list"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:674
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:691
 msgid "Sorry, an error has occurred. Please try again later or contact us for support."
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:796
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:813
 msgid "Local list not properly configured for the provider"
 msgstr ""
 
-#: includes/service-providers/class-newspack-newsletters-service-provider.php:822
+#: includes/service-providers/class-newspack-newsletters-service-provider.php:839
 msgid "Local list not found"
 msgstr ""
 
@@ -1998,8 +1998,8 @@ msgstr ""
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:382
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:422
 #: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:984
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1442
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1525
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1484
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1567
 msgid "Mailchimp campaign ID not found."
 msgstr ""
 
@@ -2046,350 +2046,350 @@ msgstr ""
 msgid "Unrecognized Mailchimp sublist type \"%s\". Sending was aborted to avoid sending to the entire audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1434
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1476
 msgid "Unable to synchronize with Mailchimp."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1532
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1574
 msgid "Invalid Mailchimp Interest."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1547
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1589
 msgid "Mailchimp list ID not found."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1574
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1616
 msgid "The selected segment could not be found in Mailchimp. The audience was not updated to avoid sending to the entire list."
 msgstr ""
 
 #. Translators: %s is the unrecognized segment type returned by Mailchimp.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1598
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1640
 #, php-format
 msgid "Unrecognized Mailchimp segment type \"%s\". The audience was not updated to avoid sending to the entire list."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1645
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1687
 msgid "We'll need to subscribe this email address manually. Please contact our support team."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1680
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1722
 msgid "An unknown Mailchimp error occurred."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1846
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1889
 msgid "Response returned no merge_fields"
 msgstr ""
 
 #. Translators: %1$s is the merge field key, %2$s is the error message.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1924
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1968
 #, php-format
 msgid "Failed to create merge field %1$s. Error response: %2$s"
 msgstr ""
 
 #. Translators: %1$s is the merge field key, %2$s is the merge field tag.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1931
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:1975
 #, php-format
 msgid "Created merge field %1$s with tag %2$s."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2107
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2161
 msgid "Error upserting contact to Mailchimp."
 msgstr ""
 
 #. Translators: 1 is a hash value representing the contact's new ID. 2 is the contact's new email address.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2117
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2171
 #, php-format
 msgid "Contact requested email change. Migrated to %1$s (%2$s)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2123
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2177
 msgid "Error adding migration note to existing contact."
 msgstr ""
 
 #. Translators: 1 is a hash value representing the contact's previous ID. 2 is the contact's previous email address.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2131
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2185
 #, php-format
 msgid "Contact requested email change. Migrated from %1$s (%2$s)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2137
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2191
 msgid "Error adding migration note to new contact."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2141
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2195
 msgid "Error deleting existing contact."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2298
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2356
 msgid "Error reaching to search-members endpoint"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2303
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2361
 msgid "Contact not found"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2445
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2503
 msgid "audience"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2446
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2504
 msgid "audiences"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2447
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2505
 msgid "group, segment, or tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2448
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2506
 msgid "Audience"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2449
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2507
 msgid "Audiences"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2450
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2508
 msgid "Group, Segment, or Tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2451
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2509
 msgid "Mailchimp Audience"
 msgstr ""
 
 #. translators: %s is the name of the group category. "Newspack newsletters" by default.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2453
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2511
 #, php-format
 msgid "Mailchimp Group under the %s category"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2455
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2513
 msgid "Once this list is saved, a Group will be created for it."
 msgstr ""
 
 #. translators: %s is the name of the group category. "Newspack newsletters" by default.
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2457
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2515
 #, php-format
 msgid "Group created for this list under %s:"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2460
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2518
 msgid "Mailchimp Group"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2463
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2521
 msgid "Mailchimp Tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2475
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2533
 #: src/editor/blocks/merge-tags/utils.js:28
 msgid "merge tag"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2481
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2539
 msgid "Creates a \"View this email in your browser link\" to your campaign page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2485
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2543
 msgid "Displays the unique ID for your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2489
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2547
 msgid "Adds the Referral badge to your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2493
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2551
 msgid "Adds a text-only version of the Rewards link."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2497
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2555
 msgid "Inserts links to translate your sent campaign into different languages."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2501
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2559
 msgid "Adds a list of links to translate the content in your campaign. Replace xx with the code for the language your campaign is written in, and we'll display other available languages."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2505
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2563
 msgid "Displays the language code for a particular subscriber. For example, if your subscriber's language is set to English, the merge tag output will display the code en."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2509
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2567
 msgid "Displays the plain-text language for a particular subscriber. All languages are written English, so if your subscriber's language is set to German we'll display \"German\" instead of Deutsch."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2513
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2571
 msgid "Use to show the current date in a given format. Replace X with the format of your choice."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2517
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2575
 msgid "Displays a list of links to recent campaigns sent to the audience indicated. Replace X with the number of campaigns to show."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2521
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2579
 msgid "Creates a linked table of contents in your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2525
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2583
 msgid "Creates a table of contents in your campaigns as plain-text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2529
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2587
 msgid "Use this merge tag to generate preview text in a custom-coded campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2533
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2591
 msgid "Creates a poll to record subscriber ratings of 1–10."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2537
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2595
 msgid "Creates a one-question survey with a set number of responses that subscribers can choose from."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2541
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2599
 msgid "Use this tag to include a promo code in a campaign. Replace the \"x\" variables in your Promo Code merge tag to specify what promo code to display."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2546
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2604
 msgid "Inserts your subscriber's first name if it's available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2551
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2609
 msgid "Inserts your subscriber's last name if it's available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2556
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2614
 msgid "Inserts your subscriber's email address."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2560
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2618
 msgid "Inserts your subscriber’s phone number if it’s available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2564
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2622
 msgid "Inserts your subscriber’s address if it’s available in your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2569
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2627
 msgid "Inserts the name of your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2573
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2631
 msgid "Inserts the name of your company or organization that's listed in the required email footer content for your audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2577
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2635
 msgid "Inserts the number of subscribers in your audience in plain-text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2581
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2639
 msgid "Inserts the company or organization name listed under Primary Account Contact info in your Mailchimp account."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2585
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2643
 msgid "Displays MM/DD/YYYY or DD/MM/YYYY based on your settings in your account Details."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2589
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2647
 msgid "Displays the current year. This is great if you include a copyright date in your campaign, because it will update automatically every year."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2594
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2652
 msgid "Gives your subscribers the opportunity to unsubscribe from your emails. (Required by law and Mailchimp's Terms of Use.)"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2598
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2656
 msgid "Inserts your audience's permission reminder"
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2602
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2660
 msgid "Inserts in your mailing address and the \"Add us to your address book\" link that points to the vcard (.vcf) file with your address details."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2606
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2664
 msgid "Inserts an \"Add us to your address book\" link to your campaign."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2610
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2668
 msgid "Inserts a text URL that points to your vcard (.vcf) file of your address details. Use this as a link's Web Address to create a linked version."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2614
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2672
 msgid "Creates a link to the About Your List page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2618
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2676
 msgid "Inserts your audience's unique ID from your audience's hosted forms."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2622
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2680
 msgid "Inserts the website URL set in the Required Email Footer Content for this audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2626
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2684
 msgid "Inserts your company or organization postal mailing address or P.O. Box as plain text."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2630
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2688
 msgid "Inserts your mailing address as plain text on a single line."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2634
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2692
 msgid "Inserts your company or organization telephone number."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2638
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2696
 msgid "Inserts the email address located in the Required Email Footer Content for this audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2642
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2700
 msgid "Inserts the URL for your audience's hosted signup form."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2646
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2704
 msgid "Inserts a link to the contact's update profile page."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2650
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2708
 msgid "Inserts the URL to your audience's Forward to a Friend form."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2655
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2713
 msgid "Inserts your X (formerly Twitter) avatar, follower, post, and following counts; a follow link; and your latest posts."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2660
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2718
 msgid "Inserts your X (formerly Twitter) avatar, follower, post, and following counts, and a follow link. Excludes your latest posts."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2665
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2723
 msgid "Displays your X (formerly Twitter) profile URL."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2670
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2728
 msgid "Sets the number of X (formerly Twitter) posts to show. Replace 2 with the number you'd like to display."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2675
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2733
 msgid "Inserts another user's X (formerly Twitter) profile. Replace TWITTERUSERNAME with their handle."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2680
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2738
 msgid "Adds a Share button that lets subscribers post a link to your campaign on X (formerly Twitter)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2685
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2743
 msgid "Posts custom text (instead of your subject line) alongside a link to your campaign on X (formerly Twitter)."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2703
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2761
 msgid "Note for Mailchimp: The group is a subset of the Audience selected above. When a reader subscribes to this List, they will also be subscribed to the selected Audience."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2718
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2776
 msgid "Error sending test email. Please enter a name and email in the \"FROM\" section."
 msgstr ""
 
-#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2740
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp.php:2798
 msgid "List ID is required."
 msgstr ""
 
@@ -2421,11 +2421,11 @@ msgstr ""
 msgid "(%s)"
 msgstr ""
 
-#: src/blocks/subscribe/index.php:774
+#: src/blocks/subscribe/index.php:772
 msgid "You must enter a valid email address."
 msgstr ""
 
-#: src/blocks/subscribe/index.php:778
+#: src/blocks/subscribe/index.php:776
 msgid "You must select a list."
 msgstr ""
 
