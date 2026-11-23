@@ -282,6 +282,7 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_order_button_html', [ __CLASS__, 'order_button_html' ], 10, 1 );
 		add_action( 'option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
 		add_action( 'default_option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
+		add_filter( 'woocommerce_checkout_posted_data', [ __CLASS__, 'ensure_customer_billing_country' ] );
 		add_action( 'wp_ajax_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_nopriv_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
@@ -3401,11 +3402,18 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Force option for base country for new customers if unset and billing country optional while state is required
-	 * unless the NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
+	 * Use the store base as the default customer location in modal checkout
+	 * when the configured billing fields leave the country out, unless the
+	 * NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
 	 *
-	 * If this option is empty AND billing state is set as a required field AND billing country is not,
-	 * validation of the state value will fail during modal checkout.
+	 * WooCommerce refuses a checkout that has no billing country, and falls
+	 * back to the session customer's country when the form posts none. With
+	 * "No location by default" that customer has no country either, and the
+	 * reader has no field to enter one in.
+	 *
+	 * The session customer is set up before the cart loads, so this cannot
+	 * tell a cart that needs shipping apart. Such a cart keeps the country
+	 * field, which then opens with the store base selected.
 	 *
 	 * See Default Customer Location in: https://woo.com/document/configuring-woocommerce-settings/#general-options
 	 *
@@ -3440,15 +3448,47 @@ final class Modal_Checkout {
 			return $option_value;
 		}
 
-		// If billing state is required but billing country is not, we need to ensure a default location is set.
-		if ( defined( '\Newspack\Donations::DONATION_BILLING_FIELDS_OPTION' ) ) {
-			$billing_fields = get_option( \Newspack\Donations::DONATION_BILLING_FIELDS_OPTION, [] );
-			if ( ! in_array( 'billing_country', $billing_fields, true ) && in_array( 'billing_state', $billing_fields, true ) ) {
-				return 'base';
-			}
+		// An empty configuration keeps every WooCommerce billing field, country included.
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+		if ( ! empty( $billing_fields ) && ! in_array( 'billing_country', $billing_fields, true ) ) {
+			return 'base';
 		}
 
 		return $option_value;
+	}
+
+	/**
+	 * Give the session customer the store base country when a modal checkout
+	 * is submitted from a form that has no country field, unless the
+	 * NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
+	 *
+	 * Any code can remove the field from the form, so this looks at what was
+	 * posted rather than at the configured billing fields. WooCommerce falls
+	 * back to the customer's country and refuses the checkout when there is
+	 * none. A store base outside the countries the store sells to would be
+	 * refused as well, so it is not applied.
+	 *
+	 * @param array $data Posted checkout data.
+	 *
+	 * @return array Posted checkout data, unchanged.
+	 */
+	public static function ensure_customer_billing_country( $data ) {
+		if ( isset( $data['billing_country'] ) || ! self::is_modal_checkout() ) {
+			return $data;
+		}
+		if ( defined( 'NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS' ) && NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS ) {
+			return $data;
+		}
+		$customer = \WC()->customer;
+		if ( ! $customer || $customer->get_billing_country() ) {
+			return $data;
+		}
+		$base_country = \WC()->countries->get_base_country();
+		if ( array_key_exists( $base_country, (array) \WC()->countries->get_allowed_countries() ) ) {
+			$customer->set_billing_country( $base_country );
+			$customer->set_billing_state( \WC()->countries->get_base_state() );
+		}
+		return $data;
 	}
 
 	/**
