@@ -622,12 +622,69 @@ final class Recaptcha {
 	 * Teams for WooCommerce Memberships shows on its join-team page does not;
 	 * both fire this action. The client's stylesheet hides Google's badge, which
 	 * Google allows only when this notice is shown instead.
+	 *
+	 * On v3 the client fetches a token only once the form has been on screen
+	 * briefly, so a reader who submits sooner would be refused. The form holds
+	 * such a submission while it asks Google for a token, then sends it through
+	 * the same button so WooCommerce still sees `register`. If no token arrives
+	 * within five seconds it sends the form anyway, and the server refuses it as
+	 * before. v2 needs none of this: the client already holds the submission
+	 * until the challenge passes.
 	 */
 	public static function render_woocommerce_registration_fields() {
 		if ( ! self::can_use_captcha() ) {
 			return;
 		}
 		\wp_print_inline_script_tag( "document.currentScript.closest( 'form' ).setAttribute( 'data-newspack-recaptcha', 'woocommerce_register' );" );
+		if ( self::can_use_captcha( 'v3' ) ) {
+			ob_start();
+			?>
+( function ( form, siteKey ) {
+	var released = false;
+	form.addEventListener( 'submit', function ( event ) {
+		var field = form.querySelector( 'input[name="g-recaptcha-response"]' );
+		if ( released || ( field && field.value ) ) {
+			return;
+		}
+		event.preventDefault();
+		var submitter = event.submitter || form.querySelector( '[type="submit"][name="register"]' );
+		var release = function ( token ) {
+			if ( released ) {
+				return;
+			}
+			released = true;
+			if ( token ) {
+				field = form.querySelector( 'input[name="g-recaptcha-response"]' );
+				if ( ! field ) {
+					field = document.createElement( 'input' );
+					field.type = 'hidden';
+					field.name = 'g-recaptcha-response';
+					form.appendChild( field );
+				}
+				field.value = token;
+			}
+			form.requestSubmit( submitter );
+		};
+		setTimeout( release, 5000 );
+		( function ask() {
+			if ( released ) {
+				return;
+			}
+			if ( ! window.grecaptcha || ! window.grecaptcha.ready ) {
+				setTimeout( ask, 100 );
+				return;
+			}
+			window.grecaptcha.ready( function () {
+				window.grecaptcha.execute( siteKey, { action: 'woocommerce_register' } ).then( release, function () {
+					release();
+				} );
+			} );
+		} )();
+	} );
+} )( document.currentScript.closest( 'form' ), '<?php echo \esc_js( self::get_site_key() ); ?>' );
+			<?php
+			\wp_print_inline_script_tag( ob_get_clean() );
+		}
 		?>
 		<p class="newspack-recaptcha-terms"><?php echo \wp_kses_post( self::get_terms_text() ); ?></p>
 		<?php
