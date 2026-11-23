@@ -121,31 +121,43 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Only a mode a manifest can declare is saved, since PWA passes the stored value straight into its manifest.
+	 * A valid display mode passes through the settings sanitizer untouched.
 	 */
-	public function test_settings_drop_invalid_display_modes() {
-		$wizard = new \Newspack\Setup_Wizard();
-		$this->assertSame(
+	public function test_settings_keep_valid_display_modes() {
+		$theme_mods = [
+			'pwa_display_mode' => 'standalone',
+			'show_author_bio'  => true,
+		];
+		$this->assertSame( $theme_mods, ( new \Newspack\Setup_Wizard() )->sanitize_theme_mods( $theme_mods ) );
+	}
+
+	/**
+	 * Display modes a manifest can't declare, including an explicit null.
+	 *
+	 * @return array
+	 */
+	public function invalid_display_mode_provider() {
+		return [
+			'unknown' => [ 'bogus' ],
+			'null'    => [ null ],
+		];
+	}
+
+	/**
+	 * Only a mode a manifest can declare is saved, since PWA passes the stored value straight into its manifest.
+	 *
+	 * @dataProvider invalid_display_mode_provider
+	 *
+	 * @param mixed $mode Submitted display mode.
+	 */
+	public function test_settings_drop_invalid_display_modes( $mode ) {
+		$sanitized = ( new \Newspack\Setup_Wizard() )->sanitize_theme_mods(
 			[
-				'pwa_display_mode' => 'standalone',
+				'pwa_display_mode' => $mode,
 				'show_author_bio'  => true,
-			],
-			$wizard->sanitize_theme_mods(
-				[
-					'pwa_display_mode' => 'standalone',
-					'show_author_bio'  => true,
-				]
-			)
+			]
 		);
-		$this->assertSame(
-			[ 'show_author_bio' => true ],
-			$wizard->sanitize_theme_mods(
-				[
-					'pwa_display_mode' => 'bogus',
-					'show_author_bio'  => true,
-				] 
-			) 
-		);
+		$this->assertSame( [ 'show_author_bio' => true ], $sanitized );
 	}
 
 	/**

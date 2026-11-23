@@ -721,7 +721,7 @@ class Setup_Wizard extends Wizard {
 	 */
 	public function sanitize_theme_mods( $theme_mods ) {
 		// PWA passes the stored display mode straight into its manifest, so only a mode a manifest can declare is saved.
-		if ( isset( $theme_mods['pwa_display_mode'] ) && ! in_array( $theme_mods['pwa_display_mode'], Web_App_Manifest::DISPLAY_MODES, true ) ) {
+		if ( array_key_exists( 'pwa_display_mode', $theme_mods ) && ! in_array( $theme_mods['pwa_display_mode'], Web_App_Manifest::DISPLAY_MODES, true ) ) {
 			unset( $theme_mods['pwa_display_mode'] );
 		}
 		return $theme_mods;
