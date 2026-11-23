@@ -109,7 +109,7 @@ beforeEach( () => {
 	responses = {
 		[ THEME_PATH ]: {
 			theme_mods: { ...ADVANCED_SETTINGS_DEFAULTS, show_author_email: false },
-			etc: { post_count: '10', has_pwa_plugin: false },
+			etc: { post_count: '10' },
 		},
 		'/newspack/v1/wizard/newspack-settings/related-content': { relatedPostsEnabled: true, relatedPostsMaxAge: 0 },
 		[ PRIMARY_CATEGORY_PATH ]: { enabled: true, yoast_active: true },

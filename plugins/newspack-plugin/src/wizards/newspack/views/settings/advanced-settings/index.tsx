@@ -31,7 +31,6 @@ import DefaultTemplates, { TemplateOptions } from './default-templates';
 import MediaCredits from './media-credits';
 import PostDate from './post-date';
 import AccessibilityStatement from './accessibility-statement';
-import PwaDisplayMode from './pwa-display-mode';
 import PrivateTags from './private-tags';
 import PrimaryCategory from './primary-category';
 
@@ -78,7 +77,7 @@ export default function AdvancedSettings() {
 
 	const [ data, setData ] = useState< AdvancedSettings >( DEFAULT_DATA );
 	const [ savedData, setSavedData ] = useState< AdvancedSettings >( DEFAULT_DATA );
-	const [ etc, setEtc ] = useState< Etc >( { post_count: '0', has_pwa_plugin: false } );
+	const [ etc, setEtc ] = useState< Etc >( { post_count: '0' } );
 
 	const [ recirculation, setRecirculation ] = useState< Recirculation >( {
 		relatedPostsMaxAge: 0,
@@ -358,12 +357,6 @@ export default function AdvancedSettings() {
 		{
 			key: 'accessibility-statement',
 			element: <AccessibilityStatement isFetching={ isFetching } />,
-		},
-		!! etc.has_pwa_plugin && {
-			key: 'pwa',
-			title: __( 'Progressive Web App', 'newspack-plugin' ),
-			description: __( 'Choose how your site appears when readers install it as a Progressive Web App on their devices.', 'newspack-plugin' ),
-			content: <PwaDisplayMode data={ data } update={ update } isFetching={ isFetching } />,
 		},
 	];
 
