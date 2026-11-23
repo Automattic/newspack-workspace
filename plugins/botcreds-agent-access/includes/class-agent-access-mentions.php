@@ -190,6 +190,8 @@ Agent Access @ %6$s',
 		 */
 		do_action( 'agent_access_user_mentioned', $user, $comment, $post );
 
+		// Sends one notification to the mentioned user, not bulk mail.
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
 		wp_mail( $user->user_email, $subject, $message );
 	}
 

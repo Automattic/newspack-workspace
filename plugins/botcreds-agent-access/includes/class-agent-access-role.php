@@ -67,6 +67,8 @@ class Agent_Access_Role {
 		if ( get_role( self::ROLE_SLUG ) ) {
 			return;
 		}
+		// wpcom_vip_add_role() does not exist on WP Cloud.
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
 		add_role( self::ROLE_SLUG, self::ROLE_NAME, self::DEFAULT_CAPS );
 	}
 

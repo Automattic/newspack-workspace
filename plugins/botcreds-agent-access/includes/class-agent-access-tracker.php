@@ -231,11 +231,14 @@ class Agent_Access_Tracker {
 	private static function build_all_content_query( $select_expr, $args ) {
 		global $wpdb;
 
+		// Joins the users table only to read display names; WP Cloud is not VIP.
+		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
 		$sql    = "SELECT {$select_expr}
 		           FROM {$wpdb->posts} p
 		           INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 		           INNER JOIN {$wpdb->users} u ON p.post_author = u.ID
 		           WHERE pm.meta_key = %s AND p.post_status != 'trash'";
+		// phpcs:enable WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
 		$params = array( self::META_KEY );
 
 		if ( ! empty( $args['user_id'] ) ) {

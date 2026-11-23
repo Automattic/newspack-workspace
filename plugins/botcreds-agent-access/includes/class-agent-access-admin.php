@@ -1681,7 +1681,7 @@ class Agent_Access_Admin {
 			Agent_Access_Pro_Auth::install_table();
 		}
 
-		wp_redirect(
+		wp_safe_redirect(
 			add_query_arg(
 				array(
 					'page'    => 'agent-access',
