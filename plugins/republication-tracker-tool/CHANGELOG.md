@@ -1,3 +1,11 @@
+## republication-tracker-tool [2.9.9](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.8...republication-tracker-tool@2.9.9) (2026-11-23)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** move republish URL to a data attribute ([#1160](https://github.com/Automattic/newspack-workspace/issues/1160)) ([ffe5ac0](https://github.com/Automattic/newspack-workspace/commit/ffe5ac0fcdb7ec2e4319474dbd0e9eeace6ff9e4))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
 ## republication-tracker-tool [2.9.8](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.7...republication-tracker-tool@2.9.8) (2026-10-29)
 
 
