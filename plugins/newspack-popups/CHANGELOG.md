@@ -1,3 +1,21 @@
+# newspack-popups [3.21.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.7...newspack-popups@3.21.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **audience:** match checkbox fields in Campaigns segments ([#1425](https://github.com/Automattic/newspack-workspace/issues/1425)) ([78c7f51](https://github.com/Automattic/newspack-workspace/commit/78c7f516ebe226c93116e74ce6cc7956dc03d948))
+
+
+### Features
+
+* **campaigns:** segment logged-out readers from newsletter links ([#1279](https://github.com/Automattic/newspack-workspace/issues/1279)) ([8ee2322](https://github.com/Automattic/newspack-workspace/commit/8ee2322c7c79d2ce3d607dd057dea6cf542c84c6))
+* **popups:** add a manual-only option to overlay prompts ([#1423](https://github.com/Automattic/newspack-workspace/issues/1423)) ([d98daa3](https://github.com/Automattic/newspack-workspace/commit/d98daa330e007d8e4bb519515d8543bbb3c72c15))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.13.0
+
 ## newspack-popups [3.20.7](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.20.6...newspack-popups@3.20.7) (2026-11-19)
 
 

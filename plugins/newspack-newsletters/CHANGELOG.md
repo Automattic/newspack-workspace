@@ -1,3 +1,29 @@
+# newspack-newsletters [3.45.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.44.2...newspack-newsletters@3.45.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **components:** tighten the gap below the page header on mobile ([#1323](https://github.com/Automattic/newspack-workspace/issues/1323)) ([153e91e](https://github.com/Automattic/newspack-workspace/commit/153e91efb00c49516f2740a8197253c9ebe330ed))
+* **content-gate:** treat authors and contributors as readers ([#1302](https://github.com/Automattic/newspack-workspace/issues/1302)) ([d3e31fc](https://github.com/Automattic/newspack-workspace/commit/d3e31fc84ac88d8d14285fd012b2b22de7379e2c))
+* **newsletters:** sync Mailchimp contacts when no field can be added ([#1324](https://github.com/Automattic/newspack-workspace/issues/1324)) ([b662fd5](https://github.com/Automattic/newspack-workspace/commit/b662fd50b319760eb66f32b0154c8bac7c68bafb))
+* **newspack-ui:** announce loading on submit buttons (DSGNEWS-244) ([#1332](https://github.com/Automattic/newspack-workspace/issues/1332)) ([e8e0dd1](https://github.com/Automattic/newspack-workspace/commit/e8e0dd173128d0530b9c73c3685ceadebf8a908d))
+* **newspack-ui:** make form control states readable (DSGNEWS-242) ([#1329](https://github.com/Automattic/newspack-workspace/issues/1329)) ([ea3e321](https://github.com/Automattic/newspack-workspace/commit/ea3e321bebfa4a0bb3431d39e801169d597aee0b))
+* **sync:** show fields Mailchimp could not save in sync activity ([#1325](https://github.com/Automattic/newspack-workspace/issues/1325)) ([892bf40](https://github.com/Automattic/newspack-workspace/commit/892bf40fa55567b11cfecd65d8b1fc7cb743a1e4))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+
+### Features
+
+* **campaigns:** segment logged-out readers from newsletter links ([#1279](https://github.com/Automattic/newspack-workspace/issues/1279)) ([8ee2322](https://github.com/Automattic/newspack-workspace/commit/8ee2322c7c79d2ce3d607dd057dea6cf542c84c6))
+* **newsletters:** show Memberships-restricted lists as premium ([#1366](https://github.com/Automattic/newspack-workspace/issues/1366)) ([168c28a](https://github.com/Automattic/newspack-workspace/commit/168c28a59c3446fadfd44a9d049482f4e291d743))
+* **premium-newsletters:** set auto-signup and hide lists per gate ([#1371](https://github.com/Automattic/newspack-workspace/issues/1371)) ([aa45560](https://github.com/Automattic/newspack-workspace/commit/aa45560ef515f3bbd5c752308fda6fd134d1f683))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.13.0
+* **newspack-icons:** upgraded to 1.4.0
+
 ## newspack-newsletters [3.44.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.44.1...newspack-newsletters@3.44.2) (2026-11-19)
 
 
