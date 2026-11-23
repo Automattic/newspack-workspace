@@ -50,7 +50,7 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	/**
 	 * The manifest carries what a browser needs to install the site.
 	 */
-	public function test_manifest_fields() {
+	public function test_manifest_has_what_a_browser_needs_to_install() {
 		$manifest = Web_App_Manifest::get_manifest();
 		$this->assertSame( 'Smith & Co', $manifest['name'] );
 		$this->assertSame( 'Smith & Co', $manifest['short_name'] );
@@ -121,9 +121,37 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The theme's background colour tints the app's title bar and splash screen, white when the theme sets none.
+	 * Only a mode a manifest can declare is saved, since PWA passes the stored value straight into its manifest.
 	 */
-	public function test_theme_color_from_custom_background() {
+	public function test_settings_drop_invalid_display_modes() {
+		$wizard = new \Newspack\Setup_Wizard();
+		$this->assertSame(
+			[
+				'pwa_display_mode' => 'standalone',
+				'show_author_bio'  => true,
+			],
+			$wizard->sanitize_theme_mods(
+				[
+					'pwa_display_mode' => 'standalone',
+					'show_author_bio'  => true,
+				]
+			)
+		);
+		$this->assertSame(
+			[ 'show_author_bio' => true ],
+			$wizard->sanitize_theme_mods(
+				[
+					'pwa_display_mode' => 'bogus',
+					'show_author_bio'  => true,
+				] 
+			) 
+		);
+	}
+
+	/**
+	 * The theme's background color tints the app's title bar and splash screen, white when the theme sets none.
+	 */
+	public function test_theme_color_falls_back_to_white_then_follows_custom_background() {
 		$manifest = Web_App_Manifest::get_manifest();
 		$this->assertSame( '#fff', $manifest['theme_color'] );
 		$this->assertSame( '#fff', $manifest['background_color'] );
@@ -185,9 +213,9 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Every page points browsers at the manifest and tints the app in the theme's colour.
+	 * Every page points browsers at the manifest and tints the app in the theme's color.
 	 */
-	public function test_head_tags() {
+	public function test_head_links_the_manifest_and_tints_the_app() {
 		add_theme_support( 'custom-background' );
 		set_theme_mod( 'background_color', '112233' );
 		$tags = $this->head_tags();

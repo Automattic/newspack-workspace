@@ -28,7 +28,7 @@ final class Web_App_Manifest {
 	const REST_ROUTE     = '/web-app-manifest';
 
 	/**
-	 * Option holding the display mode, shared with the PWA plugin era.
+	 * Option holding the display mode. PWA::filter_web_app_manifest() reads it too, while the PWA plugin is active.
 	 */
 	const DISPLAY_MODE_OPTION = 'newspack_pwa_display_mode';
 
@@ -186,7 +186,7 @@ final class Web_App_Manifest {
 	}
 
 	/**
-	 * Colour for the installed app's title bar and splash screen, read the way the PWA plugin did, white when the theme sets none.
+	 * Color for the installed app's title bar and splash screen: the theme's color if it declares one, otherwise white, as the PWA plugin did.
 	 *
 	 * @return string
 	 */

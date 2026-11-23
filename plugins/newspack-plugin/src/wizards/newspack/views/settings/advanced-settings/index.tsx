@@ -361,8 +361,11 @@ export default function AdvancedSettings() {
 		},
 		{
 			key: 'web-app-display-mode',
-			title: __( 'Web app display mode', 'newspack-plugin' ),
-			description: __( 'Choose how the site opens when readers install it as an app on their device.', 'newspack-plugin' ),
+			title: __( 'Web App', 'newspack-plugin' ),
+			description: __(
+				'Choose how the site opens when readers install it as an app on their device. Readers can only install the site once it has a site icon.',
+				'newspack-plugin'
+			),
 			content: <WebAppDisplayMode data={ data } update={ update } isFetching={ isFetching } />,
 		},
 	];
