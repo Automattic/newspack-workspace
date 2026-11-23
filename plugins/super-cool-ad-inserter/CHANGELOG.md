@@ -1,3 +1,10 @@
+## super-cool-ad-inserter [0.7.10](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.9...super-cool-ad-inserter@0.7.10) (2026-11-23)
+
+
+### Bug Fixes
+
+* **scaip:** link docs and changelog to the monorepo ([#1351](https://github.com/Automattic/newspack-workspace/issues/1351)) ([edfd18e](https://github.com/Automattic/newspack-workspace/commit/edfd18e9473d258f609c8bb914c5443eb52e992a)), closes [#1350](https://github.com/Automattic/newspack-workspace/issues/1350) [#1350](https://github.com/Automattic/newspack-workspace/issues/1350)
+
 ## super-cool-ad-inserter [0.7.9](https://github.com/Automattic/newspack-workspace/compare/super-cool-ad-inserter@0.7.8...super-cool-ad-inserter@0.7.9) (2026-10-27)
 
 

@@ -1,3 +1,23 @@
+# newspack-network [2.23.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.15...newspack-network@2.23.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **network:** bound memory in data-backfill so long ranges finish ([#998](https://github.com/Automattic/newspack-workspace/issues/998)) ([0cfc13a](https://github.com/Automattic/newspack-workspace/commit/0cfc13a0ef87d16249bf53b89bad2ec6d5455e34))
+* **network:** refuse Hub requests to private node addresses ([#1159](https://github.com/Automattic/newspack-workspace/issues/1159)) ([9197c5f](https://github.com/Automattic/newspack-workspace/commit/9197c5f8afc8c65dbfb8e0fee036087406287fdb))
+* **newspack-ui:** announce loading on submit buttons (DSGNEWS-244) ([#1332](https://github.com/Automattic/newspack-workspace/issues/1332)) ([e8e0dd1](https://github.com/Automattic/newspack-workspace/commit/e8e0dd173128d0530b9c73c3685ceadebf8a908d))
+* **newspack-ui:** make modals real dialogs (DSGNEWS-246, DSGNEWS-247) ([#1335](https://github.com/Automattic/newspack-workspace/issues/1335)) ([003e96a](https://github.com/Automattic/newspack-workspace/commit/003e96a37323829ac9f277973f4fc5b694996828))
+
+
+### Features
+
+* **subscribers:** show subscriptions held on other network sites ([#1403](https://github.com/Automattic/newspack-workspace/issues/1403)) ([a43fb97](https://github.com/Automattic/newspack-workspace/commit/a43fb97e5e2ae90ec5789dc731824d5941f96792))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+
 ## newspack-network [2.22.15](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.14...newspack-network@2.22.15) (2026-10-26)
 
 
