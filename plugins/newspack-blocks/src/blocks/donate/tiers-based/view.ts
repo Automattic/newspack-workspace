@@ -45,11 +45,9 @@ export default ( parentEl: HTMLElement ) => {
 
 			// Toggle the frequency buttons' active states.
 			frequencyButtonsEls.forEach( el => {
-				if ( selectedFrequency === el.getAttribute( 'data-frequency-slug' ) ) {
-					el.classList.add( BUTTON_ACTIVE_CLASSNAME );
-				} else {
-					el.classList.remove( BUTTON_ACTIVE_CLASSNAME );
-				}
+				const isActive = selectedFrequency === el.getAttribute( 'data-frequency-slug' );
+				el.classList.toggle( BUTTON_ACTIVE_CLASSNAME, isActive );
+				el.setAttribute( 'aria-pressed', isActive ? 'true' : 'false' );
 			} );
 
 			// Update the value attributes in the form's submit buttons.

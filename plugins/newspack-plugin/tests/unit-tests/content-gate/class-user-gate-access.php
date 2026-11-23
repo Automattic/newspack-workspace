@@ -59,6 +59,54 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Tear down after each test.
+	 */
+	public function tear_down() {
+		// Stand-ins for newspack-network, which the suite doesn't load.
+		remove_all_filters( 'newspack_access_rules_network_subscription_records' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Stand in for newspack-network: answer the network records filter with a
+	 * fixed list, and capture how it was called.
+	 *
+	 * @param array $records Records to return, in newspack-network's shape.
+	 *
+	 * @return ArrayObject Captures a `calls` list of [ $user_id, $product_ids ] pairs.
+	 */
+	private function stub_network_records( $records ) {
+		$spy = new ArrayObject( [ 'calls' => [] ] );
+		add_filter(
+			'newspack_access_rules_network_subscription_records',
+			function ( $existing, $user_id, $product_ids ) use ( $records, $spy ) {
+				$spy['calls'] = array_merge( $spy['calls'], [ [ $user_id, $product_ids ] ] );
+				return array_merge( $existing, $records );
+			},
+			10,
+			3
+		);
+		return $spy;
+	}
+
+	/**
+	 * Build a network record in the shape newspack-network supplies.
+	 *
+	 * @param int    $id        Subscription ID on the other site.
+	 * @param string $site_name Name of the other site.
+	 *
+	 * @return array
+	 */
+	private function network_record( $id = 12345678, $site_name = 'Node Daily' ) {
+		return [
+			'id'        => $id,
+			'site_url'  => 'https://node-b.example.test',
+			'site_name' => $site_name,
+			'edit_url'  => 'https://node-b.example.test/wp-admin/post.php?post=' . $id . '&action=edit',
+		];
+	}
+
+	/**
 	 * Shrink or restore the order walk's page size.
 	 *
 	 * @param int $size Page size.
@@ -518,6 +566,173 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 
 		$this->assertCount( User_Gate_Access::GRANTING_ENTITIES_LIMIT + 1, $links );
 		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ) );
+	}
+
+	/**
+	 * A subscription held on another network site is named with its site and
+	 * linked to that site's edit screen, even when the reader has no local
+	 * subscription at all.
+	 */
+	public function test_network_records_listed_when_no_local_records() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id, [] );
+
+		$this->assertCount( 1, $links );
+		$this->assertStringContainsString( 'href="' . esc_url( 'https://node-b.example.test/wp-admin/post.php?post=12345678&action=edit' ) . '"', $links[0], 'The label must link to the other site\'s edit screen.' );
+		$this->assertStringContainsString( '#12345678 on Node Daily', $links[0] );
+		$this->assertSame( [ [ self::$user_id, [ 101 ] ] ], $spy['calls'], 'The filter gets the user and the rule\'s products.' );
+	}
+
+	/**
+	 * Local records come first, then the records from other sites.
+	 */
+	public function test_local_and_network_records_listed_together() {
+		\wc_create_mock_product(
+			[
+				'id'   => 101,
+				'name' => 'All Access',
+			]
+		);
+		$local = \wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#' . $local->get_id() . '</a>', $links[0] );
+		$this->assertStringNotContainsString( ' on ', $links[0], 'A local record carries no site name.' );
+		$this->assertStringContainsString( '#12345678 on Node Daily', $links[1] );
+	}
+
+	/**
+	 * The cap covers the combined list: the first LIMIT items show, then the
+	 * "and more" marker stands in for the rest.
+	 */
+	public function test_combined_list_truncates() {
+		$limit = User_Gate_Access::GRANTING_ENTITIES_LIMIT;
+		for ( $i = 0; $i < 3; $i++ ) {
+			\wcs_create_subscription(
+				[
+					'customer_id'    => self::$user_id,
+					'status'         => 'active',
+					'billing_period' => 'month',
+					'products'       => [ 101 ],
+				]
+			);
+		}
+		// 3 local + ( LIMIT - 2 ) network = LIMIT + 1 records in all.
+		$records = [];
+		for ( $i = 1; $i <= $limit - 2; $i++ ) {
+			$records[] = $this->network_record( 7000 + $i );
+		}
+		$this->stub_network_records( $records );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( $limit + 1, $links, 'LIMIT links plus the marker.' );
+		$this->assertStringContainsString( 'screen-reader-text">and more</span>', end( $links ) );
+		$this->assertStringContainsString( '#' . ( 7000 + $limit - 3 ) . ' on Node Daily', $links[ $limit - 1 ], 'The last network record that fits still shows.' );
+		$this->assertStringNotContainsString( '#' . ( 7000 + $limit - 2 ) . ' on', implode( '', $links ), 'The record past the cap is left to the marker.' );
+	}
+
+	/**
+	 * Exactly LIMIT records in all is not a truncated list.
+	 */
+	public function test_combined_list_at_the_limit_has_no_marker() {
+		$limit = User_Gate_Access::GRANTING_ENTITIES_LIMIT;
+		\wcs_create_subscription(
+			[
+				'customer_id'    => self::$user_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ 101 ],
+			]
+		);
+		$records = [];
+		for ( $i = 1; $i <= $limit - 1; $i++ ) {
+			$records[] = $this->network_record( 7000 + $i );
+		}
+		$this->stub_network_records( $records );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( $limit, $links );
+		$this->assertStringNotContainsString( 'and more', implode( '', $links ) );
+	}
+
+	/**
+	 * Only the subscription rule asks newspack-network for records.
+	 */
+	public function test_one_time_purchase_slug_never_asks_network() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'one_time_purchase', [ 101 ], self::$user_id );
+
+		$this->assertSame( [], $spy['calls'], 'The subscription filter is never applied for a one-time-purchase rule.' );
+		$this->assertStringNotContainsString( 'Node Daily', implode( '', $links ) );
+	}
+
+	/**
+	 * A record without a positive numeric ID or a non-blank site name can't be
+	 * labelled, so it's dropped; the site name is trimmed, and escaped like any
+	 * other text printed in the report.
+	 */
+	public function test_malformed_network_records_are_dropped_and_names_escaped() {
+		$this->stub_network_records(
+			[
+				$this->network_record( 0 ),
+				$this->network_record( 'abc' ),
+				$this->network_record( 555, '' ),
+				$this->network_record( 558, '   ' ),
+				'not a record',
+				[
+					'id'       => 556,
+					'edit_url' => 'https://node-b.example.test/wp-admin/post.php?post=556&action=edit',
+				],
+				$this->network_record( 557, '<b>Node</b> Daily' ),
+				$this->network_record( 559, '  Hub Gazette ' ),
+			]
+		);
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', [ 101 ], self::$user_id );
+
+		$this->assertCount( 2, $links );
+		$this->assertStringContainsString( '#557 on &lt;b&gt;Node&lt;/b&gt; Daily', $links[0] );
+		$this->assertStringNotContainsString( '<b>', $links[0] );
+		$this->assertStringContainsString( '>#559 on Hub Gazette<', $links[1] );
+	}
+
+	/**
+	 * An "any subscription" rule stores an empty string; newspack-network gets
+	 * it as no products, not as one blank product.
+	 */
+	public function test_any_subscription_rule_asks_network_with_no_products() {
+		$spy = $this->stub_network_records( [] );
+
+		User_Gate_Access::get_granting_entity_links( 'subscription', '', self::$user_id );
+
+		$this->assertSame( [ [ self::$user_id, [] ] ], $spy['calls'] );
+	}
+
+	/**
+	 * A malformed rule value grants nothing, so newspack-network is never asked
+	 * and none of its records are listed.
+	 */
+	public function test_malformed_subscription_value_never_asks_network() {
+		$spy = $this->stub_network_records( [ $this->network_record() ] );
+
+		$links = User_Gate_Access::get_granting_entity_links( 'subscription', 'gold', self::$user_id );
+
+		$this->assertSame( [], $spy['calls'] );
+		$this->assertSame( [], $links );
 	}
 
 	/**

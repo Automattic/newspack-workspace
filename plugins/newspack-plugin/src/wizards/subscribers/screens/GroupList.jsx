@@ -310,6 +310,7 @@ export default function GroupList() {
 				getItemId={ item => item.id }
 				onClickItem={ openGroup }
 				search
+				inlineFilters
 			/>
 		</div>
 	);

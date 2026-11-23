@@ -1,6 +1,6 @@
 import matchingFunctions from './matching-functions';
 
-const { date_range: dateRange } = matchingFunctions;
+const { date_range: dateRange, boolean } = matchingFunctions;
 
 const absolute = date => ( { type: 'absolute', date } );
 const relative = days => ( { type: 'relative', days } );
@@ -172,5 +172,42 @@ describe( 'date_range matching function', () => {
 		// five-digit one sorts above. Both are rejected rather than compared.
 		expect( dateRange( { value: '2026-06-15' }, { value: { start: relative( -1000000 ) } } ) ).toBe( false );
 		expect( dateRange( { value: '2026-06-15' }, { value: { end: relative( 10000000 ) } } ) ).toBe( false );
+	} );
+} );
+
+describe( 'boolean matching function', () => {
+	it( 'matches Yes against a stored true', () => {
+		expect( boolean( { value: true }, { value: 'yes' } ) ).toBe( true );
+		expect( boolean( { value: true }, { value: 'no' } ) ).toBe( false );
+	} );
+
+	it( 'matches No against a stored false', () => {
+		expect( boolean( { value: false }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: false }, { value: 'yes' } ) ).toBe( false );
+	} );
+
+	it( 'counts a reader with no stored value as No, matching the server side', () => {
+		expect( boolean( { value: undefined }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: null }, { value: 'yes' } ) ).toBe( false );
+	} );
+
+	it( 'reads the stored value the way PHP empty() does', () => {
+		expect( boolean( { value: '0' }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: 0 }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: '' }, { value: 'no' } ) ).toBe( true );
+		// PHP decodes both of these to an empty array.
+		expect( boolean( { value: [] }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: {} }, { value: 'no' } ) ).toBe( true );
+		expect( boolean( { value: 1 }, { value: 'yes' } ) ).toBe( true );
+	} );
+
+	it( 'reads the segment value without regard to case', () => {
+		expect( boolean( { value: true }, { value: 'Yes' } ) ).toBe( true );
+		expect( boolean( { value: false }, { value: 'NO' } ) ).toBe( true );
+	} );
+
+	it( 'never matches a segment value other than Yes or No', () => {
+		expect( boolean( { value: true }, { value: 'true' } ) ).toBe( false );
+		expect( boolean( { value: false }, { value: undefined } ) ).toBe( false );
 	} );
 } );

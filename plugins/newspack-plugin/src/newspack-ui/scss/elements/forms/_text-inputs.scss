@@ -32,14 +32,22 @@
 			outline 125ms ease-in-out;
 		width: 100%;
 
+		&:hover:not(:disabled) {
+			border-color: var(--newspack-ui-color-input-border-hover);
+		}
+
 		&:focus-visible {
 			outline: 2px solid var(--newspack-ui-color-input-border-focus);
 			outline-offset: -1px;
 		}
 
 		&:disabled {
+			-webkit-text-fill-color: currentcolor;
 			background-color: var(--newspack-ui-color-input-bg-disabled);
 			border-color: var(--newspack-ui-color-input-border-disabled);
+			color: var(--newspack-ui-color-neutral-60);
+			cursor: not-allowed;
+			opacity: 1;
 		}
 	}
 
@@ -49,6 +57,11 @@
 		display: grid;
 		grid-template-columns: calc(var(--newspack-ui-spacer-9) - 2px) 1fr;
 		overflow: hidden;
+		transition: border-color 125ms ease-in-out;
+
+		&:hover:not(:has(input:disabled)) {
+			border-color: var(--newspack-ui-color-input-border-hover);
+		}
 
 		&:focus-within {
 			outline: 2px solid var(--newspack-ui-color-input-border-focus);

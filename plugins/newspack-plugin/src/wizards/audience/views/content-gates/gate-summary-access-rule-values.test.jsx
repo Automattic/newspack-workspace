@@ -89,7 +89,7 @@ describe( 'gate summary, institutions on Registered access', () => {
 describe( 'gate summary, Paid access', () => {
 	it( 'identifies same-named products by ID on every rule, including one-time purchase', () => {
 		// Both lists come from the same catalogue, so a summary that names one and not
-		// the other reads as `Annual (#188250), Annual (#205482)` above `Annual, Annual`.
+		// the other reads as `Annual (#188250) or Annual (#205482)` above `Annual or Annual`.
 		renderPaidAccess(
 			gateWith(
 				{ slug: 'subscription', value: [ 188250, 205482 ] },
@@ -97,8 +97,15 @@ describe( 'gate summary, Paid access', () => {
 			)
 		);
 
-		expect( screen.getByText( 'Annual (#188250), Annual (#205482)' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Annual (#188250), Annual (#205482) (forever)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Annual (#188250) or Annual (#205482)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Annual (#188250) or Annual (#205482) (forever)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'joins the values with "or", since any one of them grants access', () => {
+		// A comma-joined list reads as "needs all of these", which no rule requires.
+		renderPaidAccess( gateWith( { slug: 'subscription', value: [ 188250, 205482, 999999 ] } ) );
+
+		expect( screen.getByText( 'Annual (#188250) or Annual (#205482) or (product not listed) (#999999)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'formats a value the same way the pickers do', () => {
@@ -256,7 +263,7 @@ describe( 'gate summary, long rule values', () => {
 		expect( linesFor( toggle.closest( 'p' ).textContent.length ) ).toBeLessThanOrEqual( 2 );
 		const withOneMore = `Institutional access: ${ INSTITUTIONS.slice( 0, shown + 1 )
 			.map( formatAccessRuleOptionLabel )
-			.join( ', ' ) } + ${ INSTITUTIONS.length - shown - 1 } more`;
+			.join( ' or ' ) } + ${ INSTITUTIONS.length - shown - 1 } more`;
 		expect( linesFor( withOneMore.length ) ).toBeGreaterThan( 2 );
 	} );
 

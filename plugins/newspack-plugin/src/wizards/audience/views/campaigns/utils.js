@@ -66,10 +66,17 @@ const placementMap = {
 	manual: __( 'Manual Only', 'newspack-plugin' ),
 };
 
-export const placementForPopup = ( { options: { frequency, placement } } ) => {
+export const placementForPopup = ( { options: { frequency, placement, manual_only } } ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 	if ( 'manual' === frequency || customPlacements.hasOwnProperty( placement ) ) {
 		return __( 'Custom Placement', 'newspack-plugin' );
+	}
+	if ( manual_only && isOverlay( { options: { placement } } ) ) {
+		return sprintf(
+			// translators: %s: overlay placement, e.g. "Center Overlay".
+			__( '%s (Manual Only)', 'newspack-plugin' ),
+			placementMap[ placement ]
+		);
 	}
 	return placementMap[ placement ];
 };

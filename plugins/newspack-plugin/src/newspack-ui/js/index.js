@@ -1,7 +1,7 @@
 import './segmented-control';
 import './tabs';
-import './modals';
 import notices from './notices';
+import './modals';
 import './dropdowns';
 import './accordions';
 

@@ -3,8 +3,8 @@
 /**
  * Internal dependencies.
  */
-import * as a11y from './accessibility.js';
 import { sendVerificationOTP } from './inline-verification.js';
+import { isButtonLoading, setButtonLoading } from '../utils';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -69,7 +69,10 @@ export function openVerificationModal( config = {} ) {
 	};
 
 	function handleSendClick() {
-		sendOtpButton.disabled = true;
+		if ( isButtonLoading( sendOtpButton ) ) {
+			return;
+		}
+		setButtonLoading( sendOtpButton, true );
 		sendVerificationOTP( { url: newspack_ras_config.verification_url, nonce: config.verificationNonce } )
 			.then( () => {
 				codeSent = true;
@@ -84,9 +87,8 @@ export function openVerificationModal( config = {} ) {
 				}
 			} )
 			.catch( error => {
-				sendOtpButton.disabled = false;
+				setButtonLoading( sendOtpButton, false );
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				sendOtpButton.focus();
 				const errorP = modal.querySelector( '[data-error-target]' );
 				if ( ! errorP ) {
 					return;
@@ -117,11 +119,10 @@ export function openVerificationModal( config = {} ) {
 		}
 	}
 
-	sendOtpButton.disabled = false;
+	setButtonLoading( sendOtpButton, false );
 	sendOtpButton.addEventListener( 'click', handleSendClick, { signal } );
 	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
-	a11y.trapFocus( modal );
 	return true;
 }

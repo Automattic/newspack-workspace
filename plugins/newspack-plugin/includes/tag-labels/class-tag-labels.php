@@ -177,7 +177,7 @@ class Tag_Labels {
 			'newspack_tag_labels',
 			Newspack::plugin_url() . '/dist/other-scripts/tag-labels.js',
 			[ 'jquery' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/tag-labels' ),
 			true
 		);
 	}

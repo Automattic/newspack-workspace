@@ -502,6 +502,61 @@ class Test_ESP extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The answer delete_contact() gives when Newsletters' delete() returns this error.
+	 *
+	 * @param \WP_Error $error The provider error.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private function delete_contact_answering( \WP_Error $error ) {
+		\Newspack_Newsletters_Contacts::$next_return = $error;
+		\update_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME, [ 'esp' ] );
+		\update_option( 'newspack_integration_settings_esp_mailchimp_audience_id', 'list-abc' );
+
+		$result = ( new ESP() )->delete_contact( 'reader@example.test' );
+
+		\delete_option( \Newspack\Reader_Activation\Integrations::OPTION_NAME );
+		\delete_option( 'newspack_integration_settings_esp_mailchimp_audience_id' );
+		return $result;
+	}
+
+	/**
+	 * A reader the provider holds no contact for is already deleted there.
+	 * The answer must carry the framework's not-found code, which the
+	 * deletion path treats as done instead of retrying.
+	 */
+	public function test_esp_delete_contact_reports_a_missing_contact_as_not_found() {
+		$result = $this->delete_contact_answering( new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( [ Integration::CONTACT_NOT_FOUND_ERROR_CODE ], $result->get_error_codes() );
+	}
+
+	/**
+	 * A not-found answer that comes with another failure is that failure, so
+	 * it must reach the caller as it is, not as a finished deletion.
+	 */
+	public function test_esp_delete_contact_passes_a_not_found_with_another_failure_through() {
+		$provider_error = new \WP_Error( 'newspack_newsletters_mailchimp_contact_not_found', 'Contact not found' );
+		$provider_error->add( 'newspack_newsletters_mailchimp_delete_contact_failed', 'Mailchimp is down' );
+
+		$result = $this->delete_contact_answering( $provider_error );
+
+		$this->assertSame( [ 'newspack_newsletters_mailchimp_contact_not_found', 'newspack_newsletters_mailchimp_delete_contact_failed' ], $result->get_error_codes() );
+	}
+
+	/**
+	 * Any other provider error is a delete that did not happen, so the caller
+	 * must see it as it is and retry.
+	 */
+	public function test_esp_delete_contact_passes_other_errors_through() {
+		$result = $this->delete_contact_answering( new \WP_Error( 'newspack_newsletters_mailchimp_delete_contact_failed', 'Mailchimp is down' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'newspack_newsletters_mailchimp_delete_contact_failed', $result->get_error_code() );
+	}
+
+	/**
 	 * The legacy sync_esp_delete field should no longer be declared by the ESP
 	 * integration — replaced by the base-class sync_account_deletion field.
 	 */

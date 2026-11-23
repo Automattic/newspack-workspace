@@ -61,7 +61,7 @@ const CRITERIA = [
 
 const PLACEMENT = 'center';
 
-let segmentDescription, promptDescription, warningForPopup, isOverlay;
+let segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup;
 
 beforeAll( async () => {
 	window.newspackAudienceCampaigns = {
@@ -70,7 +70,7 @@ beforeAll( async () => {
 		overlay_placements: [ PLACEMENT, 'top', 'bottom' ],
 		custom_placements: {},
 	};
-	( { segmentDescription, promptDescription, warningForPopup, isOverlay } = await import( './utils' ) );
+	( { segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup } = await import( './utils' ) );
 } );
 
 describe( 'segmentDescription', () => {
@@ -260,5 +260,12 @@ describe( 'warningForPopup', () => {
 		const prompt = overlay( { categories: [ realCategory ] } );
 		const conflict = overlay( { id: 200, categories: null } );
 		expect( () => warningForPopup( [ prompt, conflict ], prompt ) ).not.toThrow();
+	} );
+} );
+
+describe( 'placementForPopup', () => {
+	it( 'labels a manual-only overlay apart from an overlay inserted automatically', () => {
+		expect( placementForPopup( { options: { placement: 'center', manual_only: false } } ) ).toBe( 'Center Overlay' );
+		expect( placementForPopup( { options: { placement: 'center', manual_only: true } } ) ).toBe( 'Center Overlay (Manual Only)' );
 	} );
 } );

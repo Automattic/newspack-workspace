@@ -372,11 +372,14 @@ class Alert_Manager {
 	 * Both classes forward at 'warning' severity, which reaches the log but
 	 * not Slack, apart from the fallback described for `permanent_config`:
 	 *
-	 * - `permanent_config` (disabled or unpaid ESP account) is site-level, so
-	 *   it is reported at most once an hour per integration; the push log
-	 *   keeps the per-contact history. The hourly health check observes the
-	 *   same account state within the hour and owns the escalation through
-	 *   handle_health_check_failed(). Where the check isn't running, because
+	 * - `permanent_config` (an ESP account that is disabled, unpaid or rejects
+	 *   the site's credentials) is site-level, so it is reported at most once
+	 *   an hour per integration; the push log keeps the per-contact history.
+	 *   The hourly health check observes the same account state within the
+	 *   hour through its own request, and owns the escalation through
+	 *   handle_health_check_failed(). An account that refuses writes but
+	 *   still answers the check's request passes it, so those failures reach
+	 *   the log alone. Where the check isn't running, because
 	 *   it is switched off or its cron has stalled, this path is the only one
 	 *   that sees the account state, so its hourly report pages instead.
 	 * - `permanent_contact` (fired by the deletion path only, where a skipped
@@ -1029,24 +1032,10 @@ class Alert_Manager {
 				return 'publisher';
 			}
 		}
-		// A bare auth or payment status with no recognisable text, in the two
-		// forms providers print one: "401: …" opening a message, or
-		// "status 401". A number anywhere else is not a status, such as the
-		// connect duration in cURL's "Failed to connect … after 402 ms".
-		foreach ( $error->get_error_messages() as $error_message ) {
-			if ( preg_match( '/^40[123]:|\bstatus 40[123]\b/i', trim( (string) $error_message ) ) ) {
-				return 'publisher';
-			}
-		}
-		// A status kept outside the message: as the error code, or as `status`
-		// in the error data. Integrations that report one in the data print it
-		// in a translatable message too, which the patterns above can't rely on.
-		foreach ( $error->get_error_codes() as $code ) {
-			$data   = $error->get_error_data( $code );
-			$status = is_numeric( $code ) ? $code : ( is_array( $data ) ? ( $data['status'] ?? null ) : null );
-			if ( is_numeric( $status ) && in_array( (int) $status, [ 401, 402, 403 ], true ) ) {
-				return 'publisher';
-			}
+		// A bare auth or payment status with no recognisable text. Contact sync
+		// reads it the same way, through the same helper.
+		if ( Reader_Activation\Integration::has_account_status( $error ) ) {
+			return 'publisher';
 		}
 		return 'other';
 	}

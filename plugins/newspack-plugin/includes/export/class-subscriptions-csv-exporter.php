@@ -20,6 +20,9 @@ require_once __DIR__ . '/class-csv-batch-exporter.php';
  * the same way Memberships-for-Teams extended the WC Memberships export):
  * - `newspack_subscriptions_export_headers` filters the column id => label map.
  * - `newspack_subscriptions_export_row` filters each row (keyed by column id).
+ *   In per-member mode it runs once per subscription, before the reader
+ *   columns are added; `newspack_subscriptions_export_member_row` then runs
+ *   on each reader's row.
  * - `newspack_subscriptions_export_query_args` filters the query args built
  *   from the captured list params and the chosen export options.
  *
@@ -36,6 +39,14 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	protected $export_type = 'newspack_subscriptions';
 
 	/**
+	 * How many subscriptions the current page fetched. In per-member mode the
+	 * page writes more rows than that, so progress is counted in these.
+	 *
+	 * @var int
+	 */
+	private int $page_subscription_count = 0;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -49,6 +60,17 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @return array
 	 */
 	public function get_default_column_names() {
+		$member_columns = $this->is_per_member()
+			? [
+				'member_id'         => __( 'User ID', 'newspack-plugin' ),
+				'member_username'   => __( 'Username', 'newspack-plugin' ),
+				'member_email'      => __( 'Email', 'newspack-plugin' ),
+				'member_first_name' => __( 'First Name', 'newspack-plugin' ),
+				'member_last_name'  => __( 'Last Name', 'newspack-plugin' ),
+				'access_through'    => __( 'Access Through', 'newspack-plugin' ),
+				'group_name'        => __( 'Group Name', 'newspack-plugin' ),
+			]
+			: [];
 		/**
 		 * Filters the subscriptions export columns.
 		 *
@@ -59,6 +81,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		return apply_filters(
 			'newspack_subscriptions_export_headers',
 			array_merge(
+				$member_columns,
 				[
 					'subscription_id'     => __( 'Subscription ID', 'newspack-plugin' ),
 					'status'              => __( 'Status', 'newspack-plugin' ),
@@ -308,7 +331,169 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			\cache_users( array_unique( $customer_ids ) );
 		}
 
-		$this->row_data = array_map( [ $this, 'get_row_data' ], $subscriptions );
+		$this->page_subscription_count = count( $results->orders );
+		if ( ! $this->is_per_member() ) {
+			$this->row_data = array_map( [ $this, 'get_row_data' ], $subscriptions );
+			return;
+		}
+
+		$groups     = array_map( [ __CLASS__, 'get_group' ], $subscriptions );
+		$member_ids = array_merge( [], ...array_map( fn( $group ) => $group ? $group['member_ids'] : [], $groups ) );
+		if ( ! empty( $member_ids ) && function_exists( 'cache_users' ) ) {
+			\cache_users( array_unique( $member_ids ) );
+		}
+
+		$this->row_data = [];
+		foreach ( $subscriptions as $index => $subscription ) {
+			array_push( $this->row_data, ...$this->get_member_rows( $subscription, $groups[ $index ] ) );
+		}
+	}
+
+	/**
+	 * Progress through the run, in subscriptions.
+	 *
+	 * The batch cursor pages over subscriptions. In per-member mode one
+	 * subscription becomes several rows, so counting rows, as the parent does,
+	 * would overshoot the subscription total and end the run with later
+	 * subscriptions never exported.
+	 *
+	 * @return int
+	 */
+	public function get_total_exported() {
+		if ( ! $this->is_per_member() ) {
+			return parent::get_total_exported();
+		}
+		return ( ( $this->get_page() - 1 ) * $this->get_limit() ) + $this->page_subscription_count;
+	}
+
+	/**
+	 * Whether the data file should hold rows by now.
+	 *
+	 * In per-member mode progress is counted in subscriptions, and a run can
+	 * match subscriptions that yield no reader at all (a deleted owner, no
+	 * members), so only the rows this page actually wrote say the file should
+	 * have content.
+	 *
+	 * @return bool
+	 */
+	public function expects_written_rows(): bool {
+		if ( ! $this->is_per_member() ) {
+			return parent::expects_written_rows();
+		}
+		return $this->exported_row_count > 0;
+	}
+
+	/**
+	 * Whether the export writes one row per reader with access rather than one
+	 * per subscription.
+	 *
+	 * @return bool
+	 */
+	private function is_per_member(): bool {
+		return ! empty( $this->export_config['per_member'] );
+	}
+
+	/**
+	 * A group subscription's name and members, or null for a subscription
+	 * that is not a group.
+	 *
+	 * Members exclude the owner and come in ID order. Pending invites are not
+	 * members: an invitee joins only by accepting.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @return array|null { name: string, member_ids: int[] }, or null.
+	 */
+	private static function get_group( \WC_Subscription $subscription ): ?array {
+		if ( ! class_exists( __NAMESPACE__ . '\Group_Subscription_Settings' ) ) {
+			return null;
+		}
+		// Read once rather than through Group_Subscription::is_group_subscription(),
+		// which resolves the same settings; its My Account exception never applies
+		// to an admin or CLI export.
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		if ( empty( $settings['enabled'] ) ) {
+			return null;
+		}
+		$owner_id   = (int) $subscription->get_customer_id();
+		$member_ids = array_unique( array_map( 'intval', Group_Subscription::get_members( $subscription ) ) );
+		$member_ids = array_values( array_filter( $member_ids, fn( $member_id ) => $member_id && $member_id !== $owner_id ) );
+		sort( $member_ids );
+		return [
+			'name'       => (string) $settings['name'],
+			'member_ids' => $member_ids,
+		];
+	}
+
+	/**
+	 * Build the per-member rows for one subscription: the owner's row, then
+	 * one row per group member. Every row carries the subscription's own
+	 * columns unchanged, so each one can be matched back to its subscription.
+	 *
+	 * An owner whose account was deleted has no access and gets no row; the
+	 * subscription still appears through its members, if it has any.
+	 *
+	 * The Access Through values are fixed English strings rather than
+	 * translations, so spreadsheet filters and formulas built on them work on
+	 * any site language.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param array|null       $group        The group, from get_group().
+	 * @return array[] Rows keyed by column id.
+	 */
+	private function get_member_rows( \WC_Subscription $subscription, ?array $group ): array {
+		$subscription_row = $this->get_row_data( $subscription );
+		$group_name       = $group ? $group['name'] : '';
+		$readers          = [];
+		$owner_id         = (int) $subscription->get_customer_id();
+		if ( $owner_id && \get_user_by( 'id', $owner_id ) ) {
+			$readers[ $owner_id ] = 'owner';
+		}
+		foreach ( $group ? $group['member_ids'] : [] as $member_id ) {
+			$readers[ $member_id ] = 'group member';
+		}
+
+		$rows = [];
+		foreach ( $readers as $user_id => $access_through ) {
+			/**
+			 * Filters a per-member subscriptions export row.
+			 *
+			 * Runs on each reader's row after `newspack_subscriptions_export_row`
+			 * has run once on the subscription's columns, so it sees the reader
+			 * columns too.
+			 *
+			 * @param array            $row          Row values keyed by column id.
+			 * @param \WC_Subscription $subscription The subscription granting access.
+			 * @param int              $user_id      The reader's user ID.
+			 */
+			$rows[] = apply_filters(
+				'newspack_subscriptions_export_member_row',
+				array_merge( $subscription_row, self::get_member_columns( $user_id, $access_through, $group_name ) ),
+				$subscription,
+				$user_id
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * The reader columns of a per-member row.
+	 *
+	 * @param int    $user_id        The reader's user ID.
+	 * @param string $access_through 'owner' or 'group member'.
+	 * @param string $group_name     The group's name, or '' when not a group.
+	 * @return array Values keyed by column id.
+	 */
+	private static function get_member_columns( int $user_id, string $access_through, string $group_name ): array {
+		$user = $user_id ? \get_user_by( 'id', $user_id ) : false;
+		return [
+			'member_id'         => $user ? $user_id : '',
+			'member_username'   => $user ? $user->user_login : '',
+			'member_email'      => $user ? $user->user_email : '',
+			'member_first_name' => $user ? $user->first_name : '',
+			'member_last_name'  => $user ? $user->last_name : '',
+			'access_through'    => $access_through,
+			'group_name'        => $group_name,
+		];
 	}
 
 	/**

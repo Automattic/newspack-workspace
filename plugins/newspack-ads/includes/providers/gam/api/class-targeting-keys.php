@@ -9,13 +9,13 @@ namespace Newspack_Ads\Providers\GAM\Api;
 
 use Newspack_Ads\Providers\GAM\Api;
 use Newspack_Ads\Providers\GAM\Api\Api_Object;
-use Google\AdsApi\AdManager\v202511\Statement;
-use Google\AdsApi\AdManager\v202511\String_ValueMapEntry;
-use Google\AdsApi\AdManager\v202511\TextValue;
-use Google\AdsApi\AdManager\v202511\SetValue;
-use Google\AdsApi\AdManager\v202511\CustomTargetingKey;
-use Google\AdsApi\AdManager\v202511\CustomTargetingValue;
-use Google\AdsApi\AdManager\v202511\ServiceFactory;
+use Google\AdsApi\AdManager\v202608\Statement;
+use Google\AdsApi\AdManager\v202608\String_ValueMapEntry;
+use Google\AdsApi\AdManager\v202608\TextValue;
+use Google\AdsApi\AdManager\v202608\SetValue;
+use Google\AdsApi\AdManager\v202608\CustomTargetingKey;
+use Google\AdsApi\AdManager\v202608\CustomTargetingValue;
+use Google\AdsApi\AdManager\v202608\ServiceFactory;
 
 /**
  * Newspack Ads GAM Default Targeting Keys

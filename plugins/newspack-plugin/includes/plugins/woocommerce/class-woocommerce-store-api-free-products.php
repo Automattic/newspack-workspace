@@ -106,7 +106,7 @@ class WooCommerce_Store_API_Free_Products {
 	 *
 	 * @return bool
 	 */
-	private static function is_free( \WC_Product $product ): bool {
+	public static function is_free( \WC_Product $product ): bool {
 		$saved_product = function_exists( 'wc_get_product' ) ? wc_get_product( $product->get_id() ) : false;
 		if ( $saved_product instanceof \WC_Product ) {
 			$product = $saved_product;

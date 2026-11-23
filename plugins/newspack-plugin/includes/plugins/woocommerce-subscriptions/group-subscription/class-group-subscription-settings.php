@@ -679,6 +679,9 @@ class Group_Subscription_Settings {
 		}
 		$subscription->update_meta_data( $meta_key, $name );
 		$subscription->save();
+		// A rename can be the group's first settings save. Fixing the slug now keeps a
+		// second rename, before anything reads the slug, from moving it.
+		Group_Subscription::get_slug( $subscription );
 	}
 
 	/**
