@@ -161,6 +161,18 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The settings screen shows the mode the manifest uses, so a stored value from before validation is replaced on the next save.
+	 */
+	public function test_settings_load_the_display_mode_the_manifest_uses() {
+		update_option( 'newspack_pwa_display_mode', 'bogus' );
+		// Without the Newspack Theme there is no primary color to seed the header color from.
+		set_theme_mod( 'header_color_hex', '#003da5' );
+		$theme_mods = ( new \Newspack\Setup_Wizard() )->api_retrieve_theme_and_set_defaults()->get_data()['theme_mods'];
+		remove_theme_mod( 'header_color_hex' );
+		$this->assertSame( 'minimal-ui', $theme_mods['pwa_display_mode'] );
+	}
+
+	/**
 	 * The theme's background color tints the app's title bar and splash screen, white when the theme sets none.
 	 */
 	public function test_theme_color_falls_back_to_white_then_follows_custom_background() {

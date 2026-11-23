@@ -430,7 +430,7 @@ class Setup_Wizard extends Wizard {
 		}
 
 		// Web app display mode is an option, not a theme mod, so the manifest keeps it when the theme changes.
-		$theme_mods['pwa_display_mode'] = get_option( 'newspack_pwa_display_mode', 'minimal-ui' );
+		$theme_mods['pwa_display_mode'] = Web_App_Manifest::get_display_mode();
 
 		// Append post content fallback image option.
 		$theme_mods['post_content_fallback_image'] = get_option( Default_Image::OPTION_NAME, null );
