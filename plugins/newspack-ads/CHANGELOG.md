@@ -1,3 +1,16 @@
+## newspack-ads [3.15.9](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.8...newspack-ads@3.15.9) (2026-11-23)
+
+
+### Bug Fixes
+
+* **ads:** move Ad Manager API from v202511 to v202608 ([#1397](https://github.com/Automattic/newspack-workspace/issues/1397)) ([eed6bc6](https://github.com/Automattic/newspack-workspace/commit/eed6bc609fdc630a44b6942ca031bf0ee47db0e8))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.13.0
+
 ## newspack-ads [3.15.8](https://github.com/Automattic/newspack-workspace/compare/newspack-ads@3.15.7...newspack-ads@3.15.8) (2026-11-19)
 
 
