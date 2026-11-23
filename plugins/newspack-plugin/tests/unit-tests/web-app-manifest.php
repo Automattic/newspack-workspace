@@ -161,6 +161,13 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A malformed request body reaches the save handler as it was sent, rather than failing in the sanitizer.
+	 */
+	public function test_settings_sanitizer_passes_non_arrays_through() {
+		$this->assertSame( 'not-an-array', ( new \Newspack\Setup_Wizard() )->sanitize_theme_mods( 'not-an-array' ) );
+	}
+
+	/**
 	 * The settings screen shows the mode the manifest uses, so a stored value from before validation is replaced on the next save.
 	 */
 	public function test_settings_load_the_display_mode_the_manifest_uses() {
