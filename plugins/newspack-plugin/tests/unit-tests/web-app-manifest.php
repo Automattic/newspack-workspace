@@ -198,6 +198,18 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Home screens label the app with the short name, or the full name when there isn't one, not the page title.
+	 */
+	public function test_head_tags_name_the_app() {
+		$tags = $this->head_tags();
+		$this->assertStringContainsString( '<meta name="apple-mobile-web-app-title" content="Smith &amp; Co">', $tags );
+		$this->assertStringContainsString( '<meta name="application-name" content="Smith &amp; Co">', $tags );
+
+		update_option( 'blogname', 'A Much Longer Site Name' );
+		$this->assertStringContainsString( '<meta name="apple-mobile-web-app-title" content="A Much Longer Site Name">', $this->head_tags() );
+	}
+
+	/**
 	 * An app set to open in the browser doesn't ask for its own window.
 	 */
 	public function test_browser_display_has_no_capable_tags() {

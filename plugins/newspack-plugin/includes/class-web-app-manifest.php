@@ -66,6 +66,9 @@ final class Web_App_Manifest {
 		<?php if ( ! empty( $manifest['theme_color'] ) ) : ?>
 			<meta name="theme-color" content="<?php echo esc_attr( $manifest['theme_color'] ); ?>">
 		<?php endif; ?>
+		<?php $app_name = $manifest['short_name'] ?? $manifest['name']; ?>
+		<meta name="apple-mobile-web-app-title" content="<?php echo esc_attr( $app_name ); ?>">
+		<meta name="application-name" content="<?php echo esc_attr( $app_name ); ?>">
 		<?php if ( 'browser' !== $manifest['display'] ) : ?>
 			<meta name="apple-mobile-web-app-capable" content="yes">
 			<meta name="mobile-web-app-capable" content="yes">
