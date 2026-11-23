@@ -91,6 +91,10 @@ GNU_STAT=$(command -v gstat 2>/dev/null || { stat --version >/dev/null 2>&1 && c
 [[ -n "$GNU_STAT" ]] && ln -s "$GNU_STAT" "$WORK/gnu/stat"
 printf '#!/bin/sh\nexit 1\n' > "$WORK/nostat/stat"
 chmod +x "$WORK/nostat/stat"
+# create asks sudo for a loopback alias and a hosts entry; refuse both.
+mkdir -p "$WORK/nosudo"
+printf '#!/bin/sh\nexit 1\n' > "$WORK/nosudo/sudo"
+chmod +x "$WORK/nosudo/sudo"
 
 # mtime <path>: epoch seconds with either stat, checked to be a number.
 mtime() {
@@ -216,6 +220,11 @@ stale_fixture() {
 	# days ago: rewriting tooling is not use.
 	stale_env rewritten old
 	touch "$SANDBOX/docker-compose.env-rewritten.yml"
+	# An env whose container is gone but whose logs show it served requests
+	# recently: only a running container writes logs/env-<name>/.
+	stale_env logged old
+	mkdir -p "$SANDBOX/logs/env-logged/apache2"
+	touch "$SANDBOX/logs/env-logged/apache2/other_vhosts_access.log"
 	# A worktree git cannot read: its .git points nowhere.
 	stale_env broken old
 	echo "gitdir: $WORK/nowhere" > "$SANDBOX/worktrees/spec-broken/.git"
@@ -276,6 +285,14 @@ after=$(mtime "$SANDBOX/envs/idle")
 desc="down moves the mtime of envs/<name>/ forward"
 [[ "$after" -gt "$before" ]] && ok "$desc" || fail "$desc — before $before, after $after"
 
+# Re-running create on an existing env reconfigures it, which is use.
+stale_env recreated old
+before=$(mtime "$SANDBOX/envs/recreated")
+EXTRA_PATH="$WORK/nosudo" run_env create recreated --worktree newspack-plugin:spec/recreated > "$WORK/recreate.out"
+after=$(mtime "$SANDBOX/envs/recreated")
+desc="create on an existing env moves the mtime of envs/<name>/ forward"
+[[ "$after" -gt "$before" ]] && ok "$desc" || fail "$desc — before $before, after $after: $(tail -3 "$WORK/recreate.out")"
+
 echo
 echo "cleanup --stale --yes:"
 
@@ -313,6 +330,7 @@ expect_line moved keep "(in use)"
 expect_line collide keep "(in use)"
 expect_line twin remove "unused 40 days"
 expect_line rewritten remove "unused 40 days"
+expect_line logged keep "in use"
 expect_line broken keep "(uncommitted or unreadable changes)"
 
 desc="a gone worktree's branch is kept: nothing proves it merged"

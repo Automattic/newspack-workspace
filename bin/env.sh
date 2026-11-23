@@ -178,9 +178,11 @@ iso_to_epoch() {
     date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "${1:0:19}" +%s 2>/dev/null
 }
 
-# An env's last use in epoch seconds: the newer of its container's start and
-# finish times and envs/<name>/, which create makes and `up` and `down` touch.
-# 0 when neither can be read. The compose file is left out: migrations rewrite
+# An env's last use in epoch seconds: the newest of its container's start and
+# finish times, envs/<name>/ (which create, `up` and `down` touch), and the
+# files under logs/env-<name>/, which only a running container writes. The
+# logs outlive a container removed by an older `down` or a docker prune.
+# 0 when none can be read. The compose file is left out: migrations rewrite
 # every env's at once, which would make the whole fleet read as used today.
 env_last_use() {
     local name="$1" newest=0 t when container
@@ -192,6 +194,12 @@ env_last_use() {
     if [[ -e "$NABSPATH/envs/$name" ]]; then
         when=$(file_mtime "$NABSPATH/envs/$name")
         [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
+    fi
+    if [[ -d "$NABSPATH/logs/env-$name" ]]; then
+        while IFS= read -r t; do
+            when=$(file_mtime "$t")
+            [[ -n "$when" && "$when" -gt "$newest" ]] && newest="$when"
+        done < <(find "$NABSPATH/logs/env-$name" -type f 2>/dev/null)
     fi
     echo "$newest"
 }
@@ -486,8 +494,10 @@ case $1 in
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
-        # Create isolated html directory.
+        # Create isolated html directory. Touch it as well: re-running create on
+        # an existing env reconfigures it, and cleanup --stale reads it as use.
         mkdir -p "$NABSPATH/envs/${env_name}/html"
+        touch "$NABSPATH/envs/${env_name}"
         cat > "$compose_file" <<YAML
 services:
   env-${env_name}:
