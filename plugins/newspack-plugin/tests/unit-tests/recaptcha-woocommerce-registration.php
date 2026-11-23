@@ -367,6 +367,7 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 		$this->assertStringContainsString( "action: 'woocommerce_register'", $html );
 		$this->assertStringContainsString( '"test\/site_key"', $html );
 		$this->assertStringContainsString( 'form.requestSubmit( submitter )', $html );
+		$this->assertStringContainsString( 'setInterval( function () {', $html );
 		$this->assertStringContainsString( 'added.value = fresh;', $html );
 		$this->assertStringContainsString( '}, 30000 );', $html );
 	}
