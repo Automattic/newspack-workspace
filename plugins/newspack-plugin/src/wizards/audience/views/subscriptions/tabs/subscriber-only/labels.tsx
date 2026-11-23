@@ -1,7 +1,7 @@
 /**
- * Search labels for the subscriber-only products list.
- *
- * What the list's search matches for a category or all-products restriction.
+ * Labels for the subscriber-only products tab: what the list's search matches
+ * for a category or all-products restriction, and the names of the
+ * restriction types.
  */
 
 /**
@@ -12,7 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
-import type { Restriction } from './types';
+import type { Restriction, RestrictionType } from './types';
 
 /**
  * The scope label for a category or all-products restriction.
@@ -33,4 +33,13 @@ export function scopeLabel( restriction: Restriction, nameOf: ( id: number ) => 
 		_n( '%s category', '%s categories', names.length, 'newspack-plugin' ),
 		names.join( ', ' )
 	);
+}
+
+/**
+ * The label for a restriction type, as the editor's "Restrict" choice names it.
+ *
+ * @param type The restriction type.
+ */
+export function restrictionTypeLabel( type: RestrictionType ) {
+	return 'view' === type ? __( 'Purchase and visibility', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
 }

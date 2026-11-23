@@ -74,6 +74,16 @@ final class Modal_Checkout {
 	];
 
 	/**
+	 * Order meta key marking an order as placed through the modal checkout.
+	 *
+	 * Modal origin is otherwise only knowable from the request that creates the
+	 * order, and a wallet request can arrive with its referer query stripped,
+	 * while payment can complete in a later request with no modal signal at
+	 * all. Tracking and the thank-you redirect read this marker instead.
+	 */
+	const ORDER_META_KEY = '_newspack_modal_checkout';
+
+	/**
 	 * Cart item keys the in-modal quantity form carries over when it re-adds the
 	 * product at a new quantity.
 	 *
@@ -92,6 +102,7 @@ final class Modal_Checkout {
 		'gate_post_id',
 		'newspack_popup_id',
 		'prompt_title',
+		'newspack_modal_checkout_url',
 		...self::CONTEXTUAL_PROMPT_KEYS,
 	];
 
@@ -235,6 +246,9 @@ final class Modal_Checkout {
 		add_action( 'wp_ajax_abandon_modal_checkout', [ __CLASS__, 'process_abandon_checkout' ] );
 		add_action( 'wp_ajax_nopriv_abandon_modal_checkout', [ __CLASS__, 'process_abandon_checkout' ] );
 		add_action( 'wp_loaded', [ __CLASS__, 'process_checkout_action' ], 21 );
+		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'mark_order' ], 10, 4 );
+		// Donations are added to the cart by newspack-plugin, through this filter.
+		add_filter( 'newspack_donations_cart_item_data', [ __CLASS__, 'amend_cart_item_data' ] );
 
 		add_filter( 'wp_redirect', [ __CLASS__, 'pass_url_param_on_redirect' ] );
 		add_filter( 'woocommerce_cart_product_cannot_be_purchased_message', [ __CLASS__, 'woocommerce_cart_product_cannot_be_purchased_message' ], 10, 2 );
@@ -268,6 +282,7 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_order_button_html', [ __CLASS__, 'order_button_html' ], 10, 1 );
 		add_action( 'option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
 		add_action( 'default_option_woocommerce_default_customer_address', [ __CLASS__, 'ensure_base_default_customer_address' ] );
+		add_filter( 'woocommerce_checkout_posted_data', [ __CLASS__, 'ensure_customer_billing_country' ] );
 		add_action( 'wp_ajax_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_nopriv_process_name_your_price_request', [ __CLASS__, 'process_name_your_price_request' ] );
 		add_action( 'wp_ajax_process_quantity_request', [ __CLASS__, 'process_quantity_request' ] );
@@ -343,6 +358,96 @@ final class Modal_Checkout {
 			$cart_item_data['newspack_modal_checkout_url'] = \home_url( \add_query_arg( null, null ) );
 		}
 		return $cart_item_data;
+	}
+
+	/**
+	 * Mark an order as placed through the modal checkout while WooCommerce
+	 * builds its line items, which the classic and the Store API checkout both
+	 * do.
+	 *
+	 * The cart stamp outlives the request that added the item, so it marks a
+	 * wallet order whose referer query was stripped. The request check covers
+	 * modal checkouts whose cart was filled without the stamp. WooCommerce saves
+	 * the order after its line items, so the meta is only set here.
+	 *
+	 * The decision covers the whole cart, and an order with nothing modal left
+	 * loses its marker. The Store API reuses a draft order from an earlier
+	 * submission (`DraftOrderTrait::is_valid_draft_order()`) and, when the cart
+	 * has changed since, rebuilds its line items from the current cart
+	 * (`OrderController::update_line_items_from_cart()`), which may no longer
+	 * hold anything from the modal.
+	 *
+	 * WooCommerce Subscriptions builds a new subscription's line items through
+	 * the same hook and from the same cart. The subscription is left unmarked:
+	 * the marker records a purchase, and renewal and resubscribe orders take
+	 * their meta from the subscription.
+	 *
+	 * @param \WC_Order_Item_Product $item          Order line item.
+	 * @param string                 $cart_item_key Cart item key.
+	 * @param array                  $values        Cart item data.
+	 * @param \WC_Order              $order         Order being built.
+	 */
+	public static function mark_order( $item, $cart_item_key, $values, $order ) {
+		if ( ! is_a( $order, 'WC_Order' ) || is_a( $order, 'WC_Subscription' ) ) {
+			return;
+		}
+		if ( ! empty( $values['newspack_modal_checkout_url'] ) || self::is_modal_checkout_origin() || self::cart_has_modal_checkout_stamp() ) {
+			$order->update_meta_data( self::ORDER_META_KEY, 1 );
+		} else {
+			$order->delete_meta_data( self::ORDER_META_KEY );
+		}
+	}
+
+	/**
+	 * Whether any item in the current cart carries the modal stamp.
+	 *
+	 * @return bool
+	 */
+	private static function cart_has_modal_checkout_stamp() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->cart ) {
+			return false;
+		}
+		foreach ( \WC()->cart->get_cart() as $cart_item ) {
+			if ( ! empty( $cart_item['newspack_modal_checkout_url'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Carry an existing cart item's modal stamp into the data it is re-added
+	 * with.
+	 *
+	 * The in-modal price change empties the cart and re-adds the item, and its
+	 * request carries no modal signal, so amend_cart_item_data() cannot stamp
+	 * the new item. Without this, a reader who changes the amount and then pays
+	 * by wallet under a strict Referrer-Policy is not recognized as modal.
+	 *
+	 * @param array $cart_item_data Data the item is about to be re-added with.
+	 * @param array $cart_item      The cart item being replaced.
+	 *
+	 * @return array
+	 */
+	public static function carry_modal_checkout_stamp( $cart_item_data, $cart_item ) {
+		if ( ! empty( $cart_item['newspack_modal_checkout_url'] ) ) {
+			$cart_item_data['newspack_modal_checkout_url'] = $cart_item['newspack_modal_checkout_url'];
+		}
+		return $cart_item_data;
+	}
+
+	/**
+	 * Whether an order was placed through the modal checkout.
+	 *
+	 * The marker can be set from a client-controlled referer, so this gates
+	 * analytics and presentation decisions only — never authorization.
+	 *
+	 * @param mixed $order Order object; anything else is not a modal order.
+	 *
+	 * @return bool
+	 */
+	public static function is_modal_checkout_order( $order ) {
+		return is_a( $order, 'WC_Order' ) && (bool) $order->get_meta( self::ORDER_META_KEY );
 	}
 
 	/**
@@ -1048,6 +1153,7 @@ final class Modal_Checkout {
 
 			$cart_item_data['nyp'] = $price;
 			$cart_item_data['base_price'] = isset( $cart_item['base_price'] ) ? $cart_item['base_price'] : $cart_item['nyp'];
+			$cart_item_data = self::carry_modal_checkout_stamp( $cart_item_data, $cart_item );
 
 			if ( $price < $cart_item_data['base_price'] ) {
 				wp_send_json_error(
@@ -2151,12 +2257,61 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Whether the current request is a Store API checkout submission that has
+	 * reached its pre-payment hook, which is where a wallet's redirect URL is
+	 * built.
+	 *
+	 * WooCommerce builds the same order-received URL for the order-received
+	 * page itself, for emails and for order-pay. Limiting the marker fallback
+	 * to this request keeps the modal thank-you out of those pages. Store API
+	 * pay-for-order (`/checkout/<id>`) fires the same hook from the standalone
+	 * order-pay page, which is not inside the modal, so its route is excluded.
+	 *
+	 * @return bool
+	 */
+	private static function is_store_api_checkout_submission() {
+		if ( ! did_action( 'woocommerce_store_api_checkout_order_processed' ) ) {
+			return false;
+		}
+		$rest_route = isset( $GLOBALS['wp']->query_vars['rest_route'] ) ? (string) $GLOBALS['wp']->query_vars['rest_route'] : '';
+		return (bool) preg_match( '#^/wc/store(/v\d+)?/checkout/?$#', $rest_route );
+	}
+
+	/**
+	 * Whether the request's referer names a page, rather than being absent or
+	 * cut back to the site's origin.
+	 *
+	 * A Referrer-Policy that strips the modal's query (strict-origin, origin,
+	 * no-referrer) leaves the origin at most. A referer that kept a path or a
+	 * query, and that is_modal_checkout_origin() did not read as modal, came
+	 * from a page outside the modal, such as the regular checkout page paid
+	 * with a cart the modal stamped earlier. A browser set to trim referers to
+	 * their path is the exception: it sends the modal's own path.
+	 *
+	 * @return bool
+	 */
+	private static function has_page_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$path  = (string) \wp_parse_url( $referer, PHP_URL_PATH );
+		$query = (string) \wp_parse_url( $referer, PHP_URL_QUERY );
+
+		return ( '' !== $path && '/' !== $path ) || '' !== $query;
+	}
+
+	/**
 	 * Return URL for modal checkout "thank you" page.
 	 *
 	 * Origin detection covers the referer so that express-wallet (Apple Pay /
 	 * Google Pay) Store API submissions — JSON bodies with no request params —
 	 * get a decorated return URL and land on the modal thank-you, where the
-	 * front-end GA4 purchase event fires.
+	 * front-end GA4 purchase event fires. A Referrer-Policy can strip that
+	 * referer's query, so a Store API checkout whose referer names no page
+	 * also falls back to the order's modal marker.
 	 *
 	 * @param string   $url The URL to redirect to.
 	 * @param WC_Order $order The order related to the transaction.
@@ -2164,7 +2319,8 @@ final class Modal_Checkout {
 	 * @return string
 	 */
 	public static function woocommerce_get_return_url( $url, $order ) {
-		if ( ! self::is_modal_checkout_origin() || self::has_unsupported_payment_gateway() ) {
+		$is_modal_checkout = self::is_modal_checkout_origin() || ( self::is_store_api_checkout_submission() && self::is_modal_checkout_order( $order ) && ! self::has_page_referer() );
+		if ( ! $is_modal_checkout || self::has_unsupported_payment_gateway() ) {
 			return $url;
 		}
 
@@ -2914,8 +3070,29 @@ final class Modal_Checkout {
 			return $params;
 		}
 		$params['button']           = isset( $params['button'] ) && is_array( $params['button'] ) ? $params['button'] : [];
-		$params['button']['radius'] = 8;
+		$params['button']['radius'] = self::get_express_checkout_button_radius();
 		return $params;
+	}
+
+	/**
+	 * The express checkout button radius in pixels.
+	 *
+	 * Follows the Theme style's button radius when it is a px or rem length (rem at a 16px root),
+	 * and keeps the Neutral 8 for anything else.
+	 *
+	 * @return int
+	 */
+	public static function get_express_checkout_button_radius(): int {
+		$radius = 8;
+		if (
+			class_exists( 'Newspack\Newspack_UI_Theme_Style' )
+			&& method_exists( 'Newspack\Newspack_UI_Theme_Style', 'get_button_radius' )
+			&& \Newspack\Newspack_UI_Theme_Style::is_active()
+			&& 1 === preg_match( '/^(\d+(?:\.\d+)?)(px|rem)$/D', \Newspack\Newspack_UI_Theme_Style::get_button_radius(), $matches )
+		) {
+			$radius = (int) round( (float) $matches[1] * ( 'rem' === $matches[2] ? 16 : 1 ) );
+		}
+		return $radius;
 	}
 
 	/**
@@ -3225,11 +3402,18 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Force option for base country for new customers if unset and billing country optional while state is required
-	 * unless the NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
+	 * Use the store base as the default customer location in modal checkout
+	 * when the configured billing fields leave the country out, unless the
+	 * NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
 	 *
-	 * If this option is empty AND billing state is set as a required field AND billing country is not,
-	 * validation of the state value will fail during modal checkout.
+	 * WooCommerce refuses a checkout that has no billing country, and falls
+	 * back to the session customer's country when the form posts none. With
+	 * "No location by default" that customer has no country either, and the
+	 * reader has no field to enter one in.
+	 *
+	 * The session customer is set up before the cart loads, so this cannot
+	 * tell a cart that needs shipping apart. Such a cart keeps the country
+	 * field, which then opens with the store base selected.
 	 *
 	 * See Default Customer Location in: https://woo.com/document/configuring-woocommerce-settings/#general-options
 	 *
@@ -3264,15 +3448,47 @@ final class Modal_Checkout {
 			return $option_value;
 		}
 
-		// If billing state is required but billing country is not, we need to ensure a default location is set.
-		if ( defined( '\Newspack\Donations::DONATION_BILLING_FIELDS_OPTION' ) ) {
-			$billing_fields = get_option( \Newspack\Donations::DONATION_BILLING_FIELDS_OPTION, [] );
-			if ( ! in_array( 'billing_country', $billing_fields, true ) && in_array( 'billing_state', $billing_fields, true ) ) {
-				return 'base';
-			}
+		// An empty configuration keeps every WooCommerce billing field, country included.
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+		if ( ! empty( $billing_fields ) && ! in_array( 'billing_country', $billing_fields, true ) ) {
+			return 'base';
 		}
 
 		return $option_value;
+	}
+
+	/**
+	 * Give the session customer the store base country when a modal checkout
+	 * is submitted from a form that has no country field, unless the
+	 * NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS constant is set.
+	 *
+	 * Any code can remove the field from the form, so this looks at what was
+	 * posted rather than at the configured billing fields. WooCommerce falls
+	 * back to the customer's country and refuses the checkout when there is
+	 * none. A store base outside the countries the store sells to would be
+	 * refused as well, so it is not applied.
+	 *
+	 * @param array $data Posted checkout data.
+	 *
+	 * @return array Posted checkout data, unchanged.
+	 */
+	public static function ensure_customer_billing_country( $data ) {
+		if ( isset( $data['billing_country'] ) || ! self::is_modal_checkout() ) {
+			return $data;
+		}
+		if ( defined( 'NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS' ) && NEWSPACK_PREVENT_FORCE_BASE_DEFAULT_CUSTOMER_ADDRESS ) {
+			return $data;
+		}
+		$customer = \WC()->customer;
+		if ( ! $customer || $customer->get_billing_country() ) {
+			return $data;
+		}
+		$base_country = \WC()->countries->get_base_country();
+		if ( array_key_exists( $base_country, (array) \WC()->countries->get_allowed_countries() ) ) {
+			$customer->set_billing_country( $base_country );
+			$customer->set_billing_state( \WC()->countries->get_base_state() );
+		}
+		return $data;
 	}
 
 	/**
@@ -3471,8 +3687,8 @@ final class Modal_Checkout {
 				'variation_modal_title'      => __( 'Complete your transaction', 'newspack-blocks' ),
 				'auth_modal_title'           => __( 'Complete your transaction', 'newspack-blocks' ),
 				'signin_modal_title'         => _x(
-					'Sign in to complete transaction',
-					'Login modal title when logged out user attempts to checkout.',
+					'Sign in or create an account to continue',
+					'Title of the email step shown when a logged-out reader starts checkout. The same step signs in existing readers and registers new ones.',
 					'newspack-blocks'
 				),
 				'register_modal_title'       => _x(

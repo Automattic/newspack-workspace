@@ -1,7 +1,7 @@
 /**
  * Editor for a subscriber-only product restriction: which subscriptions unlock
- * purchasing of which products. A right-edge drawer, mirroring the rest of the
- * Subscriptions wizard's editors.
+ * purchasing of which products, and whether everyone else may still see them.
+ * A right-edge drawer, mirroring the rest of the Subscriptions wizard's editors.
  */
 
 /**
@@ -9,8 +9,9 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
+import { speak } from '@wordpress/a11y';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { __experimentalHStack as HStack, __experimentalVStack as VStack, RadioControl } from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -19,7 +20,8 @@ import { Button, Modal } from '../../../../../../../packages/components/src';
 import SubscriberFields from '../../components/subscriber-fields';
 import TargetingFields from '../../components/targeting-fields';
 import type { RuleTargeting, SubscriberAudience } from '../../types';
-import type { Restriction } from './types';
+import { restrictionTypeLabel } from './labels';
+import type { Restriction, RestrictionType } from './types';
 
 interface RestrictionEditorProps {
 	/** The restriction to edit, or a partial one for a new restriction. */
@@ -28,6 +30,14 @@ interface RestrictionEditorProps {
 	onSave: ( rule: Partial< Restriction > ) => void;
 	onClose: () => void;
 }
+
+const restrictionTypeHelp = ( type: RestrictionType ) =>
+	'view' === type
+		? __(
+				"Readers without the chosen subscriptions can't buy the products or see their pages. Restriction settings decide what the product page shows and whether product lists hide them.",
+				'newspack-plugin'
+		  )
+		: __( 'Everyone can see the products and their prices. Only readers with the chosen subscriptions can buy them.', 'newspack-plugin' );
 
 const emptyTargeting: RuleTargeting = {
 	targeting: 'products',
@@ -38,6 +48,7 @@ const emptyTargeting: RuleTargeting = {
 
 export default function RestrictionEditor( { restriction, saving, onSave, onClose }: RestrictionEditorProps ) {
 	const isEdit = Boolean( restriction.id );
+	const [ restrictionType, setRestrictionType ] = useState< RestrictionType >( restriction.restriction_type || 'purchase' );
 	const [ audience, setAudience ] = useState< SubscriberAudience >( {
 		subscription_targeting: restriction.subscription_targeting || 'subscriptions',
 		subscription_product_ids: restriction.subscription_product_ids || [],
@@ -62,6 +73,7 @@ export default function RestrictionEditor( { restriction, saving, onSave, onClos
 	const handleSave = () => {
 		onSave( {
 			...restriction,
+			restriction_type: restrictionType,
 			subscription_targeting: audience.subscription_targeting,
 			subscription_product_ids: 'all' === audience.subscription_targeting ? [] : audience.subscription_product_ids,
 			targeting: targeting.targeting,
@@ -83,12 +95,36 @@ export default function RestrictionEditor( { restriction, saving, onSave, onClos
 			shouldCloseOnClickOutside={ false }
 		>
 			<VStack spacing={ 4 } className="newspack-subscriptions-drawer__content">
+				<RadioControl
+					label={ __( 'Restrict', 'newspack-plugin' ) }
+					help={ restrictionTypeHelp( restrictionType ) }
+					selected={ restrictionType }
+					onChange={ ( next: string ) => {
+						// The help is the meaning of the choice, and a screen reader
+						// announces it only on entry; see SubscriberFields.
+						speak( restrictionTypeHelp( next as RestrictionType ), 'polite' );
+						setRestrictionType( next as RestrictionType );
+					} }
+					options={ [
+						{ value: 'purchase', label: restrictionTypeLabel( 'purchase' ) },
+						{ value: 'view', label: restrictionTypeLabel( 'view' ) },
+					] }
+					disabled={ saving }
+				/>
 				<SubscriberFields
 					value={ audience }
 					onChange={ partial => setAudience( current => ( { ...current, ...partial } ) ) }
 					label={ __( 'Available to', 'newspack-plugin' ) }
-					specificHelp={ __( 'Only subscribers of the subscriptions below can purchase the products.', 'newspack-plugin' ) }
-					allHelp={ __( 'Anyone with an active subscription can purchase the products.', 'newspack-plugin' ) }
+					specificHelp={
+						'view' === restrictionType
+							? __( 'Only subscribers of the subscriptions below can see and purchase the products.', 'newspack-plugin' )
+							: __( 'Only subscribers of the subscriptions below can purchase the products.', 'newspack-plugin' )
+					}
+					allHelp={
+						'view' === restrictionType
+							? __( 'Anyone with an active subscription can see and purchase the products.', 'newspack-plugin' )
+							: __( 'Anyone with an active subscription can purchase the products.', 'newspack-plugin' )
+					}
 					disabled={ saving }
 				/>
 				<TargetingFields

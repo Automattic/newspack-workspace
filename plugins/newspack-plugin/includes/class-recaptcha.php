@@ -160,6 +160,8 @@ final class Recaptcha {
 					'site_key' => self::get_site_key(),
 					'version'  => self::get_setting( 'version' ),
 					'api_url'  => \esc_url( self::get_script_url() ), // The Google API script.
+					// Translated here because this plugin ships no script translations.
+					'error'    => \__( 'There was an error connecting with reCAPTCHA. Please reload the page and try again.', 'newspack-plugin' ),
 				]
 			);
 		}

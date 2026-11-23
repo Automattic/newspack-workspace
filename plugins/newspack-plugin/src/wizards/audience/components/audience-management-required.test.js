@@ -35,8 +35,6 @@ jest.mock( '@wordpress/components', () => {
 	};
 } );
 
-// The heading and description come from the real EmptyState, which reaches Grid by path
-// rather than through this barrel, so Grid is not stubbed here.
 jest.mock( '../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
@@ -126,11 +124,18 @@ describe( 'requireAudienceManagement (NPPD-1846)', () => {
 		expect( screen.getByText( 'Premium newsletters need accounts.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'omits the action rather than rendering a dead link when the URL is missing', () => {
+	it( 'keeps the prerequisite title as a level 2 heading', () => {
+		render( <AudienceManagementRequired description={ GATES_COPY } setupUrl={ SETUP_URL } /> );
+
+		expect( screen.getByRole( 'heading', { level: 2, name: PREREQUISITE_HEADING } ) ).toBeInTheDocument();
+	} );
+
+	it( 'sends a user with no setup link to an administrator instead of a dead link', () => {
 		render( <AudienceManagementRequired description={ GATES_COPY } setupUrl="" /> );
 
 		expect( screen.getByText( PREREQUISITE_HEADING ) ).toBeInTheDocument();
 		expect( screen.queryByText( ACTION_LABEL ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Ask a site administrator to turn it on.' ) ).toBeInTheDocument();
 	} );
 } );
 

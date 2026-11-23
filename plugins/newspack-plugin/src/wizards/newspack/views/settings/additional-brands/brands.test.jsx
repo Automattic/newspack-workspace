@@ -17,7 +17,7 @@ const BRAND = { id: 1, name: 'Evening Edition', meta: {} };
 const renderBrands = ( props = {} ) =>
 	render( <Brands brands={ [] } isFetching={ false } hasLoaded={ false } loadError="" deleteBrand={ jest.fn() } { ...props } /> );
 
-const emptyState = () => screen.queryByRole( 'heading', { name: 'Get started with brands' } );
+const emptyState = () => screen.queryByRole( 'heading', { name: 'No brands yet' } );
 
 describe( 'Additional Brands list', () => {
 	// The regression this guards: `isFetching` starts false and the fetch is kicked

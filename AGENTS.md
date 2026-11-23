@@ -14,7 +14,7 @@ It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lock
 | --- | --- | --- |
 | `plugins/<name>/` | 12 product plugins | `/newspack-plugins/` |
 | `themes/<name>/` | `newspack-theme` (classic; style variations nested inside it) and `newspack-block-theme` (FSE) | `/newspack-themes/` |
-| `packages/<name>/` | `scripts`, `components`, `colors`, `icons`, `motion` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
+| `packages/<name>/` | `scripts`, `components`, `colors`, `icons`, `motion`, `playground` (private, never published) — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
 | `repos/plugins/<name>/`, `repos/themes/<name>/` | Checkouts that live outside the monorepo | `/newspack-repos` |
 | `html/` | Main WordPress site | `/var/www/html` |
 | `bin/` | Shell scripts | `/var/scripts/` |
@@ -158,12 +158,13 @@ n env up <name> [--build]     # or --all
 n setup --env <name> --yes
 n env down|destroy <name>
 n env list [--porcelain]
+n env which [name] [--porcelain]   # Env serving the current worktree
 n env cleanup                 # Interactive bulk cleanup
 ```
 
 - Reachable at `https://<name>.test` (mkcert HTTPS) on its own loopback IP. `n start` pre-creates the aliases so envs can be created without sudo; `./bin/setup-networking.sh` removes the remaining password prompts.
 - Own database (`wordpress_<name>`), own `WP_CACHE_KEY_SALT`, own `envs/<name>/html/`.
-- Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch; a `repos/` worktree keeps it.
+- Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch unless you pass `--keep-branch`; a `repos/` worktree keeps it.
 - All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
 - `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
 

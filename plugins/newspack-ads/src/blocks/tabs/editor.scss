@@ -26,7 +26,7 @@
 
 		& .tab-header {
 			align-items: center;
-			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+			color: var(--newspack-ui-color-text, #1e1e1e);
 			display: flex;
 			font-family: inherit;
 			font-size: inherit;
@@ -40,7 +40,7 @@
 					calc(var(--newspack-ui-spacer-base, 8px) / -2) 0 0
 					currentcolor;
 				color: inherit;
-				font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+				font-family: var(--newspack-ui-font-family-control, var(--newspack-ui-font-family, system-ui, sans-serif));
 				font-size: var(--newspack-ui-font-size-s, 16px);
 				font-weight: 600;
 				line-height: var(--newspack-ui-line-height-s, 1.5);
@@ -99,8 +99,8 @@
 	}
 
 	& .components-button.newspack-ads__tab-item {
-		color: var(--newspack-ui-color-neutral-60, #6c6c6c);
-		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+		color: var(--newspack-ui-color-text-subtle, #6c6c6c);
+		font-family: var(--newspack-ui-font-family-control, var(--newspack-ui-font-family, system-ui, sans-serif));
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		font-weight: 600;
 		height: auto;

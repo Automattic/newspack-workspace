@@ -1,5 +1,7 @@
 import {
 	canEndTest,
+	canEndTestFromMenu,
+	createRequestQueue,
 	formatConfidence,
 	formatLift,
 	formatRate,
@@ -213,6 +215,22 @@ describe( 'canEndTest', () => {
 	} );
 } );
 
+describe( 'canEndTestFromMenu', () => {
+	const version = ( status = 'publish', eligible = true ) => ( { status, eligible } );
+	it( 'offers ending every test that has not ended but is not splitting readers', () => {
+		const tests = [
+			{ variants: { a: version(), b: version() } }, // Running: End Test is in the header.
+			{ variants: { a: version(), b: version( 'publish', false ) } }, // Needs attention, still splitting.
+			{ variants: { a: version(), b: version( 'draft', false ) } }, // Needs attention, not splitting.
+			{ variants: { a: version(), b: version( 'draft' ) } }, // Draft.
+			{ variants: { a: version() } }, // Incomplete.
+			{ variants: { b: version( 'draft' ) } }, // Incomplete, A gone.
+			{ status: 'ended', variants: { a: version(), b: version() } },
+		];
+		expect( tests.map( canEndTestFromMenu ) ).toEqual( [ false, false, true, true, true, true, false ] );
+	} );
+} );
+
 describe( 'getRecommendation', () => {
 	const twoVersions = { variants: { a: variant(), b: variant() } };
 	const result = ( { label = 'reliable', lift = 12.3, young = false, state = 'ok' } = {} ) => ( {
@@ -362,5 +380,36 @@ describe( 'getVerdict', () => {
 	it( 'leaves incomplete and needs-attention cards to their notice', () => {
 		expect( getVerdict( twoVersions, 'incomplete', result() ) ).toBeNull();
 		expect( getVerdict( twoVersions, 'needs-attention', result() ) ).toBeNull();
+	} );
+} );
+
+describe( 'createRequestQueue', () => {
+	it( 'runs one task at a time, in order, past a failure', async () => {
+		const enqueue = createRequestQueue();
+		const started = [];
+		const resolvers = {};
+		const task = name => () => {
+			started.push( name );
+			return new Promise( ( resolve, reject ) => {
+				resolvers[ name ] = { resolve, reject };
+			} );
+		};
+		const first = enqueue( task( 'first' ) );
+		const second = enqueue( task( 'second' ) );
+		const third = enqueue( task( 'third' ) );
+		await Promise.resolve();
+		expect( started ).toEqual( [ 'first' ] );
+
+		resolvers.first.reject( new Error( 'failed' ) );
+		await expect( first ).rejects.toThrow( 'failed' );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( started ).toEqual( [ 'first', 'second' ] );
+
+		resolvers.second.resolve( 2 );
+		await expect( second ).resolves.toBe( 2 );
+		await new Promise( resolve => setTimeout( resolve, 0 ) );
+		expect( started ).toEqual( [ 'first', 'second', 'third' ] );
+		resolvers.third.resolve( 3 );
+		await expect( third ).resolves.toBe( 3 );
 	} );
 } );
