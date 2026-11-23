@@ -625,11 +625,15 @@ final class Recaptcha {
 	 *
 	 * On v3 the client fetches a token only once the form has been on screen
 	 * briefly, so a reader who submits sooner would be refused. The form holds
-	 * such a submission while it asks Google for a token, then sends it through
-	 * the same button so WooCommerce still sees `register`. If no token arrives
-	 * within five seconds it sends the form anyway, and the server refuses it as
-	 * before. v2 needs none of this: the client already holds the submission
-	 * until the challenge passes.
+	 * such a submission while it asks Google for a token, then sends it once,
+	 * through the same button so WooCommerce still sees `register`; clicks made
+	 * during the hold wait with it. If no token arrives within five seconds it
+	 * sends the form anyway, and the server refuses it. Remove this hold once the
+	 * client holds early v3 submissions itself, or both would send the form.
+	 *
+	 * v2 is left to the client, which holds a submission until the challenge
+	 * passes, but only once its widget has rendered; a submission made before
+	 * then is refused.
 	 */
 	public static function render_woocommerce_registration_fields() {
 		if ( ! self::can_use_captcha() ) {
@@ -637,22 +641,32 @@ final class Recaptcha {
 		}
 		\wp_print_inline_script_tag( "document.currentScript.closest( 'form' ).setAttribute( 'data-newspack-recaptcha', 'woocommerce_register' );" );
 		if ( self::can_use_captcha( 'v3' ) ) {
-			ob_start();
-			?>
+			$hold_script = <<<'JS'
 ( function ( form, siteKey ) {
-	var released = false;
+	var pending = false;
+	var replaying = false;
 	form.addEventListener( 'submit', function ( event ) {
+		if ( replaying ) {
+			return;
+		}
+		if ( pending ) {
+			event.preventDefault();
+			return;
+		}
 		var field = form.querySelector( 'input[name="g-recaptcha-response"]' );
-		if ( released || ( field && field.value ) ) {
+		if ( field && field.value ) {
 			return;
 		}
 		event.preventDefault();
+		pending = true;
+		var done = false;
 		var submitter = event.submitter || form.querySelector( '[type="submit"][name="register"]' );
 		var release = function ( token ) {
-			if ( released ) {
+			if ( done ) {
 				return;
 			}
-			released = true;
+			done = true;
+			pending = false;
 			if ( token ) {
 				field = form.querySelector( 'input[name="g-recaptcha-response"]' );
 				if ( ! field ) {
@@ -663,11 +677,16 @@ final class Recaptcha {
 				}
 				field.value = token;
 			}
-			form.requestSubmit( submitter );
+			replaying = true;
+			try {
+				form.requestSubmit( submitter );
+			} finally {
+				replaying = false;
+			}
 		};
 		setTimeout( release, 5000 );
 		( function ask() {
-			if ( released ) {
+			if ( done ) {
 				return;
 			}
 			if ( ! window.grecaptcha || ! window.grecaptcha.ready ) {
@@ -681,9 +700,9 @@ final class Recaptcha {
 			} );
 		} )();
 	} );
-} )( document.currentScript.closest( 'form' ), '<?php echo \esc_js( self::get_site_key() ); ?>' );
-			<?php
-			\wp_print_inline_script_tag( ob_get_clean() );
+} )( document.currentScript.closest( 'form' ), %s );
+JS;
+			\wp_print_inline_script_tag( sprintf( $hold_script, \wp_json_encode( self::get_site_key() ) ) );
 		}
 		?>
 		<p class="newspack-recaptcha-terms"><?php echo \wp_kses_post( self::get_terms_text() ); ?></p>

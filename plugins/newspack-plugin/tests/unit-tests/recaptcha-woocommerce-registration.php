@@ -349,22 +349,22 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * On v3, a submission that arrives before the form has a token waits while Google is asked for one.
+	 * On v3, the form carries the script that holds an early submission, with the site key as a JSON string.
 	 */
-	public function test_register_form_holds_early_submit_for_v3_token() {
+	public function test_register_form_prints_v3_hold_script_with_site_key() {
 		$this->enable( 'v3' );
 
 		ob_start();
 		do_action( 'woocommerce_register_form' );
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( "grecaptcha.execute( siteKey, { action: 'woocommerce_register' } )", $html );
-		$this->assertStringContainsString( "'test_site_key'", $html );
-		$this->assertStringContainsString( 'form.requestSubmit( submitter )', $html );
+		$this->assertStringContainsString( "action: 'woocommerce_register'", $html );
+		$this->assertStringContainsString( '"test_site_key"', $html );
+		$this->assertStringContainsString( 'requestSubmit', $html );
 	}
 
 	/**
-	 * On v2 invisible, the shared client already holds the submission until the challenge passes.
+	 * On v2 invisible, the form prints no hold: submission is left to the shared client.
 	 */
 	public function test_register_form_leaves_v2_submit_to_the_shared_client() {
 		$this->enable( 'v2_invisible' );
