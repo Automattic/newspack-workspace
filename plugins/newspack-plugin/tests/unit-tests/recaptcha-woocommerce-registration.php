@@ -350,8 +350,8 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 
 	/**
 	 * On v3, the form carries the script that holds an early submission and resends it through
-	 * the Register button, with the site key JSON-encoded. A resend that doesn't go out drops
-	 * the token field the hold added, so a later retry asks Google for a fresh token.
+	 * the Register button, with the site key JSON-encoded. A token field the hold adds itself is
+	 * refreshed every 30 seconds, so a form whose resend was stopped still goes out with a live token.
 	 */
 	public function test_register_form_prints_v3_hold_script_with_site_key() {
 		$this->enable( 'v3' );
@@ -367,8 +367,8 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 		$this->assertStringContainsString( "action: 'woocommerce_register'", $html );
 		$this->assertStringContainsString( '"test\/site_key"', $html );
 		$this->assertStringContainsString( 'form.requestSubmit( submitter )', $html );
-		$this->assertStringContainsString( 'resent.defaultPrevented', $html );
-		$this->assertStringContainsString( 'added.parentNode.removeChild( added )', $html );
+		$this->assertStringContainsString( 'added.value = fresh;', $html );
+		$this->assertStringContainsString( '}, 30000 );', $html );
 	}
 
 	/**
