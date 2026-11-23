@@ -69,11 +69,13 @@ class Print_Section extends Wizard_Section {
 	 */
 	public function api_get_print_settings() {
 		return [
-			'module_enabled_print'      => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
-			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
-			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
-			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
-			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),
+			'module_enabled_print'         => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
+			'indesign_platform'            => InDesign_Exporter::get_platform_setting(),
+			'indesign_post_types'          => InDesign_Exporter::get_post_types_setting(),
+			'available_post_types'         => InDesign_Exporter::get_available_post_types(),
+			'indesign_exclude_captions'    => InDesign_Exporter::get_exclude_captions_setting(),
+			'indesign_style_names'         => InDesign_Exporter::get_style_names_setting(),
+			'indesign_default_style_names' => InDesign_Exporter::get_default_style_names(),
 		];
 	}
 
@@ -125,6 +127,22 @@ class Print_Section extends Wizard_Section {
 			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_exclude_captions.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
+		$has_style_names_param = $request->has_param( 'indesign_style_names' );
+		$style_names           = $has_style_names_param ? $request->get_param( 'indesign_style_names' ) : null;
+		if ( $has_style_names_param ) {
+			if ( ! is_array( $style_names ) ) {
+				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_style_names.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$clean_style_names = [];
+			foreach ( InDesign_Exporter::STYLE_NAME_KEYS as $key ) {
+				$name = isset( $style_names[ $key ] ) ? $style_names[ $key ] : '';
+				if ( ! InDesign_Exporter::is_valid_style_name( $name ) ) {
+					return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_style_names. Style names can\'t contain < > $ \\ or line breaks.', 'newspack-plugin' ), [ 'status' => 400 ] );
+				}
+				$clean_style_names[ $key ] = trim( $name );
+			}
+		}
+
 		if ( $module_enabled_print ) {
 			Optional_Modules::activate_optional_module( InDesign_Exporter::MODULE_NAME );
 		} else {
@@ -143,12 +161,18 @@ class Print_Section extends Wizard_Section {
 			update_option( InDesign_Exporter::EXCLUDE_CAPTIONS_OPTION, $exclude_captions );
 		}
 
+		if ( $has_style_names_param ) {
+			update_option( InDesign_Exporter::STYLE_NAMES_OPTION, $clean_style_names );
+		}
+
 		return [
-			'module_enabled_print'      => $module_enabled_print,
-			'indesign_platform'         => InDesign_Exporter::get_platform_setting(),
-			'indesign_post_types'       => InDesign_Exporter::get_post_types_setting(),
-			'available_post_types'      => InDesign_Exporter::get_available_post_types(),
-			'indesign_exclude_captions' => InDesign_Exporter::get_exclude_captions_setting(),
+			'module_enabled_print'         => $module_enabled_print,
+			'indesign_platform'            => InDesign_Exporter::get_platform_setting(),
+			'indesign_post_types'          => InDesign_Exporter::get_post_types_setting(),
+			'available_post_types'         => InDesign_Exporter::get_available_post_types(),
+			'indesign_exclude_captions'    => InDesign_Exporter::get_exclude_captions_setting(),
+			'indesign_style_names'         => InDesign_Exporter::get_style_names_setting(),
+			'indesign_default_style_names' => InDesign_Exporter::get_default_style_names(),
 		];
 	}
 }
