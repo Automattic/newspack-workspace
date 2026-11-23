@@ -103,18 +103,34 @@ class AutocompleteTokenField extends Component {
 		} );
 
 		const known = Object.values( this.knownSuggestions );
-		Object.entries( this.knownSuggestions ).forEach( ( [ value, { title, clashNote } ] ) => {
+		const withId = ( value, { title, clashNote } ) => ( clashNote ? `${ title } (${ clashNote }, ${ value })` : `${ title } (${ value })` );
+		Object.entries( this.knownSuggestions ).forEach( ( [ value, suggestion ] ) => {
+			const { title, clashNote } = suggestion;
 			const clashes = known.filter( other => other.title === title );
 			if ( clashes.length === 1 ) {
 				validValues[ value ] = title;
-			} else if ( ! clashNote ) {
-				validValues[ value ] = `${ title } (${ value })`;
-			} else if ( clashes.filter( other => other.clashNote === clashNote ).length === 1 ) {
+			} else if ( clashNote && clashes.filter( other => other.clashNote === clashNote ).length === 1 ) {
 				validValues[ value ] = `${ title } (${ clashNote })`;
 			} else {
-				validValues[ value ] = `${ title } (${ clashNote }, ${ value })`;
+				validValues[ value ] = withId( value, suggestion );
 			}
 		} );
+
+		// A generated label can still equal another post's own title, e.g. "Budget (Draft)".
+		// Fall back to the ID form for every value still sharing a label, until none do.
+		for ( let pass = 0; pass < 3; pass++ ) {
+			const byLabel = {};
+			Object.keys( this.knownSuggestions ).forEach( value => {
+				( byLabel[ validValues[ value ] ] = byLabel[ validValues[ value ] ] || [] ).push( value );
+			} );
+			const shared = Object.values( byLabel ).filter( values => values.length > 1 );
+			if ( ! shared.length ) {
+				break;
+			}
+			shared.flat().forEach( value => {
+				validValues[ value ] = withId( value, this.knownSuggestions[ value ] );
+			} );
+		}
 
 		return validValues;
 	}
@@ -158,10 +174,11 @@ class AutocompleteTokenField extends Component {
 						return;
 					}
 
+					// Keep the values rather than their labels: a later lookup can relabel a
+					// value, and the dropdown has to offer the label that maps back to it.
 					const validValues = this.addValidValues( suggestions );
-					const currentSuggestions = suggestions.map( suggestion => validValues[ suggestion.value ] );
 
-					this.setState( { suggestions: currentSuggestions, validValues, loading: false } );
+					this.setState( { suggestions: suggestions.map( suggestion => String( suggestion.value ) ), validValues, loading: false } );
 				} )
 				.catch( () => {
 					if ( this.suggestionsRequest === request ) {
@@ -200,13 +217,13 @@ class AutocompleteTokenField extends Component {
 	 */
 	render() {
 		const { help, label = '' } = this.props;
-		const { suggestions, loading } = this.state;
+		const { suggestions, validValues, loading } = this.state;
 
 		return (
 			<div className="autocomplete-tokenfield">
 				<FormTokenField
 					value={ this.getTokens() }
-					suggestions={ suggestions }
+					suggestions={ suggestions.map( value => validValues[ value ] ).filter( Boolean ) }
 					onChange={ tokens => this.handleOnChange( tokens ) }
 					onInputChange={ input => this.debouncedUpdateSuggestions( input ) }
 					label={ label }

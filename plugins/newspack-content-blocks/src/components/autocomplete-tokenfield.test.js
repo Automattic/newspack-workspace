@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -125,5 +125,54 @@ describe( 'AutocompleteTokenField with two posts sharing a title', () => {
 		search( screen.getByRole( 'combobox' ) );
 		fireEvent.click( await screen.findByRole( 'option', { name: 'Other Story' }, { timeout: 1500 } ) );
 		expect( onChange ).toHaveBeenCalledWith( [ '65', '66', '67' ] );
+	} );
+} );
+
+describe( 'AutocompleteTokenField when labels change after a search', () => {
+	const search = ( input, value = 'Story' ) => {
+		fireEvent.focus( input );
+		fireEvent.change( input, { target: { value } } );
+	};
+
+	it( 'relabels the dropdown when the saved titles arrive after the results', async () => {
+		let resolveSaved;
+		const onChange = jest.fn();
+		render(
+			<AutocompleteTokenField
+				tokens={ [ 65 ] }
+				onChange={ onChange }
+				fetchSuggestions={ () => Promise.resolve( [ { value: 66, label: 'Twin Story' } ] ) }
+				fetchSavedInfo={ () =>
+					new Promise( resolve => {
+						resolveSaved = resolve;
+					} )
+				}
+				label="Content"
+			/>
+		);
+		search( screen.getByRole( 'combobox' ) );
+		await screen.findByRole( 'option', { name: 'Twin Story' }, { timeout: 1500 } );
+		await act( async () => resolveSaved( [ { value: 65, label: 'Twin Story' } ] ) );
+		fireEvent.click( await screen.findByRole( 'option', { name: 'Twin Story (66)' } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ '65', '66' ] );
+	} );
+
+	it( 'never gives a generated label to a post whose own title matches it', async () => {
+		const posts = [
+			{ value: 11, label: 'Budget', clashNote: 'Draft' },
+			{ value: 22, label: 'Budget', clashNote: 'Published' },
+			{ value: 33, label: 'Budget (Draft)', clashNote: 'Draft' },
+		];
+		const onChange = jest.fn();
+		render( <AutocompleteTokenField tokens={ [] } onChange={ onChange } fetchSuggestions={ () => Promise.resolve( posts ) } label="Content" /> );
+		search( screen.getByRole( 'combobox' ), 'Budget' );
+		await screen.findByRole( 'option', { name: 'Budget (Published)' }, { timeout: 1500 } );
+		expect( screen.getAllByRole( 'option' ).map( option => option.textContent ) ).toEqual( [
+			'Budget (Draft, 11)',
+			'Budget (Published)',
+			'Budget (Draft) (Draft, 33)',
+		] );
+		fireEvent.click( screen.getByRole( 'option', { name: 'Budget (Draft) (Draft, 33)' } ) );
+		expect( onChange ).toHaveBeenCalledWith( [ '33' ] );
 	} );
 } );
