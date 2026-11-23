@@ -627,9 +627,10 @@ final class Recaptcha {
 	 * briefly, so a reader who submits sooner would be refused. The form holds
 	 * such a submission while it asks Google for a token, then sends it once,
 	 * through the same button so WooCommerce still sees `register`; clicks made
-	 * during the hold wait with it. If no token arrives within five seconds it
-	 * sends the form anyway, and the server refuses it. Remove this hold once the
-	 * client holds early v3 submissions itself, or both would send the form.
+	 * during the hold wait with it. If Google returns no token, or none arrives
+	 * within five seconds, it sends the form anyway, and the server refuses it.
+	 * Remove this hold once the client holds early v3 submissions itself
+	 * (NPPM-3947), or both would send the form.
 	 *
 	 * v2 is left to the client, which holds a submission until the challenge
 	 * passes, but only once its widget has rendered; a submission made before
@@ -694,6 +695,9 @@ final class Recaptcha {
 				return;
 			}
 			window.grecaptcha.ready( function () {
+				if ( done ) {
+					return;
+				}
 				window.grecaptcha.execute( siteKey, { action: 'woocommerce_register' } ).then( release, function () {
 					release();
 				} );
