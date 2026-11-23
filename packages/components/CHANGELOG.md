@@ -1,3 +1,21 @@
+# newspack-components [4.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.2...newspack-components@4.13.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **components:** tighten the gap below the page header on mobile ([#1323](https://github.com/Automattic/newspack-workspace/issues/1323)) ([153e91e](https://github.com/Automattic/newspack-workspace/commit/153e91efb00c49516f2740a8197253c9ebe330ed))
+
+
+### Features
+
+* **components:** fit the mobile page header on one row (DSGNEWS-241) ([#1326](https://github.com/Automattic/newspack-workspace/issues/1326)) ([fc9ac34](https://github.com/Automattic/newspack-workspace/commit/fc9ac349bfe3a2c11636490b9f512ec8c95f1b2d))
+* **subscribers:** show subscriptions held on other network sites ([#1403](https://github.com/Automattic/newspack-workspace/issues/1403)) ([a43fb97](https://github.com/Automattic/newspack-workspace/commit/a43fb97e5e2ae90ec5789dc731824d5941f96792))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+
 ## newspack-components [4.12.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.1...newspack-components@4.12.2) (2026-11-19)
 
 
