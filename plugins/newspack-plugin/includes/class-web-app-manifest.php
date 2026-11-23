@@ -47,6 +47,30 @@ final class Web_App_Manifest {
 	 */
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_route' ] );
+		add_action( 'wp_head', [ __CLASS__, 'print_head_tags' ] );
+	}
+
+	/**
+	 * Point browsers at the manifest from every page.
+	 */
+	public static function print_head_tags() {
+		if ( ! self::is_enabled() ) {
+			return;
+		}
+		$manifest = self::get_manifest();
+		if ( null === $manifest ) {
+			return;
+		}
+		?>
+		<link rel="manifest" href="<?php echo esc_url( self::get_url() ); ?>">
+		<?php if ( ! empty( $manifest['theme_color'] ) ) : ?>
+			<meta name="theme-color" content="<?php echo esc_attr( $manifest['theme_color'] ); ?>">
+		<?php endif; ?>
+		<?php if ( 'browser' !== $manifest['display'] ) : ?>
+			<meta name="apple-mobile-web-app-capable" content="yes">
+			<meta name="mobile-web-app-capable" content="yes">
+		<?php endif; ?>
+		<?php
 	}
 
 	/**

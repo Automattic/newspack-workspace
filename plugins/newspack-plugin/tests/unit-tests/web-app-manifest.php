@@ -40,7 +40,9 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	 * Undo theme support added by individual tests.
 	 */
 	public function tear_down() {
-		remove_theme_support( 'custom-background' );
+		// remove_theme_support() for custom-background reads a global that only exists on admin requests.
+		global $_wp_theme_features;
+		unset( $_wp_theme_features['custom-background'] );
 		remove_theme_mod( 'background_color' );
 		parent::tear_down();
 	}
@@ -172,6 +174,48 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Capture what the manifest adds to the page head.
+	 *
+	 * @return string
+	 */
+	private function head_tags() {
+		ob_start();
+		Web_App_Manifest::print_head_tags();
+		return ob_get_clean();
+	}
+
+	/**
+	 * Every page points browsers at the manifest and tints the app in the theme's colour.
+	 */
+	public function test_head_tags() {
+		add_theme_support( 'custom-background' );
+		set_theme_mod( 'background_color', '112233' );
+		$tags = $this->head_tags();
+		$this->assertStringContainsString( '<link rel="manifest" href="' . esc_url( Web_App_Manifest::get_url() ) . '">', $tags );
+		$this->assertStringContainsString( '<meta name="theme-color" content="#112233">', $tags );
+		$this->assertStringContainsString( '<meta name="apple-mobile-web-app-capable" content="yes">', $tags );
+		$this->assertStringContainsString( '<meta name="mobile-web-app-capable" content="yes">', $tags );
+	}
+
+	/**
+	 * An app set to open in the browser doesn't ask for its own window.
+	 */
+	public function test_browser_display_has_no_capable_tags() {
+		update_option( 'newspack_pwa_display_mode', 'browser' );
+		$tags = $this->head_tags();
+		$this->assertStringContainsString( '<link rel="manifest"', $tags );
+		$this->assertStringNotContainsString( 'web-app-capable', $tags );
+	}
+
+	/**
+	 * Without an icon there's nothing to install, so no tags.
+	 */
+	public function test_no_tags_without_icon() {
+		delete_option( 'site_icon' );
+		$this->assertSame( '', $this->head_tags() );
+	}
+
+	/**
 	 * While the PWA plugin runs it serves its own manifest at this address, so ours stays off.
 	 *
 	 * @runInSeparateProcess
@@ -181,5 +225,16 @@ class Test_Web_App_Manifest extends \WP_UnitTestCase {
 		define( 'PWA_VERSION', '0.8.2' );
 		$this->assertSame( 404, $this->request_manifest()->get_status() );
 		$this->assertArrayNotHasKey( '/wp/v2/web-app-manifest', rest_get_server()->get_routes() );
+	}
+
+	/**
+	 * While the PWA plugin runs it prints its own manifest link, so ours stays off.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_no_tags_when_pwa_active() {
+		define( 'PWA_VERSION', '0.8.2' );
+		$this->assertSame( '', $this->head_tags() );
 	}
 }
