@@ -99,6 +99,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/emails/class-idempotent-send.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-plugin-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-theme-manager.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-content-blocks-activation.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-plugins-screen.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-list-table-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation.php';

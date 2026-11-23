@@ -33,6 +33,7 @@ class Perfmatters {
 			// Newspack.
 			'newspack-popups',
 			'newspack-blocks',
+			'newspack-content-blocks',
 			'newspack-newsletters',
 			'newspack-sponsors',
 			'newspack-listings',
@@ -144,6 +145,7 @@ class Perfmatters {
 		return [
 			'plugins/newspack-ads', // Newspack Ads; the sticky footer ad never renders if this loads late.
 			'plugins/newspack-blocks', // Newspack Blocks.
+			'plugins/newspack-content-blocks', // Newspack Content Blocks.
 			'plugins/newspack-newsletters', // Newspack Newsletters.
 			'plugins/newspack-plugin', // Newspack main plugin.
 			'plugins/newspack-popups', // Newspack Campaigns.

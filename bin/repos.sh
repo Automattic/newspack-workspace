@@ -16,6 +16,7 @@ newspack_plugins=(
 	"newspack-multibranded-site"
 	"newspack-network"
 	"newspack-story-budget"
+	"newspack-content-blocks"
 )
 
 newspack_themes=(
