@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.36.11](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.10...newspack-blocks@4.36.11) (2026-11-23)
+
+
+### Bug Fixes
+
+* **modal-checkout:** accept checkouts with no billing country field ([#1629](https://github.com/Automattic/newspack-workspace/issues/1629)) ([0d7d45a](https://github.com/Automattic/newspack-workspace/commit/0d7d45af010e31481d27ea4bea29cffbbe825090))
+
 ## @automattic/newspack-blocks [4.36.10](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.9...newspack-blocks@4.36.10) (2026-11-19)
 
 
