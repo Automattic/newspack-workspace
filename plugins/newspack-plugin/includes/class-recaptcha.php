@@ -629,7 +629,10 @@ final class Recaptcha {
 	 * through the same button so WooCommerce still sees `register`; clicks made
 	 * during the hold wait with it. If Google returns no token, or none arrives
 	 * within five seconds, it sends the form anyway, and the server refuses it.
-	 * Remove this hold once the client holds early v3 submissions itself
+	 * If the resend doesn't go out (form validation or another script stops it),
+	 * the token field the hold added is removed: the client never refreshes a
+	 * field it didn't create, so a retry minutes later would send an expired
+	 * token. The retry is held again and gets a fresh one. Remove this hold once the client holds early v3 submissions itself
 	 * (NPPM-3947), or both would send the form.
 	 *
 	 * v2 is left to the client, which holds a submission until the challenge
@@ -646,8 +649,10 @@ final class Recaptcha {
 ( function ( form, siteKey ) {
 	var pending = false;
 	var replaying = false;
+	var resent = null;
 	form.addEventListener( 'submit', function ( event ) {
 		if ( replaying ) {
+			resent = event;
 			return;
 		}
 		if ( pending ) {
@@ -668,10 +673,11 @@ final class Recaptcha {
 			}
 			done = true;
 			pending = false;
+			var added = null;
 			if ( token ) {
 				field = form.querySelector( 'input[name="g-recaptcha-response"]' );
 				if ( ! field ) {
-					field = document.createElement( 'input' );
+					field = added = document.createElement( 'input' );
 					field.type = 'hidden';
 					field.name = 'g-recaptcha-response';
 					form.appendChild( field );
@@ -679,10 +685,14 @@ final class Recaptcha {
 				field.value = token;
 			}
 			replaying = true;
+			resent = null;
 			try {
 				form.requestSubmit( submitter );
 			} finally {
 				replaying = false;
+				if ( added && added.parentNode && ( ! resent || resent.defaultPrevented ) ) {
+					added.parentNode.removeChild( added );
+				}
 			}
 		};
 		setTimeout( release, 5000 );
