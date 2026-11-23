@@ -349,18 +349,23 @@ class Test_Recaptcha_WooCommerce_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * On v3, the form carries the script that holds an early submission, with the site key as a JSON string.
+	 * On v3, the form carries the script that holds an early submission and resends it through
+	 * the Register button, with the site key JSON-encoded.
 	 */
 	public function test_register_form_prints_v3_hold_script_with_site_key() {
 		$this->enable( 'v3' );
+		// JSON encoding escapes the slash, which a plain quoted string would not.
+		$credentials                   = get_option( 'newspack_recaptcha_credentials' );
+		$credentials['v3']['site_key'] = 'test/site_key';
+		update_option( 'newspack_recaptcha_credentials', $credentials );
 
 		ob_start();
 		do_action( 'woocommerce_register_form' );
 		$html = ob_get_clean();
 
 		$this->assertStringContainsString( "action: 'woocommerce_register'", $html );
-		$this->assertStringContainsString( '"test_site_key"', $html );
-		$this->assertStringContainsString( 'requestSubmit', $html );
+		$this->assertStringContainsString( '"test\/site_key"', $html );
+		$this->assertStringContainsString( 'form.requestSubmit( submitter )', $html );
 	}
 
 	/**
