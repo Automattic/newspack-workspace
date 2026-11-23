@@ -154,6 +154,15 @@ final class Newspack_Popups_Inserter {
 		if ( self::$is_apple_news_exporting ) {
 			return true;
 		}
+
+		// Never output prompts in feeds. Their markup and scripts can't work in a feed
+		// reader or a syndication partner's app. Automatically inserted prompts are
+		// already skipped on feeds by the `is_singular()` check in
+		// insert_popups_in_content(), but prompts placed with the Prompt or Custom
+		// Placement block, or the shortcode, are not, so they are excluded here.
+		if ( is_feed() ) {
+			return true;
+		}
 		return $disabled;
 	}
 

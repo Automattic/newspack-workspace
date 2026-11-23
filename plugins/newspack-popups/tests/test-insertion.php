@@ -92,6 +92,29 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * Manually placed prompts are not rendered in feeds.
+	 */
+	public function test_shortcode_not_rendered_in_feed() {
+		$popup_content = 'Hello from a manual prompt';
+		$popup_id      = self::createPopup( $popup_content );
+		$post_id       = self::factory()->post->create(
+			[ 'post_content' => '[newspack-popup id="' . $popup_id . '"]' ]
+		);
+
+		self::go_to( get_feed_link() );
+		self::assertTrue( is_feed(), 'The request is a feed.' );
+		self::assertTrue( Newspack_Popups_Inserter::assess_has_disabled_popups(), 'Prompts are disabled in feeds.' );
+
+		global $post;
+		$post = get_post( $post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		setup_postdata( $post );
+		$feed_content = apply_filters( 'the_content', $post->post_content );
+
+		self::assertStringNotContainsString( $popup_content, $feed_content, 'Feed content does not include the prompt.' );
+		self::assertStringNotContainsString( 'newspack-popup-container', $feed_content, 'Feed content does not include prompt markup.' );
+	}
+
+	/**
 	 * Shortcode along with programmatically placed popups handling.
 	 */
 	public function test_shortcode_and_programmatic() {
