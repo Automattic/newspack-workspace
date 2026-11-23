@@ -2,6 +2,7 @@
 /**
  * Administrator-authorized, byline-only Co-Authors Plus assignment.
  * No broad role or global Co-Authors Plus permission changes.
+ *
  * @package BotCreds Agent Access
  */
 if ( ! defined( 'ABSPATH' ) ) {
@@ -29,16 +30,24 @@ class Agent_Access_Authors {
 	}
 
 	public static function register() {
-		register_rest_route( 'agent-access/v1', '/authors/(?P<id>[1-9][0-9]*)', array(
-			'methods' => 'GET,POST',
-			'permission_callback' => array( __CLASS__, 'permissions' ),
-			'callback' => array( __CLASS__, 'handle' ),
-		) );
-		register_rest_route( 'agent-access/v1', '/authors/(?P<id>[1-9][0-9]*)/available', array(
-			'methods' => 'GET',
-			'permission_callback' => array( __CLASS__, 'permissions' ),
-			'callback' => array( __CLASS__, 'search' ),
-		) );
+		register_rest_route(
+			'agent-access/v1',
+			'/authors/(?P<id>[1-9][0-9]*)',
+			array(
+				'methods'             => 'GET,POST',
+				'permission_callback' => array( __CLASS__, 'permissions' ),
+				'callback'            => array( __CLASS__, 'handle' ),
+			) 
+		);
+		register_rest_route(
+			'agent-access/v1',
+			'/authors/(?P<id>[1-9][0-9]*)/available',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array( __CLASS__, 'permissions' ),
+				'callback'            => array( __CLASS__, 'search' ),
+			) 
+		);
 	}
 
 	public static function permissions( $request ) {
@@ -103,7 +112,12 @@ class Agent_Access_Authors {
 		$id = (int) $request->get_url_params()['id'];
 		if ( in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) ) {
 			$authors = self::term_ids( $id );
-			return is_wp_error( $authors ) ? $authors : rest_ensure_response( array( 'id' => $id, 'authors' => $authors ) );
+			return is_wp_error( $authors ) ? $authors : rest_ensure_response(
+				array(
+					'id'      => $id,
+					'authors' => $authors,
+				) 
+			);
 		}
 		$body = json_decode( $request->get_body() );
 		if ( ! $request->is_json_content_type() || ! is_object( $body ) || array_keys( (array) $body ) !== array( 'authors' ) || ! is_array( $body->authors ) || ! count( $body->authors ) || count( $body->authors ) > 20 || $request->get_query_params() || $request->get_body_params() || $request->get_file_params() ) {
@@ -124,7 +138,8 @@ class Agent_Access_Authors {
 			$logins[] = $author->user_login;
 		}
 		$old_authors = self::term_ids( $id );
-		if ( is_wp_error( $old_authors ) ) { return $old_authors; }
+		if ( is_wp_error( $old_authors ) ) {
+			return $old_authors; }
 		$before = get_post( $id, ARRAY_A );
 		// The supported CAP setter preserves ordered author terms and understands
 		// guests. Its boolean is insufficient: guest-only assignments can return
@@ -139,10 +154,30 @@ class Agent_Access_Authors {
 		}
 		$history = get_post_meta( $id, '_agent_access_author_history', true );
 		$history = is_array( $history ) ? $history : array();
-		$history[] = array( 'user_id' => get_current_user_id(), 'uuid' => Agent_Access_Activity_Log::get_authenticated_botcreds_uuid(), 'at' => gmdate( 'c' ), 'old_authors' => $old_authors, 'new_authors' => $actual );
+		$history[] = array(
+			'user_id'     => get_current_user_id(),
+			'uuid'        => Agent_Access_Activity_Log::get_authenticated_botcreds_uuid(),
+			'at'          => gmdate( 'c' ),
+			'old_authors' => $old_authors,
+			'new_authors' => $actual,
+		);
 		update_post_meta( $id, '_agent_access_author_history', array_slice( $history, -20 ) );
-		do_action( 'agent_access_audit', 'authors_assigned', array( 'post_id' => $id, 'old_authors' => $old_authors, 'new_authors' => $actual ) );
-		return rest_ensure_response( array( 'id' => $id, 'authors' => $actual, 'can_edit_after' => current_user_can( 'edit_post', $id ) ) );
+		do_action(
+			'agent_access_audit',
+			'authors_assigned',
+			array(
+				'post_id'     => $id,
+				'old_authors' => $old_authors,
+				'new_authors' => $actual,
+			) 
+		);
+		return rest_ensure_response(
+			array(
+				'id'             => $id,
+				'authors'        => $actual,
+				'can_edit_after' => current_user_can( 'edit_post', $id ),
+			) 
+		);
 	}
 	/** Minimal CAP discovery: current canonical term IDs and public display names only. */
 	public static function search( $request ) {
@@ -170,10 +205,18 @@ class Agent_Access_Authors {
 		foreach ( array_slice( $found, 0, 20 ) as $author ) {
 			$term = $coauthors_plus->get_author_term( $author );
 			if ( $term && ! is_wp_error( $term ) && self::author_for_term( $term ) ) {
-				$authors[] = array( 'id' => (int) $term->term_id, 'name' => $author->display_name );
+				$authors[] = array(
+					'id'   => (int) $term->term_id,
+					'name' => $author->display_name,
+				);
 			}
 		}
-		return rest_ensure_response( array( 'authors' => $authors, 'page' => $page, 'has_more' => $more ) );
+		return rest_ensure_response(
+			array(
+				'authors'  => $authors,
+				'page'     => $page,
+				'has_more' => $more,
+			) 
+		);
 	}
-
 }

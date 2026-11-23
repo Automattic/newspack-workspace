@@ -106,7 +106,7 @@ function agent_access_plugins_api( $res, $action, $args ) {
 	$res->short_description = 'Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.';
 
 	$res->sections = array(
-		'description' =>
+		'description'  =>
 			'<p><strong>BotCreds Agent Access</strong> gives your AI agent, MCP client, or automation tool a secure, scoped credential to interact with your site — no code required.</p>' .
 			'<p>Whether you\'re connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you profile controls that generate a properly scoped WordPress Application Password and logs recognized write activity by default.</p>' .
 			'<h3>Why BotCreds?</h3>' .
@@ -139,7 +139,7 @@ function agent_access_plugins_api( $res, $action, $args ) {
 				'<li>Copy the credentials and paste them into your agent\'s config.</li>' .
 			'</ol>',
 
-		'faq' =>
+		'faq'          =>
 			'<h3>How should an agent connect?</h3>' .
 			'<p>Use the private setup prompt from Agent Access. First authenticate with GET users/me, then GET agent-access/v1/connection to inspect this managed credential. Make no content writes as a login test. A 403 after a successful identity check is a permission problem, not a reason to rotate a working password.</p>' .
 			'<p>Agent Access is not an MCP server. Your client needs authenticated HTTP tools or a compatible connector. The complete setup guide and endpoint cookbook are on <a href="https://wordpress.org/plugins/botcreds-agent-access/">the plugin page</a>.</p>' .
@@ -158,7 +158,7 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'<h3>Can I have multiple agent connections?</h3>' .
 			'<p>BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create a separate Agent user for each agent. Reads do not appear in the default write-only activity log.</p>',
 
-		'changelog' =>
+		'changelog'    =>
 			'<h4>2.2.2</h4>' .
 		'<ul><li>Fix: Credential settings (Scope, Rate limit, Content policy) now render as a proper form table on profile pages — one setting per row, no cramped inline layout.</li></ul>' .
 
@@ -202,14 +202,14 @@ function agent_access_plugins_api( $res, $action, $args ) {
 				'<li>Removed provisioner and theme-bridge (available as separate add-ons).</li>' .
 				'<li>Security hardening (escaping, nonces, input validation).</li>' .
 				'<li>Added object caching for content stats.</li>' .
-			 '</ul>' .
+			'</ul>' .
 
 			'<h4>1.1.0</h4>' .
 			'<ul>' .
 				'<li>New: @mentions in comments — type @username to mention any site user.</li>' .
 				'<li>New: Mentioned users receive email notifications automatically.</li>' .
 				'<li>New: Mentions render as styled links in comment display.</li>' .
-			 '</ul>' .
+			'</ul>' .
 
 			'<h4>1.0.0</h4>' .
 			'<ul><li>Initial release. Create and revoke agent Application Passwords. Connection status display with creation and last-used dates.</li></ul>',
@@ -249,6 +249,9 @@ register_deactivation_hook( __FILE__, '__return_null' );
  * deactivation hook (e.g. manual DB reset, site migration). add_role() is a
  * no-op when the role already exists, so this costs effectively nothing.
  */
-add_action( 'plugins_loaded', function () {
-	Agent_Access_Role::register();
-} );
+add_action(
+	'plugins_loaded',
+	function () {
+		Agent_Access_Role::register();
+	} 
+);

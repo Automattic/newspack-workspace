@@ -72,8 +72,8 @@ class Agent_Access_Admin {
 
 		// Re-populate fields from a failed submission.
 		// phpcs:disable WordPress.Security.NonceVerification.Missing
-		$prev_username     = isset( $_POST['agent_username'] )     ? sanitize_user( wp_unslash( $_POST['agent_username'] ) )          : '';
-		$prev_email        = isset( $_POST['agent_email'] )        ? sanitize_email( wp_unslash( $_POST['agent_email'] ) )             : '';
+		$prev_username     = isset( $_POST['agent_username'] ) ? sanitize_user( wp_unslash( $_POST['agent_username'] ) ) : '';
+		$prev_email        = isset( $_POST['agent_email'] ) ? sanitize_email( wp_unslash( $_POST['agent_email'] ) ) : '';
 		$prev_display_name = isset( $_POST['agent_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['agent_display_name'] ) ) : '';
 		// phpcs:enable
 		?>
@@ -173,8 +173,8 @@ class Agent_Access_Admin {
 		$add_agent_url = admin_url( 'users.php?page=agent-access-add-agent' );
 		$error_key     = 'agent_access_add_agent_error_' . get_current_user_id();
 
-		$username     = isset( $_POST['agent_username'] )     ? sanitize_user( wp_unslash( $_POST['agent_username'] ) )          : '';
-		$email        = isset( $_POST['agent_email'] )        ? sanitize_email( wp_unslash( $_POST['agent_email'] ) )             : '';
+		$username     = isset( $_POST['agent_username'] ) ? sanitize_user( wp_unslash( $_POST['agent_username'] ) ) : '';
+		$email        = isset( $_POST['agent_email'] ) ? sanitize_email( wp_unslash( $_POST['agent_email'] ) ) : '';
 		$display_name = isset( $_POST['agent_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['agent_display_name'] ) ) : '';
 
 		$errs = array();
@@ -214,11 +214,13 @@ class Agent_Access_Admin {
 		$user->set_role( 'agent' );
 
 		if ( ! empty( $display_name ) ) {
-			wp_update_user( array(
-				'ID'           => $new_user_id,
-				'display_name' => $display_name,
-				'first_name'   => $display_name,
-			) );
+			wp_update_user(
+				array(
+					'ID'           => $new_user_id,
+					'display_name' => $display_name,
+					'first_name'   => $display_name,
+				) 
+			);
 		}
 
 		set_transient( 'agent_access_agent_created_' . get_current_user_id(), $new_user_id, 60 );
@@ -282,44 +284,48 @@ class Agent_Access_Admin {
 			true
 		);
 
-		wp_localize_script( 'agent-access-admin', 'agentAccess', array(
-			'ajax_url'            => admin_url( 'admin-ajax.php' ),
-			'create_nonce'        => wp_create_nonce( 'agent_access_create' ),
-			'revoke_nonce'        => wp_create_nonce( 'agent_access_revoke' ),
-			'admin_create_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_create' ) : '',
-			'admin_revoke_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_revoke' ) : '',
-			'admin_update_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_nonce' ) : '',
-			'confirm_msg'         => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'botcreds-agent-access' ),
-			'confirm_admin_msg'   => __( 'Are you sure you want to revoke this user\'s agent connection? They will need new credentials to reconnect.', 'botcreds-agent-access' ),
-			'creating_text'       => __( 'Connecting…', 'botcreds-agent-access' ),
-			'revoking_text'       => __( 'Revoking…', 'botcreds-agent-access' ),
-			'copied_text'         => __( 'Copied!', 'botcreds-agent-access' ),
-			'copy_text'           => __( 'Copy', 'botcreds-agent-access' ),
-			'ui_text'             => self::get_ui_text(),
-		) );
+		wp_localize_script(
+			'agent-access-admin',
+			'agentAccess',
+			array(
+				'ajax_url'           => admin_url( 'admin-ajax.php' ),
+				'create_nonce'       => wp_create_nonce( 'agent_access_create' ),
+				'revoke_nonce'       => wp_create_nonce( 'agent_access_revoke' ),
+				'admin_create_nonce' => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_create' ) : '',
+				'admin_revoke_nonce' => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_revoke' ) : '',
+				'admin_update_nonce' => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_nonce' ) : '',
+				'confirm_msg'        => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'botcreds-agent-access' ),
+				'confirm_admin_msg'  => __( 'Are you sure you want to revoke this user\'s agent connection? They will need new credentials to reconnect.', 'botcreds-agent-access' ),
+				'creating_text'      => __( 'Connecting…', 'botcreds-agent-access' ),
+				'revoking_text'      => __( 'Revoking…', 'botcreds-agent-access' ),
+				'copied_text'        => __( 'Copied!', 'botcreds-agent-access' ),
+				'copy_text'          => __( 'Copy', 'botcreds-agent-access' ),
+				'ui_text'            => self::get_ui_text(),
+			) 
+		);
 	}
 
 	/** Localized presentation text shared by the settings renderer and script. */
 	private static function get_ui_text() {
 		return array(
-			'seo_only' => __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ),
-			'read_only' => __( 'Read only — writes disabled.', 'botcreds-agent-access' ),
-			'full' => __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ),
-			'selected' => __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ),
-			'empty' => __( 'No selections — writes disabled.', 'botcreds-agent-access' ),
+			'seo_only'              => __( 'Yoast SEO only — all authors; no content edits or publishing.', 'botcreds-agent-access' ),
+			'read_only'             => __( 'Read only — writes disabled.', 'botcreds-agent-access' ),
+			'full'                  => __( 'Full write access — within this user’s permissions.', 'botcreds-agent-access' ),
+			'selected'              => __( 'Selected access — writes limited to the selections below.', 'botcreds-agent-access' ),
+			'empty'                 => __( 'No selections — writes disabled.', 'botcreds-agent-access' ),
 			'integrations_disabled' => __( 'Integration writes disabled.', 'botcreds-agent-access' ),
-			'integrations_full' => __( 'All detected integrations allowed by full access.', 'botcreds-agent-access' ),
-			'integrations_all' => __( 'All detected integrations allowed.', 'botcreds-agent-access' ),
+			'integrations_full'     => __( 'All detected integrations allowed by full access.', 'botcreds-agent-access' ),
+			'integrations_all'      => __( 'All detected integrations allowed.', 'botcreds-agent-access' ),
 			/* translators: 1: selected integration count, 2: available integration count. */
 			'integrations_selected' => __( '%1$d of %2$d selected', 'botcreds-agent-access' ),
-			'unsaved' => __( 'Unsaved changes', 'botcreds-agent-access' ),
-			'saving' => __( 'Saving…', 'botcreds-agent-access' ),
-			'saved' => __( 'Settings saved.', 'botcreds-agent-access' ),
-			'unsaved_remaining' => __( 'Unsaved changes remain.', 'botcreds-agent-access' ),
-			'unexpected_response' => __( 'Unexpected response. Settings were not confirmed saved.', 'botcreds-agent-access' ),
-			'error_saving' => __( 'Error saving settings.', 'botcreds-agent-access' ),
-			'network_error' => __( 'Network error. Please try again.', 'botcreds-agent-access' ),
-			'save_settings' => __( 'Save settings', 'botcreds-agent-access' ),
+			'unsaved'               => __( 'Unsaved changes', 'botcreds-agent-access' ),
+			'saving'                => __( 'Saving…', 'botcreds-agent-access' ),
+			'saved'                 => __( 'Settings saved.', 'botcreds-agent-access' ),
+			'unsaved_remaining'     => __( 'Unsaved changes remain.', 'botcreds-agent-access' ),
+			'unexpected_response'   => __( 'Unexpected response. Settings were not confirmed saved.', 'botcreds-agent-access' ),
+			'error_saving'          => __( 'Error saving settings.', 'botcreds-agent-access' ),
+			'network_error'         => __( 'Network error. Please try again.', 'botcreds-agent-access' ),
+			'save_settings'         => __( 'Save settings', 'botcreds-agent-access' ),
 		);
 	}
 
@@ -350,7 +356,7 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$tier = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( get_current_user_id(), $result['uuid'], $tier );
 		if ( Agent_Access_Approval_Queue::is_required() ) {
@@ -425,7 +431,7 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$tier = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( $user_id, $result['uuid'], $tier );
 		if ( Agent_Access_Approval_Queue::is_required() ) {
@@ -439,11 +445,15 @@ class Agent_Access_Admin {
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
 		$target_user = get_userdata( $user_id );
-		do_action( 'agent_access_audit', 'app_password_created', array(
-			'username'      => $target_user->user_login,
-			'created_by'    => wp_get_current_user()->user_login,
-			'admin_action'  => true,
-		) );
+		do_action(
+			'agent_access_audit',
+			'app_password_created',
+			array(
+				'username'     => $target_user->user_login,
+				'created_by'   => wp_get_current_user()->user_login,
+				'admin_action' => true,
+			) 
+		);
 
 		wp_send_json_success( $connection_info );
 	}
@@ -474,11 +484,15 @@ class Agent_Access_Admin {
 		}
 
 		$target_user = get_userdata( $user_id );
-		do_action( 'agent_access_audit', 'app_password_revoked', array(
-			'username'      => $target_user->user_login,
-			'revoked_by'    => wp_get_current_user()->user_login,
-			'admin_action'  => true,
-		) );
+		do_action(
+			'agent_access_audit',
+			'app_password_revoked',
+			array(
+				'username'     => $target_user->user_login,
+				'revoked_by'   => wp_get_current_user()->user_login,
+				'admin_action' => true,
+			) 
+		);
 
 		wp_send_json_success( __( 'Agent connection revoked successfully.', 'botcreds-agent-access' ) );
 	}
@@ -557,7 +571,10 @@ class Agent_Access_Admin {
 			return;
 		}
 		?>
-		<?php if ( $table_row ) : ?><tr>
+		<?php
+		if ( $table_row ) :
+			?>
+			<tr>
 			<th scope="row"><?php esc_html_e( 'Site management', 'botcreds-agent-access' ); ?></th>
 			<td><?php endif; ?>
 				<div class="agent-access-control-row">
@@ -568,7 +585,10 @@ class Agent_Access_Admin {
 				<?php $this->render_help_tooltip( __( 'Site management', 'botcreds-agent-access' ), __( 'Applies to every session and credential for this Agent account on this site. Grants manage_options and edit_theme_options, not user management or plugin/theme installation. Endpoint scopes still apply. Turning this off removes only the grant from this plugin; permissions from other sources are preserved.', 'botcreds-agent-access' ) ); ?>
 				</div>
 				<p class="agent-access-brief"><?php esc_html_e( 'Applies to every session and credential for this agent account.', 'botcreds-agent-access' ); ?></p>
-		<?php if ( $table_row ) : ?></td></tr><?php endif; ?>
+		<?php
+		if ( $table_row ) :
+			?>
+			</td></tr><?php endif; ?>
 		<?php
 	}
 
@@ -584,16 +604,22 @@ class Agent_Access_Admin {
 		$all_custom   = in_array( Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS, $scope, true );
 		$integrations = Agent_Access_Scope::get_custom_integrations();
 		$known_routes = array_column( $integrations, 'slug' );
-		$extra_routes = array_filter( $scope, static function ( $slug ) use ( $known_routes ) {
-			return is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] && ! in_array( $slug, $known_routes, true );
-		} );
+		$extra_routes = array_filter(
+			$scope,
+			static function ( $slug ) use ( $known_routes ) {
+				return is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] && ! in_array( $slug, $known_routes, true );
+			} 
+		);
 		$types = Agent_Access_Scope::get_available_post_types();
 		$known_types = array_column( $types, 'slug' );
 		$routes_id = wp_unique_id( 'agent-access-custom-routes-' );
 		// Preserve grants for post types whose plugins are temporarily inactive.
 		foreach ( $scope as $slug ) {
 			if ( is_string( $slug ) && '' !== $slug && '/' !== $slug[0] && ! in_array( $slug, array( '*', '__read_only__', Agent_Access_Yoast_SEO::SCOPE, Agent_Access_Yoast_SEO::LEGACY_SCOPE, Agent_Access_Authors::SCOPE, Agent_Access_User_Directory::SCOPE, Agent_Access_Scope::ALL_CUSTOM_ENDPOINTS ), true ) && ! in_array( $slug, $known_types, true ) ) {
-				$types[] = array( 'slug' => $slug, 'label' => $slug );
+				$types[] = array(
+					'slug'  => $slug,
+					'label' => $slug,
+				);
 			}
 		}
 		?>
@@ -614,7 +640,7 @@ class Agent_Access_Admin {
 		<?php if ( Agent_Access_Yoast_SEO::can_assign( $user_id ) ) : ?>
 		<div class="agent-access-control-row">
 		<label><input type="checkbox" name="scope_seo_only" class="agent-access-scope-seo-only" value="1" <?php checked( $seo_only ); ?> <?php disabled( $read_only ); ?>> <?php esc_html_e( 'Yoast SEO only', 'botcreds-agent-access' ); ?></label>
-		<?php $this->render_help_tooltip( __( 'Yoast SEO only', 'botcreds-agent-access' ), __( 'Requires active Yoast SEO. Allows SEO title, description, focus keyphrase and social titles/descriptions through /agent-access/v1/yoast-seo/{id}. Existing content across all authors; only a human administrator can assign this scope. Blocks all other writes, including content, publishing and plugin integrations. Overrides full and selected write access. Reads are unchanged.', 'botcreds-agent-access' ) ); ?>
+			<?php $this->render_help_tooltip( __( 'Yoast SEO only', 'botcreds-agent-access' ), __( 'Requires active Yoast SEO. Allows SEO title, description, focus keyphrase and social titles/descriptions through /agent-access/v1/yoast-seo/{id}. Existing content across all authors; only a human administrator can assign this scope. Blocks all other writes, including content, publishing and plugin integrations. Overrides full and selected write access. Reads are unchanged.', 'botcreds-agent-access' ) ); ?>
 		</div>
 		<?php elseif ( $seo_only ) : ?>
 		<p><?php esc_html_e( 'Yoast SEO only — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
@@ -679,10 +705,10 @@ class Agent_Access_Admin {
 			<?php elseif ( in_array( Agent_Access_User_Directory::SCOPE, $scope, true ) ) : ?>
 			<p><?php esc_html_e( 'List users — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
 			<?php endif; ?>
-		<?php if ( Agent_Access_Authors::can_assign( $user_id ) ) : ?>
+			<?php if ( Agent_Access_Authors::can_assign( $user_id ) ) : ?>
 		<div class="agent-access-control-row">
 		<label><input type="checkbox" name="scope_assign_authors" class="agent-access-scope-authors" value="1" <?php checked( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ); ?> <?php disabled( $read_only || $seo_only ); ?>> <?php esc_html_e( 'Allow author assignment', 'botcreds-agent-access' ); ?></label>
-		<?php $this->render_help_tooltip( __( 'Author assignment', 'botcreds-agent-access' ), __( 'Requires Co-Authors Plus. Allows ordered user and guest bylines through /agent-access/v1/authors/{id}, only on content this account can already edit and within its content scope. Does not grant editing of other authors’ posts. Existing content permissions remain unchanged. Assign the byline last: handing off ownership can remove editing access. Read-only and SEO-only modes override this permission.', 'botcreds-agent-access' ) ); ?>
+				<?php $this->render_help_tooltip( __( 'Author assignment', 'botcreds-agent-access' ), __( 'Requires Co-Authors Plus. Allows ordered user and guest bylines through /agent-access/v1/authors/{id}, only on content this account can already edit and within its content scope. Does not grant editing of other authors’ posts. Existing content permissions remain unchanged. Assign the byline last: handing off ownership can remove editing access. Read-only and SEO-only modes override this permission.', 'botcreds-agent-access' ) ); ?>
 		</div>
 		<?php elseif ( in_array( Agent_Access_Authors::SCOPE, $scope, true ) ) : ?>
 		<p><?php esc_html_e( 'Author assignment — managed by an administrator.', 'botcreds-agent-access' ); ?></p>
@@ -916,7 +942,7 @@ class Agent_Access_Admin {
 				$current_rl     = Agent_Access_Rate_Limiter::get( $user->ID, $uuid );
 				?>
 				<?php
-					$checked_slugs          = is_array( $current_scope ) ? $current_scope : array( 'post', 'attachment' );
+					$checked_slugs = is_array( $current_scope ) ? $current_scope : array( 'post', 'attachment' );
 				?>
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
 					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
@@ -1137,7 +1163,10 @@ class Agent_Access_Admin {
 		}
 
 		$content_tab_url = add_query_arg(
-			array( 'tab' => 'content', 'user_id' => $user_id ),
+			array(
+				'tab'     => 'content',
+				'user_id' => $user_id,
+			),
 			menu_page_url( 'agent-access', false )
 		);
 		?>
@@ -1193,7 +1222,7 @@ class Agent_Access_Admin {
 	 */
 	private function render_disconnected_state() {
 		// Default checked: post + attachment (posts_media equivalent)
-		$default_slugs   = array( 'post', 'attachment' );
+		$default_slugs = array( 'post', 'attachment' );
 		?>
 		<div id="agent-access-card">
 			<table class="form-table agent-access-settings-table" role="presentation">
@@ -1269,23 +1298,23 @@ class Agent_Access_Admin {
 
 			<nav class="nav-tab-wrapper">
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'connections', menu_page_url( 'agent-access', false ) ) ); ?>"
-				   class="nav-tab <?php echo 'connections' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					class="nav-tab <?php echo 'connections' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Connections', 'botcreds-agent-access' ); ?>
 				</a>
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'activity', menu_page_url( 'agent-access', false ) ) ); ?>"
-				   class="nav-tab <?php echo 'activity' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					class="nav-tab <?php echo 'activity' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Activity Log', 'botcreds-agent-access' ); ?>
 				</a>
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) ) ); ?>"
-				   class="nav-tab <?php echo 'content' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					class="nav-tab <?php echo 'content' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Content', 'botcreds-agent-access' ); ?>
 				</a>
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'revisions', menu_page_url( 'agent-access', false ) ) ); ?>"
-				   class="nav-tab <?php echo 'revisions' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					class="nav-tab <?php echo 'revisions' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( '↩ Revisions', 'botcreds-agent-access' ); ?>
 				</a>
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'experimental', menu_page_url( 'agent-access', false ) ) ); ?>"
-				   class="nav-tab <?php echo 'experimental' === $current_tab ? 'nav-tab-active' : ''; ?>" style="color:#856404;">
+					class="nav-tab <?php echo 'experimental' === $current_tab ? 'nav-tab-active' : ''; ?>" style="color:#856404;">
 					<?php esc_html_e( '⚗ Experimental', 'botcreds-agent-access' ); ?>
 				</a>
 			</nav>
@@ -1386,10 +1415,12 @@ class Agent_Access_Admin {
 	private function render_experimental_tab() {
 		$is_enabled = Agent_Access_Pro_Auth::is_enabled();
 		$tokens     = $is_enabled ? Agent_Access_Pro_Auth::get_tokens() : array();
-		$users      = get_users( array(
-			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
-			'number'   => -1,
-		) );
+		$users      = get_users(
+			array(
+				'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+				'number'   => -1,
+			) 
+		);
 		?>
 
 		<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
@@ -1604,11 +1635,13 @@ class Agent_Access_Admin {
 
 		$result = Agent_Access_Pro_Auth::generate_setup_link( $user_id, $label );
 
-		wp_send_json_success( array(
-			'activate_url' => $result['url'],
-			'setup_code'   => $result['code'],
-			'expires_in'   => $result['expires_in'],
-		) );
+		wp_send_json_success(
+			array(
+				'activate_url' => $result['url'],
+				'setup_code'   => $result['code'],
+				'expires_in'   => $result['expires_in'],
+			) 
+		);
 	}
 
 	/**
@@ -1725,7 +1758,10 @@ class Agent_Access_Admin {
 							<td>
 								<?php $tooltip = $this->get_role_tooltip( $entry['role_slug'] ); ?>
 								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?><?php echo $tooltip ? ' agent-access-badge--has-tooltip' : ''; ?>"
-									<?php if ( $tooltip ) : ?>title="<?php echo esc_attr( $tooltip ); ?>"<?php endif; ?>
+									<?php
+									if ( $tooltip ) :
+										?>
+										title="<?php echo esc_attr( $tooltip ); ?>"<?php endif; ?>
 								>
 									<?php echo esc_html( $entry['role_name'] ); ?>
 								</span>
@@ -1763,7 +1799,8 @@ class Agent_Access_Admin {
 					<?php endforeach; ?>
 				</tbody>
 			</table>
-		<?php endif;
+			<?php
+		endif;
 	}
 
 	/**
@@ -1783,19 +1820,26 @@ class Agent_Access_Admin {
 		);
 
 		$total   = Agent_Access_Tracker::count_all_content( $filter_args );
-		$entries = Agent_Access_Tracker::get_all_content( array_merge( $filter_args, array(
-			'limit'  => $per_page,
-			'offset' => ( $paged - 1 ) * $per_page,
-		) ) );
+		$entries = Agent_Access_Tracker::get_all_content(
+			array_merge(
+				$filter_args,
+				array(
+					'limit'  => $per_page,
+					'offset' => ( $paged - 1 ) * $per_page,
+				) 
+			) 
+		);
 
 		$base_url          = add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) );
 		$content_post_types = Agent_Access_Tracker::get_content_post_types();
 
 		// Only roles that can hold agent connections — avoids loading subscriber/follower tails.
-		$filter_users = get_users( array(
-			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
-			'number'   => -1,
-		) );
+		$filter_users = get_users(
+			array(
+				'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+				'number'   => -1,
+			) 
+		);
 		?>
 
 		<form method="get" style="margin: 1em 0;">
@@ -1863,7 +1907,19 @@ class Agent_Access_Admin {
 							</td>
 							<td><?php echo esc_html( ucfirst( $row->post_type ) ); ?></td>
 							<td>
-								<a href="<?php echo esc_url( add_query_arg( array( 'user_id' => $row->user_id, 'tab' => 'content' ), menu_page_url( 'agent-access', false ) ) ); ?>">
+								<a href="
+								<?php
+								echo esc_url(
+									add_query_arg(
+										array(
+											'user_id' => $row->user_id,
+											'tab'     => 'content',
+										),
+										menu_page_url( 'agent-access', false ) 
+									) 
+								);
+								?>
+											">
 									<?php echo esc_html( $row->display_name ?: $row->user_login ); ?>
 								</a>
 							</td>
@@ -1882,23 +1938,30 @@ class Agent_Access_Admin {
 			$total_pages = (int) ceil( $total / $per_page );
 			if ( $total_pages > 1 ) {
 				$pag_args = array( 'tab' => 'content' );
-				if ( $filter_user ) $pag_args['user_id'] = $filter_user;
-				if ( $filter_post_type ) $pag_args['post_type'] = $filter_post_type;
+				if ( $filter_user ) {
+					$pag_args['user_id'] = $filter_user;
+				}
+				if ( $filter_post_type ) {
+					$pag_args['post_type'] = $filter_post_type;
+				}
 
-				$pagination_links = paginate_links( array(
-					'base'      => add_query_arg( array_merge( $pag_args, array( 'paged' => '%#%' ) ), menu_page_url( 'agent-access', false ) ),
-					'format'    => '',
-					'current'   => $paged,
-					'total'     => $total_pages,
-					'prev_text' => '&laquo;',
-					'next_text' => '&raquo;',
-					'type'      => 'plain',
-				) );
+				$pagination_links = paginate_links(
+					array(
+						'base'      => add_query_arg( array_merge( $pag_args, array( 'paged' => '%#%' ) ), menu_page_url( 'agent-access', false ) ),
+						'format'    => '',
+						'current'   => $paged,
+						'total'     => $total_pages,
+						'prev_text' => '&laquo;',
+						'next_text' => '&raquo;',
+						'type'      => 'plain',
+					) 
+				);
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				echo '<div class="tablenav"><div class="tablenav-pages">' . $pagination_links . '</div></div>';
 			}
 			?>
-		<?php endif;
+			<?php
+		endif;
 	}
 
 	/**
@@ -1919,10 +1982,15 @@ class Agent_Access_Admin {
 		);
 
 		$total   = Agent_Access_Activity_Log::count_entries( $filter_args );
-		$entries = Agent_Access_Activity_Log::get_entries( array_merge( $filter_args, array(
-			'limit'  => $per_page,
-			'offset' => ( $paged - 1 ) * $per_page,
-		) ) );
+		$entries = Agent_Access_Activity_Log::get_entries(
+			array_merge(
+				$filter_args,
+				array(
+					'limit'  => $per_page,
+					'offset' => ( $paged - 1 ) * $per_page,
+				) 
+			) 
+		);
 
 		$base_url = add_query_arg( 'tab', 'activity', menu_page_url( 'agent-access', false ) );
 		?>
@@ -2020,20 +2088,23 @@ class Agent_Access_Admin {
 			// Windowed pagination — avoids emitting thousands of links if the log grows very large.
 			$total_pages = (int) ceil( $total / $per_page );
 			if ( $total_pages > 1 ) {
-				$pagination_links = paginate_links( array(
-					'base'      => add_query_arg( 'paged', '%#%', $base_url ),
-					'format'    => '',
-					'current'   => $paged,
-					'total'     => $total_pages,
-					'prev_text' => '&laquo;',
-					'next_text' => '&raquo;',
-					'type'      => 'plain',
-				) );
+				$pagination_links = paginate_links(
+					array(
+						'base'      => add_query_arg( 'paged', '%#%', $base_url ),
+						'format'    => '',
+						'current'   => $paged,
+						'total'     => $total_pages,
+						'prev_text' => '&laquo;',
+						'next_text' => '&raquo;',
+						'type'      => 'plain',
+					) 
+				);
 				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- paginate_links() output is escaped by core.
 				echo '<div class="tablenav"><div class="tablenav-pages">' . $pagination_links . '</div></div>';
 			}
 			?>
-		<?php endif;
+			<?php
+		endif;
 	}
 
 	/**
@@ -2126,10 +2197,12 @@ class Agent_Access_Admin {
 
 		// Only roles that can realistically hold agent connections.
 		// This sidesteps the old 200-user cap and avoids scanning subscriber/follower tails.
-		$users = get_users( array(
-			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
-			'number'   => -1,
-		) );
+		$users = get_users(
+			array(
+				'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+				'number'   => -1,
+			) 
+		);
 
 		foreach ( $users as $user ) {
 			$passwords = WP_Application_Passwords::get_user_application_passwords( $user->ID );
@@ -2154,17 +2227,17 @@ class Agent_Access_Admin {
 					: __( 'Never', 'botcreds-agent-access' );
 
 				$results[] = array(
-					'user'        => $user,
-					'role_slug'   => $role_slug,
-					'role_name'   => $role_name,
-					'scope_label' => Agent_Access_Scope::get_label( Agent_Access_Scope::get( $user->ID, $item['uuid'] ) ),
-					'rl_label'    => Agent_Access_Rate_Limiter::get_label( Agent_Access_Rate_Limiter::get( $user->ID, $item['uuid'] ) ),
-					'approval'    => Agent_Access_Approval_Queue::get_status( $user->ID, $item['uuid'] ),
+					'user'         => $user,
+					'role_slug'    => $role_slug,
+					'role_name'    => $role_name,
+					'scope_label'  => Agent_Access_Scope::get_label( Agent_Access_Scope::get( $user->ID, $item['uuid'] ) ),
+					'rl_label'     => Agent_Access_Rate_Limiter::get_label( Agent_Access_Rate_Limiter::get( $user->ID, $item['uuid'] ) ),
+					'approval'     => Agent_Access_Approval_Queue::get_status( $user->ID, $item['uuid'] ),
 					'policy_label' => Agent_Access_Content_Policy::get_label( Agent_Access_Content_Policy::get( $user->ID, $item['uuid'] ) ),
-					'uuid'        => $item['uuid'],
-					'created'     => $created,
-					'last_used'   => $last_used,
-					'stats'       => Agent_Access_Tracker::get_stats( $user->ID ),
+					'uuid'         => $item['uuid'],
+					'created'      => $created,
+					'last_used'    => $last_used,
+					'stats'        => Agent_Access_Tracker::get_stats( $user->ID ),
 				);
 
 				break; // Only one Agent Access password per user

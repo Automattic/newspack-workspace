@@ -69,33 +69,38 @@ class Agent_Access_Tracker {
 
 		// Count posts (not attachments) tagged by Agent Access — includes all non-attachment CPTs.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$post_count = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->posts} p
+		$post_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE p.post_author = %d
 			 AND pm.meta_key = %s
 			 AND p.post_type != 'attachment'
 			 AND p.post_status != 'trash'",
-			$user_id,
-			self::META_KEY
-		) );
+				$user_id,
+				self::META_KEY
+			) 
+		);
 
 		// Count media tagged by Agent Access.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$media_count = (int) $wpdb->get_var( $wpdb->prepare(
-			"SELECT COUNT(*) FROM {$wpdb->posts} p
+		$media_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE p.post_author = %d
 			 AND pm.meta_key = %s
 			 AND p.post_type = 'attachment'",
-			$user_id,
-			self::META_KEY
-		) );
+				$user_id,
+				self::META_KEY
+			) 
+		);
 
 		// Recent posts (last 5) — includes all non-attachment CPTs.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$recent_posts = $wpdb->get_results( $wpdb->prepare(
-			"SELECT p.ID, p.post_title, p.post_date, p.post_status, p.post_type
+		$recent_posts = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_title, p.post_date, p.post_status, p.post_type
 			 FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE p.post_author = %d
@@ -104,9 +109,10 @@ class Agent_Access_Tracker {
 			 AND p.post_status != 'trash'
 			 ORDER BY p.post_date DESC
 			 LIMIT 5",
-			$user_id,
-			self::META_KEY
-		) );
+				$user_id,
+				self::META_KEY
+			) 
+		);
 
 		$stats = array(
 			'post_count'   => $post_count,
@@ -161,7 +167,10 @@ class Agent_Access_Tracker {
 		$items = $wpdb->get_results( $wpdb->prepare( $select_sql, $select_params ) ) ?: array();
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 
-		return array( 'items' => $items, 'total' => $total );
+		return array(
+			'items' => $items,
+			'total' => $total,
+		);
 	}
 
 	/**
@@ -259,14 +268,16 @@ class Agent_Access_Tracker {
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$types = $wpdb->get_col( $wpdb->prepare(
-			"SELECT DISTINCT p.post_type
+		$types = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT p.post_type
 			 FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE pm.meta_key = %s AND p.post_status != 'trash'
 			 ORDER BY p.post_type",
-			self::META_KEY
-		) ) ?: array();
+				self::META_KEY
+			) 
+		) ?: array();
 
 		wp_cache_set( $cache_key, $types, 'agent_access', 300 );
 

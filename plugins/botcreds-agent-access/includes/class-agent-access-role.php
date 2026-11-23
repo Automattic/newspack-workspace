@@ -40,19 +40,19 @@ class Agent_Access_Role {
 	 * @var array<string,true>
 	 */
 	const DEFAULT_CAPS = array(
-		'read'                     => true,
-		'edit_posts'               => true,
-		'edit_published_posts'     => true,
-		'publish_posts'            => true,
-		'delete_posts'             => true,
-		'delete_published_posts'   => true,
-		'edit_pages'               => true,
-		'edit_published_pages'     => true,
-		'publish_pages'            => true,
-		'delete_pages'             => true,
-		'upload_files'             => true,
-		'manage_categories'        => true,
-		'moderate_comments'        => true,
+		'read'                   => true,
+		'edit_posts'             => true,
+		'edit_published_posts'   => true,
+		'publish_posts'          => true,
+		'delete_posts'           => true,
+		'delete_published_posts' => true,
+		'edit_pages'             => true,
+		'edit_published_pages'   => true,
+		'publish_pages'          => true,
+		'delete_pages'           => true,
+		'upload_files'           => true,
+		'manage_categories'      => true,
+		'moderate_comments'      => true,
 	);
 
 	/**

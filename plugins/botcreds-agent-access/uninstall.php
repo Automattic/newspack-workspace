@@ -19,11 +19,13 @@ $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_agent_access_created' ) )
 
 // Remove any transients we may have set.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-$wpdb->query( $wpdb->prepare(
-	"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-	$wpdb->esc_like( '_transient_agent_access_' ) . '%',
-	$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
-) );
+$wpdb->query(
+	$wpdb->prepare(
+		"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+		$wpdb->esc_like( '_transient_agent_access_' ) . '%',
+		$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
+	) 
+);
 
 // Remove all plugin-managed Application Passwords.
 // Covers the current name and legacy names from previous rebrands so that

@@ -46,7 +46,7 @@ class Agent_Access_Content_Policy {
 	public static function register_cpt_hooks() {
 		$post_types = get_post_types( array( 'show_in_rest' => true ), 'names' );
 		foreach ( $post_types as $post_type ) {
-			add_filter( "rest_pre_insert_{$post_type}",  array( __CLASS__, 'apply' ), 10, 2 );
+			add_filter( "rest_pre_insert_{$post_type}", array( __CLASS__, 'apply' ), 10, 2 );
 			add_action( "rest_after_insert_{$post_type}", array( __CLASS__, 'record_creation' ), 10, 3 );
 		}
 	}

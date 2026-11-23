@@ -56,9 +56,9 @@ class Agent_Access_Scope {
 	 * Priority 5 — runs before the activity log (10) so blocked requests
 	 * are never recorded as successful writes.
 	 *
-	 * @param mixed            $result  null (pass-through) or existing response.
-	 * @param WP_REST_Server   $server  REST server.
-	 * @param WP_REST_Request  $request Current request.
+	 * @param mixed           $result  null (pass-through) or existing response.
+	 * @param WP_REST_Server  $server  REST server.
+	 * @param WP_REST_Request $request Current request.
 	 * @return mixed Original $result, or WP_Error on scope violation.
 	 */
 	public static function enforce( $result, $server, $request ) {
@@ -188,7 +188,9 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 
 		foreach ( $slugs as $slug ) {
-			if ( Agent_Access_Authors::SCOPE === $slug ) { $routes[] = '/agent-access/v1/authors/*'; continue; }
+			if ( Agent_Access_Authors::SCOPE === $slug ) {
+				$routes[] = '/agent-access/v1/authors/*';
+				continue; }
 			// Literal route pattern (starts with /) — pass through as-is.
 			if ( '/' === $slug[0] ) {
 				$routes[] = $slug;
@@ -305,11 +307,11 @@ class Agent_Access_Scope {
 	public static function get_custom_integrations() {
 		$labels = array(
 			'newspack-workflows' => __( 'Newspack Workflows', 'botcreds-agent-access' ),
-			'wc'                => __( 'WooCommerce', 'botcreds-agent-access' ),
-			'wc-admin'          => __( 'WooCommerce Admin', 'botcreds-agent-access' ),
-			'wc-analytics'      => __( 'WooCommerce Analytics', 'botcreds-agent-access' ),
-			'wc/store'          => __( 'WooCommerce Store', 'botcreds-agent-access' ),
-			'botcreds-memory'   => __( 'Agent Memory', 'botcreds-agent-access' ),
+			'wc'                 => __( 'WooCommerce', 'botcreds-agent-access' ),
+			'wc-admin'           => __( 'WooCommerce Admin', 'botcreds-agent-access' ),
+			'wc-analytics'       => __( 'WooCommerce Analytics', 'botcreds-agent-access' ),
+			'wc/store'           => __( 'WooCommerce Store', 'botcreds-agent-access' ),
+			'botcreds-memory'    => __( 'Agent Memory', 'botcreds-agent-access' ),
 		);
 		$result = array();
 		$namespaces = rest_get_server()->get_namespaces();
@@ -332,7 +334,12 @@ class Agent_Access_Scope {
 				'label' => $label . ( $name ? ' (' . $version . ')' : '' ),
 			);
 		}
-		usort( $result, static function ( $a, $b ) { return strcasecmp( $a['label'], $b['label'] ); } );
+		usort(
+			$result,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['label'], $b['label'] );
+			} 
+		);
 		return $result;
 	}
 

@@ -38,7 +38,7 @@ class Agent_Access_Approval_Queue {
 	public static function init() {
 		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'enforce' ), 7, 3 );
 		add_action( 'wp_ajax_agent_access_approve', array( __CLASS__, 'handle_approve_ajax' ) );
-		add_action( 'wp_ajax_agent_access_reject',  array( __CLASS__, 'handle_reject_ajax' ) );
+		add_action( 'wp_ajax_agent_access_reject', array( __CLASS__, 'handle_reject_ajax' ) );
 	}
 
 	// ──────────────────────────────────────────────
@@ -48,9 +48,9 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Block write requests from pending credentials.
 	 *
-	 * @param mixed            $result
-	 * @param WP_REST_Server   $server
-	 * @param WP_REST_Request  $request
+	 * @param mixed           $result
+	 * @param WP_REST_Server  $server
+	 * @param WP_REST_Request $request
 	 * @return mixed
 	 */
 	public static function enforce( $result, $server, $request ) {
@@ -192,10 +192,14 @@ class Agent_Access_Approval_Queue {
 		self::approve( $user_id, $uuid );
 
 		$target = get_userdata( $user_id );
-		do_action( 'agent_access_audit', 'credential_approved', array(
-			'username'    => $target->user_login,
-			'approved_by' => wp_get_current_user()->user_login,
-		) );
+		do_action(
+			'agent_access_audit',
+			'credential_approved',
+			array(
+				'username'    => $target->user_login,
+				'approved_by' => wp_get_current_user()->user_login,
+			) 
+		);
 
 		wp_send_json_success( __( 'Credential approved. The agent now has write access.', 'botcreds-agent-access' ) );
 	}
@@ -229,10 +233,14 @@ class Agent_Access_Approval_Queue {
 		Agent_Access_Content_Policy::delete( $user_id, $uuid );
 
 		$target = get_userdata( $user_id );
-		do_action( 'agent_access_audit', 'credential_rejected', array(
-			'username'    => $target->user_login,
-			'rejected_by' => wp_get_current_user()->user_login,
-		) );
+		do_action(
+			'agent_access_audit',
+			'credential_rejected',
+			array(
+				'username'    => $target->user_login,
+				'rejected_by' => wp_get_current_user()->user_login,
+			) 
+		);
 
 		wp_send_json_success( __( 'Credential rejected and revoked.', 'botcreds-agent-access' ) );
 	}

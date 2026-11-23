@@ -106,11 +106,13 @@ class Agent_Access_Mentions {
 		}
 
 		// Try display_name as a last resort.
-		$users = get_users( array(
-			'search'         => $name,
-			'search_columns' => array( 'display_name' ),
-			'number'         => 1,
-		) );
+		$users = get_users(
+			array(
+				'search'         => $name,
+				'search_columns' => array( 'display_name' ),
+				'number'         => 1,
+			) 
+		);
 
 		return ! empty( $users ) ? $users[0] : false;
 	}
@@ -156,17 +158,17 @@ class Agent_Access_Mentions {
 		$message = sprintf(
 			/* translators: 1: mentioned user display name, 2: comment author, 3: post title, 4: comment excerpt, 5: comment URL */
 			__(
-				"Hey %1\$s,
+				'Hey %1$s,
 
-%2\$s mentioned you in a comment on \"%3\$s\":
+%2$s mentioned you in a comment on "%3$s":
 
-\"%4\$s\"
+"%4$s"
 
 View the comment:
-%5\$s
+%5$s
 
 —
-Agent Access @ %6\$s",
+Agent Access @ %6$s',
 				'botcreds-agent-access'
 			),
 			$user->display_name,
@@ -205,38 +207,42 @@ Agent Access @ %6\$s",
 		$count = 0;
 		$max   = 20;
 
-		return preg_replace_callback( self::MENTION_PATTERN, function ( $matches ) use ( &$user_cache, &$count, $max ) {
-			if ( ++$count > $max ) {
-				return $matches[0];
-			}
-
-			$username = strtolower( $matches[1] );
-
-			if ( ! array_key_exists( $username, $user_cache ) ) {
-				$user = get_user_by( 'login', $username );
-				if ( ! $user ) {
-					$user = $this->find_user_fuzzy( $username );
+		return preg_replace_callback(
+			self::MENTION_PATTERN,
+			function ( $matches ) use ( &$user_cache, &$count, $max ) {
+				if ( ++$count > $max ) {
+					return $matches[0];
 				}
-				$user_cache[ $username ] = $user ?: null;
-			}
 
-			$user = $user_cache[ $username ];
+				$username = strtolower( $matches[1] );
 
-			if ( $user ) {
-				$profile_url = get_author_posts_url( $user->ID );
+				if ( ! array_key_exists( $username, $user_cache ) ) {
+					$user = get_user_by( 'login', $username );
+					if ( ! $user ) {
+						$user = $this->find_user_fuzzy( $username );
+					}
+					$user_cache[ $username ] = $user ?: null;
+				}
+
+				$user = $user_cache[ $username ];
+
+				if ( $user ) {
+					$profile_url = get_author_posts_url( $user->ID );
+					return sprintf(
+						'<a href="%s" class="agent-access-mention" title="@%s">@%s</a>',
+						esc_url( $profile_url ),
+						esc_attr( $user->user_login ),
+						esc_html( $user->display_name )
+					);
+				}
+
+				// Not a real user — render as styled but unlinked.
 				return sprintf(
-					'<a href="%s" class="agent-access-mention" title="@%s">@%s</a>',
-					esc_url( $profile_url ),
-					esc_attr( $user->user_login ),
-					esc_html( $user->display_name )
+					'<span class="agent-access-mention agent-access-mention--unknown">@%s</span>',
+					esc_html( $matches[1] )
 				);
-			}
-
-			// Not a real user — render as styled but unlinked.
-			return sprintf(
-				'<span class="agent-access-mention agent-access-mention--unknown">@%s</span>',
-				esc_html( $matches[1] )
-			);
-		}, $text );
+			},
+			$text 
+		);
 	}
 }

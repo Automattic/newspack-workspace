@@ -97,7 +97,7 @@ class Agent_Access_Activity_Log {
 
 		if ( null !== $object_id ) {
 			// Splice object_id in after object_type (position 6).
-			$row_data    = array_slice( $row_data, 0, 6, true )
+			$row_data = array_slice( $row_data, 0, 6, true )
 				+ array( 'object_id' => (int) $object_id )
 				+ array_slice( $row_data, 6, null, true );
 			array_splice( $row_formats, 6, 0, '%d' );
@@ -148,7 +148,10 @@ class Agent_Access_Activity_Log {
 
 		// Verified credential takes precedence over client-supplied attribution hints.
 		if ( self::get_authenticated_botcreds_uuid() ) {
-			return array( 'source' => self::SOURCE_AA, 'app_password_name' => AGENT_ACCESS_APP_PASSWORD_NAME );
+			return array(
+				'source'            => self::SOURCE_AA,
+				'app_password_name' => AGENT_ACCESS_APP_PASSWORD_NAME,
+			);
 		}
 
 		// ---- WP.com MCP via User-Agent ----
@@ -160,12 +163,15 @@ class Agent_Access_Activity_Log {
 		 *
 		 * @param string[] $patterns Case-insensitive substring patterns.
 		 */
-		$mcp_ua_patterns = apply_filters( 'agent_access_mcp_ua_patterns', array(
-			'wordpress.com-mcp',
-			'wpcom-mcp',
-			'automattic-mcp',
-			'wp-mcp',
-		) );
+		$mcp_ua_patterns = apply_filters(
+			'agent_access_mcp_ua_patterns',
+			array(
+				'wordpress.com-mcp',
+				'wpcom-mcp',
+				'automattic-mcp',
+				'wp-mcp',
+			) 
+		);
 
 		foreach ( $mcp_ua_patterns as $pattern ) {
 			if ( '' !== $pattern && false !== stripos( $ua, $pattern ) ) {
@@ -229,11 +235,14 @@ class Agent_Access_Activity_Log {
 			 *
 			 * @param string[] $patterns Case-insensitive substring patterns.
 			 */
-			$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
-				'wordpress.com',
-				'wpcom',
-				'mcp',
-			) );
+			$mcp_name_patterns = apply_filters(
+				'agent_access_mcp_name_patterns',
+				array(
+					'wordpress.com',
+					'wpcom',
+					'mcp',
+				) 
+			);
 
 			foreach ( $mcp_name_patterns as $pattern ) {
 				if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
@@ -318,9 +327,9 @@ class Agent_Access_Activity_Log {
 		$sql = "SELECT l.*, u.user_login, u.display_name
 		        FROM {$table} l
 		        LEFT JOIN {$wpdb->users} u ON l.user_id = u.ID
-		        WHERE " . implode( ' AND ', $where ) . "
+		        WHERE " . implode( ' AND ', $where ) . '
 		        ORDER BY l.created_at DESC
-		        LIMIT %d OFFSET %d";
+		        LIMIT %d OFFSET %d';
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) );
@@ -396,5 +405,4 @@ class Agent_Access_Activity_Log {
 	// -------------------------------------------------------------------------
 	// Utilities
 	// -------------------------------------------------------------------------
-
 }

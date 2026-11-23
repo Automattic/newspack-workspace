@@ -47,9 +47,9 @@ class Agent_Access_Rollback {
 	 * Only fires on PUT / PATCH / DELETE targeting /wp/v2/posts/{id}
 	 * or /wp/v2/media/{id}.  POST (create) has no before-state to capture.
 	 *
-	 * @param mixed            $result
-	 * @param WP_REST_Server   $server
-	 * @param WP_REST_Request  $request
+	 * @param mixed           $result
+	 * @param WP_REST_Server  $server
+	 * @param WP_REST_Request $request
 	 * @return mixed  Always returns $result unchanged.
 	 */
 	public static function capture( $result, $server, $request ) {
@@ -118,15 +118,17 @@ class Agent_Access_Rollback {
 			? (string) get_post_meta( $post->ID, '_wp_attachment_image_alt', true )
 			: '';
 
-		$payload = wp_json_encode( array(
-			'kind'         => $kind,
-			'post_title'   => $post->post_title,
-			'post_content' => $post->post_content,
-			'post_excerpt' => $post->post_excerpt,
-			'post_status'  => $post->post_status,
-			'post_date'    => $post->post_date,
-			'alt_text'     => $alt_text,
-		) );
+		$payload = wp_json_encode(
+			array(
+				'kind'         => $kind,
+				'post_title'   => $post->post_title,
+				'post_content' => $post->post_content,
+				'post_excerpt' => $post->post_excerpt,
+				'post_status'  => $post->post_status,
+				'post_date'    => $post->post_date,
+				'alt_text'     => $alt_text,
+			) 
+		);
 
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
@@ -154,10 +156,12 @@ class Agent_Access_Rollback {
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( '-' . self::RETAIN_DAYS . ' days' ) );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM `{$table}` WHERE captured_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$cutoff
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM `{$table}` WHERE captured_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$cutoff
+			) 
+		);
 	}
 
 	// ──────────────────────────────────────────────
@@ -216,17 +220,23 @@ class Agent_Access_Rollback {
 			update_post_meta( $post->ID, '_wp_attachment_image_alt', $state['alt_text'] );
 		}
 
-		do_action( 'agent_access_audit', 'content_restored', array(
-			'post_id'     => $post->ID,
-			'post_title'  => $state['post_title'],
-			'restored_by' => wp_get_current_user()->user_login,
-			'snapshot_id' => $snapshot_id,
-		) );
+		do_action(
+			'agent_access_audit',
+			'content_restored',
+			array(
+				'post_id'     => $post->ID,
+				'post_title'  => $state['post_title'],
+				'restored_by' => wp_get_current_user()->user_login,
+				'snapshot_id' => $snapshot_id,
+			) 
+		);
 
-		wp_send_json_success( array(
-			'message'  => __( 'Content restored successfully.', 'botcreds-agent-access' ),
-			'edit_url' => get_edit_post_link( $post->ID, 'raw' ),
-		) );
+		wp_send_json_success(
+			array(
+				'message'  => __( 'Content restored successfully.', 'botcreds-agent-access' ),
+				'edit_url' => get_edit_post_link( $post->ID, 'raw' ),
+			) 
+		);
 	}
 
 	// ──────────────────────────────────────────────
@@ -244,10 +254,12 @@ class Agent_Access_Rollback {
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return $wpdb->get_row( $wpdb->prepare(
-			"SELECT * FROM `{$table}` WHERE id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$id
-		) );
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM `{$table}` WHERE id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$id
+			) 
+		);
 	}
 
 	/**
@@ -264,13 +276,15 @@ class Agent_Access_Rollback {
 		// input. A phpcs:ignore must not sit inside the SQL string: MySQL does
 		// not treat "//" as a comment, so the query fails with a syntax error.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
-		$rows = $wpdb->get_results( $wpdb->prepare(
-			"SELECT s.*, u.user_login FROM `{$table}` s
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT s.*, u.user_login FROM `{$table}` s
 			 LEFT JOIN {$wpdb->users} u ON s.user_id = u.ID
 			 ORDER BY s.captured_at DESC
 			 LIMIT %d",
-			absint( $limit )
-		) );
+				absint( $limit )
+			) 
+		);
 		// phpcs:enable
 
 		return $rows ?: array();

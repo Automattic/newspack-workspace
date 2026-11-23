@@ -39,11 +39,15 @@ class Agent_Access_Yoast_SEO {
 	}
 
 	public static function register_routes() {
-		register_rest_route( 'agent-access/v1', '/yoast-seo/(?P<id>[1-9][0-9]*)', array(
-			'methods' => 'GET,POST,PUT,PATCH',
-			'permission_callback' => array( __CLASS__, 'permissions' ),
-			'callback' => array( __CLASS__, 'handle' ),
-		) );
+		register_rest_route(
+			'agent-access/v1',
+			'/yoast-seo/(?P<id>[1-9][0-9]*)',
+			array(
+				'methods'             => 'GET,POST,PUT,PATCH',
+				'permission_callback' => array( __CLASS__, 'permissions' ),
+				'callback'            => array( __CLASS__, 'handle' ),
+			) 
+		);
 	}
 
 	public static function permissions( $request ) {
@@ -102,6 +106,11 @@ class Agent_Access_Yoast_SEO {
 		foreach ( self::FIELDS as $field ) {
 			$data[ $field ] = WPSEO_Meta::get_value( $field, $id );
 		}
-		return rest_ensure_response( array( 'id' => $id, 'yoast' => $data ) );
+		return rest_ensure_response(
+			array(
+				'id'    => $id,
+				'yoast' => $data,
+			) 
+		);
 	}
 }

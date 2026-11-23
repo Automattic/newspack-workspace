@@ -105,11 +105,11 @@ class Agent_Access_API {
 		$user = $user_id ? get_userdata( (int) $user_id ) : wp_get_current_user();
 
 		$info = array(
-			'site_url' => home_url( '/' ),
-			'username' => $user->user_login,
-			'password' => $password,
+			'site_url'            => home_url( '/' ),
+			'username'            => $user->user_login,
+			'password'            => $password,
 			'connection_info_url' => rest_url( 'agent-access/v1/connection' ),
-			'current_user_url' => rest_url( 'wp/v2/users/me' ),
+			'current_user_url'    => rest_url( 'wp/v2/users/me' ),
 		);
 		$existing = $this->get_existing_password( $user->ID );
 		if ( $existing && in_array( Agent_Access_Authors::SCOPE, Agent_Access_Scope::get( $user->ID, $existing['uuid'] ), true ) ) {

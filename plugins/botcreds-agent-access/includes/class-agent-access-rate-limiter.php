@@ -42,9 +42,9 @@ class Agent_Access_Rate_Limiter {
 	 * Check the current request against the credential's rate-limit tier.
 	 * Returns a 429 WP_Error on violation; null otherwise.
 	 *
-	 * @param mixed            $result
-	 * @param WP_REST_Server   $server
-	 * @param WP_REST_Request  $request
+	 * @param mixed           $result
+	 * @param WP_REST_Server  $server
+	 * @param WP_REST_Request $request
 	 * @return mixed
 	 */
 	public static function enforce( $result, $server, $request ) {
