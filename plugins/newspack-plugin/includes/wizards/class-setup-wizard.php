@@ -429,6 +429,9 @@ class Setup_Wizard extends Wizard {
 			}
 		}
 
+		// Web app display mode is an option, so the manifest can read it without the theme.
+		$theme_mods['pwa_display_mode'] = get_option( 'newspack_pwa_display_mode', 'minimal-ui' );
+
 		// Append post content fallback image option.
 		$theme_mods['post_content_fallback_image'] = get_option( Default_Image::OPTION_NAME, null );
 
@@ -507,6 +510,12 @@ class Setup_Wizard extends Wizard {
 			// Media credits are actually options, not theme mods.
 			if ( 'newspack_image_credits' === substr( $key, 0, 22 ) ) {
 				Newspack_Image_Credits::update_setting( $key, $value );
+				continue;
+			}
+
+			// Web app display mode is an option, not a theme mod.
+			if ( 'pwa_display_mode' === $key ) {
+				update_option( 'newspack_pwa_display_mode', $value );
 				continue;
 			}
 

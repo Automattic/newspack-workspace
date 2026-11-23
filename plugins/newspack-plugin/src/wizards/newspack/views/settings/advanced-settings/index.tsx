@@ -31,6 +31,7 @@ import DefaultTemplates, { TemplateOptions } from './default-templates';
 import MediaCredits from './media-credits';
 import PostDate from './post-date';
 import AccessibilityStatement from './accessibility-statement';
+import WebAppDisplayMode from './web-app-display-mode';
 import PrivateTags from './private-tags';
 import PrimaryCategory from './primary-category';
 
@@ -357,6 +358,12 @@ export default function AdvancedSettings() {
 		{
 			key: 'accessibility-statement',
 			element: <AccessibilityStatement isFetching={ isFetching } />,
+		},
+		{
+			key: 'web-app-display-mode',
+			title: __( 'Web app display mode', 'newspack-plugin' ),
+			description: __( 'Choose how the site opens when readers install it as an app on their device.', 'newspack-plugin' ),
+			content: <WebAppDisplayMode data={ data } update={ update } isFetching={ isFetching } />,
 		},
 	];
 
