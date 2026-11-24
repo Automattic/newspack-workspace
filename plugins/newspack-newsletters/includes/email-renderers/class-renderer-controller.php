@@ -218,7 +218,8 @@ class Renderer_Controller {
 		while ( $scan->next_token() ) {
 			$type = $scan->get_token_type();
 			if ( '#text' === $type ) {
-				if ( null !== $candidate && preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
+				// A failed match (invalid UTF-8) counts as text, so the link keeps its underline.
+				if ( null !== $candidate && 0 !== preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
 					$candidate = null;
 				}
 				continue;
