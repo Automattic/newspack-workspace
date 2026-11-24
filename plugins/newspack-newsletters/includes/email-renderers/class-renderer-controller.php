@@ -207,20 +207,39 @@ class Renderer_Controller {
 		if ( false === stripos( $html, 'text-decoration: underline' ) && false === stripos( $html, 'text-decoration:underline' ) ) {
 			return $html;
 		}
-		$processor = new \WP_HTML_Tag_Processor( $html );
+		// First pass: find the links whose next tag (closers included) is an image. A link
+		// followed by an image after it closes (`<a>…</a><img>`) is a text link and keeps
+		// its underline.
+		$image_links = [];
+		$scan        = new \WP_HTML_Tag_Processor( $html );
+		$link_index  = -1;
+		$candidate   = null;
+		while ( $scan->next_tag( [ 'tag_closers' => 'visit' ] ) ) {
+			$is_opener = ! $scan->is_tag_closer();
+			if ( null !== $candidate ) {
+				if ( $is_opener && 'IMG' === $scan->get_tag() ) {
+					$image_links[ $candidate ] = true;
+				}
+				$candidate = null;
+			}
+			if ( $is_opener && 'A' === $scan->get_tag() ) {
+				++$link_index;
+				if ( preg_match( '/text-decoration:\s*underline/i', (string) $scan->get_attribute( 'style' ) ) ) {
+					$candidate = $link_index;
+				}
+			}
+		}
+		if ( empty( $image_links ) ) {
+			return $html;
+		}
+
+		// Second pass: rewrite those links.
+		$processor  = new \WP_HTML_Tag_Processor( $html );
+		$link_index = -1;
 		while ( $processor->next_tag( 'a' ) ) {
-			if ( $processor->is_tag_closer() ) {
-				continue;
-			}
-			$style = (string) $processor->get_attribute( 'style' );
-			if ( ! preg_match( '/text-decoration:\s*underline/i', $style ) ) {
-				continue;
-			}
-			$processor->set_bookmark( 'link' );
-			$wraps_image = $processor->next_tag() && 'IMG' === $processor->get_tag();
-			$processor->seek( 'link' );
-			$processor->release_bookmark( 'link' );
-			if ( $wraps_image ) {
+			++$link_index;
+			if ( isset( $image_links[ $link_index ] ) ) {
+				$style = (string) $processor->get_attribute( 'style' );
 				$processor->set_attribute( 'style', (string) preg_replace( '/text-decoration:\s*underline/i', 'text-decoration: none', $style ) );
 			}
 		}
