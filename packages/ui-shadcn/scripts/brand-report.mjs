@@ -124,7 +124,7 @@ export function brandScopes( dist = join( root, 'dist' ) ) {
 	const blueDecls = declarations( css, '.dark' );
 	const blue = computeScope( blueDecls, light );
 	const inverse = computeScope( declarations( css, '.newspack-brand-inverse' ), light );
-	const blueContrast = computeScope( declarations( css, '.dark', contrastQuery ), blue );
+	const blueContrast = computeScope( { ...blueDecls, ...declarations( css, '.dark', contrastQuery ) }, light );
 	return { light, blue, inverse, blueContrast };
 }
 

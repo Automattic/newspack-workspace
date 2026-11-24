@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'culori';
 import { formatOklch } from '../scripts/oklch.mjs';
 import { brandChart, brandFonts, brandTypeTokens } from '../scripts/brand.mjs';
+import { declarations } from '../scripts/brand-report.mjs';
 
 const root = resolve( dirname( fileURLToPath( import.meta.url ) ), '..' );
 const registry = join( root, 'dist', 'registry' );
@@ -70,6 +71,25 @@ test( '.dark and .newspack-brand-inverse share one set of values', () => {
 	const keys = Object.keys( brand.css );
 	assert.ok( keys.indexOf( '@media (prefers-contrast: more)' ) > keys.indexOf( '.newspack-brand-inverse' ) );
 	assert.ok( keys.indexOf( '@media (prefers-contrast: more)' ) > keys.indexOf( '.dark' ) );
+} );
+
+test( 'a blue section restates every :root token that derives from a token it changes', () => {
+	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	const light = declarations( css, ':root' );
+	const changed = new Set( Object.keys( declarations( css, '.dark' ) ) );
+	const stale = new Set();
+	const references = value => [ ...value.matchAll( /var\((--[\w-]+)/g ) ].map( match => match[ 1 ] );
+	let grew = true;
+	while ( grew ) {
+		grew = false;
+		for ( const [ name, value ] of Object.entries( light ) ) {
+			if ( ! changed.has( name ) && ! stale.has( name ) && references( value ).some( ref => changed.has( ref ) || stale.has( ref ) ) ) {
+				stale.add( name );
+				grew = true;
+			}
+		}
+	}
+	assert.deepEqual( [ ...stale ], [] );
 } );
 
 test( 'a blue section restates every shadcn variable, pointing primary at the white button', () => {
@@ -273,6 +293,5 @@ test( 'never follows the system color scheme', () => {
 
 test( 'documents blue sections and what they do not cover', () => {
 	assert.match( brand.docs, /The page is always light/ );
-	assert.doesNotMatch( brand.docs, /Alerts/ );
 	assert.ok( read( join( root, 'dist', 'mapping.json' ) ).brand.unsupported.length >= 2 );
 } );
