@@ -106,6 +106,18 @@ a.sr-only[href='#nd-page'] {
 	display: none;
 }
 
+button[data-copy]:focus-visible,
+#nd-sidebar-mobile button[aria-controls='nd-sidebar-mobile']:focus-visible {
+	outline: 2px solid var(--newspack-ui-color-focus);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 calc(2px + var(--newspack-ui-focus-halo-width)) var(--newspack-ui-color-focus-halo);
+}
+
+[data-toc-popover-trigger]:focus-visible {
+	outline: 2px solid var(--newspack-ui-color-focus);
+	outline-offset: -2px;
+}
+
 figure.shiki:focus-visible {
 	outline: 2px solid var(--newspack-ui-color-focus);
 	outline-offset: 2px;
