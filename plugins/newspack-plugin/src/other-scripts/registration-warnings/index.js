@@ -2,9 +2,10 @@
  * Keeps the "Anyone can register" warnings on Settings → General in step with
  * the form, so a publisher sees the risk before saving, not after.
  *
- * PHP prints both warnings and decides which roles are risky and whether
- * reCAPTCHA is on; this script only places the warnings under their settings
- * and shows or hides them as the checkbox and the role dropdown change.
+ * PHP prints both warnings and decides which roles are risky, how serious each
+ * is, and whether reCAPTCHA is on; this script only places the warnings under
+ * their settings and shows, hides and recolors them as the checkbox and the
+ * role dropdown change.
  *
  * It reads out changes through the `wp.a11y` global instead of importing
  * `@wordpress/a11y`: with the import, the built script waited on Newspack's
@@ -72,6 +73,11 @@ function init() {
 		const botMessage = setVisible( botNotice, isOpen && ! data.hasBotProtection, false );
 
 		const roleWarning = isOpen ? getRoleWarning( roleSelect.value ) : undefined;
+		if ( roleWarning ) {
+			const isWarning = roleWarning.severity === 'warning';
+			roleNotice.classList.toggle( 'notice-warning', isWarning );
+			roleNotice.classList.toggle( 'notice-error', ! isWarning );
+		}
 		let changed = false;
 		if ( roleWarning && roleTitle && roleBody && roleTitle.textContent !== roleWarning.title ) {
 			roleTitle.textContent = roleWarning.title;
