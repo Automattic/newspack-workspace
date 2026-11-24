@@ -72,6 +72,26 @@ test( 'deck dot navigation uses the kit tokens, the brand surface and renders fo
 	assert.ok( section.includes( 'window.history.replaceState( window.history.state' ) );
 } );
 
+test( 'deck dots read as clickable, have a 32px target and grow on hover and focus', () => {
+	const nav = readItem( 'deck-nav' ).files[ 0 ].content;
+	const button = nav.match( /className="(group [^"]*)"/ )[ 1 ].split( ' ' );
+	const dot = nav.match( /<span className="([^"]*)"/ )[ 1 ].split( ' ' );
+	assert.ok( button.includes( 'cursor-pointer' ) );
+	assert.ok( button.includes( 'size-8' ) && ! button.includes( 'size-6' ), '32px hit target' );
+	assert.ok( ! /flex-col gap-/.test( nav ), 'targets touch, with no gap between them' );
+	assert.ok( dot.includes( 'size-2' ) );
+	assert.ok( dot.includes( 'motion-safe:pointer-fine:group-hover:scale-150' ) );
+	assert.ok( dot.includes( 'motion-safe:group-focus-visible:scale-150' ) );
+	assert.ok( ! dot.some( name => /^(?!motion-safe:)[^ ]*scale-/.test( name ) ), 'no growth outside motion-safe' );
+	assert.ok( dot.includes( '[transition:background-color_var(--newspack-ui-duration-color)_var(--newspack-ui-ease-color),border-color_var(--newspack-ui-duration-color)_var(--newspack-ui-ease-color),scale_var(--newspack-ui-duration-press)_var(--newspack-ui-ease-out)]' ) );
+	assert.ok( ! nav.includes( 'transition-all' ) && ! /transition:all/.test( nav ) );
+	assert.ok( button.includes( 'motion-reduce:pointer-fine:hover:bg-(--newspack-ui-color-neutral-fill)' ), 'reduced motion swaps the growth for the hover fill' );
+	assert.ok( button.includes( 'transition-[background-color]' ) && button.includes( 'duration-(--newspack-ui-duration-color)' ) );
+	assert.ok( dot.includes( 'group-aria-[current=step]:bg-[var(--newspack-ui-color-text)]' ) );
+	assert.ok( dot.includes( 'forced-colors:group-aria-[current=step]:bg-[Highlight]' ) );
+	assert.ok( button.some( name => name.startsWith( 'focus-visible:[box-shadow:inset_0_0_0_2px_var(--newspack-ui-color-focus)' ) ) );
+} );
+
 test( 'deck-section ships the navigation and motion helpers', () => {
 	const files = readItem( 'deck-section' ).files.map( f => f.path );
 	assert.ok( files.some( path => path.endsWith( 'deck-navigation.ts' ) ) );
