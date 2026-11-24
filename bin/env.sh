@@ -24,40 +24,58 @@ ip_for_env() {
     echo "${legacy:-$ENV_PROXY_IP}"
 }
 
-# Finish `up` by asking the env for a page instead of announcing a URL that may
-# not work. Three outcomes are worth telling apart, because each has a different
-# fix: the env answers at its domain; it answers through the proxy but the
-# domain does not resolve to the proxy on this machine; the proxy is not
-# routing it. Any HTTP response counts as an answer, a WordPress error included.
+# Whether a TLS connection for the domain ends at the env itself: the
+# certificate that comes back names the domain. Each env serves a certificate
+# for its own domain and the main site's does not name it, so the main site
+# answering as the proxy's catch-all is not mistaken for the env.
+#
+# Args: domain, address to connect to.
+env_cert_served() {
+    local escaped="${1//./\\.}"
+    openssl s_client -connect "${2}:443" -servername "$1" </dev/null 2>/dev/null \
+        | openssl x509 -noout -text 2>/dev/null \
+        | grep -Eq "DNS:${escaped}(,|[[:space:]]|$)"
+}
+
+# Finish `up` by checking the env answers, instead of announcing a URL that may
+# not work. The causes have different fixes, so they are told apart: the proxy
+# is not handing the domain to the env; the domain does not resolve to the
+# proxy on this machine; or everything is in place.
+#
+# Returns 1 only when the proxy is not routing the domain. A hosts problem is
+# reported and returns 0: the env is up and reachable by address.
 #
 # Args: env name, domain.
 report_env_reachability() {
-    local env_name="$1" domain="$2" attempt
+    local env_name="$1" domain="$2" routed=false hosts_ip
     local url="https://${domain}/"
-    local via_proxy=(--resolve "${domain}:443:${ENV_PROXY_IP}")
     # A non-default host port moves the site off 443, and the check with it.
-    if [[ -n "${PORT_WORDPRESS:-}" ]] || ! command -v curl >/dev/null 2>&1; then
+    if [[ -n "${PORT_WORDPRESS:-}" ]] || ! command -v openssl >/dev/null 2>&1; then
         echo "Environment '$env_name' is ready at $url"
         return 0
     fi
-    for attempt in 1 2 3; do
-        if curl -sk -o /dev/null --max-time 5 "$url"; then
-            echo "Environment '$env_name' is ready at $url"
-            return 0
+    # The proxy picks a new route up within about a second.
+    for _ in 1 2 3 4 5; do
+        if env_cert_served "$domain" "$ENV_PROXY_IP"; then
+            routed=true
+            break
         fi
-        curl -sk -o /dev/null --max-time 5 "${via_proxy[@]}" "$url" && break
-        # The proxy normally picks a new route up by itself within a second. If
-        # the file watch missed it, a restart makes it read every route again.
-        [[ "$attempt" == 1 ]] && docker restart newspack_proxy >/dev/null 2>&1
-        sleep 2
+        sleep 1
     done
-    if curl -sk -o /dev/null --max-time 5 "${via_proxy[@]}" "$url"; then
-        echo "Environment '$env_name' is running, but $domain does not resolve to $ENV_PROXY_IP on this machine, so a browser cannot reach it yet."
-        echo "Fix it with (replacing any older line for $domain): sudo sh -c 'echo \"$ENV_PROXY_IP $domain\" >> /etc/hosts'"
-        echo "Until then: curl -k --resolve ${domain}:443:${ENV_PROXY_IP} $url"
-    else
-        echo "Warning: environment '$env_name' is running, but the proxy is not routing $domain. See 'docker logs newspack_proxy' and $(proxy_route_file "$env_name")." >&2
+    if [[ "$routed" != true ]]; then
+        echo "Error: environment '$env_name' is running, but the proxy is not routing $domain to it. See 'docker logs newspack_proxy' and $(proxy_route_file "$env_name")." >&2
+        return 1
     fi
+    hosts_ip=$(hosts_ip_for "$domain")
+    # No hosts line is fine when the name resolves another way, such as a local
+    # DNS server for .test.
+    if [[ "$hosts_ip" == "$ENV_PROXY_IP" ]] || { [[ -z "$hosts_ip" ]] && env_cert_served "$domain" "$domain"; }; then
+        echo "Environment '$env_name' is ready at $url"
+    else
+        echo "Environment '$env_name' is running, but $domain does not resolve to $ENV_PROXY_IP on this machine (see the warning above)."
+        echo "Until that is fixed: curl -k --resolve ${domain}:443:${ENV_PROXY_IP} $url"
+    fi
+    return 0
 }
 
 # Parse a docker-compose volume line for a worktree mount and emit
@@ -355,7 +373,6 @@ case $1 in
                 created_wtdirs+=("$wt_c")
             fi
         done
-        ip="$ENV_PROXY_IP"
         if [[ -z "$domain" ]]; then
             domain="${env_name}.test"
         fi
@@ -418,21 +435,6 @@ YAML
         if ! env_proxy_route "$env_name" "$domain" | write_proxy_route "$(proxy_route_file "$env_name")"; then
             echo "Error: could not write the proxy route for $env_name under $PROXY_ROUTES_DIR" >&2
             exit 1
-        fi
-        # Custom domains (not IP-based) need a /etc/hosts entry.
-        if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                # Passwordless via the locked-down wrapper — works without a TTY.
-                sudo newspack-manage-host host-add "$ip" "$domain"
-            elif [ -t 0 ] && [ -t 1 ]; then
-                read -p "Add $domain to /etc/hosts? (Y/n): " choice
-                choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
-                if [[ "$choice" != "n" ]]; then
-                    echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                fi
-            else
-                echo "Note: add hosts entry before browser access: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
-            fi
         fi
         # Start the environment immediately or prompt.
         if [[ "$auto_up" == true ]]; then
@@ -581,38 +583,9 @@ MIGRATE
                 exit 1
             fi
         fi
-        ip="$ENV_PROXY_IP"
-        # A hosts line written for the env's old address keeps the browser on a
-        # loopback alias that is gone after the next reboot. Only a line that
-        # maps this domain alone is ours to replace; the block below then adds
-        # the current one. When it cannot be replaced here, the reachability
-        # report at the end of `up` says so.
-        stale_host_ip=$(awk -v d="$domain" '$1 ~ /^127\./ && NF == 2 && $2 == d { print $1; exit }' /etc/hosts 2>/dev/null)
-        if [[ -n "$domain" && -n "$stale_host_ip" && "$stale_host_ip" != "$ip" ]]; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-remove "$domain"
-            elif [ -t 0 ] && [ -t 1 ]; then
-                echo "Updating the /etc/hosts entry for $domain (requires sudo)..."
-                stale_line="^[[:space:]]*${stale_host_ip//./\\.}[[:space:]]+${domain//./\\.}[[:space:]]*$"
-                { sudo sed -i '' -E "/${stale_line}/d" /etc/hosts 2>/dev/null || \
-                    sudo sed -i -E "/${stale_line}/d" /etc/hosts; }
-            fi
-        fi
-        # Custom domains (not IP-based) need a /etc/hosts entry.
-        if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                # Passwordless via the locked-down wrapper — works without a TTY.
-                sudo newspack-manage-host host-add "$ip" "$domain"
-                echo "Added $domain to /etc/hosts"
-            elif [ -t 0 ] && [ -t 1 ]; then
-                echo "Adding $domain to /etc/hosts (requires sudo)..."
-                echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                echo "Added $domain to /etc/hosts"
-            else
-                echo "Warning: $domain not in /etc/hosts. Browser access won't work until added."
-                echo "Run: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
-            fi
-        fi
+        # The domain has to reach the proxy from the host. The reachability report
+        # at the end of `up` repeats the outcome, so a failure here is not fatal.
+        [[ -n "$domain" ]] && point_host_at_proxy "$domain"
         # Source env files for DB credentials.
         set -a
         source "$NABSPATH/default.env"
@@ -641,7 +614,10 @@ MIGRATE
         # site as a dependency, and starting an env is no reason to start that.
         proxy_compose=(-f "$NABSPATH/docker-compose.yml")
         [[ -f "$NABSPATH/docker-compose.override.yml" ]] && proxy_compose+=(-f "$NABSPATH/docker-compose.override.yml")
-        if ! docker compose "${proxy_compose[@]}" up -d --no-deps proxy; then
+        # Two envs starting at once both try to create the proxy; the one that
+        # loses finds it running, which is all it needed.
+        if ! docker compose "${proxy_compose[@]}" up -d --no-deps proxy \
+            && [[ -z "$(docker ps -q --filter name='^newspack_proxy$' --filter status=running 2>/dev/null)" ]]; then
             echo "Error: could not start the shared proxy on ports 80/443." >&2
             port_holders=$(docker ps --filter publish=443 --filter publish=80 --format '{{.Names}}' 2>/dev/null | grep -v '^newspack_proxy$' | tr '\n' ' ')
             if [[ -n "$port_holders" ]]; then
@@ -741,7 +717,8 @@ MIGRATE
         fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
-        report_env_reachability "$env_name" "$domain"
+        env_reachable=0
+        report_env_reachability "$env_name" "$domain" || env_reachable=1
         # Copy built assets from main repos into worktrees.
         if [[ "$auto_build" == true ]]; then
             # Anchored regex (matching each_worktree_in_env / get_target_container
@@ -769,6 +746,9 @@ MIGRATE
                 done
             done
         fi
+        # Non-zero when the proxy is not routing the env, so a caller does not
+        # continue against a site that cannot be reached.
+        exit "$env_reachable"
         ;;
     down)
         env_name="$2"
@@ -821,6 +801,9 @@ MIGRATE
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
         set +a
+        # The compose file names this network as external, so it has to exist for
+        # any compose command, this one included.
+        ensure_envs_network >/dev/null
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
@@ -831,9 +814,6 @@ MIGRATE
             rm -rf "$NABSPATH/envs/${env_name}"
             echo "Removed envs/${env_name}/"
         fi
-        # Remove the proxy's route, so the domain stops being claimed for an env
-        # that no longer exists.
-        rm -f "$(proxy_route_file "$env_name")"
         # Remove log directories.
         if [[ -d "$NABSPATH/logs/env-${env_name}" ]]; then
             rm -rf "$NABSPATH/logs/env-${env_name}"
@@ -852,6 +832,10 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
+        # Then the proxy's route, so the domain stops being claimed for an env
+        # that no longer exists. After the compose file: a route sync running in
+        # between would otherwise see the env and write the route back.
+        rm -f "$(proxy_route_file "$env_name")"
         # Remove worktrees that were mounted by this environment. The branch
         # here is the mount-derived (safe) form from parse_worktree_mount —
         # the stable filesystem identifier, not the live git branch. This is

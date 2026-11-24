@@ -127,50 +127,35 @@ start() {
     fi
 
     # Compose never refreshes an image it already has. Offline, the current one is used.
-    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit >/dev/null 2>&1
+    # The proxy is pulled here too: left to `up`, an image that is not cached yet
+    # makes Compose try to pull the locally built newspack-dev image as well.
+    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit proxy >/dev/null 2>&1
     if ! docker compose "${compose_files[@]}" up -d; then
-        # The likely cause on the first start after the proxy arrived: an
-        # isolated env from before it is still running and publishing 443
-        # itself. Stop those and try once more.
-        if stop_legacy_env_publishers; then
-            docker compose "${compose_files[@]}" up -d
+        # With the proxy down, the likely cause on the first start after it
+        # arrived is an isolated env from before it, still running and
+        # publishing 443 itself. Stop those and try once more. A failure with
+        # the proxy up is something else, and no reason to stop anyone's env.
+        if [[ -n "$(docker ps -q --filter name='^newspack_proxy$' --filter status=running 2>/dev/null)" ]] \
+            || ! stop_legacy_env_publishers \
+            || ! docker compose "${compose_files[@]}" up -d; then
+            echo "Error: the stack did not start. See the Docker output above." >&2
+            exit 1
         fi
     fi
 
-    # macOS: make sure every isolated env's domain resolves, so agents can bring
-    # envs up without sudo later. All of them point at the shared proxy; an env
-    # still on its own loopback address is moved over by its next `n env up`.
+    # macOS: make sure every isolated env's domain resolves to the proxy, so
+    # agents can bring envs up without sudo later. A line left from when an env
+    # had a loopback address of its own is replaced, because that address is
+    # gone after a reboot.
     if [[ "$(uname)" == "Darwin" ]]; then
-        missing_hosts=()
+        warn_if_manage_host_stale
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
-            domain=$(grep 'WP_DOMAIN=' "$f" | head -1 | sed 's/.*WP_DOMAIN=//')
-            # Only add hosts entries for custom domains, not IP-based ones.
-            if [[ -n "$domain" && "$domain" != "$(legacy_env_ip "$f")" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-                missing_hosts+=("$ENV_PROXY_IP $domain")
-            fi
+            domain=$(domain_for_env "$f")
+            # An env still addressed by its loopback IP has no name to resolve.
+            [[ -n "$domain" && "$domain" != "$(legacy_env_ip "$f")" ]] || continue
+            point_host_at_proxy "$domain"
         done
-        if [[ ${#missing_hosts[@]} -gt 0 ]]; then
-            # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
-            warn_if_manage_host_stale
-            if command -v newspack-manage-host >/dev/null 2>&1; then
-                for entry in "${missing_hosts[@]}"; do
-                    read -r ip domain <<< "$entry"
-                    if [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                        sudo newspack-manage-host host-add "$ip" "$domain"
-                    else
-                        echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                    fi
-                done
-            else
-                echo ""
-                echo "Adding hosts entries for isolated environments (requires sudo)..."
-                for entry in "${missing_hosts[@]}"; do
-                    echo "$entry" | sudo tee -a /etc/hosts > /dev/null
-                done
-            fi
-            echo "Ready: ${#missing_hosts[@]} hosts entries."
-        fi
     fi
 }
 stop() {

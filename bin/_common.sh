@@ -106,9 +106,10 @@ ensure_envs_network() {
 # exist, because that needs the Docker socket, and the socket would hand the
 # proxy control of every container and every path Docker can mount.
 #
-# Under envs/ so it is gitignored with the rest. The leading dot keeps it clear
-# of every env's own directory: an env name starts with a letter or digit.
-PROXY_ROUTES_DIR="$NABSPATH/envs/.proxy"
+# A directory of its own rather than one under envs/: `n env destroy <name>`
+# removes envs/<name>, and a route directory in there could be named and
+# deleted as if it were an env.
+PROXY_ROUTES_DIR="$NABSPATH/.proxy-routes"
 
 # The route file for an env. The name is used as is, so two envs can never
 # share a file: env names are unique, and all of their characters are legal in
@@ -122,18 +123,27 @@ domain_for_env() {
     grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
 }
 
+# An env's container name. Docker rejects dashes nowhere, but the name doubles
+# as a database-safe identifier elsewhere, so dashes become underscores.
+env_container_name() {
+    echo "newspack_env_$1" | tr '-' '_'
+}
+
 # The route for one env: TLS for its domain is passed through to the env's own
 # Apache, which keeps serving the env's certificate, and plain HTTP for its
 # domain goes to port 80.
 #
-# The backend is the env's domain, which is also its alias on the newspack_envs
-# network, so the proxy finds the container through Docker's DNS when a request
-# arrives. An env that is down therefore fails to connect. It does not fall
-# through to the main site.
+# The backend is the container's name, never the domain. Only Docker's own DNS
+# knows that name, so when the env is down the lookup fails and the request
+# fails with it. Docker hands a name it does not know to the host's resolver,
+# and for the domain that resolver has an answer: the /etc/hosts line pointing
+# at the proxy, which would then connect to itself, or the real site, for a
+# custom domain that also exists publicly.
 #
 # Args: env name, domain.
 env_proxy_route() {
-    local id="env-$1" domain="$2"
+    local id="env-$1" domain="$2" backend
+    backend=$(env_container_name "$1")
     # shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
     printf '%s\n' \
         'tcp:' \
@@ -148,7 +158,7 @@ env_proxy_route() {
         "    $id:" \
         '      loadBalancer:' \
         '        servers:' \
-        "          - address: \"$domain:443\"" \
+        "          - address: \"$backend:443\"" \
         'http:' \
         '  routers:' \
         "    $id:" \
@@ -159,7 +169,7 @@ env_proxy_route() {
         "    $id:" \
         '      loadBalancer:' \
         '        servers:' \
-        "          - url: \"http://$domain:80\""
+        "          - url: \"http://$backend:80\""
 }
 
 # The route for everything no env claims: localhost, the additional sites, the
@@ -195,30 +205,37 @@ main_proxy_route() {
         '          - url: "http://wordpress:80"'
 }
 
-# Write a route file from stdin. The content lands under a dot-name the proxy
+# Write a route file from stdin. The content lands in a temp file the proxy
 # ignores and is then renamed into place, so the proxy never reads half a file.
-# An unchanged route is left alone, which spares the proxy a reload.
+# The temp name is unique to this call, because several `n` commands sync the
+# routes at once and would otherwise write through the same file. An unchanged
+# route is left alone, which spares the proxy a reload.
+#
+# Modes are set here, not left to the caller's umask: the proxy runs as a user
+# of its own and reads the directory as "other".
 #
 # Args: target path.
 write_proxy_route() {
     local target="$1" tmp
-    mkdir -p "$PROXY_ROUTES_DIR" || return 1
-    tmp="$PROXY_ROUTES_DIR/.$(basename "$target").tmp"
-    cat > "$tmp" || return 1
+    mkdir -p "$PROXY_ROUTES_DIR" && chmod 755 "$PROXY_ROUTES_DIR" || return 1
+    tmp=$(mktemp "$PROXY_ROUTES_DIR/.route.XXXXXX") || return 1
+    if ! cat > "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
     if [[ -f "$target" ]] && cmp -s "$tmp" "$target"; then
         rm -f "$tmp"
         return 0
     fi
-    mv "$tmp" "$target"
+    chmod 644 "$tmp" && mv "$tmp" "$target" || { rm -f "$tmp"; return 1; }
 }
 
 # Make the route files match the envs that exist: the main route, one route per
 # env compose file, and nothing for an env that is gone. Run before the proxy
-# starts, so the directory it mounts is there and owned by the user. Docker
-# would otherwise create it as root on Linux.
+# starts, so the directory it mounts is there and is the user's. Docker would
+# otherwise create it as root on Linux.
 sync_proxy_routes() {
     local f name domain route
-    mkdir -p "$PROXY_ROUTES_DIR" || return 1
     main_proxy_route | write_proxy_route "$PROXY_ROUTES_DIR/main.yml" || return 1
     for f in "$NABSPATH"/docker-compose.env-*.yml; do
         [[ -f "$f" ]] || continue
@@ -236,6 +253,54 @@ sync_proxy_routes() {
         name="${name%.yml}"
         [[ -f "$NABSPATH/docker-compose.env-$name.yml" ]] || rm -f "$route"
     done
+}
+
+# The address /etc/hosts gives a name: the first line that lists it, which is
+# the one the system resolver uses. Prints nothing when no line does.
+hosts_ip_for() {
+    awk -v d="$1" '
+        /^[[:space:]]*#/ { next }
+        {
+            for (i = 2; i <= NF; i++) {
+                if ($i ~ /^#/) break
+                if ($i == d) { print $1; found = 1; exit }
+            }
+        }
+    ' /etc/hosts 2>/dev/null
+}
+
+# Point an env's domain at the proxy in /etc/hosts, replacing a line left from
+# when the env had a loopback address of its own. Such a line keeps working
+# only while that address is still aliased, which ends at the next reboot.
+#
+# Uses the passwordless wrapper when it is installed, sudo when there is a
+# terminal to ask on, and otherwise prints what to change. Returns 0 when the
+# file ends up right, 1 when it still needs a change by hand.
+point_host_at_proxy() {
+    local domain="$1" current stale_line
+    current=$(hosts_ip_for "$domain")
+    [[ "$current" == "$ENV_PROXY_IP" ]] && return 0
+    if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
+        [[ -n "$current" ]] && sudo newspack-manage-host host-remove "$domain"
+        sudo newspack-manage-host host-add "$ENV_PROXY_IP" "$domain"
+    elif [ -t 0 ] && [ -t 1 ]; then
+        echo "Pointing $domain at $ENV_PROXY_IP in /etc/hosts (requires sudo)..."
+        if [[ -n "$current" ]]; then
+            # Only a line that maps this domain alone is ours to remove.
+            stale_line="^[[:space:]]*${current//./\\.}[[:space:]]+${domain//./\\.}[[:space:]]*$"
+            { sudo sed -i '' -E "/${stale_line}/d" /etc/hosts 2>/dev/null || \
+                sudo sed -i -E "/${stale_line}/d" /etc/hosts; }
+        fi
+        [[ -z "$(hosts_ip_for "$domain")" ]] && echo "$ENV_PROXY_IP $domain" | sudo tee -a /etc/hosts > /dev/null
+    fi
+    current=$(hosts_ip_for "$domain")
+    [[ "$current" == "$ENV_PROXY_IP" ]] && return 0
+    if [[ -n "$current" ]]; then
+        echo "Warning: /etc/hosts maps $domain to $current, an address from before the shared proxy. It stops working after a reboot. Change that line to: $ENV_PROXY_IP $domain"
+    else
+        echo "Warning: $domain is not in /etc/hosts, so a browser cannot reach it. Add it with: sudo sh -c 'echo \"$ENV_PROXY_IP $domain\" >> /etc/hosts'"
+    fi
+    return 1
 }
 
 # Stop running env containers that still publish 80/443 themselves, as envs did

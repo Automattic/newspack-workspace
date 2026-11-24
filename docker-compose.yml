@@ -86,7 +86,7 @@ services:
   ## TLS is passed through, not terminated: each site keeps serving its own
   ## mkcert certificate and nothing inside the site containers changes.
   ##
-  ## Routes are files in envs/.proxy, written by `n` (see env_proxy_route and
+  ## Routes are files in .proxy-routes, written by `n` (see env_proxy_route and
   ## sync_proxy_routes in bin/_common.sh) and picked up as they change. The proxy
   ## deliberately has no Docker socket: discovering containers through it would
   ## give this third-party image control of Docker itself. For the same reason
@@ -112,15 +112,16 @@ services:
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      ## Off by default it is not: Traefik otherwise reports its version and
-      ## the machine's public address to its vendor.
+      ## Traefik otherwise reports its version and the machine's public address
+      ## to its vendor. Usage statistics are off by default already; the flag
+      ## keeps that from depending on the default.
       - --global.checknewversion=false
       - --global.sendanonymoususage=false
     ports:
       - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
       - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
     volumes:
-      - ./envs/.proxy:/etc/traefik/dynamic:ro
+      - ./.proxy-routes:/etc/traefik/dynamic:ro
     networks:
       - default
       - newspack_envs

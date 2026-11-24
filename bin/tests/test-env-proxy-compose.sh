@@ -30,7 +30,7 @@ trap 'rm -rf "$WORK"' EXIT
 # The helpers read both at call time, so pointing them at a sandbox here keeps
 # every case away from the real workspace.
 NABSPATH="$WORK/root"
-PROXY_ROUTES_DIR="$WORK/root/envs/.proxy"
+PROXY_ROUTES_DIR="$WORK/root/.proxy-routes"
 mkdir -p "$NABSPATH"
 
 failures=0
@@ -82,10 +82,20 @@ route=$(env_proxy_route demo demo.test)
 # shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
 assert_contains "$route" 'rule: "HostSNI(`demo.test`)"' "TLS for the domain is matched by SNI"
 assert_contains "$route" 'passthrough: true' "TLS is passed through, so the env keeps its own certificate"
-assert_contains "$route" 'address: "demo.test:443"' "and goes to the env's own 443, found by its domain"
+assert_contains "$route" 'address: "newspack_env_demo:443"' "and goes to the env's own 443"
 # shellcheck disable=SC2016
 assert_contains "$route" 'rule: "Host(`demo.test`)"' "plain HTTP for the domain is matched by Host"
-assert_contains "$route" 'url: "http://demo.test:80"' "and goes to the env's own 80"
+assert_contains "$route" 'url: "http://newspack_env_demo:80"' "and goes to the env's own 80"
+# The backend must be a name only Docker's DNS knows. Docker passes any other
+# name to the host's resolver, where a stopped env's domain still resolves: to
+# the proxy itself through /etc/hosts, or to the real site for a public domain.
+route_custom=$(env_proxy_route my-site news.example.com)
+if grep -E '(address|url):' <<< "$route_custom" | grep -q 'news\.example\.com'; then
+	fail "a route never dials the env's domain, which the host can resolve when the env is down"
+else
+	ok "a route never dials the env's domain, which the host can resolve when the env is down"
+fi
+assert_contains "$route_custom" 'address: "newspack_env_my_site:443"' "it dials the container by name instead"
 
 # Env names allow dots, dashes and underscores. Folding them into one safe
 # character would give these two envs the same route, and one would take the
@@ -108,10 +118,15 @@ assert_eq "$(cat "$PROXY_ROUTES_DIR/env-a.yml")" "first" "a route is written"
 inode_before=$(ls -i "$PROXY_ROUTES_DIR/env-a.yml" | awk '{ print $1 }')
 echo "first" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml"
 assert_eq "$(ls -i "$PROXY_ROUTES_DIR/env-a.yml" | awk '{ print $1 }')" "$inode_before" "an unchanged route is not replaced, so the proxy is not made to reload"
+# Checked right after the unchanged write, the one path that has to delete its
+# temp file itself. Temp files pile up in a directory the proxy watches.
+assert_eq "$(find "$PROXY_ROUTES_DIR" -type f ! -name 'env-a.yml' | wc -l | tr -d ' ')" "0" "an unchanged write leaves no temp file behind"
 echo "second" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml"
 assert_eq "$(cat "$PROXY_ROUTES_DIR/env-a.yml")" "second" "a changed route is replaced"
-# The proxy loads every .yml it sees. A leftover temp file must not be one.
-assert_eq "$(find "$PROXY_ROUTES_DIR" -name '*.tmp' | wc -l | tr -d ' ')" "0" "no temp file is left for the proxy to read"
+assert_eq "$(find "$PROXY_ROUTES_DIR" -type f ! -name 'env-a.yml' | wc -l | tr -d ' ')" "0" "and so does a changed one"
+# The proxy runs as a user of its own, so a private umask must not hide routes from it.
+(umask 077; echo "third" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml")
+assert_eq "$(ls -l "$PROXY_ROUTES_DIR/env-a.yml" | cut -c1-10)" "-rw-r--r--" "a route stays readable by the proxy under a private umask"
 rm -f "$PROXY_ROUTES_DIR/env-a.yml"
 
 echo "sync_proxy_routes:"
@@ -121,7 +136,8 @@ echo "stale" > "$PROXY_ROUTES_DIR/env-gone.yml"
 sync_proxy_routes
 assert_eq "$(cat "$PROXY_ROUTES_DIR/main.yml")" "$(main_proxy_route)" "the main route is written"
 assert_eq "$(cat "$PROXY_ROUTES_DIR/env-demo.yml")" "$(env_proxy_route demo demo.test)" "each env gets a route for the domain in its compose file"
-assert_contains "$(cat "$PROXY_ROUTES_DIR/env-other.yml")" 'address: "custom.example.test:443"' "a custom domain is routed as given"
+# shellcheck disable=SC2016
+assert_contains "$(cat "$PROXY_ROUTES_DIR/env-other.yml")" 'rule: "HostSNI(`custom.example.test`)"' "a custom domain is matched as given"
 if [[ -e "$PROXY_ROUTES_DIR/env-gone.yml" ]]; then
 	fail "the route of an env that no longer exists is removed"
 else
