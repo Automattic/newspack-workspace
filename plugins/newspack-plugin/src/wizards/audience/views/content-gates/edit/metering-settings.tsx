@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Button, Divider, Grid, SectionHeader, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, Divider, SplitSection, useConfirmDialog } from '../../../../../../packages/components/src';
 import { countdown as countdownIcon } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -236,16 +236,11 @@ const MeteringSettings = () => {
 	return (
 		<div className="newspack-content-gate__edit">
 			{ confirmDialog }
-			<Grid columns={ 2 } noMargin>
-				<Stack direction="column" gap="xl">
-					<SectionHeader
-						heading={ 2 }
-						title={ __( 'Free Views', 'newspack-plugin' ) }
-						description={ __(
-							'One allowance for the whole site, so moving between gated sections does not reset it.',
-							'newspack-plugin'
-						) }
-					/>
+			<SplitSection.Root>
+				<SplitSection.Header
+					title={ __( 'Free Views', 'newspack-plugin' ) }
+					description={ __( 'One allowance for the whole site, so moving between gated sections does not reset it.', 'newspack-plugin' ) }
+				>
 					{ gatesWithOwnMeter.length > 0 && (
 						<Notice status="warning" isDismissible={ false }>
 							{ sprintf(
@@ -280,8 +275,8 @@ const MeteringSettings = () => {
 							) }
 						</Notice>
 					) }
-				</Stack>
-				<Stack direction="column" gap="xl">
+				</SplitSection.Header>
+				<SplitSection.Content>
 					<NumberControl
 						label={ __( 'Signed-out readers', 'newspack-plugin' ) }
 						help={ __( 'Free views before a gate applies.', 'newspack-plugin' ) }
@@ -309,8 +304,8 @@ const MeteringSettings = () => {
 						<ToggleGroupControlOption label={ __( 'Monthly', 'newspack-plugin' ) } value="month" />
 						<ToggleGroupControlOption label={ __( 'Weekly', 'newspack-plugin' ) } value="week" />
 					</ToggleGroupControl>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
 			<CountdownBanner
 				countdown={ countdown }
