@@ -42,6 +42,7 @@ import { getTemplateBlocks, convertBlockSerializationFormat } from './utils';
 import QueryControlsSettings from './query-controls';
 import { POSTS_INSERTER_BLOCK_NAME, POSTS_INSERTER_STORE_NAME } from './consts';
 import { selectSpecificPosts } from './specific-posts';
+import { selectAutoPosts } from './auto-posts';
 import PostsPreview from './posts-preview';
 import useSettledPostList from './use-settled-post-list';
 
@@ -347,7 +348,6 @@ const PostsInserterBlockWithSelect = compose( [
 			excerptLength,
 			displaySponsoredPosts,
 		} = props.attributes;
-		const { getEntityRecords, hasFinishedResolution } = select( 'core' );
 		const { getBlocks, getSettings } = select( 'core/block-editor' );
 		const catIds = categories && categories.length > 0 ? categories.map( cat => cat.id ) : [];
 
@@ -377,10 +377,7 @@ const PostsInserterBlockWithSelect = compose( [
 		} else if ( ! isDisplayingSpecificPosts ) {
 			// The automatic query stays published-only.
 			const autoQuery = pickBy( query, value => ! isUndefined( value ) );
-			const records = getEntityRecords( 'postType', postType, autoQuery );
-			posts = records || [];
-			// A failed request also has no records, but it has finished, so it shows as empty.
-			isLoadingPosts = ! records && ! hasFinishedResolution( 'getEntityRecords', [ 'postType', postType, autoQuery ] );
+			( { posts, isLoading: isLoadingPosts } = selectAutoPosts( select, postType, autoQuery ) );
 		}
 
 		// Order posts in the order as they appear in the input
