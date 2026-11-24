@@ -315,7 +315,9 @@ const PostsInserterBlock = ( {
 			<BlockControls>
 				{ attributes.displayFeaturedImage && <Toolbar controls={ blockControlsImages } /> }
 				<Toolbar>
-					<ToolbarButton onClick={ insertPosts }>{ __( 'Insert posts', 'newspack-newsletters' ) }</ToolbarButton>
+					<ToolbarButton onClick={ insertPosts } disabled={ isLoadingPosts }>
+						{ __( 'Insert posts', 'newspack-newsletters' ) }
+					</ToolbarButton>
 				</Toolbar>
 			</BlockControls>
 
