@@ -71,6 +71,24 @@ class SettingsTest extends WP_UnitTestCase {
 			],
 		],
 		[
+			'description' => 'A multiple select field',
+			'help'        => 'Help text',
+			'section'     => 'test_section',
+			'key'         => 'multi_select_field',
+			'type'        => 'string',
+			'multiple'    => true,
+			'options'     => [
+				[
+					'value' => 'option1',
+					'name'  => 'Option 1',
+				],
+				[
+					'value' => 'option2',
+					'name'  => 'Option 2',
+				],
+			],
+		],
+		[
 			'description' => 'A field without type',
 			'help'        => 'Help text',
 			'section'     => 'test_section',
@@ -157,6 +175,61 @@ class SettingsTest extends WP_UnitTestCase {
 			'option2',
 			'Should update a value within existing options.'
 		);
+	}
+
+	/**
+	 * Build a settings update request for the sanitize callback.
+	 *
+	 * @param string $section Section name.
+	 *
+	 * @return WP_REST_Request
+	 */
+	private static function get_settings_request( $section = 'test_section' ) {
+		$request = new WP_REST_Request( 'POST', '/newspack-ads/v1/settings' );
+		$request->set_param( 'section', $section );
+		return $request;
+	}
+
+	/**
+	 * Test that sanitizing an unregistered setting key returns an error instead of a fatal.
+	 */
+	public function test_sanitize_unknown_setting() {
+		add_filter( 'newspack_ads_settings_list', [ __CLASS__, 'set_settings_list' ] );
+		$result = Settings::api_sanitize_settings( [ 'a' => 'b' ], self::get_settings_request() );
+		self::assertWPError( $result, 'Unknown setting key should return an error.' );
+
+		$result = Settings::api_sanitize_settings( [ 'number_field' => '200' ], self::get_settings_request( 'not_a_section' ) );
+		self::assertWPError( $result, 'Known key in an unknown section should return an error.' );
+	}
+
+	/**
+	 * Test that a scalar value for a multiple select setting returns an error instead of a fatal.
+	 */
+	public function test_sanitize_multiple_requires_array() {
+		add_filter( 'newspack_ads_settings_list', [ __CLASS__, 'set_settings_list' ] );
+		$result = Settings::api_sanitize_settings( [ 'multi_select_field' => 'option1' ], self::get_settings_request() );
+		self::assertWPError( $result, 'Scalar value for a multiple setting should return an error.' );
+
+		$result = Settings::api_sanitize_settings( [ 'multi_select_field' => [ 'option1' ] ], self::get_settings_request() );
+		self::assertSame( [ 'multi_select_field' => [ 'option1' ] ], $result );
+	}
+
+	/**
+	 * Test the REST endpoint returns a 400, not a fatal, for an unknown setting from an unauthenticated user.
+	 */
+	public function test_rest_unknown_setting_unauthenticated() {
+		global $wp_rest_server;
+		add_filter( 'newspack_ads_settings_list', [ __CLASS__, 'set_settings_list' ] );
+		wp_set_current_user( 0 );
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init', $wp_rest_server );
+
+		$request = self::get_settings_request( 'foo' );
+		$request->set_param( 'settings', [ 'a' => 'b' ] );
+		$response = $wp_rest_server->dispatch( $request );
+		self::assertSame( 400, $response->get_status() );
+
+		$wp_rest_server = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 	}
 
 	/**
