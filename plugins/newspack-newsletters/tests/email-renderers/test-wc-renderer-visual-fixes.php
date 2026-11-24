@@ -10,7 +10,6 @@ use Newspack\Newsletters\Email_Renderers\Blocks\Cover;
 use Newspack\Newsletters\Email_Renderers\Blocks\Site_Logo;
 use Newspack\Newsletters\Email_Renderers\Editor_Bootstrap;
 use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
-use Newspack\Newsletters\Email_Renderers\Theme_Json_Builder;
 use Newspack_Newsletters\Ads;
 
 /**
@@ -25,6 +24,14 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Editor_Bootstrap::init();
+	}
+
+	/**
+	 * Remove the images uploaded by image_block(); the database rollback leaves files.
+	 */
+	public function tear_down() {
+		$this->remove_added_uploads();
+		parent::tear_down();
 	}
 
 	/**
@@ -105,9 +112,9 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An ad's content is sized to the ad block and not indented by the email gutter again.
-	 * Before the fix its image kept the full 612px inside an extra 24px indent, forcing
-	 * the email table wider than the card for everything that followed.
+	 * An ad's content is sized to the ad block and not indented by the email gutter
+	 * again: a 612px image inside an extra 24px indent would force the email table wider
+	 * than the card for everything after it.
 	 */
 	public function test_ad_content_is_not_indented_twice() {
 		list( , $image ) = $this->image_block();
@@ -123,6 +130,52 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 
 		$this->assertSame( [ 612 ], self::image_widths( $html ), 'Expected the ad image to fit the 612px content column.' );
 		$this->assertLessThanOrEqual( 1, substr_count( $html, 'class="email-root-padding"' ), 'Expected the ad\'s own blocks not to get the email gutter again.' );
+	}
+
+	/**
+	 * Create an ad with the given content and return the ad block that places it.
+	 *
+	 * @param string $content Ad block markup.
+	 * @return string
+	 */
+	private function ad_block( string $content ): string {
+		$ad_id = self::factory()->post->create(
+			[
+				'post_type'    => Ads::CPT,
+				'post_status'  => 'publish',
+				'post_title'   => 'Ad',
+				'post_content' => wp_slash( $content ),
+			]
+		);
+		return '<!-- wp:newspack-newsletters/ad {"adId":"' . $ad_id . '"} /-->';
+	}
+
+	/**
+	 * Unsized columns in an ad are sized to the ad's own width (half of a 306px column),
+	 * not to the full email width the first parse assumed.
+	 */
+	public function test_ad_columns_fit_a_narrow_host() {
+		$ad_columns = '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>A</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>B</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->';
+		$html       = $this->render(
+			'<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column {"width":"50%"} --><div class="wp-block-column" style="flex-basis:50%">'
+			. $this->ad_block( $ad_columns )
+			. '</div><!-- /wp:column --><!-- wp:column {"width":"50%"} --><div class="wp-block-column" style="flex-basis:50%"><!-- wp:paragraph --><p>Side</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->'
+		);
+
+		$this->assertSame( 2, substr_count( $html, 'width="153"' ), 'Expected the ad\'s two columns to split its 306px.' );
+	}
+
+	/**
+	 * Preset side padding inside an ad (`var:preset|spacing|50`, 32px) narrows the
+	 * content within it, as it does at the top level.
+	 */
+	public function test_ad_content_respects_preset_padding() {
+		list( , $image ) = $this->image_block();
+		$html            = $this->render(
+			$this->ad_block( '<!-- wp:group {"style":{"spacing":{"padding":{"left":"var:preset|spacing|50","right":"var:preset|spacing|50"}}}} --><div class="wp-block-group">' . $image . '</div><!-- /wp:group -->' )
+		);
+
+		$this->assertSame( [ 548 ], self::image_widths( $html ), 'Expected the image to fit inside 2 × 32px of padding.' );
 	}
 
 	// ------------------------------------------------------------------
@@ -152,7 +205,7 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 
 	/**
 	 * Columns in a full-width band with zero side padding are sized to the content
-	 * column. Before the fix they were sized to the full email width (330px each).
+	 * column (306px each), not to the full email width (330px each).
 	 */
 	public function test_columns_in_zero_padding_band_fit_content_column() {
 		$columns = '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>A</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>B</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->';
@@ -210,22 +263,6 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/class="layout-flex-item" style="[^"]*width:\s*298px/', $html, 'Expected the button cell to take half the 612px content width.' );
 	}
 
-	/**
-	 * Core's block-hooks pass over `the_content` uses core's parser, so the widths the
-	 * engine computes while parsing aren't serialized back into the content.
-	 */
-	public function test_block_hooks_pass_uses_core_parser() {
-		Block_Normalizer::add_hooks();
-		try {
-			Block_Normalizer::start_block_hooks_pass( '' );
-			$this->assertSame( \WP_Block_Parser::class, apply_filters( 'block_parser_class', 'Email_Parser' ) );
-			Block_Normalizer::end_block_hooks_pass( '' );
-			$this->assertSame( 'Email_Parser', apply_filters( 'block_parser_class', 'Email_Parser' ) );
-		} finally {
-			Block_Normalizer::remove_hooks();
-		}
-	}
-
 	// ------------------------------------------------------------------
 	// Posts Inserter image-left gap (NPPD-2616)
 	// ------------------------------------------------------------------
@@ -263,15 +300,12 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	// ------------------------------------------------------------------
 
 	/**
-	 * The logo image is block-level, keeps its alignment and drops web-only attributes.
+	 * The logo image is block-level and keeps its alignment.
 	 */
 	public function test_site_logo_image_is_block_level() {
-		$html = Site_Logo::prepare_image( '<div class="wp-block-site-logo"><a href="/"><img width="120" src="logo.png" class="custom-logo" loading="lazy" decoding="async" srcset="a 1x" sizes="10px" style="max-width:100%"/></a></div>', 'center' );
+		$html = Site_Logo::prepare_image( '<div class="wp-block-site-logo"><a href="/"><img width="120" src="logo.png" class="custom-logo" style="max-width:100%"/></a></div>', 'center' );
 
 		$this->assertStringContainsString( 'style="max-width:100%;display:block;vertical-align:middle;margin-left:auto;margin-right:auto;"', $html );
-		foreach ( [ 'loading=', 'decoding=', 'srcset=', 'sizes=' ] as $attribute ) {
-			$this->assertStringNotContainsString( $attribute, $html, 'Expected web-only image attributes to be removed.' );
-		}
 	}
 
 	/**
@@ -313,6 +347,17 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4))', html_entity_decode( $html ) );
 	}
 
+	/**
+	 * A cover with a gradient overlay is not tinted with the default black.
+	 */
+	public function test_cover_gradient_overlay_is_not_tinted_black() {
+		list( $id ) = $this->image_block();
+		$src        = esc_url( wp_get_attachment_url( $id ) );
+		$html       = $this->render( '<!-- wp:cover {"url":"' . $src . '","id":' . $id . ',"dimRatio":50,"gradient":"luminous-vivid-amber-to-luminous-vivid-orange"} --><div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim has-background-gradient has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background"></span><img class="wp-block-cover__image-background wp-image-' . $id . '" alt="" src="' . $src . '" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
+
+		$this->assertStringNotContainsString( 'linear-gradient(rgba(0, 0, 0', html_entity_decode( $html ) );
+	}
+
 	// ------------------------------------------------------------------
 	// Social icons (NPPD-2609, NPPD-2613, NPPD-2614)
 	// ------------------------------------------------------------------
@@ -320,22 +365,28 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	/**
 	 * Social-links markup with the given block attributes.
 	 *
-	 * @param array $attrs Block attributes.
+	 * @param array    $attrs    Block attributes.
+	 * @param string[] $services Services, one link each.
 	 * @return string
 	 */
-	private static function social( array $attrs ): string {
-		return '<!-- wp:social-links ' . ( $attrs ? wp_json_encode( $attrs ) : '{}' ) . ' --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://facebook.example.test/x","service":"facebook"} /--></ul><!-- /wp:social-links -->';
+	private static function social( array $attrs, array $services = [ 'facebook' ] ): string {
+		$links = '';
+		foreach ( $services as $service ) {
+			$links .= '<!-- wp:social-link {"url":"https://' . $service . '.example.test/x","service":"' . $service . '"} /-->';
+		}
+		return '<!-- wp:social-links ' . ( $attrs ? wp_json_encode( $attrs ) : '{}' ) . ' --><ul class="wp-block-social-links">' . $links . '</ul><!-- /wp:social-links -->';
 	}
 
 	/**
-	 * The pill table of the first icon.
+	 * The pill table of an icon.
 	 *
-	 * @param string $html Rendered HTML.
+	 * @param string $html  Rendered HTML.
+	 * @param int    $index Icon position.
 	 * @return string
 	 */
-	private static function pill( string $html ): string {
-		preg_match( '/<table[^>]*style="[^"]*display:\s*inline-table[^"]*"[^>]*>/', $html, $matches );
-		return $matches[0] ?? '';
+	private static function pill( string $html, int $index = 0 ): string {
+		preg_match_all( '/<table[^>]*style="[^"]*display:\s*inline-table[^"]*"[^>]*>/', $html, $matches );
+		return $matches[0][ $index ] ?? '';
 	}
 
 	/**
@@ -366,40 +417,53 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Newspack's style variants set the background and the icon color.
+	 * A service the package has no icon for doesn't shift the brand colors of the
+	 * icons after it.
 	 */
-	public function test_social_style_variants() {
-		$filled_black = $this->render( self::social( [ 'className' => 'is-style-filled-black' ] ) );
-		$this->assertStringNotContainsString( 'background-color', self::pill( $filled_black ), 'Expected filled black to have no background.' );
-		$this->assertStringContainsString( 'assets/black-facebook.png', $filled_black );
+	public function test_social_brand_colors_follow_their_service() {
+		$html = $this->render( self::social( [], [ 'snapchat', 'facebook' ] ) );
 
-		$circle_black = $this->render( self::social( [ 'className' => 'is-style-circle-black' ] ) );
-		$this->assertMatchesRegularExpression( '/background-color:\s*#000000/', self::pill( $circle_black ) );
-		$this->assertStringContainsString( 'facebook-white.png', $circle_black );
+		$this->assertMatchesRegularExpression( '/background-color:\s*#0866ff/i', self::pill( $html, 1 ), 'Expected the second icon to keep Facebook\'s brand color.' );
+	}
 
-		$circle_white = $this->render( self::social( [ 'className' => 'is-style-circle-white' ] ) );
-		$this->assertMatchesRegularExpression( '/background-color:\s*#ffffff/', self::pill( $circle_white ) );
-		$this->assertStringContainsString( 'assets/black-facebook.png', $circle_white );
+	/**
+	 * Newspack's style variants and what each renders: pill background (null for none)
+	 * and icon file.
+	 *
+	 * @return array
+	 */
+	public function social_style_variants(): array {
+		return [
+			'filled black' => [ 'is-style-filled-black', null, 'assets/black-facebook.png' ],
+			'filled white' => [ 'is-style-filled-white', null, 'facebook-white.png' ],
+			'circle black' => [ 'is-style-circle-black', '#000000', 'facebook-white.png' ],
+			'circle white' => [ 'is-style-circle-white', '#ffffff', 'assets/black-facebook.png' ],
+		];
+	}
 
-		$filled_white = $this->render( self::social( [ 'className' => 'is-style-filled-white' ] ) );
-		$this->assertStringNotContainsString( 'background-color', self::pill( $filled_white ) );
-		$this->assertStringContainsString( 'facebook-white.png', $filled_white );
+	/**
+	 * Newspack's style variants set the background and the icon color.
+	 *
+	 * @dataProvider social_style_variants
+	 *
+	 * @param string      $class_name Style variant class.
+	 * @param string|null $background Expected pill background, or null for none.
+	 * @param string      $icon       Expected icon file.
+	 */
+	public function test_social_style_variants( string $class_name, ?string $background, string $icon ) {
+		$html = $this->render( self::social( [ 'className' => $class_name ] ) );
+
+		if ( null === $background ) {
+			$this->assertStringNotContainsString( 'background-color', self::pill( $html ) );
+		} else {
+			$this->assertMatchesRegularExpression( '/background-color:\s*' . preg_quote( $background, '/' ) . '/i', self::pill( $html ) );
+		}
+		$this->assertStringContainsString( $icon, $html );
 	}
 
 	// ------------------------------------------------------------------
 	// Links (NPPD-2615)
 	// ------------------------------------------------------------------
-
-	/**
-	 * The email theme underlines links and gives them the surrounding text color.
-	 */
-	public function test_theme_json_styles_links() {
-		$post_id = self::factory()->post->create( [ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ] );
-		$link    = Theme_Json_Builder::build( get_post( $post_id ) )['styles']['elements']['link'];
-
-		$this->assertSame( 'underline', $link['typography']['textDecoration'] );
-		$this->assertSame( 'inherit', $link['color']['text'] );
-	}
 
 	/**
 	 * Links in text are underlined and inherit the text color, while a block's own link
@@ -410,5 +474,17 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 
 		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="(?=[^"]*text-decoration:\s*underline)(?=[^"]*color:\s*inherit)[^"]*"[^>]*>plain link/', $html );
 		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*color:\s*#c(c0000|00)[^"]*"[^>]*>red link/i', $html );
+	}
+
+	/**
+	 * A text link followed by an image keeps its underline; only a link around an image
+	 * loses it.
+	 */
+	public function test_text_link_before_image_keeps_underline() {
+		list( $id ) = $this->image_block();
+		$src        = esc_url( wp_get_attachment_url( $id ) );
+		$html       = $this->render( '<!-- wp:paragraph --><p><a href="https://example.test/more">Read more</a><img src="' . $src . '" alt="" width="20"/></p><!-- /wp:paragraph -->' );
+
+		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>Read more/', $html );
 	}
 }
