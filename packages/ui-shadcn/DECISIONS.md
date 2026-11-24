@@ -1,6 +1,6 @@
 # Decisions
 
-This is an append-only log. Entries about the early exploration site (its pages such as `/shadcn`, `/plan` and `/seams`, its Astro endpoint, its Spacefast publishing) are history: that site is gone, and the package ships tokens, the shadcn theme and the registry only. There is no npm package; the shadcn registry is the only route.
+This is an append-only log. Notes about how the work was run were removed, and their numbers are not reused. Entries about the early exploration site (its pages such as `/shadcn`, `/plan` and `/seams`, its Astro endpoint) are history: that site is gone, and the package ships tokens, the shadcn theme and the registry only. There is no npm package; the shadcn registry is the only route.
 
 1. **Astro 7.4.8.** The latest stable on the day. It needs Node 22.23.4 or later, so the repo pins Node 24.22.2 in `.node-version` and `engines` is left to Astro.
 2. **Source path.** `scripts/tokens.mjs` reads `plugins/newspack-plugin/src/newspack-ui` by its repo-relative path, and resolves the `newspack-motion` import the SCSS makes to the sibling `packages/motion`. There are no environment overrides.
@@ -54,9 +54,6 @@ Gaps in newspack-ui that this exposed: no page container, no section spacing sca
 41. **The `registry.json` name is kept from the original plan** and listed as an open question, since shadcn uses that file name for a registry index rather than a single item.
 43. **Body text in doc sections keeps the existing muted `.section > p` color**; leads (`.lead`) use the main text color so each page's answer reads first.
 
-## Publishing to Spacefast
-
-
 ## Newspack-shaped shadcn components
 
 47. **`theme.css` now carries every newspack-ui token** (244 plus the 7 inside media queries, which are written as media blocks) with resolved values, next to the shadcn variables. `color-mix()` values stay as written, since browsers compute them. Components read tokens, so a token change reaches both sides.
@@ -76,10 +73,10 @@ Gaps in newspack-ui that this exposed: no page container, no section spacing sca
 ## Change of direction: shadcn first
 
 60. **The recommendation is now the shadcn registry, with the npm package deferred.** Later dropped for good: there is no npm package. The direction was decided upstream ("we don't want to own the JS"); the pages explain it with the evidence from `/shadcn` rather than reopen it. `/plan` leads with a decision table and an order-of-work table, and the `packages/ui` move is condensed under "If we ship the npm package later".
-61. **Directory `packages/ui-shadcn`, package name `newspack-ui-shadcn`, private.** Unprefixed like the other directories, says what it is, keeps the POC package name, and leaves `packages/ui` free. Superseded: the package has no release config and is left out of releases.
+61. **Directory `packages/ui-shadcn`, package name `newspack-ui-shadcn`, private.** Unprefixed like the other directories, says what it is, keeps the POC package name, and leaves `packages/ui` free. It has no release config and is left out of releases.
 62. **Default host: jsDelivr's GitHub endpoint pinned to the release tag.** The monorepo is public and multi-semantic-release already tags `<name>@<version>`. Checked: `cdn.jsdelivr.net/gh/Automattic/newspack-workspace@newspack-blocks@4.36.7/packages/icons/package.json` returns 200, so a tag with `@` resolves. Nothing to deploy, no secret, immutable URLs. Cost: the built JSON has to be in the tagged tree, so the release step generates it with the new version and commits it in the release commit, as the changelog is. A Space was not chosen as the default because it serves one build at a time (pinning would mean redeploying every old version) and needs a CI credential. Superseded: the registry is served from the product site, https://newspack-ui-theme.space.fast/.
 63. **Dark values belong in newspack-ui's color SCSS**, under a selector newspack-plugin never sets, so tokens keep one source; `scripts/dark.mjs` is the stand-in. The generator's `.dark` block redefines the color tokens as well as shadcn's variables, because the components read the tokens directly.
-64. **New gap: Inter.** `theme.css` names Inter but nothing in the registry loads it; on the POC it comes from newspack-ui's CSS. Listed on `/plan`, `/seams` and in `gaps.md`.
+64. **New gap: Inter.** `theme.css` names Inter but nothing in the registry loads it; on the POC it comes from newspack-ui's CSS. Listed on `/plan`, `/seams` and in `gaps.md`. Superseded by 71.
 65. **Icons for shadcn import `@wordpress/icons` and `newspack-icons`.** Checked: React is a peer dependency of both (`@wordpress/icons` 20.0.0 via `@wordpress/element` 8.8.0, and `newspack-icons`), so no second React. The build-time renderer and PHP array move under the package path.
 66. **Chart colors from the Insights series palette.** `--chart-1..5` take series 0, 3, 1, 4, 6, alternating blue and orange as Insights pairs two series; all eight are also written as `--newspack-ui-chart-0..7` (hex, as written in the source). Blues and grays are read from `newspack-colors`: `scripts/tokens.mjs` keeps the colors module's `:export` block as `build/newspack-ui/colors.json` before stripping it from the CSS, so no value is copied. The three oranges are hex in the source and in `mapping.mjs`, with a note that they have no token. The mapping table on `/shadcn` swatches hex values too. The private repo path of the Insights SCSS is not named on the public site.
 67. **Stale theme-only gaps reworded.** The radius, hover, elevation and spacing gaps in `mapping.mjs` described stock shadcn components; they now say so and point at what the Newspack components do instead. The `/seams` shadcn table rows for the dark variant, Inter and shapes were updated to match.
