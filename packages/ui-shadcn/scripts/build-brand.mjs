@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'culori';
 import postcss from 'postcss';
-import { accentTokens, brandBase, brandChart, brandFontFiles, brandFonts, brandShadcn, brandTokens, brandTypeTokens, inverseTokens, inverseUnsupported } from './brand.mjs';
+import { accentTokens, blueChart, blueContrast, blueShadcn, blueTokens, blueUnsupported, brandBase, brandChart, brandFontFiles, brandFonts, brandShadcn, brandTokens, brandTypeTokens } from './brand.mjs';
 import { formatOklch } from './oklch.mjs';
 import { writeBrandReport } from './brand-report.mjs';
 
@@ -39,8 +39,8 @@ brandChart.forEach( ( hex, index ) => {
 	shadcn[ `chart-${ index + 1 }` ] = oklch( hex );
 } );
 const tokenValues = group => Object.fromEntries( Object.entries( group ).map( ( [ name, [ value ] ] ) => [ name, value ] ) );
-const prefix = vars => Object.fromEntries( Object.entries( vars ).map( ( [ name, value ] ) => [ `--${ name }`, value ] ) );
-const varName = name => `--${ name }`;
+const varName = name => ( name === 'color-scheme' ? name : `--${ name }` );
+const prefix = vars => Object.fromEntries( Object.entries( vars ).map( ( [ name, value ] ) => [ varName( name ), value ] ) );
 
 Object.assign( brand.cssVars.light, shadcn );
 Object.assign( brand.cssVars.theme, tokenValues( brandFonts ) );
@@ -49,8 +49,25 @@ brand.css[ '@layer base' ] = brandBase;
 
 brand.name = 'newspack-brand';
 brand.title = 'Newspack brand';
-brand.description = 'Newspack brand theme, light only. For sites on Automattic domains.';
-brand.docs = `On the .newspack-brand-inverse surface: ${ inverseUnsupported.join( ' ' ) }`;
+const shadcnNames = Object.keys( neutral.cssVars.light );
+const neutralDark = neutral.css[ '.dark' ];
+const blueShadcnValues = Object.fromEntries( shadcnNames.map( name => [ name, neutralDark[ `--${ name }` ] ] ) );
+Object.assign( blueShadcnValues, tokenValues( blueShadcn ) );
+blueChart.forEach( ( [ value ], index ) => {
+	blueShadcnValues[ `chart-${ index + 1 }` ] = value;
+} );
+for ( const name of shadcnNames ) {
+	if ( ! blueShadcnValues[ name ] ) {
+		throw new Error( `No blue value for --${ name }` );
+	}
+}
+const blue = { ...prefix( tokenValues( blueTokens ) ), ...prefix( blueShadcnValues ) };
+const blueHighContrast = prefix( tokenValues( blueContrast ) );
+const contrastQuery = '@media (prefers-contrast: more)';
+const blueSelectors = [ '.dark', '.newspack-brand-inverse' ];
+
+brand.description = 'Newspack brand theme with a light mode and a blue mode. For sites on Automattic domains.';
+brand.docs = `Blue mode is the .dark class: a Cobalt surface with white text, white buttons and a white focus ring. The .newspack-brand-inverse class gives a section the same values in light mode. Not covered: ${ blueUnsupported.join( ' ' ) }`;
 
 const fontsCss = brandFontFiles.map( ( [ family, weight, style, file ] ) => `@font-face {\n\tfont-family: "${ family }";\n\tfont-style: ${ style };\n\tfont-weight: ${ weight };\n\tfont-display: swap;\n\tsrc: url("/fonts/american-grotesk/${ file }") format("woff2");\n}\n` ).join( '\n' );
 const fonts = {
@@ -99,11 +116,15 @@ themeCss.walkAtRules( 'media', atRule => {
 		atRule.remove();
 	}
 } );
-const inverse = prefix( tokenValues( inverseTokens ) );
-brand.css[ '.newspack-brand-inverse' ] = inverse;
+for ( const selector of blueSelectors ) {
+	brand.css[ selector ] = { ...blue };
+	brand.css[ contrastQuery ][ selector ] = { ...blueHighContrast };
+}
 writeJson( join( registryDir, 'newspack-brand.json' ), brand );
 const baseCss = `@layer base {\n${ Object.entries( brandBase ).map( ( [ selector, decls ] ) => block( selector, decls ).replace( /^/gm, '\t' ).replace( /\t$/, '' ) ).join( '\n' ) }}\n`;
-const brandCss = `@custom-variant dark (&:where(.dark, .dark *));\n\n${ themeCss.toString().trim().replace( /\n{3,}/g, '\n\n' ) }\n\n${ baseCss }\n${ block( '.newspack-brand-inverse', inverse ) }`;
+const blueCss = blueSelectors.map( selector => block( selector, blue ) ).join( '\n' );
+const blueContrastCss = `${ contrastQuery } {\n${ blueSelectors.map( selector => block( selector, blueHighContrast ).replace( /^/gm, '\t' ).replace( /\t$/, '' ) ).join( '\n' ) }}\n`;
+const brandCss = `@custom-variant dark (&:where(.dark, .dark *));\n\n${ themeCss.toString().trim().replace( /\n{3,}/g, '\n\n' ) }\n\n${ baseCss }\n${ blueCss }\n${ blueContrastCss }`;
 writeFileSync( join( dist, 'brand.css' ), brandCss );
 
 const entry = ( variable, value, note ) => ( { variable, value, note } );
@@ -115,8 +136,12 @@ mapping.brand = {
 		...brandChart.map( ( hex, index ) => entry( `--chart-${ index + 1 }`, shadcn[ `chart-${ index + 1 }` ], `Brand chart series ${ index + 1 }: ${ hex }.` ) ),
 		...Object.entries( brandTokens ).map( ( [ name, [ value, note ] ] ) => entry( `--${ name }`, value, note ) ),
 	],
-	inverse: Object.entries( inverseTokens ).map( ( [ name, [ value, note ] ] ) => entry( varName( name ), value, note ) ),
-	unsupported: inverseUnsupported,
+	blue: [
+		...Object.entries( blueTokens ).map( ( [ name, [ value, note ] ] ) => entry( varName( name ), value, note ) ),
+		...shadcnNames.map( name => entry( `--${ name }`, blueShadcnValues[ name ], blueShadcn[ name ]?.[ 1 ] ?? ( name.startsWith( 'chart-' ) ? `Blue chart series ${ name.slice( 6 ) }: ${ blueChart[ Number( name.slice( 6 ) ) - 1 ][ 1 ] }` : 'The token Neutral\'s dark block points it at.' ) ) ),
+	],
+	blueContrast: Object.entries( blueContrast ).map( ( [ name, [ value, note ] ] ) => entry( varName( name ), value, note ) ),
+	unsupported: blueUnsupported,
 	type: [
 		...Object.entries( brandFonts ).map( ( [ name, [ value, note ] ] ) => entry( `--${ name }`, value, note ) ),
 		...Object.entries( brandTypeTokens ).map( ( [ name, [ value, note ] ] ) => entry( `--${ name }`, value, note ) ),

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatHex, formatHex8, interpolate, parse } from 'culori';
-import { brandPairs, computeScope, resolveValue } from '../scripts/brand-report.mjs';
+import { brandPairs, brandScopes, colorIn, computeScope, resolveValue } from '../scripts/brand-report.mjs';
 
 const pairs = brandPairs();
 
@@ -14,48 +14,11 @@ const expectedNames = [
 	'checked mark on surface',
 	'h1 on surface',
 	'display text on surface',
-	'h1 on inverse',
-	'display text on inverse',
-	'body text on inverse',
-	'muted text on inverse',
-	'link on inverse',
-	'inverse button ink on inverse button',
-	'inverse button ink on inverse button, hover',
-	'inverse button ink on inverse button, pressed',
-	'inverse button ink on hover, text-hover token',
-	'inverse focus ring on the white button',
-	'inverse checked mark on Cobalt',
-	'inverse tick on the white mark',
-	'inverse secondary button ink on its fill',
-	'inverse secondary button ink on its fill, hover',
-	'inverse secondary button ink on its fill, pressed',
-	'inverse brand button ink on the brand fill',
-	'inverse brand button ink on the brand fill, hover',
-	'inverse brand button ink on the brand fill, pressed',
-	'inverse input border on Cobalt',
 	'input focus edge on surface',
-	'label on inverse',
-	'inactive tab on inverse',
-	'field ink on field',
-	'placeholder on field',
-	'placeholder on disabled field',
-	'default alert text on its fill',
-	'default alert icon on its fill',
-	'muted badge ink on its fill',
-	'secondary badge ink on its fill',
-	'default badge ink on its fill',
-	'success badge ink on its fill',
-	'warning badge ink on its fill',
-	'error badge ink on its fill',
-	'destructive button ink on its fill',
 	'toast ink on toast',
 	'select highlighted item on its fill',
 	'select checked item on its fill',
 	'active tab marker on surface',
-	'inverse active tab marker on Cobalt',
-	'segmented control unselected on its track',
-	'disabled button ink on its fill',
-	'inverse focus on Cobalt',
 	'emerald ink on emerald',
 	'body text on emerald subtle',
 	'morganite ink on morganite',
@@ -67,6 +30,71 @@ const expectedNames = [
 	'chart 3 on surface',
 	'chart 4 on surface',
 	'chart 5 on surface',
+	'body text on blue',
+	'muted text on blue',
+	'link on blue',
+	'h1 on blue',
+	'display text on blue',
+	'h1 in an inverse section',
+	'button ink on the white button',
+	'button ink on the white button, hover',
+	'button ink on the white button, pressed',
+	'button ink on hover, text-hover token',
+	'focus ring on blue',
+	'focus ring on the white button',
+	'checked mark on blue',
+	'tick on the white mark',
+	'secondary button ink on its fill',
+	'secondary button ink on its fill, hover',
+	'secondary button ink on its fill, pressed',
+	'brand button ink on the brand fill',
+	'brand button ink on the brand fill, hover',
+	'brand button ink on the brand fill, pressed',
+	'brand outline button ink on blue',
+	'destructive button ink on its fill',
+	'disabled button ink on its fill',
+	'input border on blue',
+	'input focus edge on blue',
+	'label on blue',
+	'field ink on field',
+	'placeholder on field',
+	'placeholder on disabled field',
+	'invalid field edge on field',
+	'invalid checkbox and radio edge on blue',
+	'field error text on blue',
+	'inactive tab on blue',
+	'active tab marker on blue',
+	'segmented control unselected on its track',
+	'select highlighted item on its fill, blue',
+	'select checked item on its fill, blue',
+	'toast ink on toast, blue',
+	'default alert text on its fill',
+	'default alert icon on its fill',
+	'success alert text on its fill',
+	'success alert icon on its fill',
+	'warning alert text on its fill',
+	'warning alert icon on its fill',
+	'error and destructive alert text on its fill',
+	'error and destructive alert icon on its fill',
+	'muted badge ink on its fill',
+	'secondary badge ink on its fill',
+	'default badge ink on its fill',
+	'success badge ink on its fill',
+	'warning badge ink on its fill',
+	'error badge ink on its fill',
+	'emerald ink on emerald, blue',
+	'body text on emerald subtle, blue',
+	'morganite ink on morganite, blue',
+	'body text on morganite subtle, blue',
+	'amber ink on amber, blue',
+	'body text on amber subtle, blue',
+	'chart 1 on blue',
+	'chart 2 on blue',
+	'chart 3 on blue',
+	'chart 4 on blue',
+	'chart 5 on blue',
+	'high-contrast input border on blue',
+	'placeholder on high-contrast disabled field',
 ];
 
 test( 'covers exactly the expected brand color pairs', () => {
@@ -122,6 +150,19 @@ test( 'mixing two translucent colors weights each by its alpha', () => {
 test( 'a nested translucent mix keeps the inner alpha', () => {
 	const color = resolveValue( 'color-mix(in oklab, color-mix(in oklab, #fff 50%, transparent) 50%, transparent)' );
 	assert.equal( formatHex8( color ), '#ffffff40' );
+} );
+
+test( 'blue mode resolves every scored token the same on html and on a section', () => {
+	const { blue, blueOnRoot } = brandScopes();
+	const tokens = new Set( pairs.flatMap( pair => [ pair.fgToken, pair.bgToken ] ) );
+	for ( const token of tokens ) {
+		assert.equal( colorIn( blueOnRoot, token ), colorIn( blue, token ), token );
+	}
+} );
+
+test( 'the inverse section resolves exactly like blue mode', () => {
+	const { blue, inverse } = brandScopes();
+	assert.deepEqual( inverse, blue );
 } );
 
 for ( const pair of pairs ) {

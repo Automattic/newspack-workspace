@@ -39,19 +39,59 @@ test( 'brand.css starts with the dark variant line', () => {
 	assert.ok( readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' ).startsWith( '@custom-variant dark (&:where(.dark, .dark *));' ) );
 } );
 
-test( 'keeps the dark variant line and drops every dark scope', () => {
+test( 'keeps the dark variant line and replaces Neutral dark with blue mode', () => {
 	assert.ok( '@custom-variant dark (&:where(.dark, .dark *))' in brand.css );
-	for ( const key of Object.keys( brand.css ) ) {
-		assert.ok( key !== '.dark' && ! key.startsWith( '.dark ' ), `unexpected dark scope ${ key }` );
+	const darkKeys = Object.keys( brand.css ).filter( key => key.startsWith( '.dark' ) );
+	assert.deepEqual( darkKeys, [ '.dark' ] );
+	assert.equal( brand.css[ '.dark' ][ '--newspack-ui-color-surface' ], 'var(--newspack-ui-color-primary-60)' );
+	for ( const key of Object.keys( brand.css[ '.dark' ] ) ) {
+		assert.ok( ! /^--newspack-ui-color-(neutral|primary|success|error|warning|overlay)-\d+$/.test( key ), `palette step ${ key } redefined in blue mode` );
 	}
 	for ( const [ key, value ] of Object.entries( brand.css ) ) {
 		if ( key.startsWith( '@media' ) ) {
 			for ( const selector of Object.keys( value ) ) {
-				assert.ok( ! selector.startsWith( '.dark' ), `dark selector ${ selector } in ${ key }` );
+				assert.ok( ! selector.startsWith( '.dark ' ), `Neutral dark selector ${ selector } in ${ key }` );
 			}
 		}
 	}
 	assert.equal( brand.cssVars.dark, undefined );
+} );
+
+test( 'blue mode and the inverse section share one set of values', () => {
+	assert.deepEqual( brand.css[ '.newspack-brand-inverse' ], brand.css[ '.dark' ] );
+	const contrast = brand.css[ '@media (prefers-contrast: more)' ];
+	assert.ok( contrast[ ':root' ] );
+	assert.ok( contrast[ '.dark' ] );
+	assert.deepEqual( contrast[ '.newspack-brand-inverse' ], contrast[ '.dark' ] );
+	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	const body = selector => css.match( new RegExp( `^${ selector.replace( '.', '\\.' ) } \\{([\\s\\S]*?)\\n\\}`, 'm' ) )[ 1 ];
+	assert.equal( body( '.dark' ), body( '.newspack-brand-inverse' ) );
+	assert.ok( css.lastIndexOf( '@media (prefers-contrast: more)' ) > css.indexOf( '.newspack-brand-inverse {' ) );
+} );
+
+test( 'blue mode restates every shadcn variable, pointing primary at the white button', () => {
+	const blue = brand.css[ '.dark' ];
+	for ( const name of Object.keys( brand.cssVars.light ) ) {
+		assert.ok( blue[ `--${ name }` ], name );
+	}
+	assert.equal( blue[ '--primary' ], 'var(--newspack-ui-color-btn)' );
+	assert.equal( blue[ '--background' ], 'var(--newspack-ui-color-surface)' );
+	assert.equal( blue[ '--ring' ], 'var(--newspack-ui-color-focus)' );
+	assert.equal( blue[ '--chart-1' ], 'var(--newspack-ui-color-primary-0)' );
+} );
+
+test( 'blue mode supplies status, invalid and accent values', () => {
+	const blue = brand.css[ '.dark' ];
+	for ( const name of [ 'success', 'success-text', 'success-tint', 'success-border', 'warning', 'warning-dot', 'warning-text', 'warning-tint', 'warning-border', 'error', 'error-text', 'error-tint', 'error-border', 'destructive-text' ] ) {
+		assert.ok( blue[ `--newspack-ui-color-${ name }` ], name );
+	}
+	for ( const name of [ 'emerald', 'morganite', 'amber' ] ) {
+		assert.match( blue[ `--newspack-ui-color-brand-accent-${ name }-subtle` ], /^color-mix\(in oklab, / );
+	}
+	for ( const value of Object.values( blue ) ) {
+		assert.ok( ! /#[0-9a-f]{3,8}\b/i.test( value ), `raw hex in blue mode: ${ value }` );
+		assert.ok( ! value.includes( 'srgb' ), value );
+	}
 } );
 
 test( 'points the button, focus, mark, selected and link tokens at Cobalt', () => {
@@ -114,11 +154,12 @@ test( 'accent tokens pair a fill with Neutral 900 ink', () => {
 test( 'writes brand.css and the mapping section', () => {
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
 	assert.ok( css.indexOf( ':root {' ) !== -1 && css.indexOf( ':root {' ) < css.indexOf( '.newspack-brand-inverse {' ) );
-	assert.ok( ! css.replace( '@custom-variant dark (&:where(.dark, .dark *));', '' ).includes( '.dark' ) );
+	assert.deepEqual( css.match( /^\s*\.dark[^{]*\{/gm ).map( line => line.trim() ), [ '.dark {', '.dark {' ] );
 	assert.ok( ! /\/\*/.test( css ) );
 	const mapping = read( join( root, 'dist', 'mapping.json' ) );
 	assert.ok( mapping.brand.entries.length > 0 );
-	assert.ok( mapping.brand.inverse.length > 0 );
+	assert.ok( mapping.brand.blue.length > 0 );
+	assert.ok( mapping.brand.blueContrast.length > 0 );
 	assert.ok( mapping.brand.accents.length > 0 );
 	assert.equal( mapping.style, 'neutral' );
 } );
@@ -221,7 +262,8 @@ test( 'Neutral item matches Neutral theme.css and the brand step never rewrites 
 	}
 } );
 
-test( 'documents what the inverse surface does not support', () => {
-	assert.match( brand.docs, /Alerts/ );
+test( 'documents blue mode and what it does not cover', () => {
+	assert.match( brand.docs, /Blue mode is the \.dark class/ );
+	assert.doesNotMatch( brand.docs, /Alerts/ );
 	assert.ok( read( join( root, 'dist', 'mapping.json' ) ).brand.unsupported.length >= 2 );
 } );

@@ -28,7 +28,7 @@ newspack-ui is read from this checkout, so a change to its tokens reaches the th
 | Path | Contents |
 | --- | --- |
 | `newspack-ui-shadcn/theme.css` | The shadcn variables mapped to newspack-ui tokens, light and dark |
-| `newspack-ui-shadcn/brand.css` | The Newspack brand theme: Neutral's mapping with the brand overrides, light only, and the `.newspack-brand-inverse` surface |
+| `newspack-ui-shadcn/brand.css` | The Newspack brand theme: Neutral's mapping with the brand overrides, blue mode on `.dark`, and the `.newspack-brand-inverse` surface |
 | `newspack-ui-shadcn/dark.css` | newspack-ui's own dark values |
 | `newspack-ui-shadcn/mapping.json` | Every shadcn variable with its token, plus the gaps and values with no token |
 | `newspack-ui-shadcn/registry/*` | The registry items |
@@ -50,15 +50,19 @@ The brand items: `newspack-brand` and `newspack-brand-fonts` are in `registry/*`
 
 ## Brand theme
 
-A second, light-only theme for internal Newspack work such as sales decks. A site installs it instead of Neutral. It maps the same shadcn variables, so every kit component works in it unchanged.
+A second theme for internal Newspack work such as sales decks, with a light mode and a blue mode. A site installs it instead of Neutral. It maps the same shadcn variables, so every kit component works in it unchanged.
 
 Cobalt (`#003DA5`) is used for the default Button fill, links, the focus ring, checked Checkbox and Radio, the active Tab marker, and h1 and `font-display` text. Everything else keeps Neutral's values, and `variant="brand"` renders like the default Button. Emerald, Morganite and Amber are accent tokens for backgrounds, shapes and charts, never for actions. The full accents carry short or large text only (their ink is Lc 62.8 to 63.2); body copy goes on the `-subtle` tints, which the gate checks at Lc 75. Anchors with no class are Cobalt and underlined.
 
-Add the `newspack-brand-inverse` class to a section for a Cobalt surface with white text, a white focus ring and white buttons. Put it on a section or slide, not on an element that carries its own `bg-*` utility: the utility keeps its fill while the tokens flip to white text. Success, Warning, Error and Destructive Alerts and invalid-field styling are not supported on it.
+Blue mode is the brand theme's dark mode: the `.dark` class on `html` gives a Cobalt surface with white text, white buttons with Cobalt ink, a white focus ring and white checked marks. It works with the kit's theme toggle and head script unchanged, and `dark:` utilities apply in it. Popups that render through a portal (the Select list, Dialog, Sheet and toasts) are blue too, since they sit under `html`. Status Alerts and Badges use dark status fills with white text and light icons, invalid fields use a light red edge and message, the accent `-subtle` tints become accent-tinted Cobalt so white text reads on them, and the chart series swap Cobalt for light blues. A system set to dark turns on blue mode, as it turns on dark mode in Neutral.
+
+To enable it, keep `DARK_MODE = true` in `site.ts` (the default), and label the theme toggle "Blue": in the site's copy of `components/site/theme-toggle.tsx`, the screen reader text should say "Switch to blue mode" instead of "Switch to dark mode". With `DARK_MODE = false` the site stays light.
+
+Add the `newspack-brand-inverse` class to a section for the same Cobalt surface in light mode. It has the same values as blue mode, so it supports the same components and states. Put it on a section or slide, not on an element that carries its own `bg-*` utility: the utility keeps its fill while the tokens flip to white text. In blue mode an inverse section matches the page. In light mode, portal-rendered popups opened from an inverse section render on the light surface.
 
 American Grotesk is licensed for Automattic domains only. The files are never committed here. To use them, copy the five woff2 files into the site's `public/fonts/american-grotesk/` and import `styles/newspack-brand-fonts.css` once, before the theme. Without them the theme falls back to Inter. Get the files from the product site's `/fonts/american-grotesk/`.
 
-Set `DARK_MODE = false` in `site.ts`. For a deck, import `styles/newspack-deck.css`, which `deck-section` ships.
+For a deck, import `styles/newspack-deck.css`, which `deck-section` ships.
 
 `brand.css` must be imported after `@import "tailwindcss"`, otherwise preflight's heading reset wins over the brand heading styles.
 
