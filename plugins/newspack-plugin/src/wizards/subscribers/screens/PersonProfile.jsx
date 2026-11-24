@@ -42,7 +42,7 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Router, SplitSection, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
@@ -96,10 +96,10 @@ const giftPayerName = subscription => ( subscription.giftedBy ? subscription.gif
 function Row( { title, description, children, showDivider = true } ) {
 	return (
 		<>
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader title={ title } description={ description } heading={ 2 } noMargin />
-				<div>{ children }</div>
-			</Grid>
+			<SplitSection.Root>
+				<SplitSection.Header title={ title } description={ description } />
+				<SplitSection.Content>{ children }</SplitSection.Content>
+			</SplitSection.Root>
 			{ showDivider && <Divider alignment="full-width" variant="tertiary" /> }
 		</>
 	);
