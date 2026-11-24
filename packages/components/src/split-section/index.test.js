@@ -53,10 +53,10 @@ describe( 'SplitSection', () => {
 		expect( screen.getByTestId( 'content' ) ).toContainElement( screen.getByRole( 'textbox', { name: 'Name' } ) );
 	} );
 
-	it( 'spaces the fields 24px apart and header extras 16px apart', () => {
+	it( 'spaces the items of both columns 24px apart', () => {
 		renderSection();
 		expect( screen.getByTestId( 'content' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
-		expect( screen.getByTestId( 'header' ).style.gap ).toContain( '--wpds-dimension-gap-lg' );
+		expect( screen.getByTestId( 'header' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
 	} );
 
 	it( 'keeps its layout when a caller passes layout props', () => {

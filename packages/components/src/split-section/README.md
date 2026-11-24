@@ -71,7 +71,7 @@ The left column: a `SectionHeader` with `noMargin`, then any children.
   view. An item editor under a tabbed `Wizard` links back through its page
   `breadcrumbs` instead.
 - `className` and any other `div` attribute: added to the column.
-- `children`: shown 16px below the description, such as a notice that applies
+- `children`: shown 24px below the description, such as a notice that applies
   to the whole section. Children stretch to the column width, so wrap a lone
   button in a `Stack` from `@wordpress/ui` to keep its natural width.
 
