@@ -672,7 +672,8 @@ final class Recaptcha {
 	 * @return \WP_Error The same errors, plus the reCAPTCHA error if verification failed.
 	 */
 	public static function verify_wp_registration( $errors ) {
-		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), \wp_registration_url(), 'wp_register' );
+		$url                   = \home_url( \add_query_arg( null, null ) );
+		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), $url, 'wp_register' );
 		if ( ! $should_verify_captcha ) {
 			return $errors;
 		}

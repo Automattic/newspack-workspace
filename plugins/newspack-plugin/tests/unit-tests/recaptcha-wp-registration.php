@@ -47,6 +47,13 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	private $original_wp_styles;
 
 	/**
+	 * The request URI from before the test, restored afterwards.
+	 *
+	 * @var string|null
+	 */
+	private $original_request_uri;
+
+	/**
 	 * Start each test with reCAPTCHA off, no token, an empty mailbox, empty script and style queues and a mocked siteverify endpoint.
 	 */
 	public function set_up() {
@@ -62,6 +69,8 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		$GLOBALS['wp_scripts']     = new WP_Scripts();
 		$this->original_wp_styles  = $GLOBALS['wp_styles'] ?? null;
 		$GLOBALS['wp_styles']      = new WP_Styles();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Snapshotting the value verbatim to restore it after the test.
+		$this->original_request_uri = $_SERVER['REQUEST_URI'] ?? null;
 		// Read by the TEC Community Events mock when another test file has loaded it.
 		$GLOBALS['newspack_test_is_tec_community_page'] = false;
 		$this->siteverify       = [ 'success' => true ];
@@ -76,6 +85,11 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		unset( $_POST['g-recaptcha-response'] );
 		$GLOBALS['wp_scripts'] = $this->original_wp_scripts;
 		$GLOBALS['wp_styles']  = $this->original_wp_styles;
+		if ( null === $this->original_request_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
+		}
 		parent::tear_down();
 	}
 
@@ -317,10 +331,19 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Sites can skip the check for this form through the shared filter, which names the form's context.
+	 * Sites can skip the check for this form through the shared filter, which gets the requested page
+	 * and names the form's context. A site that sends registration elsewhere through `register_url`
+	 * still gets the page that was requested, as checkout does.
 	 */
-	public function test_verify_filter_receives_wp_register_context() {
+	public function test_verify_filter_receives_requested_url_and_wp_register_context() {
 		$this->enable( 'v3' );
+		$_SERVER['REQUEST_URI'] = '/wp-login.php?action=register';
+		add_filter(
+			'register_url',
+			function () {
+				return home_url( '/join/' );
+			}
+		);
 		$seen = [];
 		add_filter(
 			'newspack_recaptcha_verify_captcha',
@@ -333,7 +356,7 @@ class Test_Recaptcha_WP_Registration extends WP_UnitTestCase {
 		);
 
 		$this->assert_allowed( $this->register() );
-		$this->assertSame( [ wp_registration_url(), 'wp_register' ], $seen );
+		$this->assertSame( [ home_url( '/wp-login.php?action=register' ), 'wp_register' ], $seen );
 	}
 
 	/**
