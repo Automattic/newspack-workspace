@@ -24,7 +24,6 @@ class Plugin_Manager {
 	public static $required_plugins = [
 		'akismet',
 		'jetpack',
-		'pwa',
 		'google-site-kit',
 		'newspack-blocks',
 		'wp-parsely',
@@ -214,14 +213,6 @@ class Plugin_Manager {
 					'filename'   => 'class-publish-to-apple-news-configuration-manager.php',
 					'class_name' => 'Publish_To_Apple_News_Configuration_Manager',
 				],
-			],
-			'pwa'                         => [
-				'Name'        => \esc_html__( 'PWA', 'newspack-plugin' ),
-				'Description' => \esc_html__( 'Feature plugin to bring Progressive Web App (PWA) capabilities to Core.', 'newspack-plugin' ),
-				'Author'      => \esc_html__( 'PWA Plugin Contributors', 'newspack-plugin' ),
-				'AuthorURI'   => \esc_url( 'https://github.com/xwp/pwa-wp/graphs/contributors' ),
-				'PluginURI'   => \esc_url( 'https://github.com/xwp/pwa-wp' ),
-				'Download'    => 'wporg',
 			],
 			'redirection'                 => [
 				'Name'        => \esc_html__( 'Redirection', 'newspack-plugin' ),

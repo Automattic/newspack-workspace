@@ -5,7 +5,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _x, sprintf } from '@wordpress/i18n';
 import {
 	CheckboxControl,
 	__experimentalToggleGroupControl as ToggleGroupControl, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -18,9 +18,27 @@ import {
  */
 import ContentRuleControlTokenField from './content-rule-control-tokenfield';
 import { Grid } from '../../../../../../packages/components/src';
+import PublishedAgeRuleControl from '../../../../../content-gate/components/published-age-rule-control';
+import { PUBLISHED_AGE_RULE, formatPublishedAge } from '../../../../../content-gate/utils/published-age';
 
 export default function ContentRuleControl( { slug, value, exclusion, onChange, onChangeExclusion, isStatic = false }: GateRuleControlProps ) {
 	const rule = window.newspackAudienceContentGates.available_content_rules[ slug ];
+	if ( rule && PUBLISHED_AGE_RULE === slug ) {
+		return isStatic ? (
+			<p>
+				<strong>
+					{ sprintf(
+						// translators: %s: rule name, "Publication date".
+						_x( '%s:', 'content rule label', 'newspack-plugin' ),
+						rule.name
+					) }
+				</strong>{ ' ' }
+				{ formatPublishedAge( value ) }
+			</p>
+		) : (
+			<PublishedAgeRuleControl className="newspack-content-gates__content-rule-control" value={ value } onChange={ onChange } />
+		);
+	}
 	if ( ! rule || ! Array.isArray( value ) ) {
 		return null;
 	}

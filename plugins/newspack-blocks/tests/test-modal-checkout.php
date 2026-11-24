@@ -74,7 +74,14 @@ if ( ! function_exists( 'WC' ) ) {
 				public $session = null;
 
 				/**
-				 * Countries double exposing a US-only states list.
+				 * Customer double, set by tests.
+				 *
+				 * @var object|null
+				 */
+				public $customer = null;
+
+				/**
+				 * Countries double exposing a US-only states list and an AU:NSW store base.
 				 *
 				 * @var object
 				 */
@@ -94,6 +101,36 @@ if ( ! function_exists( 'WC' ) ) {
 						 */
 						public function get_states( $country ) {
 							return 'US' === $country ? [ 'CA' => 'California' ] : [];
+						}
+
+						/**
+						 * Get the store base country.
+						 *
+						 * @return string
+						 */
+						public function get_base_country() {
+							return 'AU';
+						}
+
+						/**
+						 * Get the store base state.
+						 *
+						 * @return string
+						 */
+						public function get_base_state() {
+							return 'NSW';
+						}
+
+						/**
+						 * Get the countries the store sells to.
+						 *
+						 * @return array
+						 */
+						public function get_allowed_countries() {
+							return [
+								'AU' => 'Australia',
+								'US' => 'United States',
+							];
 						}
 					};
 				}
@@ -553,6 +590,9 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$_SERVER['HTTP_REFERER']
 		);
 		$this->reset_validation_only_request();
+		if ( isset( $GLOBALS['wp'] ) ) {
+			unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		}
 		parent::tear_down();
 	}
 
@@ -895,6 +935,70 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Hooks that carry the wallet button params.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function express_checkout_hook_provider() {
+		return [
+			'Stripe'      => [ 'wc_stripe_express_checkout_params' ],
+			'WooPayments'      => [ 'wcpay_express_checkout_js_params' ],
+		];
+	}
+
+	/**
+	 * Wallet buttons take the Newspack UI button radius on modal checkout requests.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_on_modal_checkout( $hook ) {
+		$_REQUEST['modal_checkout'] = '1';
+		$params                     = apply_filters( $hook, [ 'button' => [ 'radius' => '4', 'height' => '48' ] ] );
+
+		$this->assertSame( 8, $params['button']['radius'] );
+		$this->assertSame( '48', $params['button']['height'] );
+	}
+
+	/**
+	 * A missing or non-array button param still receives the radius.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_handles_odd_shapes( $hook ) {
+		$_REQUEST['modal_checkout'] = '1';
+		$missing                    = apply_filters( $hook, [ 'foo' => 'bar' ] );
+		$odd                        = apply_filters( $hook, [ 'button' => 'x' ] );
+
+		$this->assertSame( 8, $missing['button']['radius'] );
+		$this->assertSame( 'bar', $missing['foo'] );
+		$this->assertSame( 8, $odd['button']['radius'] );
+	}
+
+	/**
+	 * Non-array params are returned untouched. Called directly: the hooks always pass arrays.
+	 */
+	public function test_express_checkout_button_radius_returns_non_array_untouched() {
+		$_REQUEST['modal_checkout'] = '1';
+		$this->assertNull( \Newspack_Blocks\Modal_Checkout::set_express_checkout_button_radius( null ) );
+	}
+
+	/**
+	 * Regular checkout pages keep the gateway's radius.
+	 *
+	 * @dataProvider express_checkout_hook_provider
+	 *
+	 * @param string $hook Filter name.
+	 */
+	public function test_express_checkout_button_radius_noop_outside_modal_checkout( $hook ) {
+		$params = [ 'button' => [ 'radius' => '4' ] ];
+		$this->assertSame( $params, apply_filters( $hook, $params ) );
+	}
+
+	/**
 	 * Standard (non-modal) Woo checkouts keep the stock field set, by design:
 	 * publisher flows that predate Audience Management must not change.
 	 */
@@ -1232,6 +1336,105 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 		$this->set_mock_checkout_cart( true );
 		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Shipping carts should not be relaxed.' );
+	}
+
+	/**
+	 * WooCommerce refuses a checkout that has no billing country. When the
+	 * modal's configured billing fields leave the country out, the reader has
+	 * nowhere to enter one, so the store base becomes the default customer
+	 * location and the session customer carries a country.
+	 */
+	public function test_base_default_customer_address_when_country_field_is_off() {
+		$this->set_modal_checkout_request();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+		$this->assertSame( 'base', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'Without a country field, "No location by default" should resolve to the store base.' );
+
+		// The country field is shown, so the reader supplies the country.
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email', 'billing_country' ] );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'A shown country field should leave the option alone.' );
+
+		// The default (empty) configuration shows every WooCommerce field, country included.
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'The default configuration should leave the option alone.' );
+	}
+
+	/**
+	 * Set WC()->customer to a session customer double.
+	 *
+	 * @param string $billing_country The billing country the customer starts with.
+	 *
+	 * @return object The customer double.
+	 */
+	private function set_mock_session_customer( $billing_country ) {
+		$session_customer = new class() {
+			/**
+			 * Billing country.
+			 *
+			 * @var string
+			 */
+			public $billing_country = '';
+
+			/**
+			 * Billing state.
+			 *
+			 * @var string
+			 */
+			public $billing_state = '';
+
+			/**
+			 * Get the billing country.
+			 *
+			 * @return string
+			 */
+			public function get_billing_country() {
+				return $this->billing_country;
+			}
+
+			/**
+			 * Set the billing country.
+			 *
+			 * @param string $country Country code.
+			 */
+			public function set_billing_country( $country ) {
+				$this->billing_country = $country;
+			}
+
+			/**
+			 * Set the billing state.
+			 *
+			 * @param string $state State code.
+			 */
+			public function set_billing_state( $state ) {
+				$this->billing_state = $state;
+			}
+		};
+		$session_customer->billing_country = $billing_country;
+		WC()->customer                     = $session_customer;
+		return $session_customer;
+	}
+
+	/**
+	 * Any code can remove the country field from the checkout form, not only
+	 * the configured billing fields. A submission that posts no country, from
+	 * a customer who has none, takes the store base so WooCommerce accepts it.
+	 */
+	public function test_submission_without_country_field_takes_store_base() {
+		$this->set_modal_checkout_request();
+		$posted_data_without_country = [ 'billing_email' => 'reader@example.test' ];
+
+		$customer_without_country = $this->set_mock_session_customer( '' );
+		$this->assertSame( $posted_data_without_country, \Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( $posted_data_without_country ), 'The posted data should pass through unchanged.' );
+		$this->assertSame( [ 'AU', 'NSW' ], [ $customer_without_country->billing_country, $customer_without_country->billing_state ], 'A customer with no country should take the store base.' );
+
+		$customer_with_country = $this->set_mock_session_customer( 'US' );
+		\Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( $posted_data_without_country );
+		$this->assertSame( 'US', $customer_with_country->billing_country, 'A country the customer already has should be kept.' );
+
+		// The form has a country field, so an empty value is the reader's to fix.
+		$customer_with_country_field = $this->set_mock_session_customer( '' );
+		\Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( [ 'billing_country' => '' ] );
+		$this->assertSame( '', $customer_with_country_field->billing_country, 'A form with a country field should leave the customer alone.' );
 	}
 
 	/**
@@ -1730,6 +1933,65 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Changing the quantity in the modal keeps the modal stamp, though the
+	 * quantity request itself carries no modal signal: without it, a wallet
+	 * payment under a strict Referrer-Policy would not be recognized as modal.
+	 */
+	public function test_update_cart_quantity_keeps_the_modal_stamp() {
+		$this->vouch_for_requested_quantity();
+		$cart = $this->set_mutable_cart( 920, 2, [ 'newspack_modal_checkout_url' => 'https://example.com/?modal_checkout=1' ] );
+
+		\Newspack_Blocks\Modal_Checkout::update_cart_quantity( 920, 5 );
+
+		$item = reset( $cart->contents );
+		$this->assertSame( 'https://example.com/?modal_checkout=1', $item['newspack_modal_checkout_url'] ?? null );
+	}
+
+	/**
+	 * The helper the name-your-price handler re-adds an item through copies the
+	 * item's modal stamp across, for the same reason as a quantity change.
+	 */
+	public function test_carry_modal_checkout_stamp_copies_an_existing_stamp() {
+		$cart_item_data = \Newspack_Blocks\Modal_Checkout::carry_modal_checkout_stamp(
+			[ 'nyp' => 25 ],
+			[ 'newspack_modal_checkout_url' => 'https://example.com/?modal_checkout=1' ]
+		);
+
+		$this->assertSame( 'https://example.com/?modal_checkout=1', $cart_item_data['newspack_modal_checkout_url'] ?? null );
+		$this->assertSame( 25, $cart_item_data['nyp'] );
+	}
+
+	/**
+	 * An item that never carried the stamp does not gain one.
+	 */
+	public function test_carry_modal_checkout_stamp_adds_nothing_without_one() {
+		$cart_item_data = \Newspack_Blocks\Modal_Checkout::carry_modal_checkout_stamp( [ 'nyp' => 25 ], [ 'nyp' => 20 ] );
+
+		$this->assertSame( [ 'nyp' => 25 ], $cart_item_data );
+	}
+
+	/**
+	 * A donation added to the cart from the modal carries the modal stamp,
+	 * like the modal's own cart paths, so the order it becomes is marked.
+	 */
+	public function test_modal_donation_cart_item_carries_modal_stamp() {
+		$this->set_modal_checkout_request();
+
+		$cart_item_data = apply_filters( 'newspack_donations_cart_item_data', [ 'referer' => '' ] );
+
+		$this->assertNotEmpty( $cart_item_data['newspack_modal_checkout_url'] ?? '' );
+	}
+
+	/**
+	 * A donation added outside the modal carries no modal stamp.
+	 */
+	public function test_non_modal_donation_cart_item_has_no_modal_stamp() {
+		$cart_item_data = apply_filters( 'newspack_donations_cart_item_data', [ 'referer' => '' ] );
+
+		$this->assertArrayNotHasKey( 'newspack_modal_checkout_url', $cart_item_data );
+	}
+
+	/**
 	 * A rejected re-add must not leave the cart empty. WooCommerce answers
 	 * update_order_review on an empty cart by replacing the whole checkout form
 	 * with a session-expired notice, so the reader's original line item has to go
@@ -2001,6 +2263,293 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			'https://example.com/checkout/order-received/123/',
 			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
 		);
+	}
+
+	/**
+	 * Simulate a Store API checkout request on the given REST route that has
+	 * reached its pre-payment hook, as it has by the time the gateway asks for
+	 * the return URL.
+	 *
+	 * @param string   $rest_route REST route of the request.
+	 * @param WC_Order $order      Order being checked out.
+	 */
+	private function set_store_api_checkout_request( $rest_route, $order ) {
+		$GLOBALS['wp']->query_vars['rest_route'] = $rest_route;
+		do_action( 'woocommerce_store_api_checkout_order_processed', $order );
+	}
+
+	/**
+	 * A wallet checkout whose referer query was stripped still lands on the
+	 * modal thank-you, where the GA4 purchase event fires: the Store API
+	 * checkout request falls back to the order's modal marker.
+	 */
+	public function test_return_url_decorated_for_marked_order_in_store_api_checkout_without_referer() {
+		$order = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( '1', $query['modal_checkout'] ?? null );
+		$this->assertSame( '123', $query['order_id'] ?? null );
+		$this->assertSame( 'wc_order_testkey', $query['key'] ?? null );
+	}
+
+	/**
+	 * A referer cut back to the site's origin, as a strict-origin policy sends
+	 * it, still falls back to the order's modal marker.
+	 */
+	public function test_return_url_decorated_for_marked_order_in_store_api_checkout_with_origin_only_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$url = \Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order );
+
+		$query = [];
+		wp_parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$this->assertSame( '1', $query['modal_checkout'] ?? null );
+	}
+
+	/**
+	 * A Store API checkout made from another page keeps the standard thank-you
+	 * page, though the order is marked: a reader who left the modal without
+	 * closing it still has the modal stamp in the cart. A referer that kept its
+	 * path is one no query-stripping policy produced.
+	 */
+	public function test_return_url_untouched_for_marked_order_in_store_api_checkout_from_another_page() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * Outside a Store API checkout submission, a marked order's URL is left
+	 * alone: WooCommerce builds the same URL for the order-received page
+	 * itself, emails and classic order-pay, none of which are inside the modal.
+	 */
+	public function test_return_url_untouched_for_marked_order_outside_store_api_checkout() {
+		$order = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * A request on the checkout route that has not reached its pre-payment
+	 * hook, such as the Store API's read of the draft order, leaves a marked
+	 * order's URL alone: the route alone does not make it a submission.
+	 */
+	public function test_return_url_untouched_for_marked_order_on_checkout_route_before_its_hook() {
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wc/store/v1/checkout';
+		$order                                   = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * Paying for a marked order on the standalone order-pay page keeps the
+	 * standard thank-you page, as classic order-pay does: that page is not
+	 * inside the modal.
+	 */
+	public function test_return_url_untouched_for_marked_order_on_store_api_pay_for_order() {
+		$order = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout/123', $order );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * A Store API checkout of an order that is not marked, with no modal
+	 * referer, is a standard checkout and keeps the standard thank-you page.
+	 */
+	public function test_return_url_untouched_for_unmarked_order_in_store_api_checkout() {
+		$order = new WC_Order( 123, 'wc_order_testkey' );
+		$this->set_store_api_checkout_request( '/wc/store/v1/checkout', $order );
+
+		$this->assertSame(
+			'https://example.com/checkout/order-received/123/',
+			\Newspack_Blocks\Modal_Checkout::woocommerce_get_return_url( 'https://example.com/checkout/order-received/123/', $order )
+		);
+	}
+
+	/**
+	 * A cart item carrying the modal stamp marks the order even when the
+	 * request carries no modal signal: the wallet shape where a
+	 * Referrer-Policy stripped the referer query.
+	 */
+	public function test_mark_order_from_cart_stamp_without_request_signals() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [ 'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1' ], $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * A modal referer marks the order when the cart item carries no stamp
+	 * (express wallet shape: JSON body, no request params).
+	 */
+	public function test_mark_order_from_modal_referer() {
+		$this->set_modal_checkout_referer();
+		$order = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [], $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * The modal_checkout request param marks the order (classic card shape).
+	 */
+	public function test_mark_order_from_modal_request_param() {
+		$this->set_modal_checkout_request();
+		$order = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [], $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * A standard checkout order is not marked: no stamp, and a referer with
+	 * no modal_checkout query.
+	 */
+	public function test_standard_checkout_order_is_not_marked() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$order                   = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [], $order );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * Set WC()->cart to a cart double holding the given items.
+	 *
+	 * @param array $items Cart items, keyed by cart item key.
+	 */
+	private function set_cart_items( $items ) {
+		WC()->cart = new class( $items ) {
+			/**
+			 * Cart items.
+			 *
+			 * @var array
+			 */
+			private $items;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param array $items Cart items.
+			 */
+			public function __construct( $items ) {
+				$this->items = $items;
+			}
+
+			/**
+			 * Get the cart items.
+			 *
+			 * @return array
+			 */
+			public function get_cart() {
+				return $this->items;
+			}
+		};
+	}
+
+	/**
+	 * A Store API draft order is reused with a different cart, and its line
+	 * items are rebuilt from that cart. When nothing in the new cart came from
+	 * the modal, and the request is not modal, the old marker is cleared, so
+	 * the purchase is not reported as a modal one.
+	 */
+	public function test_mark_order_clears_marker_when_rebuilt_from_a_non_modal_cart() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$this->set_cart_items( [ 'key' => [ 'product_id' => 34 ] ] );
+		$order = new WC_Order( 123, 'wc_order_testkey', [], [ \Newspack_Blocks\Modal_Checkout::ORDER_META_KEY => 1 ] );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [ 'product_id' => 34 ], $order );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * The marker reflects the whole cart, not the line item being built: an
+	 * unstamped item built after a stamped one leaves the order marked.
+	 */
+	public function test_mark_order_keeps_marker_when_any_cart_item_is_stamped() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/';
+		$stamped                 = [
+			'product_id'                  => 34,
+			'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1',
+		];
+		$unstamped               = [ 'product_id' => 35 ];
+		$this->set_cart_items(
+			[
+				'stamped'   => $stamped,
+				'unstamped' => $unstamped,
+			]
+		);
+		$order = new WC_Order( 123 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'stamped', $stamped, $order );
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'unstamped', $unstamped, $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
+	}
+
+	/**
+	 * A subscription bought in the modal is not marked, though WooCommerce
+	 * Subscriptions builds its line items from the same stamped cart through
+	 * the same hook: the marker records a purchase, and renewal and resubscribe
+	 * orders take their meta from the subscription.
+	 */
+	public function test_mark_order_skips_subscriptions() {
+		$subscription = new WC_Subscription( [], false, 902 );
+
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [ 'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1' ], $subscription );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $subscription ) );
+	}
+
+	/**
+	 * Values that are not a WC_Order are ignored, never marked or reported as
+	 * modal orders, and never fatal.
+	 */
+	public function test_mark_order_ignores_non_order_values() {
+		\Newspack_Blocks\Modal_Checkout::mark_order( null, 'key', [ 'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1' ], null );
+
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( null ) );
+		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( 'not-an-order' ) );
+	}
+
+	/**
+	 * The marker is written while WooCommerce builds the order's line items,
+	 * which both the classic and the Store API checkout do, and the hook hands
+	 * mark_order() all four of the arguments it needs.
+	 */
+	public function test_mark_order_is_hooked_on_line_item_creation() {
+		$order = new WC_Order( 123 );
+
+		do_action( 'woocommerce_checkout_create_order_line_item', null, 'key', [ 'newspack_modal_checkout_url' => 'https://example.com/checkout/?modal_checkout=1' ], $order );
+
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::is_modal_checkout_order( $order ) );
 	}
 
 	/**

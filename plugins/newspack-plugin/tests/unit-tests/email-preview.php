@@ -173,6 +173,17 @@ class Newspack_Test_Email_Preview extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The sample code shows its two groups, not the markup that spaces them.
+	 */
+	public function test_otp_sample_renders_grouped() {
+		$post_id = $this->create_email_post( '<html><body><p>*MAGIC_LINK_OTP*</p></body></html>' );
+
+		$result = Email_Preview::get_preview_html( $post_id );
+
+		self::assertStringContainsString( '12<span style="letter-spacing:0.75em">3</span>456', $result );
+	}
+
+	/**
 	 * Raw-bucket value-construction escapes admin-controlled inputs.
 	 *
 	 * *SITE_CONTACT* lives in the 'raw' bucket (not re-escaped at

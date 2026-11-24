@@ -81,4 +81,47 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 
 		$this->assertFalse( get_user_by( 'email', 'gone@example.test' ) );
 	}
+
+	/**
+	 * The subscription's dates and price are recorded with it, so other sites can show them.
+	 */
+	public function test_event_records_the_subscription_billing() {
+		$user_id = self::factory()->user->create( [ 'user_email' => 'billed@example.test' ] );
+		$event   = new Subscription_Changed(
+			'https://a.example.test',
+			[
+				'email'             => 'billed@example.test',
+				'id'                => 42,
+				'status_after'      => 'active',
+				'products'          => [],
+				'start_date'        => '2026-03-14 12:00:00',
+				'next_payment_date' => '2026-11-14 12:00:00',
+				'last_payment_date' => '2026-10-14 12:00:00',
+				'last_paid_date'    => '2026-10-14 12:00:00',
+				'end_date'          => 0,
+				'total'             => '12.00',
+				'currency'          => 'GBP',
+				'billing_period'    => 'month',
+				'billing_interval'  => 1,
+			],
+			time()
+		);
+
+		$event->process_in_node();
+
+		$this->assertSame(
+			[
+				'start_date'        => '2026-03-14 12:00:00',
+				'next_payment_date' => '2026-11-14 12:00:00',
+				'last_payment_date' => '2026-10-14 12:00:00',
+				'last_paid_date'    => '2026-10-14 12:00:00',
+				'end_date'          => 0,
+				'total'             => '12.00',
+				'currency'          => 'GBP',
+				'billing_period'    => 'month',
+				'billing_interval'  => 1,
+			],
+			get_user_meta( $user_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true )['https://a.example.test'][42]['billing']
+		);
+	}
 }

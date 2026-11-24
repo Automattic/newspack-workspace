@@ -123,7 +123,20 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 
 if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 	class Newspack_Newsletters {
-		const EMAIL_HTML_META = 'newspack_email_html';
+		const EMAIL_HTML_META                   = 'newspack_email_html';
+		const NEWSPACK_NEWSLETTERS_PALETTE_META = 'newspack_newsletters_color_palette';
+
+		public static function update_color_palette( $palette ) {
+			return update_option(
+				self::NEWSPACK_NEWSLETTERS_PALETTE_META,
+				wp_json_encode(
+					array_merge(
+						json_decode( (string) get_option( self::NEWSPACK_NEWSLETTERS_PALETTE_META, '{}' ), true ) ?? [],
+						$palette
+					)
+				)
+			);
+		}
 
 		/**
 		 * Default return value of is_service_provider_configured(). Tests that

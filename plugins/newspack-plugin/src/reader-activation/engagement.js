@@ -1,4 +1,12 @@
 /**
+ * How often last_active is sent to the server. The browser's copy updates on
+ * every page view, but the server's copy only feeds the ESP sync and the
+ * Subscribers screen, which don't need it to the minute. Sending it every time
+ * would make every logged-in page view send a REST request.
+ */
+const LAST_ACTIVE_SYNC_INTERVAL = 60 * 60 * 1000; // 1 hour.
+
+/**
  * Set up general reader engagement fields.
  *
  * @param {Object} ras Reader Activation object.
@@ -20,5 +28,7 @@ export default function setupEngagement( ras ) {
 	ras.store.register( 'last_active', {
 		merge: ( server, client ) => Math.max( server || 0, client || 0 ),
 	} );
-	ras.store.set( 'last_active', Date.now() );
+	const now = Date.now();
+	const serverLastActive = Number( window.newspack_reader_data?.items?.last_active ) || 0;
+	ras.store.set( 'last_active', now, now - serverLastActive >= LAST_ACTIVE_SYNC_INTERVAL );
 }

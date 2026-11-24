@@ -9,9 +9,8 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/plans';
 /**
  * Fetch every plan name the subscriber list can be filtered by.
  *
- * The group list derives its options from the groups it has already loaded, because
- * it loads them all. This list is server-paginated, so the plans on the current page
- * are not the plans on the site; the whole set comes from the endpoint instead.
+ * The list is server-paginated, so the plans on the current page are not the plans
+ * on the site; the whole set comes from the endpoint instead.
  *
  * Unlike the list hooks there is no loading state to return: these names only
  * populate a filter dropdown, and the table is fully usable without them. A failure
@@ -19,11 +18,13 @@ const PATH = '/newspack/v1/wizard/newspack-subscribers/plans';
  * as `failed` because DataViews drops a filter with no options — leaving nothing on
  * screen to tell a failed read from a site that sells no plans.
  *
- * @return {{plans: string[], failed: boolean}} Plan names, alphabetised by the
- *                                              endpoint, and whether the read failed.
+ * @return {{plans: string[], sites: string[], failed: boolean}} Plan names and the
+ * network sites managing any subscription here, both alphabetized by the endpoint,
+ * and whether the read failed.
  */
 export function usePlans() {
 	const [ plans, setPlans ] = useState( [] );
+	const [ sites, setSites ] = useState( [] );
 	const [ failed, setFailed ] = useState( false );
 
 	useEffect( () => {
@@ -32,6 +33,7 @@ export function usePlans() {
 			.then( response => {
 				if ( ! cancelled ) {
 					setPlans( response?.items || [] );
+					setSites( response?.sites || [] );
 					setFailed( false );
 				}
 			} )
@@ -45,5 +47,5 @@ export function usePlans() {
 		};
 	}, [] );
 
-	return { plans, failed };
+	return { plans, sites, failed };
 }

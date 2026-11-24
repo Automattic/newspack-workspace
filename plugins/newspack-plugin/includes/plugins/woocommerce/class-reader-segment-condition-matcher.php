@@ -66,7 +66,7 @@ final class Reader_Segment_Condition_Matcher implements Condition_Matcher {
 			'field_type' => 'select',
 			'multiple'   => true,
 			'label'      => $this->display_name(),
-			'help'       => __( 'Only apply to readers in any of the selected Campaigns segments. Uses the reader\'s last-known segment match.', 'newspack-plugin' ),
+			'help'       => __( 'Applies only to readers in at least one of these segments, based on the segment they last matched.', 'newspack-plugin' ),
 			'options'    => self::segment_options(),
 		];
 	}

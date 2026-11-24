@@ -1,3 +1,48 @@
+# newspack-story-budget [1.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.11...newspack-story-budget@1.4.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **components:** tighten the gap below the page header on mobile ([#1323](https://github.com/Automattic/newspack-workspace/issues/1323)) ([153e91e](https://github.com/Automattic/newspack-workspace/commit/153e91efb00c49516f2740a8197253c9ebe330ed))
+
+
+### Features
+
+* **components:** fit the mobile page header on one row (DSGNEWS-241) ([#1326](https://github.com/Automattic/newspack-workspace/issues/1326)) ([fc9ac34](https://github.com/Automattic/newspack-workspace/commit/fc9ac349bfe3a2c11636490b9f512ec8c95f1b2d))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.13.0
+
+## newspack-story-budget [1.3.11](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.10...newspack-story-budget@1.3.11) (2026-11-19)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
+## newspack-story-budget [1.3.10](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.9...newspack-story-budget@1.3.10) (2026-11-16)
+
+
+### Bug Fixes
+
+* **story-budget:** build field registry only when it is read ([#1454](https://github.com/Automattic/newspack-workspace/issues/1454)) ([9087911](https://github.com/Automattic/newspack-workspace/commit/90879116288361c03d933534e9d3aa7359c91dbb))
+
+## newspack-story-budget [1.3.9](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.8...newspack-story-budget@1.3.9) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## newspack-story-budget [1.3.8](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.7...newspack-story-budget@1.3.8) (2026-10-22)
+
+
+### Bug Fixes
+
+* **story-budget:** show other users' changes on refresh ([#1396](https://github.com/Automattic/newspack-workspace/issues/1396)) ([7d2b0cb](https://github.com/Automattic/newspack-workspace/commit/7d2b0cbf03b74b25947eff9a456bb8c04a53d080))
+
 ## newspack-story-budget [1.3.7](https://github.com/Automattic/newspack-workspace/compare/newspack-story-budget@1.3.6...newspack-story-budget@1.3.7) (2026-10-14)
 
 

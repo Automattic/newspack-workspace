@@ -25,6 +25,70 @@ function register_block() {
 }
 
 /**
+ * Whether light text is needed on a background color.
+ *
+ * Derived at render so lists saved under an earlier classification follow the current rule.
+ *
+ * @param string $background_color Hexadecimal background color.
+ * @return bool
+ */
+function has_dark_background( $background_color ) {
+	return 'white' === contrast_text_color( $background_color );
+}
+
+/**
+ * Pick the text color for a background, as newspack-plugin does when it is active.
+ *
+ * Whichever of black or white reads better by APCA (ties to black).
+ *
+ * Keep in sync with: \Newspack\newspack_get_color_contrast() (newspack-plugin),
+ * Newspack_Blocks::get_color_for_contrast() and getColorForContrast() in donate/utils.ts (newspack-blocks),
+ * newspack_get_color_contrast() (newspack-theme), getContrastColor() in contrast-color.js (packages/components)
+ * and Newspack_Popups_Model::contrast_text_color() (newspack-popups).
+ * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
+ *
+ * @param string $hex Hexadecimal background color.
+ * @return string Either 'black' or 'white'.
+ */
+function contrast_text_color( $hex ) {
+	if ( function_exists( '\Newspack\newspack_get_color_contrast' ) ) {
+		return \Newspack\newspack_get_color_contrast( $hex );
+	}
+
+	$hex = ltrim( trim( (string) $hex ), '#' );
+	if ( 3 === strlen( $hex ) ) {
+		$hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+	} elseif ( 8 === strlen( $hex ) ) {
+		$hex = substr( $hex, 0, 6 );
+	}
+	$channels = 6 === strlen( $hex ) && ctype_xdigit( $hex )
+		? [ hexdec( substr( $hex, 0, 2 ) ), hexdec( substr( $hex, 2, 2 ) ), hexdec( substr( $hex, 4, 2 ) ) ]
+		: [ 255, 255, 255 ];
+
+	$apca_luminance = function ( array $rgb ): float {
+		$y = 0.2126729 * pow( $rgb[0] / 255, 2.4 ) + 0.7151522 * pow( $rgb[1] / 255, 2.4 ) + 0.072175 * pow( $rgb[2] / 255, 2.4 );
+		return $y <= 0.022 ? $y + pow( 0.022 - $y, 1.414 ) : $y;
+	};
+	$apca_contrast  = function ( float $background_y, float $text_y ): float {
+		if ( abs( $background_y - $text_y ) < 0.0005 ) {
+			return 0.0;
+		}
+		if ( $background_y > $text_y ) {
+			$sapc = ( pow( $background_y, 0.56 ) - pow( $text_y, 0.57 ) ) * 1.14;
+			return $sapc < 0.1 ? 0.0 : ( $sapc - 0.027 ) * 100;
+		}
+		$sapc = ( pow( $background_y, 0.65 ) - pow( $text_y, 0.62 ) ) * 1.14;
+		return $sapc > -0.1 ? 0.0 : ( $sapc + 0.027 ) * 100;
+	};
+
+	$background_y = $apca_luminance( $channels );
+	$black_lc     = $apca_contrast( $background_y, $apca_luminance( [ 0, 0, 0 ] ) );
+	$white_lc     = $apca_contrast( $background_y, $apca_luminance( [ 255, 255, 255 ] ) );
+
+	return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+}
+
+/**
  * Block render callback.
  *
  * @param Array  $attributes Block attributes.
@@ -55,7 +119,7 @@ function render_block( $attributes, $inner_content ) {
 		$classes[] = 'media-size-' . $attributes['imageScale'];
 	}
 	if ( $attributes['backgroundColor'] ) {
-		if ( $attributes['hasDarkBackground'] ) {
+		if ( has_dark_background( $attributes['backgroundColor'] ) ) {
 			$classes[] = 'has-dark-background';
 		}
 		$classes[] = 'has-background-color';
@@ -181,6 +245,16 @@ function render_block( $attributes, $inner_content ) {
 	// Load AMP script if a.) we're in an AMP page, and b.) we have either more pages or a sort UI.
 	$amp_script = Utils\is_amp() && ( $attributes['showSortUi'] || $has_more_pages );
 
+	// The amp-script sandbox runs in a worker with its own `document`, scoped
+	// to this block's own container - it can't see the real page's <head>, so
+	// there's no REST-discovery <link> to read there, and `window.location`
+	// reflects the worker's own origin, which an AMP cache serving this page
+	// replaces with the cache's origin rather than this site's. This site's
+	// real REST root is embedded as a server-rendered element inside the
+	// container instead, trustworthy for the same reason the real data-next
+	// attribute already is.
+	$rest_root_url = $amp_script ? rest_url( '/' ) : null;
+
 	// Begin front-end output.
 	ob_start();
 
@@ -192,6 +266,9 @@ function render_block( $attributes, $inner_content ) {
 		class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>"
 		style="<?php echo esc_attr( implode( ';', $styles ) ); ?>"
 	>
+		<?php if ( $amp_script ) : ?>
+			<span class="newspack-listings__rest-root" data-rest-root="<?php echo esc_url( $rest_root_url ); ?>" style="display:none" aria-hidden="true"></span>
+		<?php endif; ?>
 		<?php echo wp_kses( $inner_content, $allowed_elements ); ?>
 		<?php if ( $attributes['queryMode'] && $has_more_pages ) : ?>
 			<button class="newspack-listings__load-more-button" type="button" data-next="<?php echo esc_url( $next_url ); ?>">

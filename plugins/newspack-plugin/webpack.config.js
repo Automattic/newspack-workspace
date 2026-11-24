@@ -63,6 +63,7 @@ const entry = {
 
 	// Newspack wizard assets.
 	...wizardsScriptFiles,
+	'handoff-banner-block-editor': resolveSource( 'src', 'wizards', 'handoff-banner', 'block-editor' ),
 	blocks: resolveSource( 'src', 'blocks', 'index' ),
 	'content-gate-editor': resolveSource( 'src', 'content-gate', 'editor', 'editor' ),
 	'content-gate-editor-memberships': resolveSource( 'src', 'content-gate', 'editor', 'memberships' ),
@@ -71,6 +72,7 @@ const entry = {
 	'content-gate-block-visibility': resolveSource( 'src', 'content-gate', 'editor', 'block-visibility' ),
 	'content-gate-post-settings': resolveSource( 'src', 'content-gate', 'editor', 'post-settings' ),
 	'content-banner': resolveSource( 'src', 'content-gate', 'content-banner' ),
+	'content-gifting-editor': resolveSource( 'src', 'content-gate', 'editor', 'gifting-sharing-button' ),
 	wizards: resolveSource( 'src', 'wizards', 'index' ),
 	'newspack-ui': resolveSource( 'src', 'newspack-ui', 'index' ),
 	bylines: resolveSource( 'src', 'bylines', 'index' ),
@@ -108,7 +110,7 @@ if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
 // Overwrite default optimisation.
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',
-	chunks: 'initial',
+	chunks: chunk => chunk.canBeInitial() && ! [ 'overlay-menu-block', 'overlay-search-block' ].includes( chunk.name ),
 	minChunks: 2,
 };
 

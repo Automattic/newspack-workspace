@@ -6,4 +6,24 @@
 		flex-shrink: 0;
 		margin: calc((#{wp-vars.$grid-unit-20} - #{wp-vars.$icon-size}) / 2);
 	}
+
+	&--success &__icon {
+		color: var(--wpds-color-foreground-content-success-weak, currentcolor);
+	}
+
+	&--info &__icon {
+		color: var(--wpds-color-foreground-content-info-weak, currentcolor);
+	}
+
+	&--warning &__icon {
+		color: var(--wpds-color-foreground-content-warning-weak, currentcolor);
+	}
+
+	&--error &__icon {
+		color: var(--wpds-color-foreground-content-error-weak, currentcolor);
+	}
+
+	&--neutral &__icon {
+		color: var(--wpds-color-foreground-content-neutral-weak, currentcolor);
+	}
 }

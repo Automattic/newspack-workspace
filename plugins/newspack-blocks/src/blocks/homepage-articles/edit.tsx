@@ -310,6 +310,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						customTaxonomyExclusions={ customTaxonomyExclusions }
 						onCustomTaxonomyExclusionsChange={ handleAttributeChange( 'customTaxonomyExclusions' ) }
 						postType={ postType }
+						includedPostStatuses={ attributes.includedPostStatuses }
 						allowDedupeCurrentValue={ ! attributes.deduplicate }
 						onAllowDedupeChange={ ( value: boolean ) => setAttributes( { deduplicate: ! value } ) }
 					/>

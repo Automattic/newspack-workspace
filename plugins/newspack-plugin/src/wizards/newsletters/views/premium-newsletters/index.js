@@ -31,7 +31,7 @@ const REQUIRES_AUDIENCE_MANAGEMENT = {
 };
 
 const ROOT = [ { label: __( 'Newsletters', 'newspack-plugin' ) } ];
-const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium', 'newspack-plugin' ) } ];
+const PREMIUM_BREADCRUMBS = [ ...ROOT, { label: __( 'Premium Newsletters', 'newspack-plugin' ) } ];
 
 // Wrapped at module scope so each section keeps a stable component type across
 // renders. Only the landing route renders the prerequisite state; the editor

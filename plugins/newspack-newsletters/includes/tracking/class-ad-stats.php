@@ -268,4 +268,7 @@ class Ad_Stats {
 		return $deleted;
 	}
 }
-Ad_Stats::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Ad_Stats::init();
+}

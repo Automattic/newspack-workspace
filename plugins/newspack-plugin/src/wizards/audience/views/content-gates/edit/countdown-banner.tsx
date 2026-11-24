@@ -28,6 +28,7 @@ import { Stack } from '@wordpress/ui';
  * Internal dependencies
  */
 import { Grid, SectionHeader, SelectControl, TextControl } from '../../../../../../packages/components/src';
+import BannerStyleControl, { getBannerPreviewProps } from '../../../components/banner-style';
 
 interface CountdownBannerProps {
 	countdown: MeteringCountdownConfig;
@@ -104,6 +105,7 @@ export default function CountdownBanner( {
 	const update = ( value: Partial< MeteringCountdownConfig > ) => onChange( { ...countdown, ...value } );
 	// Sanitized to an int by REST, so a bare `enabled && ...` would render a literal 0.
 	const isEnabled = !! countdown.enabled;
+	const preview = getBannerPreviewProps( countdown );
 
 	return (
 		<Stack direction="column" gap="xl">
@@ -154,16 +156,6 @@ export default function CountdownBanner( {
 								__next40pxDefaultSize
 							/>
 							<ToggleGroupControl
-								label={ __( 'Style', 'newspack-plugin' ) }
-								value={ countdown.style || 'light' }
-								onChange={ value => update( { style: value as string } ) }
-								isBlock
-								__next40pxDefaultSize
-							>
-								<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
-								<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
-							</ToggleGroupControl>
-							<ToggleGroupControl
 								label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 								help={ __(
 									'Whether the subscribe button should start a product checkout or redirect to a landing page.',
@@ -201,6 +193,7 @@ export default function CountdownBanner( {
 									__next40pxDefaultSize
 								/>
 							) }
+							<BannerStyleControl settings={ countdown } onChange={ update } disabled={ ! isEnabled } />
 						</Stack>
 					</fieldset>
 				</Stack>
@@ -217,7 +210,7 @@ export default function CountdownBanner( {
 				>
 					<div className="newspack-countdown-banner__cta-preview" inert="true">
 						<div className="newspack-ui">
-							<div className={ `banner newspack-countdown-banner__cta is-style-${ countdown.style || 'light' }` }>
+							<div className={ `banner newspack-countdown-banner__cta ${ preview.bannerClassName }` } style={ preview.bannerStyle }>
 								<div className="wrapper newspack-countdown-banner__cta__content">
 									<div className="newspack-countdown-banner__cta__content__wrapper">
 										<span className="newspack-countdown-banner__cta__content__countdown newspack-ui__font--s">
@@ -230,13 +223,7 @@ export default function CountdownBanner( {
 									</div>
 									{ ( ( countdown.cta_type === 'product' && countdown.cta_product_id ) ||
 										( countdown.cta_type === 'url' && countdown.cta_url ) ) && (
-										<button
-											className={ `newspack-ui__button newspack-ui__button--x-small ${
-												( countdown.style || 'light' ) === 'dark'
-													? 'newspack-ui__button--primary-light'
-													: 'newspack-ui__button--accent'
-											}` }
-										>
+										<button className={ `newspack-ui__button ${ preview.buttonClassName }` }>
 											{ countdown.button_label || __( 'Subscribe now', 'newspack-plugin' ) }
 										</button>
 									) }

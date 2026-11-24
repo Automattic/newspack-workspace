@@ -6,7 +6,7 @@ import { envelope } from '@wordpress/icons';
 /**
  * External dependencies
  */
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -24,5 +24,12 @@ describe( 'SectionHeader size', () => {
 		const { container } = render( <SectionHeader title="Get started" icon={ envelope } size="small" /> );
 		expect( container.querySelector( '.newspack-section-header--small' ) ).toBeInTheDocument();
 		expect( container.querySelector( '.newspack-section-header__icon svg' ) ).toHaveAttribute( 'width', '24' );
+	} );
+} );
+
+describe( 'SectionHeader back navigation', () => {
+	it( 'names the back arrow link for screen readers', () => {
+		render( <SectionHeader title="Segments" backNav="https://example.test/back" /> );
+		expect( screen.getByRole( 'link', { name: 'Go back' } ) ).toHaveAttribute( 'href', 'https://example.test/back' );
 	} );
 } );

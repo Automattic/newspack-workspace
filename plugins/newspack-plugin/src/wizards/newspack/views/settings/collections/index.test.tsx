@@ -107,7 +107,7 @@ describe( 'when Collections is off', () => {
 	it( 'offers the empty state instead of the settings', async () => {
 		await renderCollections();
 
-		expect( screen.getByText( 'Organize content into collections' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Collections are off' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Calls to Action' ) ).not.toBeInTheDocument();
 		expect( headerActions() ).toHaveLength( 0 );
 	} );

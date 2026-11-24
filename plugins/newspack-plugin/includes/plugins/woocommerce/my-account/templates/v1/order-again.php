@@ -9,7 +9,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-$wp_button_class = 'newspack-ui__button newspack-ui__button--secondary';
+$wp_button_class = 'newspack-ui__button newspack-ui__button--outline newspack-ui__button--small newspack-ui__button--medium-on-mobile order-again';
 $contains_subscription = wcs_order_contains_subscription( $order, 'parent' );
 $button_text = $contains_subscription ? __( 'Renew subscription', 'newspack-plugin' ) : __( 'Order again', 'newspack-plugin' );
 if ( $contains_subscription ) {
@@ -25,6 +25,4 @@ if ( $contains_subscription ) {
 }
 ?>
 
-<p class="order-again">
-	<a href="<?php echo esc_url( $order_again_url ); ?>" class="<?php echo esc_attr( $wp_button_class ); ?>"><?php echo esc_html( $button_text ); ?></a>
-</p>
+<a href="<?php echo esc_url( $order_again_url ); ?>" class="<?php echo esc_attr( $wp_button_class ); ?>"><?php echo esc_html( $button_text ); ?></a>

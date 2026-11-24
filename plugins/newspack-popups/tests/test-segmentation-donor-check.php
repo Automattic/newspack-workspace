@@ -6,7 +6,7 @@
  */
 
 /**
- * Test the is_donor_merge_field_value method.
+ * Test the Mailchimp donor merge field checks.
  */
 class SegmentationDonorCheckTest extends WP_UnitTestCase {
 
@@ -111,5 +111,32 @@ class SegmentationDonorCheckTest extends WP_UnitTestCase {
 			Newspack_Popups_Segmentation::is_donor_merge_field_value( $value ),
 			"Value $description was a false positive under old behavior and should now be rejected."
 		);
+	}
+
+	/**
+	 * Mailchimp returns merge tags in uppercase, while the setting is typed by
+	 * hand. Each comma-separated entry in the setting matches on its own.
+	 */
+	public function test_merge_fields_match_setting_case_insensitively_and_per_entry() {
+		$merge_fields = [
+			'FNAME'      => 'Pat',
+			'ADDRESS'    => [ 'addr1' => '1 Main St' ],
+			'HUB-MEMBER' => 'yes',
+		];
+
+		self::assertTrue( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'Hub-Member' ) );
+		self::assertTrue( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT, hub-member' ) );
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT' ) );
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'ADDRESS' ), 'An address array is not a donor value.' );
+	}
+
+	/**
+	 * A blank setting, or a blank entry in it, matches no field.
+	 */
+	public function test_blank_setting_entries_match_nothing() {
+		$merge_fields = [ 'FNAME' => 'Pat' ];
+
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, '' ) );
+		self::assertFalse( Newspack_Popups_Segmentation::merge_fields_indicate_donor( $merge_fields, 'DONAT, ' ) );
 	}
 }

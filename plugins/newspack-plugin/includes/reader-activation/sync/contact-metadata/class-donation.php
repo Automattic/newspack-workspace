@@ -194,6 +194,7 @@ class Donation extends Subscription {
 		return $this->one_time_donation_order_cache;
 	}
 
+
 	/**
 	 * Get the donor status label.
 	 *
@@ -292,43 +293,55 @@ class Donation extends Subscription {
 	}
 
 	/**
-	 * Get the last donation amount, with fallback to one-time donation order.
+	 * Get the most recently paid donation order, recurring or one-time.
+	 *
+	 * Last Donation Amount and Last Donation Date both read this order, so they
+	 * always describe the same payment. A one-time gift paid after the recurring
+	 * donation's last payment wins, whether that donation lapsed or is active.
+	 *
+	 * @return \WC_Order|null
+	 */
+	protected function get_last_donation_order() {
+		$subscription = $this->get_current_subscription();
+		$orders       = array_filter(
+			[
+				$subscription ? $this->get_last_successful_order( $subscription ) : null,
+				$this->get_one_time_donation_order(),
+			]
+		);
+
+		$last_order     = null;
+		$last_timestamp = -1;
+		foreach ( $orders as $order ) {
+			$date_paid = $order->get_date_paid();
+			$timestamp = $date_paid ? $date_paid->getTimestamp() : 0;
+			if ( $timestamp > $last_timestamp ) {
+				$last_order     = $order;
+				$last_timestamp = $timestamp;
+			}
+		}
+
+		return $last_order;
+	}
+
+	/**
+	 * Get the amount of the most recent donation, recurring or one-time.
 	 *
 	 * @return string
 	 */
 	protected function get_last_donation_amount() {
-		$amount = $this->get_last_payment_amount();
-		if ( ! empty( $amount ) ) {
-			return $amount;
-		}
-
-		$one_time_order = $this->get_one_time_donation_order();
-		if ( $one_time_order ) {
-			return $one_time_order->get_total();
-		}
-
-		return '';
+		$order = $this->get_last_donation_order();
+		return $order ? $order->get_total() : '';
 	}
 
 	/**
-	 * Get the last donation date, with fallback to one-time donation order.
+	 * Get the date of the most recent donation, recurring or one-time.
 	 *
 	 * @return string
 	 */
 	protected function get_last_donation_date() {
-		$date = $this->get_last_payment_date();
-		if ( ! empty( $date ) ) {
-			return $date;
-		}
-
-		$one_time_order = $this->get_one_time_donation_order();
-		if ( $one_time_order ) {
-			$date_paid = $one_time_order->get_date_paid();
-			if ( ! empty( $date_paid ) ) {
-				return $date_paid->date( self::DATE_FORMAT );
-			}
-		}
-
-		return '';
+		$order     = $this->get_last_donation_order();
+		$date_paid = $order ? $order->get_date_paid() : null;
+		return $date_paid ? $date_paid->date( self::DATE_FORMAT ) : '';
 	}
 }

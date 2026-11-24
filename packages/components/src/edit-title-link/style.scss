@@ -1,0 +1,77 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+$pencil-space: calc(20px + var(--wpds-dimension-gap-xs, #{wp-vars.$grid-unit-05}));
+$reveal: 150ms cubic-bezier(0.23, 1, 0.32, 1);
+
+.newspack-wizard .newspack-edit-title-link {
+	align-items: center;
+	color: inherit;
+	display: inline-flex;
+	gap: var(--wpds-dimension-gap-xs, #{wp-vars.$grid-unit-05});
+	text-decoration: none;
+	transition: color 150ms ease;
+
+	svg {
+		fill: currentcolor;
+		flex-shrink: 0;
+	}
+
+	&:focus-visible {
+		color: var(--wpds-color-foreground-interactive-brand, var(--wp-admin-theme-color));
+
+		svg {
+			opacity: 1;
+			transform: none;
+		}
+	}
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.newspack-wizard .newspack-edit-title-link {
+		svg {
+			margin-inline-end: calc(-1 * #{$pencil-space});
+			opacity: 0;
+			pointer-events: none;
+			transform: translateX(-4px);
+			transition:
+				opacity $reveal,
+				transform $reveal;
+		}
+
+		&:hover {
+			color: var(--wpds-color-foreground-interactive-brand, var(--wp-admin-theme-color));
+
+			svg {
+				opacity: 1;
+				pointer-events: auto;
+				transform: none;
+			}
+		}
+	}
+
+	.newspack-wizard :has(> .newspack-edit-title-link) {
+		max-width: calc(100% - #{$pencil-space});
+	}
+
+	.newspack-wizard .newspack-edit-title-link ~ *,
+	.newspack-wizard .newspack-edit-title-link-row > :has(> .newspack-edit-title-link) ~ * {
+		transition: transform $reveal;
+	}
+
+	.newspack-wizard .newspack-edit-title-link:is(:hover, :focus-visible) ~ *,
+	.newspack-wizard .newspack-edit-title-link-row > :has(> .newspack-edit-title-link:is(:hover, :focus-visible)) ~ * {
+		transform: translateX(#{$pencil-space});
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.newspack-wizard .newspack-edit-title-link svg {
+		transform: none;
+		transition-property: opacity;
+	}
+
+	.newspack-wizard .newspack-edit-title-link ~ *,
+	.newspack-wizard .newspack-edit-title-link-row > :has(> .newspack-edit-title-link) ~ * {
+		transition: none;
+	}
+}

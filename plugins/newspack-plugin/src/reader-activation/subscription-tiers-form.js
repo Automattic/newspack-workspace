@@ -56,7 +56,6 @@ export default function init() {
 		[ ...forms ].forEach( form => {
 			const modal = form.closest( '.newspack-ui__modal-container' );
 			const submitButton = form.querySelector( 'button[type="submit"]' );
-			const cancelButton = form.querySelector( '.newspack-ui__modal__cancel' );
 			const isNYP = form.classList.contains( 'nyp' );
 			const originalSubmitButtonText = submitButton.textContent;
 
@@ -180,14 +179,6 @@ export default function init() {
 			attachInputListeners();
 
 			handleChange();
-
-			if ( modal ) {
-				cancelButton.addEventListener( 'click', () => {
-					modal?.setAttribute( 'data-state', 'closed' );
-				} );
-			} else {
-				cancelButton.style.display = 'none';
-			}
 
 			form.addEventListener( 'submit', ev => {
 				if ( ! isFormValid ) {

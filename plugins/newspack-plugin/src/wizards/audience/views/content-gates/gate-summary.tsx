@@ -13,6 +13,7 @@ import { useLayoutEffect, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies.
  */
+import { worthCollapsing } from '../../../../../packages/components/src/cell-list/collapse';
 import ContentRuleControl from './edit/content-rule-control';
 import {
 	findAccessRuleOption,
@@ -21,7 +22,13 @@ import {
 	getMissingOptionLabel,
 	type AccessRuleOption,
 } from '../../../../content-gate/access-rule-options';
-import { getMeteringCount, isMalformedAccessRuleValue, isUnconfiguredAccessRuleValue, isUnconstrainedAccessRuleValue } from './utils';
+import {
+	getAutoSignupOptions,
+	getMeteringCount,
+	isMalformedAccessRuleValue,
+	isUnconfiguredAccessRuleValue,
+	isUnconstrainedAccessRuleValue,
+} from './utils';
 import { normalizeOneTimePurchaseValue } from '../../../../content-gate/components/one-time-purchase-rule-control';
 import { getUntrustedReaderDataKeys, hasUnusableRangeBounds, normalizeRangeValue } from '../../../../content-gate/utils/access-rule-value';
 
@@ -65,6 +72,8 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	// Keeps an existing toggle mounted while a layout change re-measures from every
 	// value, so a keyboard user's focus is not dropped.
 	const [ holdToggle, setHoldToggle ] = useState( false );
+	// A single value that would not fit shows in full instead of behind a toggle.
+	const [ showAll, setShowAll ] = useState( false );
 	const [ width, setWidth ] = useState( 0 );
 	const layoutKey = `${ values.join( '\n' ) }|${ width }`;
 	const measuredKey = useRef( layoutKey );
@@ -82,11 +91,12 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 	// Settles in a few passes whatever the list length: one state update per value
 	// would hit React's nested-update limit on a long list and crash the screen.
 	useLayoutEffect( () => {
-		if ( isExpanded ) {
+		if ( isExpanded || ( showAll && measuredKey.current === layoutKey ) ) {
 			return;
 		}
 		if ( measuredKey.current !== layoutKey ) {
 			measuredKey.current = layoutKey;
+			setShowAll( false );
 			if ( visibleCount !== values.length ) {
 				setHoldToggle( true );
 				setVisibleCount( values.length );
@@ -136,11 +146,17 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 		}
 		setHoldToggle( false );
 		// At least one fewer than shown, so a toggle that pushes the line over makes room for itself.
-		setVisibleCount( Math.max( 1, Math.min( fitting, visibleCount - 1 ) ) );
+		const nextCount = Math.max( 1, Math.min( fitting, visibleCount - 1 ) );
+		if ( ! worthCollapsing( values.length - nextCount ) ) {
+			setShowAll( true );
+			setVisibleCount( values.length );
+			return;
+		}
+		setVisibleCount( nextCount );
 	} );
 
 	const hiddenCount = isExpanded ? 0 : values.length - visibleCount;
-	if ( hiddenCount < 1 && ! isExpanded && ! holdToggle ) {
+	if ( ( hiddenCount < 1 || showAll ) && ! isExpanded && ! holdToggle ) {
 		return (
 			<span ref={ ref } tabIndex={ -1 }>
 				{ values.join( VALUE_SEPARATOR ) }
@@ -163,7 +179,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 						  )
 						: sprintf(
 								// translators: 1: number of hidden values, 2: access rule name, e.g. "Institutional access".
-								_n( '%1$d more for %2$s', '%1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
+								_n( 'Show %1$d more for %2$s', 'Show %1$d more for %2$s', hiddenCount, 'newspack-plugin' ),
 								hiddenCount,
 								ruleName
 						  )
@@ -174,7 +190,7 @@ const CollapsibleValues = ( { values, ruleName }: { values: string[]; ruleName: 
 					? __( 'Show less', 'newspack-plugin' )
 					: sprintf(
 							// translators: %d: number of hidden values.
-							_n( '+ %d more', '+ %d more', hiddenCount, 'newspack-plugin' ),
+							_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
 							hiddenCount
 					  ) }
 			</Button>
@@ -438,22 +454,26 @@ const formatMetering = ( metering: Metering, siteCount?: number, sitePeriod?: Me
 };
 
 /**
- * Build the Content rules / Registered access / Paid access sections for a gate.
+ * Build the Content rules / Registered access / Paid access sections for a gate,
+ * plus Sign-up and visibility for a premium newsletter gate.
  *
- * @param gate          The gate (live edit state or a saved gate).
- * @param isNewsletter  Whether this is a premium-newsletter gate (hides registration).
- * @param siteMeter     The shared allowance, so a summary can name where its count comes from.
- * @param optionsBySlug The options to name each rule's values with, from
- *                      `useAccessRuleOptions()`. The list localised with the page goes
- *                      stale while the app is open — institutions are created and
- *                      deleted in it — and a summary built from it would call an
- *                      institution added a moment ago "not listed".
+ * @param gate           The gate (live edit state or a saved gate).
+ * @param isNewsletter   Whether this is a premium-newsletter gate (hides registration).
+ * @param siteMeter      The shared allowance, so a summary can name where its count comes from.
+ * @param optionsBySlug  The options to name each rule's values with, from
+ *                       `useAccessRuleOptions()`. The list localised with the page goes
+ *                       stale while the app is open — institutions are created and
+ *                       deleted in it — and a summary built from it would call an
+ *                       institution added a moment ago "not listed".
+ * @param siteAutoSignup The site-wide auto-signup setting, which a premium newsletter gate
+ *                       set to "Default" follows.
  */
 export const getGateSummarySections = (
 	gate: Gate,
 	isNewsletter = false,
 	siteMeter?: SiteMeterConfig,
-	optionsBySlug: Record< string, AccessRuleOption[] > = {}
+	optionsBySlug: Record< string, AccessRuleOption[] > = {},
+	siteAutoSignup?: boolean
 ): GateSummarySection[] => {
 	const sections: GateSummarySection[] = [];
 
@@ -475,7 +495,7 @@ export const getGateSummarySections = (
 				) )
 			) : (
 				<p>
-					<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+					<span>—</span>
 				</p>
 			),
 	} );
@@ -503,7 +523,7 @@ export const getGateSummarySections = (
 					) }
 					{ ! gate.registration?.active && (
 						<p>
-							<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+							<span>—</span>
 						</p>
 					) }
 				</>
@@ -533,15 +553,39 @@ export const getGateSummarySections = (
 						) }
 					</p>
 				) }
-				{ /* Only when the column has nothing else: N/A beside a metering line reads as a contradiction. */ }
+				{ /* Only when the column has nothing else: a dash beside a metering line reads as a contradiction. */ }
 				{ ! showsAccessRules && ! showsPaidMetering && (
 					<p>
-						<strong>{ __( 'N/A', 'newspack-plugin' ) }</strong>
+						<span>—</span>
 					</p>
 				) }
 			</>
 		),
 	} );
+
+	if ( isNewsletter ) {
+		const autoSignupLabel = getAutoSignupOptions( siteAutoSignup ).find( option => option.value === ( gate.auto_signup ?? 'default' ) )?.label;
+		sections.push( {
+			key: 'sign_up_and_visibility',
+			label: __( 'Sign-up and visibility', 'newspack-plugin' ),
+			// Without paid access the editor has no sign-up step, so there's nothing to report.
+			content: gate.custom_access?.active ? (
+				<>
+					<p>
+						<strong>{ __( 'Auto-signup:', 'newspack-plugin' ) }</strong> { autoSignupLabel }
+					</p>
+					<p>
+						<strong>{ __( 'Hidden from readers:', 'newspack-plugin' ) }</strong>{ ' ' }
+						{ gate.hide_lists ? __( 'Yes', 'newspack-plugin' ) : __( 'No', 'newspack-plugin' ) }
+					</p>
+				</>
+			) : (
+				<p>
+					<span>—</span>
+				</p>
+			),
+		} );
+	}
 
 	return sections;
 };

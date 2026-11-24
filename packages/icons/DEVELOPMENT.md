@@ -36,13 +36,14 @@ Follow this step-by-step process when selecting an icon:
 All icons in this package are designed on a **24×24 grid/viewbox**. This ensures consistency and scalability:
 
 - **Design grid:** All icons use `viewBox="0 0 24 24"`
+- **Color:** Single-color icons set `fill="currentColor"` on the root `<SVG>`, so they follow the CSS `color` of their context
 - **Display flexibility:** Icons can be displayed at different sizes (e.g., 48×48, 40×40) depending on context
 - **Scalability:** SVG format allows crisp rendering at any size
 - **Consistency:** Uniform grid system ensures visual harmony across the icon set
 
 ## Available Icons
 
-This package includes 52 custom icons:
+This package includes 53 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -71,6 +72,7 @@ This package includes 52 custom icons:
 - `emailError` - Email error icon
 - `emailPremium` - Email premium icon
 - `emailSend` - Email send icon
+- `feather` - Feather icon
 - `gift` - Gift icon
 - `hand` - Hand icon
 - `iframe` - Iframe icon

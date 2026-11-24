@@ -28,6 +28,18 @@ declare global {
 				};
 			};
 			institutional_access_url?: string;
+			content_banner?: {
+				supports_theme_style: boolean;
+				uses_site_theme: boolean;
+				theme_button_bg: string;
+				theme_button_ink: string;
+				theme_font_heading: string;
+				theme_font_body: string;
+				site_bg: string;
+				site_text: string;
+				site_button_bg: string;
+				site_button_ink: string;
+			};
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.
@@ -115,6 +127,10 @@ declare global {
 			// fails closed through `?.`, and the prerequisite screen falls back to ''.
 			audience_management_enabled?: string;
 			audience_management_url?: string;
+		};
+		newspack_aux_data?: {
+			has_completed_setup?: boolean | string;
+			is_e2e?: boolean;
 		};
 	}
 }

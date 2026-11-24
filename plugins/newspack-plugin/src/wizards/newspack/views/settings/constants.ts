@@ -29,8 +29,8 @@ export const THEME_BRAND_DEFAULTS = {
 	header_color_hex: '#003da5',
 	custom_logo: '',
 	logo_size: 0,
-	header_text: false, // No custom_logo set.
-	header_display_tagline: false, // No custom_logo set.
+	header_text: true,
+	header_display_tagline: true,
 	// Footer.
 	footer_copyright: '',
 	footer_color: 'default',
@@ -64,8 +64,6 @@ export const ADVANCED_SETTINGS_DEFAULTS = {
 	post_time_ago_cut_off: 14,
 	post_updated_date: false,
 	post_updated_date_threshold: 24,
-	// PWA Display Mode.
-	pwa_display_mode: 'minimal-ui',
 	// Post content fallback image.
 	newspack_default_image_url: undefined,
 	// Private Tags settings (populated from the server unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).

@@ -15,6 +15,7 @@ import { addQueryArgs } from '@wordpress/url';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, View } from '@wordpress/dataviews';
 import { termCount } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
 
@@ -22,11 +23,10 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  * Internal dependencies.
  */
 import { Button, DataViews, Notice, Waiting } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
 import { SEARCH_ENDPOINTS, WIZARD_ENDPOINT } from '../../constants';
-import { useNames } from '../../use-names';
+import { EMPTY_RULE_NAMES } from '../../types';
 import { registerTab } from '../registry';
 import { DISCOUNTS_ENDPOINT } from './constants';
 import { DEFAULT_CURRENCY } from './discount';
@@ -36,6 +36,8 @@ import SettingsModal from './settings-modal';
 import type { DiscountRule, DiscountsPayload } from './types';
 
 import './style.scss';
+
+const FIT_COLUMNS = [ 'status' ];
 
 const { useHistory, useLocation, useRouteMatch } = Router;
 
@@ -54,6 +56,7 @@ const DEFAULT_VIEW: View = {
 function SubscriberDiscounts() {
 	const [ payload, setPayload ] = useState< DiscountsPayload >( {
 		rules: [],
+		names: EMPTY_RULE_NAMES,
 		settings: { apply_on_sale: true, apply_at_checkout: false },
 		currency: DEFAULT_CURRENCY,
 	} );
@@ -141,23 +144,20 @@ function SubscriberDiscounts() {
 		}
 	}, [ isLoading, editingId, editingRule, history, baseUrl ] );
 
-	// The picker's one page of suggestions names most subscriptions, but not a
-	// trashed one and not the overflow on a store with more than a page of
-	// them. Resolving the ids the rules actually hold covers both, and is what
-	// keeps a row from counting a subscription it could have named.
-	const ruleSubscriptionIds = useMemo(
-		() => [ ...new Set( payload.rules.flatMap( rule => rule.subscription_product_ids || [] ) ) ],
-		[ payload.rules ]
-	);
-	const resolvedNames = useNames( SEARCH_ENDPOINTS.subscriptions, ruleSubscriptionIds );
+	const productNames = payload.names?.products;
+	const categoryNames = payload.names?.categories;
+	const ruleSubscriptionNames = payload.names?.subscriptions;
 
 	const namedSubscriptions = useMemo( () => {
 		const byId = new Map< number, string >( subscriptionOptions.map( option => [ option.id, option.name ] ) );
-		Object.entries( resolvedNames ).forEach( ( [ id, name ] ) => byId.set( Number( id ), name ) );
+		Object.entries( ruleSubscriptionNames || {} ).forEach( ( [ id, name ] ) => byId.set( Number( id ), decodeEntities( name ) ) );
 		return [ ...byId ].map( ( [ id, name ] ) => ( { id, name } ) );
-	}, [ subscriptionOptions, resolvedNames ] );
+	}, [ subscriptionOptions, ruleSubscriptionNames ] );
 
-	const fields = useMemo( () => discountFields( currency, namedSubscriptions ), [ currency, namedSubscriptions ] );
+	const fields = useMemo(
+		() => discountFields( currency, namedSubscriptions, productNames, categoryNames ),
+		[ currency, namedSubscriptions, productNames, categoryNames ]
+	);
 
 	const actions: Action< DiscountRule >[] = useMemo(
 		() => [
@@ -236,6 +236,11 @@ function SubscriberDiscounts() {
 			),
 			actions: [
 				{
+					type: 'secondary',
+					label: __( 'Settings', 'newspack-plugin' ),
+					action: () => setShowSettings( true ),
+				},
+				{
 					type: 'primary',
 					label: __( 'Add Discount', 'newspack-plugin' ),
 					mobileIcon: 'plus',
@@ -265,24 +270,34 @@ function SubscriberDiscounts() {
 			{ error && <Notice isError noticeText={ error } /> }
 			{ showEmptyState ? (
 				<div className="newspack-subscriber-discounts__empty">
-					<EmptyState.Root>
-						<EmptyState.Header
-							icon={ termCount }
-							title={ __( 'Get started with subscriber discounts', 'newspack-plugin' ) }
-							description={ __(
-								'Offer subscribers a discount on your products. Create your first rule to choose which subscription gets what off which products.',
-								'newspack-plugin'
-							) }
-						/>
-						<EmptyState.Actions>
-							<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
-								{ __( 'Add Discount', 'newspack-plugin' ) }
-							</Button>
-						</EmptyState.Actions>
-					</EmptyState.Root>
+					<Stack direction="column" align="center">
+						<EmptyState.Root>
+							<EmptyState.Icon icon={ termCount } />
+							<EmptyState.Title>{ __( 'No discounts yet', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Description>
+								{ __(
+									'Give subscribers a discount on selected products. Each rule sets the subscriptions, the products, and the amount off.',
+									'newspack-plugin'
+								) }
+							</EmptyState.Description>
+							<EmptyState.Actions>
+								<Button variant="primary" onClick={ () => history.push( `${ baseUrl }/new` ) }>
+									{ __( 'Add Discount', 'newspack-plugin' ) }
+								</Button>
+							</EmptyState.Actions>
+						</EmptyState.Root>
+					</Stack>
 				</div>
 			) : (
 				<DataViews
+					fitColumns={ FIT_COLUMNS }
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of discounts. */
+							_n( '%s discount', '%s discounts', count, 'newspack-plugin' ),
+							formatted
+						)
+					}
 					data={ processedData }
 					fields={ fields }
 					view={ view }
@@ -292,13 +307,8 @@ function SubscriberDiscounts() {
 					defaultLayouts={ { table: {} } }
 					isLoading={ isLoading }
 					getItemId={ ( item: DiscountRule ) => item.id }
-					onClickItem={ ( item: DiscountRule ) => history.push( `${ baseUrl }/edit/${ item.id }` ) }
 					search
-					header={
-						<Button variant="secondary" size="compact" onClick={ () => setShowSettings( true ) }>
-							{ __( 'Settings', 'newspack-plugin' ) }
-						</Button>
-					}
+					inlineFilters
 				/>
 			) }
 			<DiscountEditor

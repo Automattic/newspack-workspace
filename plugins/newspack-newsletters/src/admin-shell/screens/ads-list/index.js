@@ -3,12 +3,12 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { emailAd } from 'newspack-icons';
 
-import { EmptyState } from 'newspack-components';
+import { DataViews } from 'newspack-components';
 import { getAdminUrl } from '../../admin-globals';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
@@ -32,7 +32,8 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'title',
-	fields: [ 'advertiser', 'ad_placement', 'status', 'start_date', 'expiry_date', 'impressions', 'clicks', 'price' ],
+	descriptionField: 'advertiser',
+	fields: [ 'status', 'start_date', 'expiry_date', 'ad_placement', 'impressions', 'clicks', 'price' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
@@ -41,6 +42,9 @@ const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// The advertiser now sits under the title, so a view saved while it had its
+	// own column would show it twice. The field stays for its filter.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'advertiser' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom
@@ -137,6 +141,7 @@ export default function AdsListScreen() {
 	const actions = useMemo( () => getActions( { refresh, openQuickEdit } ), [ refresh, openQuickEdit ] );
 
 	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, trashCount, view } );
+	const HeadingTag = getEmptyStateHeading() === 1 ? 'h1' : 'h2';
 
 	useHeaderActions(
 		useMemo(
@@ -160,22 +165,23 @@ export default function AdsListScreen() {
 
 	if ( isStrictEmpty ) {
 		return (
-			<EmptyState.Root className={ EMPTY_STATE_CLASS }>
-				<EmptyState.Header
-					icon={ emailAd }
-					heading={ getEmptyStateHeading() }
-					title={ __( 'Get started with newsletter ads', 'newspack-newsletters' ) }
-					description={ __(
-						'Monetise newsletters with sponsored or house ads. Schedule by date, target by placement or category.',
-						'newspack-newsletters'
-					) }
-				/>
-				<EmptyState.Actions>
-					<Button variant="primary" href={ addNewHref }>
-						{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
-					</Button>
-				</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+					<EmptyState.Icon icon={ emailAd } />
+					<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No newsletter ads yet', 'newspack-newsletters' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __(
+							'Run sponsored or house ads in newsletters. Each ad runs on the dates you set, in the placements or categories you pick.',
+							'newspack-newsletters'
+						) }
+					</EmptyState.Description>
+					<EmptyState.Actions>
+						<Button variant="primary" href={ addNewHref }>
+							{ __( 'Add Newsletter Ad', 'newspack-newsletters' ) }
+						</Button>
+					</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	}
 
@@ -183,6 +189,13 @@ export default function AdsListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			<DataViews
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of ads. */
+						_n( '%s ad', '%s ads', count, 'newspack-newsletters' ),
+						formatted
+					)
+				}
 				className="newspack-newsletters-list newspack-newsletters-ads-list"
 				data={ data }
 				fields={ fields }
@@ -193,8 +206,8 @@ export default function AdsListScreen() {
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				isLoading={ isLoading }
 				getItemId={ item => String( item.id ) }
-				search
 				config={ DATAVIEWS_CONFIG }
+				inlineFilters
 				header={ <ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } /> }
 			/>
 			{ quickEditItem && (

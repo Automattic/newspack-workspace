@@ -416,7 +416,7 @@ class Subscribers_Payments {
 		if ( is_wp_error( $subscription ) ) {
 			return $subscription;
 		}
-		$customer_check = self::assert_customer( $request, (int) $subscription->get_customer_id() );
+		$customer_check = self::assert_customer( $request, WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription ) );
 		if ( is_wp_error( $customer_check ) ) {
 			return $customer_check;
 		}
@@ -448,6 +448,7 @@ class Subscribers_Payments {
 				[ 'status' => 404 ]
 			);
 		}
+		// The purchaser's cards pay for a gift, so the token must be theirs, not the recipient's.
 		if ( (int) $token->get_user_id() !== (int) $subscription->get_customer_id() ) {
 			return new \WP_Error(
 				'newspack_payments_token_mismatch',
@@ -527,7 +528,7 @@ class Subscribers_Payments {
 		if ( is_wp_error( $subscription ) ) {
 			return $subscription;
 		}
-		$customer_check = self::assert_customer( $request, (int) $subscription->get_customer_id() );
+		$customer_check = self::assert_customer( $request, WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription ) );
 		if ( is_wp_error( $customer_check ) ) {
 			return $customer_check;
 		}
@@ -703,7 +704,7 @@ class Subscribers_Payments {
 		if ( is_wp_error( $subscription ) ) {
 			return $subscription;
 		}
-		$customer_check = self::assert_customer( $request, (int) $subscription->get_customer_id() );
+		$customer_check = self::assert_customer( $request, WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription ) );
 		if ( is_wp_error( $customer_check ) ) {
 			return $customer_check;
 		}
@@ -911,7 +912,10 @@ class Subscribers_Payments {
 	 * picked the right target.
 	 *
 	 * @param \WP_REST_Request $request        The request (carries `customer_id`).
-	 * @param int              $actual_user_id The target's real owner.
+	 * @param int              $actual_user_id The target's real owner. For a
+	 *                                         subscription that is the user whose
+	 *                                         profile lists it: the recipient of a
+	 *                                         gift, otherwise the customer.
 	 *
 	 * @return true|\WP_Error
 	 */

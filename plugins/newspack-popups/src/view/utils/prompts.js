@@ -22,6 +22,25 @@ export const getRawId = id => {
 };
 
 /**
+ * Total time an element's current transitions take to finish, from the computed
+ * transition-duration and transition-delay lists.
+ *
+ * @param {Element} element Element whose transitions to measure.
+ * @return {number} Longest duration plus delay, in milliseconds.
+ */
+const getTransitionTime = element => {
+	const style = window.getComputedStyle( element );
+	const toMs = value => {
+		const time = parseFloat( value ) || 0;
+		return value.trim().endsWith( 'ms' ) ? time : time * 1000;
+	};
+	const durations = ( style.transitionDuration || '0s' ).split( ',' ).map( toMs );
+	const delays = ( style.transitionDelay || '0s' ).split( ',' ).map( toMs );
+	const count = ( style.transitionProperty || '' ).split( ',' ).length;
+	return Math.max( 0, ...Array.from( { length: count }, ( _, index ) => durations[ index % durations.length ] + delays[ index % delays.length ] ) );
+};
+
+/**
  * Close an overlay when its close button is clicked.
  *
  * @param {Event} event Dispatched click event.
@@ -29,8 +48,16 @@ export const getRawId = id => {
 export const closeOverlay = event => {
 	const parent = event.currentTarget.closest( '.newspack-lightbox' );
 
+	if ( parent?.classList.contains( 'hidden' ) ) {
+		event.preventDefault();
+		return;
+	}
+
 	if ( parent && parent.contains( event.currentTarget ) ) {
-		parent.style.display = 'none';
+		parent.classList.add( 'hidden' );
+		setTimeout( () => {
+			parent.style.display = 'none';
+		}, getTransitionTime( parent ) );
 	}
 
 	// Remove the overlay from RAS.

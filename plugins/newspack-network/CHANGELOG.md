@@ -1,3 +1,35 @@
+# newspack-network [2.23.0](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.15...newspack-network@2.23.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **network:** bound memory in data-backfill so long ranges finish ([#998](https://github.com/Automattic/newspack-workspace/issues/998)) ([0cfc13a](https://github.com/Automattic/newspack-workspace/commit/0cfc13a0ef87d16249bf53b89bad2ec6d5455e34))
+* **network:** refuse Hub requests to private node addresses ([#1159](https://github.com/Automattic/newspack-workspace/issues/1159)) ([9197c5f](https://github.com/Automattic/newspack-workspace/commit/9197c5f8afc8c65dbfb8e0fee036087406287fdb))
+* **newspack-ui:** announce loading on submit buttons (DSGNEWS-244) ([#1332](https://github.com/Automattic/newspack-workspace/issues/1332)) ([e8e0dd1](https://github.com/Automattic/newspack-workspace/commit/e8e0dd173128d0530b9c73c3685ceadebf8a908d))
+* **newspack-ui:** make modals real dialogs (DSGNEWS-246, DSGNEWS-247) ([#1335](https://github.com/Automattic/newspack-workspace/issues/1335)) ([003e96a](https://github.com/Automattic/newspack-workspace/commit/003e96a37323829ac9f277973f4fc5b694996828))
+
+
+### Features
+
+* **subscribers:** show subscriptions held on other network sites ([#1403](https://github.com/Automattic/newspack-workspace/issues/1403)) ([a43fb97](https://github.com/Automattic/newspack-workspace/commit/a43fb97e5e2ae90ec5789dc731824d5941f96792))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+
+## newspack-network [2.22.15](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.14...newspack-network@2.22.15) (2026-10-26)
+
+
+### Bug Fixes
+
+* **group-subscription:** match Network's member query shape (NPPD-2416, [#1294](https://github.com/Automattic/newspack-workspace/issues/1294)) ([ef09bd2](https://github.com/Automattic/newspack-workspace/commit/ef09bd2f7134d4665648c0cbcae08f6c8f482ef2))
+* **network:** accept each signed hub request once ([#1133](https://github.com/Automattic/newspack-workspace/issues/1133)) ([3b831e3](https://github.com/Automattic/newspack-workspace/commit/3b831e3016d4ff05620cba2e90fd1b672046ac6a))
+* **network:** grant access from group seats and one-time purchases ([#1222](https://github.com/Automattic/newspack-workspace/issues/1222)) ([99bc75a](https://github.com/Automattic/newspack-workspace/commit/99bc75a4c804e072784f7683cd6ab0e4cc08c6e4))
+* **network:** name the reader by account email and drop guest orders ([#1255](https://github.com/Automattic/newspack-workspace/issues/1255)) ([9398b8d](https://github.com/Automattic/newspack-workspace/commit/9398b8d0ba1113281aa3af4ee1b627c0c6022114))
+* **newspack-network:** skip unresolvable co-authors on incoming posts ([#1234](https://github.com/Automattic/newspack-workspace/issues/1234)) ([cec2e66](https://github.com/Automattic/newspack-workspace/commit/cec2e66c55725166bff86000e69b0d6b262f63bc))
+* **newspack-ui:** let font classes set h2 and h3 sizes (DSGNEWS-239) ([#1315](https://github.com/Automattic/newspack-workspace/issues/1315)) ([6792fdd](https://github.com/Automattic/newspack-workspace/commit/6792fdd1aee91a6b14a4b46634b505b510626d31))
+
 ## newspack-network [2.22.14](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.22.13...newspack-network@2.22.14) (2026-10-20)
 
 

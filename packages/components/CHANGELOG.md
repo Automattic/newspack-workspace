@@ -1,3 +1,53 @@
+# newspack-components [4.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.2...newspack-components@4.13.0) (2026-11-23)
+
+
+### Bug Fixes
+
+* **components:** tighten the gap below the page header on mobile ([#1323](https://github.com/Automattic/newspack-workspace/issues/1323)) ([153e91e](https://github.com/Automattic/newspack-workspace/commit/153e91efb00c49516f2740a8197253c9ebe330ed))
+
+
+### Features
+
+* **components:** fit the mobile page header on one row (DSGNEWS-241) ([#1326](https://github.com/Automattic/newspack-workspace/issues/1326)) ([fc9ac34](https://github.com/Automattic/newspack-workspace/commit/fc9ac349bfe3a2c11636490b9f512ec8c95f1b2d))
+* **subscribers:** show subscriptions held on other network sites ([#1403](https://github.com/Automattic/newspack-workspace/issues/1403)) ([a43fb97](https://github.com/Automattic/newspack-workspace/commit/a43fb97e5e2ae90ec5789dc731824d5941f96792))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+
+## newspack-components [4.12.2](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.1...newspack-components@4.12.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **audience:** let store staff use Audience > Subscriptions (NPPD-2619, [#1599](https://github.com/Automattic/newspack-workspace/issues/1599)) ([807e24b](https://github.com/Automattic/newspack-workspace/commit/807e24bebb012f40eeea5b6b3b241fe7792bc6ab))
+
+## newspack-components [4.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.12.0...newspack-components@4.12.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **components:** stop hiding dropdowns while a modal is open ([#1557](https://github.com/Automattic/newspack-workspace/issues/1557)) ([0b71695](https://github.com/Automattic/newspack-workspace/commit/0b716959963723c62ed6cfa12903b1f7c5b2c276))
+
+# newspack-components [4.12.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.11.0...newspack-components@4.12.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **components:** fit the page header and tabs on mobile (DSGNEWS-237, [#1263](https://github.com/Automattic/newspack-workspace/issues/1263)) ([e5b89f7](https://github.com/Automattic/newspack-workspace/commit/e5b89f719b7d22cd2be0aef33f0d1f9773fadb06))
+* **components:** lay out the drawer with Stack and end-align its actions ([#1258](https://github.com/Automattic/newspack-workspace/issues/1258)) ([e8dfd37](https://github.com/Automattic/newspack-workspace/commit/e8dfd3766e8a12ffd584a6be7f5352aff9a53f19))
+
+
+### Features
+
+* **content-gate:** reorganize Access Control into tabs ([#1164](https://github.com/Automattic/newspack-workspace/issues/1164)) ([f0622f2](https://github.com/Automattic/newspack-workspace/commit/f0622f2a59bdfd0a7064b551ddd2a7a2895281d2))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.3.0
+
 # newspack-components [4.11.0](https://github.com/Automattic/newspack-workspace/compare/newspack-components@4.10.0...newspack-components@4.11.0) (2026-10-14)
 
 

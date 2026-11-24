@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useRef } from '@wordpress/element';
-import { DropdownMenu, MenuItem, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { DropdownMenu, MenuItem, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
 import { Badge } from '@wordpress/ui';
 
@@ -128,13 +128,16 @@ const SectionHeader = ( {
 				) }
 				{ menu?.length > 0 && (
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
-						{ () =>
+						{ ( { onClose } ) =>
 							menu.map( ( item, index ) => (
 								<MenuItem
 									key={ index }
 									icon={ item.icon }
 									href={ item.href }
-									onClick={ item.action }
+									onClick={ event => {
+										onClose();
+										item.action?.( event );
+									} }
 									disabled={ item.disabled || false }
 									isDestructive={ item.destructive || false }
 								>
@@ -171,9 +174,7 @@ const SectionHeader = ( {
 				{ backNav ? (
 					<HStack alignment="left" style={ { position: 'relative' } }>
 						<div className="newspack-section-header__back-nav">
-							<Tooltip text={ __( 'Go back', 'newspack-plugin' ) }>
-								<Button href={ backNav } icon={ chevronLeft } variant="tertiary" />
-							</Tooltip>
+							<Button href={ backNav } icon={ chevronLeft } label={ __( 'Go back', 'newspack-plugin' ) } variant="tertiary" />
 						</div>
 						{ titleContent }
 					</HStack>

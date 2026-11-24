@@ -23,14 +23,15 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Badge, Stack } from '@wordpress/ui';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
-import { PolicyChips, EffectivePrice } from './policy-cells';
+import { EffectivePrice } from './policy-cells';
+import { gateLinks, ruleLinks } from './item-links';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 const CONVENTION_SLUGS = [ 'private-subscriptions', 'free-subscriptions' ];
@@ -164,7 +165,11 @@ export default function ProductForm( {
 		bundled,
 	} );
 	const initialSnapshot = useRef( snapshot ).current;
-	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+	const {
+		confirmDialog: navBlockDialog,
+		requestConfirm,
+		allowNextUnload,
+	} = useUnsavedChangesDialog( {
 		when: snapshot !== initialSnapshot && ! isSaving,
 	} );
 
@@ -336,8 +341,8 @@ export default function ProductForm( {
 								label={ __( 'Status', 'newspack-plugin' ) }
 								value={ status }
 								options={ [
-									{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
-									{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
+									{ label: __( 'Active', 'newspack-plugin' ), value: 'publish' },
+									{ label: __( 'Inactive', 'newspack-plugin' ), value: 'draft' },
 								] }
 								onChange={ setStatus }
 								__next40pxDefaultSize
@@ -571,11 +576,13 @@ export default function ProductForm( {
 									</span>
 									<VStack spacing={ 3 }>
 										{ policyRows.map( row => (
-											<HStack key={ row.key } alignment="center" spacing={ 3 } justify="flex-start">
+											<HStack key={ row.key } alignment="top" spacing={ 3 } justify="flex-start">
 												{ row.label && (
 													<span className="newspack-subscription-products__policy-plan-label">{ row.label }</span>
 												) }
-												<PolicyChips policy={ row.policy } />
+												<VStack spacing={ 2 } alignment="left">
+													{ ruleLinks( row.policy, { requestConfirm, allowNextUnload } ) }
+												</VStack>
 												<EffectivePrice policy={ row.policy } currency={ currency } />
 											</HStack>
 										) ) }
@@ -585,13 +592,9 @@ export default function ProductForm( {
 							{ initial.unlocks.length > 0 && (
 								<div>
 									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
-									<div className="newspack-subscription-products__unlocks">
-										{ initial.unlocks.map( gate => (
-											<Badge key={ gate.id } intent="none">
-												{ gate.title }
-											</Badge>
-										) ) }
-									</div>
+									<VStack spacing={ 2 } alignment="left">
+										{ gateLinks( initial.unlocks, { requestConfirm, allowNextUnload } ) }
+									</VStack>
 								</div>
 							) }
 						</VStack>

@@ -1,3 +1,82 @@
+## @automattic/newspack-blocks [4.36.12](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.11...newspack-blocks@4.36.12) (2026-11-23)
+
+
+### Bug Fixes
+
+* **blocks:** apply post type rules to every Homepage Posts query ([#1288](https://github.com/Automattic/newspack-workspace/issues/1288)) ([06825b8](https://github.com/Automattic/newspack-workspace/commit/06825b80ecb282a025fe5db3f3489f2339aff705))
+* **iframe:** only embed http(s) sources ([#1135](https://github.com/Automattic/newspack-workspace/issues/1135)) ([38cdea4](https://github.com/Automattic/newspack-workspace/commit/38cdea433d7ec8a7d1e5ea69521011ad796cc0a4))
+* merge conflict ([5f868c7](https://github.com/Automattic/newspack-workspace/commit/5f868c7a97a66f8cc406fe369c2c487325e34631))
+* **modal-checkout:** open checkout as a newspack-ui dialog (DSGNEWS-249) ([#1336](https://github.com/Automattic/newspack-workspace/issues/1336)) ([d16ad60](https://github.com/Automattic/newspack-workspace/commit/d16ad6056cb5d0491a96828ddedef5bf2db6d881))
+* **newspack-ui:** announce loading on submit buttons (DSGNEWS-244) ([#1332](https://github.com/Automattic/newspack-workspace/issues/1332)) ([e8e0dd1](https://github.com/Automattic/newspack-workspace/commit/e8e0dd173128d0530b9c73c3685ceadebf8a908d))
+* **newspack-ui:** make form control states readable (DSGNEWS-242) ([#1329](https://github.com/Automattic/newspack-workspace/issues/1329)) ([ea3e321](https://github.com/Automattic/newspack-workspace/commit/ea3e321bebfa4a0bb3431d39e801169d597aee0b))
+* **newspack-ui:** make modals real dialogs (DSGNEWS-246, DSGNEWS-247) ([#1335](https://github.com/Automattic/newspack-workspace/issues/1335)) ([003e96a](https://github.com/Automattic/newspack-workspace/commit/003e96a37323829ac9f277973f4fc5b694996828))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+* **newspack-components:** upgraded to 4.13.0
+
+## @automattic/newspack-blocks [4.36.11](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.10...newspack-blocks@4.36.11) (2026-11-23)
+
+
+### Bug Fixes
+
+* **modal-checkout:** accept checkouts with no billing country field ([#1629](https://github.com/Automattic/newspack-workspace/issues/1629)) ([0d7d45a](https://github.com/Automattic/newspack-workspace/commit/0d7d45af010e31481d27ea4bea29cffbbe825090))
+
+## @automattic/newspack-blocks [4.36.10](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.9...newspack-blocks@4.36.10) (2026-11-19)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
+## @automattic/newspack-blocks [4.36.9](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.8...newspack-blocks@4.36.9) (2026-11-11)
+
+
+### Bug Fixes
+
+* **donations:** stop overwriting per-block and per-product minimums ([#1550](https://github.com/Automattic/newspack-workspace/issues/1550)) ([5d79d59](https://github.com/Automattic/newspack-workspace/commit/5d79d59d4c492b13c2dab53f6569240c4b87ea99))
+
+## @automattic/newspack-blocks [4.36.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.7...newspack-blocks@4.36.8) (2026-11-10)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.1
+
+## @automattic/newspack-blocks [4.36.7](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.6...newspack-blocks@4.36.7) (2026-11-06)
+
+
+### Bug Fixes
+
+* **blocks:** let Static mode add draft and scheduled posts ([#1514](https://github.com/Automattic/newspack-workspace/issues/1514)) ([9fcf53f](https://github.com/Automattic/newspack-workspace/commit/9fcf53f4808e82828a461b2ad940910d7b804798))
+
+## @automattic/newspack-blocks [4.36.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.5...newspack-blocks@4.36.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **modal-checkout:** track wallet payment attempts in GA4 (NPPM-3212) ([#1417](https://github.com/Automattic/newspack-workspace/issues/1417)) ([60fba92](https://github.com/Automattic/newspack-workspace/commit/60fba9271e8228e35e54a2ee7a67e260a2f28657))
+
+## @automattic/newspack-blocks [4.36.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.4...newspack-blocks@4.36.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **post-date:** let plugins show a post's updated date ([#1416](https://github.com/Automattic/newspack-workspace/issues/1416)) ([9ec64bf](https://github.com/Automattic/newspack-workspace/commit/9ec64bfc6348e608fbacd2c569704219167b3cf4))
+
+## @automattic/newspack-blocks [4.36.4](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.3...newspack-blocks@4.36.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **blocks:** scope the fullscreen Iframe takeover to its own page ([#1204](https://github.com/Automattic/newspack-workspace/issues/1204)) ([bd46bed](https://github.com/Automattic/newspack-workspace/commit/bd46bed7f88024811c4c712a0f77b841c78927ac))
+* **content-loop:** keep editor preview links from navigating away ([#1016](https://github.com/Automattic/newspack-workspace/issues/1016)) ([3b38d5a](https://github.com/Automattic/newspack-workspace/commit/3b38d5ae522467048e43a70e476174edbb105bd1))
+* **newspack-blocks:** add check for Jetpack paywall when building excerpts ([#1266](https://github.com/Automattic/newspack-workspace/issues/1266)) ([30f7dbc](https://github.com/Automattic/newspack-workspace/commit/30f7dbceb074f1aa1d650f230f77c30861bfb67a))
+* **reader-revenue:** rename News Revenue Hub to RevEngine ([#1260](https://github.com/Automattic/newspack-workspace/issues/1260)) ([d53ada0](https://github.com/Automattic/newspack-workspace/commit/d53ada020f26889e253d553a053283f98bd62a3b))
+
 ## @automattic/newspack-blocks [4.36.3](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.2...newspack-blocks@4.36.3) (2026-10-20)
 
 

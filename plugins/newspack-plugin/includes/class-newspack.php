@@ -317,6 +317,8 @@ final class Newspack {
 		// Load the general Newspack UI front-end styles.
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-icons.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-palette.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-theme-style.php';
 
 		\Newspack\CLI\Initializer::init();
 	}
@@ -500,7 +502,7 @@ final class Newspack {
 	 * Is the Setup completed?
 	 */
 	public static function is_setup_complete() {
-		return '1' === get_option( NEWSPACK_SETUP_COMPLETE, '0' );
+		return (bool) get_option( NEWSPACK_SETUP_COMPLETE, false );
 	}
 
 	/**
@@ -523,6 +525,10 @@ final class Newspack {
 	 * Long-running processes (CLI workers, integration tests) that rebuild
 	 * dist/ mid-run can call self::asset_version_reset_cache() to drop
 	 * stale entries.
+	 *
+	 * newspack-ads, newspack-blocks, newspack-listings and newspack-newsletters
+	 * carry trimmed copies of this helper, since each must work without this
+	 * plugin. A change to the name check belongs in those copies too.
 	 *
 	 * @param string $name Asset basename relative to `dist/`, without the
 	 *                     `.asset.php` suffix. Examples: 'wizards',
@@ -558,7 +564,8 @@ final class Newspack {
 		 * to avoid writing fixtures into the production-served path.
 		 *
 		 * @param string $dir  Absolute path with trailing slash.
-		 * @param string $name Asset basename being resolved.
+		 * @param string $name Asset basename being resolved, or empty when
+		 *                     resolving the directory itself.
 		 */
 		$dist_dir = apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', $name );
 		$path     = $dist_dir . $name . '.asset.php';

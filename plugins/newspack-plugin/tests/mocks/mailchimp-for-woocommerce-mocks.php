@@ -57,6 +57,13 @@ if ( ! class_exists( 'MailChimp_Service' ) ) {
 		public $updated_users = [];
 
 		/**
+		 * Users the stored opt-in handler ran for.
+		 *
+		 * @var int[]
+		 */
+		public $saved_opt_ins = [];
+
+		/**
 		 * Get the singleton.
 		 */
 		public static function instance() {
@@ -73,6 +80,20 @@ if ( ! class_exists( 'MailChimp_Service' ) ) {
 		 */
 		public function handleUserUpdated( $user_id ) {
 			$this->updated_users[] = $user_id;
+		}
+
+		/**
+		 * In the plugin, sends the user's stored opt-in to Mailchimp when a REST request saves it.
+		 *
+		 * @param int    $meta_id    Meta ID.
+		 * @param int    $user_id    User ID.
+		 * @param string $meta_key   Meta key.
+		 * @param mixed  $meta_value Meta value.
+		 */
+		public function handleUserMetaUpdated( $meta_id, $user_id, $meta_key, $meta_value ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- Matches the plugin's signature.
+			if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
+				$this->saved_opt_ins[] = $user_id;
+			}
 		}
 	}
 }
@@ -109,6 +130,13 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 		 * @var string
 		 */
 		private $email_address;
+
+		/**
+		 * The customer's billing address.
+		 *
+		 * @var MailChimp_WooCommerce_Address|null
+		 */
+		private $address = null;
 
 		/**
 		 * Constructor.
@@ -168,6 +196,94 @@ if ( ! class_exists( 'MailChimp_WooCommerce_Customer' ) ) {
 		public function getWordpressUser() {
 			return $this->wordpress_user;
 		}
+
+		/**
+		 * Get the billing address, created empty on first use as in the plugin.
+		 */
+		public function getAddress() {
+			if ( ! $this->address ) {
+				$this->address = new MailChimp_WooCommerce_Address();
+			}
+			return $this->address;
+		}
+
+		/**
+		 * Replace the billing address.
+		 *
+		 * @param MailChimp_WooCommerce_Address $address Address.
+		 */
+		public function setAddress( MailChimp_WooCommerce_Address $address ) {
+			$this->address = $address;
+			return $this;
+		}
+	}
+}
+
+if ( ! class_exists( 'MailChimp_WooCommerce_Address' ) ) {
+	/**
+	 * A customer's billing address, as Mailchimp for WooCommerce sends it.
+	 */
+	class MailChimp_WooCommerce_Address {
+		/**
+		 * Address fields, keyed by the plugin's property names.
+		 *
+		 * @var array<string, string>
+		 */
+		public $fields = [
+			'name'        => '',
+			'phone'       => '',
+			'address1'    => '',
+			'address2'    => '',
+			'city'        => '',
+			'province'    => '',
+			'postal_code' => '',
+			'country'     => '',
+		];
+
+		// phpcs:disable Squiz.Commenting.FunctionComment.Missing -- Accessors with the plugin's names.
+		public function getAddress1() {
+			return $this->fields['address1'];
+		}
+		public function setAddress1( $value ) {
+			$this->fields['address1'] = $value;
+			return $this;
+		}
+		public function getAddress2() {
+			return $this->fields['address2'];
+		}
+		public function setAddress2( $value ) {
+			$this->fields['address2'] = $value;
+			return $this;
+		}
+		public function getCity() {
+			return $this->fields['city'];
+		}
+		public function setCity( $value ) {
+			$this->fields['city'] = $value;
+			return $this;
+		}
+		public function getProvince() {
+			return $this->fields['province'];
+		}
+		public function setProvince( $value ) {
+			$this->fields['province'] = $value;
+			return $this;
+		}
+		public function getPostalCode() {
+			return $this->fields['postal_code'];
+		}
+		public function setPostalCode( $value ) {
+			$this->fields['postal_code'] = $value;
+			return $this;
+		}
+		public function getCountry() {
+			return $this->fields['country'];
+		}
+		public function setCountry( $value ) {
+			$this->fields['country'] = $value;
+			return $this;
+		}
+		// phpcs:enable Squiz.Commenting.FunctionComment.Missing
 	}
 }
 

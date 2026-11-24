@@ -150,7 +150,7 @@ describe( 'GoalCards', () => {
 
 	it( 'names each goal by its title and summary, not its icon', () => {
 		render( <Picker /> );
-		expect( radios()[ 0 ] ).toHaveAccessibleName( 'New Subscriptions An introduction or stepped offer for first-time subscribers.' );
+		expect( radios()[ 0 ] ).toHaveAccessibleName( 'New Subscriptions An introductory or stepped price for first-time subscribers.' );
 	} );
 
 	it( 'renders the title as a heading so the card supplies its own typography', () => {

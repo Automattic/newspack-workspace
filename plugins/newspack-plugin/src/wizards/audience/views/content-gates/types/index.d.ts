@@ -51,7 +51,8 @@ type AccessRule = {
 	value: GateAccessRuleValue;
 };
 
-type GateContentRuleValue = string[];
+type PublishedAgeRuleValue = import( '../../../../../content-gate/utils/published-age' ).PublishedAgeValue;
+type GateContentRuleValue = string[] | PublishedAgeRuleValue;
 type ContentRule = {
 	name: string;
 	default: GateContentRuleValue;
@@ -129,6 +130,10 @@ type GateContentRule = {
 
 type GateStatus = 'publish' | 'draft' | 'pending' | 'future' | 'private' | 'trash';
 
+// How a premium newsletter gate decides whether to add readers to its lists:
+// follow the site-wide setting, or force it on or off for this gate.
+type AutoSignupMode = 'default' | 'on' | 'off';
+
 type Gate = {
 	id: number;
 	title: string;
@@ -140,6 +145,9 @@ type Gate = {
 	content_rules_match: 'all' | 'any';
 	registration: Registration;
 	custom_access: CustomAccess;
+	// Premium newsletter gates only. Absence means 'default' and false.
+	auto_signup?: AutoSignupMode;
+	hide_lists?: boolean;
 };
 
 type Registration = {
@@ -176,6 +184,11 @@ type ContentGiftingConfig = {
 	expiration_time?: number;
 	expiration_time_unit?: string;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_type?: string;
@@ -188,6 +201,11 @@ type MeteringCountdownConfig = {
 	// and writes should stay int-shaped to keep dirty checks honest.
 	enabled?: boolean | number;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_url?: string;
@@ -206,6 +224,7 @@ type AdvancedSettingsConfig = {
 	comment_restriction_gate_id: number;
 	comment_restriction_message: string;
 	comment_restriction_purchase_url: string;
+	comment_require_full_name: boolean;
 };
 
 type GateSettings = {
@@ -216,6 +235,8 @@ type GateSettings = {
 	has_institutions?: boolean;
 	// Capability flags the gates endpoint returns alongside the stored settings.
 	has_newsletters?: boolean;
+	// The Premium Newsletters wizard's site-wide auto-signup setting.
+	auto_signup?: boolean;
 };
 
 type GateConfig = {
@@ -251,8 +272,5 @@ type Institution = {
 		np_institution_email_domain: string;
 		np_institution_ip_range: string;
 		np_institution_reader_data: string;
-	};
-	_embedded?: {
-		'wp:featuredmedia'?: Array<{ source_url: string }>;
 	};
 };

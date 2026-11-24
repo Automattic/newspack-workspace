@@ -25,6 +25,7 @@ const Sidebar = props => {
 		onMetaFieldChange,
 		placement,
 		overlay_size,
+		manual_only,
 		trigger_type,
 		trigger_delay,
 		trigger_scroll_progress,
@@ -36,6 +37,16 @@ const Sidebar = props => {
 	} = props;
 	const updatePlacement = value => {
 		onMetaFieldChange( { placement: value } );
+	};
+	// Switching type keeps a prompt manual-only or automatic as it was, so a hand-placed prompt never starts appearing site-wide.
+	const updatePromptType = value => {
+		if ( 'center' === value ) {
+			onMetaFieldChange( { placement: value, manual_only: 'manual' === placement } );
+		} else if ( 'inline' === value && isOverlay && manual_only ) {
+			onMetaFieldChange( { placement: 'manual' } );
+		} else {
+			updatePlacement( value );
+		}
 	};
 	const updatePlacementWhenPopupIsFullWidth = () => {
 		switch ( placement ) {
@@ -65,6 +76,31 @@ const Sidebar = props => {
 
 	const helpMessage = getPlacementHelpMessage( props );
 
+	// While the prompt is in an A/B test, leave out the placements a test can't
+	// use. A current one stays listed, disabled, so the select still shows it.
+	const abTesting = window.newspack_popups_data?.ab_testing || {};
+	const inTest = !! abTesting.enabled && !! props.newspack_popups_ab_test_id;
+	const ineligiblePlacements = abTesting.ineligible_placements || [];
+	const inlinePlacementOptions = [
+		{ value: 'inline', label: __( 'In article content', 'newspack-popups' ) },
+		{ value: 'archives', label: __( 'In archive pages' ) },
+		{ value: 'above_header', label: __( 'Above site header', 'newspack-popups' ) },
+		{ value: 'manual', label: __( 'Manual only', 'newspack-popups' ) },
+	]
+		.concat(
+			Object.keys( customPlacements ).map( key => ( {
+				value: key,
+				label: customPlacements[ key ],
+			} ) )
+		)
+		.filter( option => ! inTest || ! ineligiblePlacements.includes( option.value ) || option.value === placement )
+		.map( option => ( inTest && ineligiblePlacements.includes( option.value ) ? { ...option, disabled: true } : option ) );
+	const inlinePlacementHelp = inTest
+		? [ helpMessage, __( 'Manual and custom placements aren’t available while this prompt is in an A/B test.', 'newspack-popups' ) ]
+				.filter( Boolean )
+				.join( ' ' )
+		: helpMessage;
+
 	return (
 		<>
 			<RadioControl
@@ -75,7 +111,7 @@ const Sidebar = props => {
 					{ label: __( 'Inline', 'newspack-popups' ), value: 'inline' },
 					{ label: __( 'Overlay', 'newspack-popups' ), value: 'center' },
 				] }
-				onChange={ updatePlacement }
+				onChange={ updatePromptType }
 			/>
 			{ isOverlay ? (
 				<>
@@ -93,24 +129,29 @@ const Sidebar = props => {
 						onChange={ updatePlacement }
 						size={ overlay_size }
 					/>
+					<ToggleControl
+						label={ __( 'Manual only', 'newspack-popups' ) }
+						help={
+							inTest
+								? __(
+										'The prompt will appear only where inserted using the Single Prompt block or a shortcode. Manual only isn’t available while this prompt is in an A/B test.',
+										'newspack-popups'
+								  )
+								: __( 'The prompt will appear only where inserted using the Single Prompt block or a shortcode.', 'newspack-popups' )
+						}
+						checked={ !! manual_only }
+						onChange={ value => onMetaFieldChange( { manual_only: value } ) }
+						// Still on for a prompt that already has it, so it can be turned off.
+						disabled={ inTest && ! manual_only }
+					/>
 				</>
 			) : (
 				<SelectControl
 					label={ __( 'Placement' ) }
-					help={ helpMessage }
+					help={ inlinePlacementHelp }
 					value={ placement }
 					onChange={ updatePlacement }
-					options={ [
-						{ value: 'inline', label: __( 'In article content', 'newspack-popups' ) },
-						{ value: 'archives', label: __( 'In archive pages' ) },
-						{ value: 'above_header', label: __( 'Above site header', 'newspack-popups' ) },
-						{ value: 'manual', label: __( 'Manual only', 'newspack-popups' ) },
-					].concat(
-						Object.keys( customPlacements ).map( key => ( {
-							value: key,
-							label: customPlacements[ key ],
-						} ) )
-					) }
+					options={ inlinePlacementOptions }
 				/>
 			) }
 

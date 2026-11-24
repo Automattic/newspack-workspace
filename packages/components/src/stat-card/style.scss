@@ -5,6 +5,8 @@
 @use "../variables" as np-vars;
 
 $stat-card-min-height: wp-vars.$grid-unit * 21;
+$stat-card-value-font-size: clamp(#{wp-vars.$font-size-x-large}, 14cqi, #{np-vars.$font-size-3x-large});
+$stat-card-note-line-height: wp-vars.$font-line-height-small;
 
 .newspack-stat-card {
 	--wp-admin-theme-color: #{colors.$primary-600};
@@ -35,6 +37,10 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		margin: 0;
 	}
 
+	&__label-qualifier {
+		display: block;
+	}
+
 	&__body {
 		flex: 1;
 	}
@@ -42,7 +48,7 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 	&__value {
 		color: var(--wp-admin-theme-color);
 		font-size: np-vars.$font-size-3x-large;
-		font-size: clamp(#{wp-vars.$font-size-x-large}, 14cqi, #{np-vars.$font-size-3x-large});
+		font-size: $stat-card-value-font-size;
 		font-variant-numeric: tabular-nums;
 		font-weight: wp-vars.$font-weight-medium;
 		line-height: np-vars.$font-line-height-3x-large;
@@ -51,6 +57,11 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 			font-size: wp-vars.$font-size-x-large;
 			line-height: wp-vars.$font-line-height-x-large;
 		}
+	}
+
+	&__unit {
+		@include wp-mixins.heading-medium();
+		color: var(--wp-admin-theme-color);
 	}
 
 	&__delta {
@@ -64,6 +75,21 @@ $stat-card-min-height: wp-vars.$grid-unit * 21;
 		&--negative {
 			color: colors.$error-600;
 		}
+	}
+
+	&__note {
+		@include wp-mixins.body-medium();
+		color: wp-colors.$gray-700;
+
+		p {
+			font: inherit;
+			margin: 0;
+		}
+	}
+
+	&__body >&__note:first-child {
+		padding-block-start: (np-vars.$font-size-3x-large * np-vars.$font-line-height-3x-large - $stat-card-note-line-height) * 0.5;
+		padding-block-start: calc((#{$stat-card-value-font-size} * #{np-vars.$font-line-height-3x-large} - #{$stat-card-note-line-height}) / 2);
 	}
 
 	&__action,

@@ -21,6 +21,13 @@ class Mailchimp_For_WooCommerce {
 	private static bool $removed_profile_update_handler = false;
 
 	/**
+	 * The user meta hooks this class removed MC4WC's stored opt-in handler from for a block checkout.
+	 *
+	 * @var string[]
+	 */
+	private static array $checkout_removed_user_meta_hooks = [];
+
+	/**
 	 * Mailchimp statuses read during this request, keyed by email address.
 	 *
 	 * @var array<string, string|null>
@@ -36,7 +43,10 @@ class Mailchimp_For_WooCommerce {
 		add_action( 'wp_loaded', [ __CLASS__, 'remove_account_details_opt_in' ] );
 		add_action( 'profile_update', [ __CLASS__, 'skip_profile_update_without_opt_in' ], 99 );
 		add_action( 'profile_update', [ __CLASS__, 'restore_profile_update_handler' ], 101 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'skip_checkout_opt_in_save' ], 9 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'restore_checkout_opt_in_handler' ], 11 );
 		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'keep_subscribed_customer_subscribed' ] );
+		add_filter( 'mailchimp_filter_ecommerce_order', [ __CLASS__, 'send_only_complete_address' ], 10, 2 );
 	}
 
 	/**
@@ -81,6 +91,57 @@ class Mailchimp_For_WooCommerce {
 	}
 
 	/**
+	 * Stop MC4WC from unsubscribing a reader who buys through the block checkout.
+	 *
+	 * At a block checkout, MC4WC saves its newsletter checkbox to the customer's stored opt-in,
+	 * as "" when the box is not ticked or not shown. A save of the stored opt-in in a REST request
+	 * makes MC4WC send it to Mailchimp, with "" as "transactional", so a subscribed reader who
+	 * buys something would be unsubscribed. An unticked box is not a choice to stop receiving
+	 * newsletters.
+	 *
+	 * MC4WC's stored opt-in handler is off while the checkout runs its default-priority callbacks,
+	 * which is where MC4WC saves the checkbox. The opt-in is still timestamped as MC4WC would.
+	 * A ticked box still subscribes the customer, because the checkout queues that subscription
+	 * itself, and the order MC4WC sends next keeps a subscribed customer subscribed, see
+	 * keep_subscribed_customer_subscribed().
+	 */
+	public static function skip_checkout_opt_in_save() {
+		if ( ! \class_exists( '\MailChimp_Service' ) ) {
+			return;
+		}
+		foreach ( [ 'added_user_meta', 'updated_user_meta' ] as $user_meta_hook ) {
+			if ( remove_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10 ) ) {
+				add_action( $user_meta_hook, [ __CLASS__, 'record_checkout_opt_in_time' ], 10, 3 );
+				self::$checkout_removed_user_meta_hooks[] = $user_meta_hook;
+			}
+		}
+	}
+
+	/**
+	 * Record when the checkout saved the stored opt-in, which MC4WC sends with the customer's orders.
+	 *
+	 * @param int    $meta_id  Meta ID.
+	 * @param int    $user_id  User ID.
+	 * @param string $meta_key Meta key.
+	 */
+	public static function record_checkout_opt_in_time( $meta_id, $user_id, $meta_key ) {
+		if ( 'mailchimp_woocommerce_is_subscribed' === $meta_key ) {
+			update_user_meta( $user_id, 'mailchimp_woocommerce_marketing_status_updated_at', time() );
+		}
+	}
+
+	/**
+	 * Re-hook MC4WC's stored opt-in handler once the checkout has saved the opt-in.
+	 */
+	public static function restore_checkout_opt_in_handler() {
+		foreach ( self::$checkout_removed_user_meta_hooks as $user_meta_hook ) {
+			remove_action( $user_meta_hook, [ __CLASS__, 'record_checkout_opt_in_time' ], 10 );
+			add_action( $user_meta_hook, [ \MailChimp_Service::instance(), 'handleUserMetaUpdated' ], 10, 4 );
+		}
+		self::$checkout_removed_user_meta_hooks = [];
+	}
+
+	/**
 	 * Stop MC4WC from unsubscribing a customer who places an order.
 	 *
 	 * MC4WC sends an order's customer to Mailchimp as "transactional" unless its stored opt-in
@@ -119,6 +180,103 @@ class Mailchimp_For_WooCommerce {
 			update_user_meta( $customer->getWordpressUser()->ID, 'mailchimp_woocommerce_is_subscribed', '1' );
 		}
 		return $order;
+	}
+
+	/**
+	 * Stop an order's billing address from blocking Newspack's contact updates.
+	 *
+	 * Mailchimp writes each part of the address MC4WC sends with an order into the contact's
+	 * address. When the result lacks a street, city, or postcode, Mailchimp ignores every later
+	 * update to the contact, while still reporting success. Checkouts for digital products often
+	 * collect only a postcode and country. A missing street and city come from the reader's earlier
+	 * order at the same postcode and country, so a returning reader keeps their real address, and
+	 * become "-" otherwise, which Mailchimp accepts as complete. An address without a postcode is
+	 * not sent.
+	 *
+	 * @param \MailChimp_WooCommerce_Order $order    The order MC4WC is about to send.
+	 * @param \WC_Order|null               $wc_order The WooCommerce order it was built from.
+	 *
+	 * @return \MailChimp_WooCommerce_Order
+	 */
+	public static function send_only_complete_address( $order, $wc_order = null ) {
+		$customer = method_exists( $order, 'getCustomer' ) ? $order->getCustomer() : null;
+		$address  = $customer && method_exists( $customer, 'getAddress' ) ? $customer->getAddress() : null;
+		foreach ( [ 'Address1', 'Address2', 'City', 'PostalCode', 'Country' ] as $field ) {
+			if ( ! $address || ! method_exists( $address, 'get' . $field ) || ! method_exists( $address, 'set' . $field ) ) {
+				return $order;
+			}
+		}
+		if ( ! $address->getPostalCode() ) {
+			if ( method_exists( $customer, 'setAddress' ) && class_exists( '\MailChimp_WooCommerce_Address' ) ) {
+				// MC4WC leaves an empty address out of what it sends.
+				$customer->setAddress( new \MailChimp_WooCommerce_Address() );
+			}
+			return $order;
+		}
+		if ( $address->getAddress1() && $address->getCity() ) {
+			return $order;
+		}
+		$earlier_address = self::get_earlier_address( $customer, $wc_order, $address->getPostalCode(), $address->getCountry() );
+		if ( ! $address->getAddress1() ) {
+			$address->setAddress1( $earlier_address ? $earlier_address['address_1'] : '-' );
+			if ( $earlier_address ) {
+				$address->setAddress2( $earlier_address['address_2'] );
+			}
+		}
+		if ( ! $address->getCity() ) {
+			$address->setCity( $earlier_address ? $earlier_address['city'] : '-' );
+		}
+		return $order;
+	}
+
+	/**
+	 * Get the street and city from the reader's most recent earlier order that has them, if that
+	 * order was at the given postcode and country.
+	 *
+	 * Orders are read rather than the reader's saved billing address, because checkout saves the
+	 * new postcode while keeping a street the form did not collect.
+	 *
+	 * @param \MailChimp_WooCommerce_Customer $customer The order's customer.
+	 * @param \WC_Order|null                  $wc_order The order being sent.
+	 * @param string                          $postcode The postcode on the order.
+	 * @param string                          $country  The country on the order.
+	 *
+	 * @return array{address_1: string, address_2: string, city: string}|null Null when the reader is a guest, has no earlier street, or has moved since.
+	 */
+	private static function get_earlier_address( $customer, $wc_order, $postcode, $country ) {
+		$user = method_exists( $customer, 'getWordpressUser' ) ? $customer->getWordpressUser() : null;
+		if ( ! $user instanceof \WP_User || ! $wc_order instanceof \WC_Order || ! function_exists( 'wc_get_orders' ) ) {
+			return null;
+		}
+		$query      = [
+			'customer_id' => $user->ID,
+			'type'        => 'shop_order',
+			'orderby'     => 'date',
+			'order'       => 'DESC',
+			'limit'       => 50,
+		];
+		$order_date = $wc_order->get_date_created();
+		if ( $order_date ) {
+			$query['date_created'] = '<' . $order_date->getTimestamp();
+		}
+		$normalize = fn( $value ) => strtoupper( preg_replace( '/\s+/', '', (string) $value ) );
+		foreach ( wc_get_orders( $query ) as $earlier_order ) {
+			if ( $earlier_order->get_id() === $wc_order->get_id() ) {
+				continue;
+			}
+			if ( ! $earlier_order->get_billing_address_1() || ! $earlier_order->get_billing_city() ) {
+				continue;
+			}
+			if ( $normalize( $earlier_order->get_billing_postcode() ) !== $normalize( $postcode ) || $normalize( $earlier_order->get_billing_country() ) !== $normalize( $country ) ) {
+				return null;
+			}
+			return [
+				'address_1' => $earlier_order->get_billing_address_1(),
+				'address_2' => $earlier_order->get_billing_address_2(),
+				'city'      => $earlier_order->get_billing_city(),
+			];
+		}
+		return null;
 	}
 
 	/**

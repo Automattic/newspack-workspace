@@ -34,7 +34,7 @@ import { select } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder, usesSiteButtonStyle } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -110,6 +110,9 @@ export default function SubscribeEdit( {
 	},
 } ) {
 	const blockProps = useBlockProps();
+	const useSiteStyle = usesSiteButtonStyle( backgroundColor, textColor );
+	const isBlockTheme = !! window.newspackIsBlockTheme;
+	const buttonStyle = useSiteStyle ? undefined : { backgroundColor: backgroundColor ?? '#dd3333', color: textColor ?? '#ffffff' };
 	const [ editedState, setEditedState ] = useState( editedStateOptions[ 0 ].value );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ listConfig, setListConfig ] = useState( {} );
@@ -265,6 +268,7 @@ export default function SubscribeEdit( {
 					<TextControl
 						label={ __( 'Email placeholder', 'newspack-newsletters' ) }
 						value={ placeholder }
+						placeholder={ __( 'Your email address', 'newspack-newsletters' ) }
 						onChange={ value => setAttributes( { placeholder: value } ) }
 					/>
 					<ToggleControl
@@ -277,17 +281,19 @@ export default function SubscribeEdit( {
 							<TextControl
 								label={ __( 'Name placeholder', 'newspack-newsletters' ) }
 								value={ namePlaceholder }
+								placeholder={ __( 'Your name', 'newspack-newsletters' ) }
 								onChange={ value => setAttributes( { namePlaceholder: value } ) }
 							/>
 							<ToggleControl
-								label={ __( 'Display "Last Name" field', 'newspack-newsletters' ) }
+								label={ __( 'Display "Last name" field', 'newspack-newsletters' ) }
 								checked={ displayLastNameField }
 								onChange={ value => setAttributes( { displayLastNameField: value } ) }
 							/>
 							{ displayLastNameField && (
 								<TextControl
-									label={ __( '"Last Name" placeholder', 'newspack-newsletters' ) }
+									label={ __( '"Last name" placeholder', 'newspack-newsletters' ) }
 									value={ lastNamePlaceholder }
+									placeholder={ __( 'Your last name', 'newspack-newsletters' ) }
 									onChange={ value => setAttributes( { lastNamePlaceholder: value } ) }
 								/>
 							) }
@@ -540,7 +546,7 @@ export default function SubscribeEdit( {
 													/>
 												) }
 											</label>
-											<input type="text" placeholder={ namePlaceholder } />
+											<input type="text" placeholder={ namePlaceholder || __( 'Your name', 'newspack-newsletters' ) } />
 										</div>
 										{ displayLastNameField && (
 											<div className="newspack-newsletters-name-input-item">
@@ -548,13 +554,16 @@ export default function SubscribeEdit( {
 													{ displayInputLabels && (
 														<RichText
 															onChange={ value => setAttributes( { lastNameLabel: value } ) }
-															placeholder={ __( 'Last Name', 'newspack-newsletters' ) }
+															placeholder={ __( 'Last name', 'newspack-newsletters' ) }
 															value={ lastNameLabel }
 															tagName="span"
 														/>
 													) }
 												</label>
-												<input type="text" placeholder={ lastNamePlaceholder } />
+												<input
+													type="text"
+													placeholder={ lastNamePlaceholder || __( 'Your last name', 'newspack-newsletters' ) }
+												/>
 											</div>
 										) }
 									</div>
@@ -564,14 +573,14 @@ export default function SubscribeEdit( {
 										{ displayInputLabels && (
 											<RichText
 												onChange={ value => setAttributes( { emailLabel: value } ) }
-												placeholder={ __( 'Email Address', 'newspack-newsletters' ) }
+												placeholder={ __( 'Email address', 'newspack-newsletters' ) }
 												value={ emailLabel }
 												tagName="span"
 											/>
 										) }
 									</label>
-									<input type="email" placeholder={ placeholder } />
-									<div className="submit-button" style={ { backgroundColor, color: textColor } }>
+									<input type="email" placeholder={ placeholder || __( 'Your email address', 'newspack-newsletters' ) } />
+									<div className={ classnames( 'submit-button', { 'wp-element-button': isBlockTheme } ) } style={ buttonStyle }>
 										<RichText
 											onChange={ value => setAttributes( { label: value } ) }
 											placeholder={ __( 'Sign up', 'newspack-newsletters' ) }
@@ -600,8 +609,10 @@ export default function SubscribeEdit( {
 									// renders no button on the published page, so don't preview one.
 									! ( 'custom' === afterSuccessBehavior && ! afterSuccessURL ) && (
 										<div
-											className="newspack-newsletters-subscribe__continue submit-button"
-											style={ { backgroundColor, color: textColor } }
+											className={ classnames( 'newspack-newsletters-subscribe__continue submit-button', {
+												'wp-element-button': isBlockTheme,
+											} ) }
+											style={ buttonStyle }
 										>
 											{ afterSuccessButtonLabel || __( 'Continue', 'newspack-newsletters' ) }
 										</div>

@@ -1,30 +1,73 @@
-/**
- * Main content area
- */
+@use "../../newspack-ui/scss/mixins";
 
 .newspack-my-account {
 	.woocommerce-MyAccount-content {
-		transition: transform 125ms ease-in-out;
-		@media ( min-width: 768px ) {
-			border: none;
-			margin-left: auto;
-			margin-right: auto;
-			max-width: calc(301px + 768px);
-			padding-bottom: 0;
-			padding-left: 301px;
-			padding-top: 0;
-			transition: none;
-			width: 100%;
+		border: none;
+		box-sizing: border-box;
+		float: none;
+		padding: var(--newspack-ui-spacer-5) var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-9);
+		width: auto;
+
+		@include mixins.media( tablet ) {
+			--newspack-my-account-content-gutter: clamp(var(--newspack-ui-spacer-5), 7vw, calc(var(--newspack-ui-spacer-1) * 13));
+			--newspack-my-account-content-max: calc(var(--newspack-ui-width-content) + 2 * var(--newspack-my-account-content-gutter));
+
+			margin-inline-start: calc(var(--newspack-ui-width-sidebar) + max(0px, (100% - var(--newspack-ui-width-sidebar) - var(--newspack-my-account-content-max)) / 2));
+			max-width: var(--newspack-my-account-content-max);
+			padding: var(--newspack-ui-spacer-9) var(--newspack-my-account-content-gutter) calc(var(--newspack-ui-spacer-1) * 10);
 		}
+
+		> :not(dialog) {
+			max-width: var(--newspack-ui-width-content);
+		}
+
 		&.is-loading {
 			opacity: 0.5;
 			pointer-events: none;
 		}
-		section + section {
-			margin-top: var(--newspack-ui-spacer-11);
-		}
+
 		.wp-block-details + .wp-block-details {
 			margin-top: 0;
 		}
+
+		h1.newspack-my-account__page-title {
+			margin: 0 0 var(--newspack-ui-spacer-5);
+
+			@include mixins.media( tablet ) {
+				margin-bottom: var(--newspack-ui-spacer-6);
+			}
+		}
+
+		@include mixins.media-below( tablet ) {
+			h1.newspack-my-account__page-title--matches-nav {
+				@include mixins.visually-hidden;
+
+				+ .newspack-ui__notice {
+					margin-top: 0;
+				}
+			}
+		}
+
+		> h2,
+		> header > h2,
+		> section > h2,
+		> section > .newspack-ui__stack > h2 {
+			margin: 0 0 var(--newspack-ui-spacer-4);
+		}
+
+		> section + section {
+			border-top: 1px solid var(--newspack-ui-color-border);
+			margin-top: var(--newspack-ui-spacer-8);
+			padding-top: var(--newspack-ui-spacer-8);
+		}
+
+		> p:not(.woocommerce-buttons-card),
+		> section > p:not(.woocommerce-buttons-card) {
+			max-width: 70ch;
+		}
+	}
+
+	&:dir(rtl) :is(.newspack-ui__svg-icon--chevron-left, .newspack-ui__svg-icon--chevron-right, .newspack-ui__svg-icon--logout) {
+		transform: scaleX(-1);
 	}
 }

@@ -1,0 +1,5 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-table-card--separated .newspack-table-card__header {
+	border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-200});
+}

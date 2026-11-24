@@ -11,7 +11,7 @@ the one part with no counterpart there.
 The parts hang off one exported object rather than the flat named exports the
 rest of this package uses. That is deliberate, to keep them recognisable against
 `@wordpress/ui`'s own `Drawer`. It is also the shape compound components in this
-package follow, `EmptyState` included.
+package follow, `StatCard` included.
 
 ```jsx
 import { Drawer } from 'newspack-components';
@@ -412,9 +412,8 @@ that grows after mount is picked up.
 
 The Root wraps its children in a `SlotFillProvider` and renders a `Popover.Slot`
 beside them, so dropdowns and pickers inside the drawer stay visible. Without
-both, a popover
-portalled to the body would land in a container Modal has marked `aria-hidden`,
-and our own `modal/style.scss` blanks popovers while a modal is open.
+both, a popover portalled to the body would land in a container Modal has marked
+`aria-hidden`.
 
 That provider starts a fresh registry rather than chaining to a parent one. **A
 `Fill` rendered inside the drawer cannot reach a `Slot` outside it**: it renders

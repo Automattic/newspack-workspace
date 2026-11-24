@@ -75,8 +75,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 180s
-  mailhog:
-    image: arjenz/mailhog:latest
+  mailpit:
+    image: axllent/mailpit:latest
     restart: always
     ports:
       - "127.0.0.1:1025:1025"

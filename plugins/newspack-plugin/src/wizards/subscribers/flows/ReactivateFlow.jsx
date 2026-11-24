@@ -39,7 +39,16 @@ const MODE_DETAILS = {
 	free: __( 'Reactivate now without taking a payment. Billing resumes on the regular schedule.', 'newspack-plugin' ),
 };
 
-export default function ReactivateFlow( { subscription, email, actions, onClose, onDone } ) {
+/**
+ * @param {Object}   props              Component props.
+ * @param {Object}   props.subscription The profile subscription entry.
+ * @param {string}   [props.email]      Where the payment link is emailed; empty when the subscription has no billing email.
+ * @param {string}   [props.payerName]  The gift buyer's name, passed only for a gift: the payment link is theirs to pay, not the subscriber's.
+ * @param {Object}   props.actions      The subscription write calls (useSubscriptionActions).
+ * @param {Function} props.onClose      Close without acting.
+ * @param {Function} props.onDone       Called with a success message afterwards.
+ */
+export default function ReactivateFlow( { subscription, email, payerName, actions, onClose, onDone } ) {
 	const canCharge = !! subscription.canCharge;
 	const step = useTwoStep();
 	const [ mode, setMode ] = useState( canCharge ? 'charge' : 'link' );
@@ -48,6 +57,18 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 
 	const planName = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
 	const price = fmtCurrency( subscription.amount, subscription.currency );
+
+	// A gift's payment link is the buyer's to pay, so its help text names them.
+	const modeDetails = {
+		...MODE_DETAILS,
+		...( payerName && {
+			link: sprintf(
+				// translators: %s is the gift buyer's name.
+				__( 'Email %s a link to pay. The subscription stays on hold until they pay.', 'newspack-plugin' ),
+				payerName
+			),
+		} ),
+	};
 
 	const modeOptions = [
 		...( canCharge ? [ { label: __( 'Charge the customer now', 'newspack-plugin' ), value: 'charge' } ] : [] ),
@@ -65,15 +86,22 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 				// UI. When it couldn't send one, the admin gets the link itself to
 				// pass along instead of a false "sent" confirmation.
 				if ( result?.emailSent ) {
-					// translators: %s is the subscriber's email address.
+					// translators: %s is the email address the payment link went to: the buyer's billing email on a gift.
 					onDone( sprintf( __( 'Payment link sent to %s.', 'newspack-plugin' ), email ) );
 				} else {
 					setError(
-						sprintf(
-							// translators: %s is a checkout payment URL.
-							__( 'The email could not be sent. Share this payment link with the subscriber directly: %s', 'newspack-plugin' ),
-							result?.paymentUrl || ''
-						)
+						payerName
+							? sprintf(
+									// translators: 1: the gift buyer's name, 2: a checkout payment URL.
+									__( 'The email could not be sent. Share this payment link with %1$s directly: %2$s', 'newspack-plugin' ),
+									payerName,
+									result?.paymentUrl || ''
+							  )
+							: sprintf(
+									// translators: %s is a checkout payment URL.
+									__( 'The email could not be sent. Share this payment link with the subscriber directly: %s', 'newspack-plugin' ),
+									result?.paymentUrl || ''
+							  )
 					);
 					setBusy( false );
 				}
@@ -122,8 +150,16 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 					'newspack-plugin'
 			  );
 	} else if ( 'link' === mode ) {
-		// translators: %s is the subscriber's email address.
-		detail = sprintf( __( 'A payment link will be emailed to %s. The subscription reactivates once they pay.', 'newspack-plugin' ), email );
+		detail = email
+			? sprintf(
+					// translators: %s is the email address the payment link goes to: the buyer's billing email on a gift.
+					__( 'A payment link will be emailed to %s. The subscription reactivates once they pay.', 'newspack-plugin' ),
+					email
+			  )
+			: __(
+					"No billing email is on file, so you'll get a payment link to share instead. The subscription reactivates once it's paid.",
+					'newspack-plugin'
+			  );
 	} else {
 		detail = __(
 			'The subscription reactivates now without taking a payment. Billing resumes on the regular schedule at the next renewal.',
@@ -158,7 +194,7 @@ export default function ReactivateFlow( { subscription, email, actions, onClose,
 							selected={ mode }
 							options={ modeOptions }
 							onChange={ setMode }
-							help={ MODE_DETAILS[ mode ] }
+							help={ modeDetails[ mode ] }
 						/>
 						<StepButtons
 							leftLabel={ __( 'Cancel', 'newspack-plugin' ) }

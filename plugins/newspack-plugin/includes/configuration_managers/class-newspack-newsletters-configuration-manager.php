@@ -124,7 +124,7 @@ class Newspack_Newsletters_Configuration_Manager extends Configuration_Manager {
 	 * @return array Lists.
 	 */
 	public function add_contact( $contact, $list_id ) {
-		__deprecated_function( __METHOD__, '4.4.3', 'Newspack_Newsletters_Contacts::upsert' );
+		_deprecated_function( __METHOD__, '4.4.3', 'Newspack_Newsletters_Contacts::upsert' );
 		if ( $this->is_configured() ) {
 			return \Newspack_Newsletters_Contacts::upsert( $contact, $list_id );
 		}

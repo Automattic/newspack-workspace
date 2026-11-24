@@ -172,14 +172,14 @@ final class Ad_Unit_Block {
 			'newspack-ads-editor',
 			Core::plugin_url( 'dist/editor.js' ),
 			[],
-			NEWSPACK_ADS_VERSION,
+			Core::asset_version( 'editor' ),
 			true
 		);
 		wp_enqueue_style(
 			'newspack-ads-editor',
 			Core::plugin_url( 'dist/editor.css' ),
 			[],
-			NEWSPACK_ADS_VERSION
+			Core::asset_version( 'editor' )
 		);
 	}
 

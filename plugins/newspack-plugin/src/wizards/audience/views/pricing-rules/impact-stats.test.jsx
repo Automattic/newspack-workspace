@@ -22,7 +22,7 @@ const audience = ( over = {} ) => ( {
 	...over,
 } );
 
-const labels = () => [ 'Products affected', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ];
+const labels = () => [ 'Affected products', 'Subscribers in scope', 'Eligible at renewal', 'Protected' ];
 
 const stats = props => <ImpactStats productsDescription="Rules currently price these products." { ...props } />;
 
@@ -56,7 +56,7 @@ describe( 'ImpactStats', () => {
 	it( 'renders one tile and keeps the four-column track', () => {
 		const { container } = render( stats( { totalMatching: 36, countLimited: false } ) );
 
-		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Affected products' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Subscribers in scope' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Eligible at renewal' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Protected' ) ).not.toBeInTheDocument();
@@ -68,7 +68,7 @@ describe( 'ImpactStats', () => {
 		const { container } = render( stats( { totalMatching: 36, countLimited: false, audience: audience() } ) );
 
 		labels().forEach( label => expect( screen.getByText( label ) ).toBeInTheDocument() );
-		expect( within( tileFor( 'Products affected' ) ).getByText( '36' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Affected products' ) ).getByText( '36' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Protected' ) ).getByText( '4' ) ).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe( 'ImpactStats', () => {
 		render( stats( { totalMatching: 36, countLimited: false, audience: audience(), onViewProducts: jest.fn() } ) );
 
 		const trigger = screen.getByRole( 'button', { name: 'View Affected Products' } );
-		expect( tileFor( 'Products affected' ).contains( trigger ) ).toBe( true );
+		expect( tileFor( 'Affected products' ).contains( trigger ) ).toBe( true );
 		[ 'Subscribers in scope', 'Eligible at renewal', 'Protected' ].forEach( label =>
 			expect( within( tileFor( label ) ).queryByRole( 'button' ) ).not.toBeInTheDocument()
 		);
@@ -147,7 +147,7 @@ describe( 'ImpactStats', () => {
 	it( 'leaves the product count exact when only the audience is capped', () => {
 		render( stats( { totalMatching: 500, countLimited: false, audience: audience( { count_limited: true } ) } ) );
 
-		expect( within( tileFor( 'Products affected' ) ).getByText( '500' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Affected products' ) ).getByText( '500' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12+' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8+' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Protected' ) ).getByText( '4+' ) ).toBeInTheDocument();
@@ -156,7 +156,7 @@ describe( 'ImpactStats', () => {
 	it( 'bounds all three subscriber counts when the audience is capped', () => {
 		render( stats( { totalMatching: 500, countLimited: true, audience: audience( { count_limited: true } ) } ) );
 
-		expect( within( tileFor( 'Products affected' ) ).getByText( '500+' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Affected products' ) ).getByText( '500+' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12+' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8+' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Protected' ) ).getByText( '4+' ) ).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe( 'ImpactStats', () => {
 	it( 'renders a zero count as a number, not as the em-dash', () => {
 		render( stats( { totalMatching: 0, countLimited: false, audience: audience( { caught: 0 } ) } ) );
 
-		expect( within( tileFor( 'Products affected' ) ).getByText( '0' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Affected products' ) ).getByText( '0' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '0' ) ).toBeInTheDocument();
 		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();
 	} );
@@ -222,7 +222,7 @@ describe( 'ImpactStats', () => {
 	it( 'formats a count the engine sent as a string', () => {
 		render( stats( { totalMatching: '500', countLimited: false, audience: audience( { total: '12', caught: '8', protected: '4' } ) } ) );
 
-		expect( within( tileFor( 'Products affected' ) ).getByText( '500' ) ).toBeInTheDocument();
+		expect( within( tileFor( 'Affected products' ) ).getByText( '500' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Subscribers in scope' ) ).getByText( '12' ) ).toBeInTheDocument();
 		expect( within( tileFor( 'Eligible at renewal' ) ).getByText( '8' ) ).toBeInTheDocument();
 		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();

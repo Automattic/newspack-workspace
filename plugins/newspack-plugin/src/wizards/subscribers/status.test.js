@@ -79,10 +79,8 @@ describe( 'STATUS_BADGE_INTENT', () => {
 		expect( Object.keys( STATUS_BADGE_INTENT ) ).toEqual( Object.keys( STATUS_LABELS ) );
 	} );
 
-	it( 'reads pending as queued work rather than an idle state', () => {
-		// `low` is the design system's "worth noticing, non-urgent"; `informational`
-		// would read as settled context, which a payment still to clear is not.
-		expect( STATUS_BADGE_INTENT.pending ).toBe( 'low' );
+	it( 'badges pending in grey, matching its mark in the status column', () => {
+		expect( STATUS_BADGE_INTENT.pending ).toBe( 'draft' );
 	} );
 
 	it( 'separates a live subscription from one needing attention and one gone', () => {

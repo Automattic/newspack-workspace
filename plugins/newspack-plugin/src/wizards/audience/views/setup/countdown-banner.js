@@ -13,9 +13,11 @@ import {
 } from '@wordpress/components';
 
 import { ActionCard, Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import BannerStyleControl, { getBannerPreviewProps } from '../../components/banner-style';
 
 export default function CountdownBanner( { config, setConfig, updateConfig, noBorder = false } ) {
 	const availableProducts = newspackAudience?.available_products || [];
+	const preview = getBannerPreviewProps( config.countdown_banner || {} );
 	return (
 		<ActionCard
 			title={ __( 'Metered Countdown', 'newspack-plugin' ) }
@@ -45,17 +47,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 							__next40pxDefaultSize
 						/>
 					</Grid>
-					<Grid columns={ 3 } rowGap={ 16 }>
-						<ToggleGroupControl
-							label={ __( 'Style', 'newspack-plugin' ) }
-							value={ config.countdown_banner.style || 'light' }
-							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, style: value } } ) }
-							isBlock
-							__next40pxDefaultSize
-						>
-							<ToggleGroupControlOption label={ __( 'Light', 'newspack-plugin' ) } value="light" />
-							<ToggleGroupControlOption label={ __( 'Dark', 'newspack-plugin' ) } value="dark" />
-						</ToggleGroupControl>
+					<Grid columns={ 2 } rowGap={ 16 }>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
 							help={ __(
@@ -93,14 +85,18 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 								__next40pxDefaultSize
 							/>
 						) }
+						<BannerStyleControl
+							gridCells
+							settings={ config.countdown_banner }
+							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, ...value } } ) }
+						/>
 						<div style={ { gridColumn: '1 / -1' } }>
 							<BaseControl id="newspack-countdown-banner-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 								<div className="newspack-countdown-banner__cta-preview" inert="true">
 									<div className="newspack-ui">
 										<div
-											className={ `banner newspack-countdown-banner__cta is-style-${
-												config.countdown_banner.style || 'light'
-											}` }
+											className={ `banner newspack-countdown-banner__cta ${ preview.bannerClassName }` }
+											style={ preview.bannerStyle }
 										>
 											<div className="wrapper newspack-countdown-banner__cta__content">
 												<div className="newspack-countdown-banner__cta__content__wrapper">
@@ -115,13 +111,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 												</div>
 												{ ( ( config.countdown_banner.cta_type === 'product' && config.countdown_banner.cta_product_id ) ||
 													( config.countdown_banner.cta_type === 'url' && config.countdown_banner.cta_url ) ) && (
-													<button
-														className={ `newspack-ui__button newspack-ui__button--x-small ${
-															( config.countdown_banner.style || 'light' ) === 'dark'
-																? 'newspack-ui__button--primary-light'
-																: 'newspack-ui__button--accent'
-														}` }
-													>
+													<button className={ `newspack-ui__button ${ preview.buttonClassName }` }>
 														{ config.countdown_banner.button_label || __( 'Subscribe now', 'newspack-plugin' ) }
 													</button>
 												) }

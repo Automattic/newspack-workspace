@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Network 2.22.14\n"
+"Project-Id-Version: Newspack Network 2.23.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-20T19:02:20+00:00\n"
+"POT-Creation-Date: 2026-11-23T14:31:50+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-network\n"
@@ -55,7 +55,7 @@ msgstr ""
 msgid "This site acts as the Network Hub"
 msgstr ""
 
-#: includes/class-initializer.php:84
+#: includes/class-initializer.php:85
 msgid "Network Reader"
 msgstr ""
 
@@ -119,7 +119,7 @@ msgstr[1] ""
 #: dist/incoming-post.js:1
 #: dist/outgoing-post.js:1
 #: dist/outgoing-post.js:22
-#: src/content-distribution/content-distribution-panel/index.js:19
+#: src/content-distribution/content-distribution-panel/index.js:20
 #: src/content-distribution/outgoing-post/index.js:254
 msgid "Distribute"
 msgstr ""
@@ -545,18 +545,18 @@ msgstr ""
 msgid "None"
 msgstr ""
 
-#: includes/hub/admin/class-membership-plans.php:33
-#: includes/hub/admin/class-membership-plans.php:46
+#: includes/hub/admin/class-membership-plans.php:34
+#: includes/hub/admin/class-membership-plans.php:47
 msgid "Membership Plans"
 msgstr ""
 
 #. translators: last fetch date.
-#: includes/hub/admin/class-membership-plans.php:58
+#: includes/hub/admin/class-membership-plans.php:59
 #, php-format
 msgid "Plans were last fetched on %s."
 msgstr ""
 
-#: includes/hub/admin/class-membership-plans.php:219
+#: includes/hub/admin/class-membership-plans.php:220
 #: includes/woocommerce-memberships/class-admin.php:110
 msgid "Only displayed for plans with a Network ID."
 msgstr ""
@@ -592,7 +592,7 @@ msgid "Links"
 msgstr ""
 
 #. translators: %d - users on the Hub only, %d on the Node only
-#: includes/hub/admin/class-nodes-list.php:136
+#: includes/hub/admin/class-nodes-list.php:137
 #, php-format
 msgid "%1$d on the Hub only, %2$d on the Node only"
 msgstr ""
@@ -1212,12 +1212,16 @@ msgstr ""
 msgid "Error connecting the site"
 msgstr ""
 
-#: includes/utils/class-network.php:97
+#: includes/utils/class-network.php:107
 msgid "Refused a sideload request to a private or reserved address."
 msgstr ""
 
-#: includes/utils/class-network.php:144
-#: includes/utils/class-network.php:147
+#: includes/utils/class-network.php:146
+msgid "Refused a request to a URL that is not a public http(s) address on an allowed port."
+msgstr ""
+
+#: includes/utils/class-network.php:260
+#: includes/utils/class-network.php:263
 msgid "Refused a sideload redirect to a private or reserved address."
 msgstr ""
 
@@ -1233,23 +1237,23 @@ msgstr ""
 msgid "Bad request. Invalid signature."
 msgstr ""
 
-#: includes/utils/class-sites.php:122
+#: includes/utils/class-sites.php:210
 msgid "Dashboard"
 msgstr ""
 
-#: includes/utils/class-sites.php:134
+#: includes/utils/class-sites.php:222
 msgid "Posts"
 msgstr ""
 
-#: includes/utils/class-sites.php:138
+#: includes/utils/class-sites.php:226
 msgid "Users"
 msgstr ""
 
-#: includes/utils/class-sites.php:142
+#: includes/utils/class-sites.php:230
 msgid "Plugins"
 msgstr ""
 
-#: includes/utils/class-sites.php:146
+#: includes/utils/class-sites.php:234
 msgid "Settings"
 msgstr ""
 
@@ -1293,7 +1297,7 @@ msgstr ""
 
 #. translators: %s is the number of network sites selected.
 #: dist/admin-bar.js:3
-#: src/content-distribution/admin-bar/index.js:134
+#: src/content-distribution/admin-bar/index.js:126
 #, js-format
 msgid "Distribute this post to %s network site?"
 msgid_plural "Distribute this post to %s network sites?"
@@ -1301,12 +1305,12 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: dist/admin-bar.js:3
-#: src/content-distribution/admin-bar/index.js:136
+#: src/content-distribution/admin-bar/index.js:128
 msgid "This can’t be undone from here."
 msgstr ""
 
 #: dist/admin-bar.js:3
-#: src/content-distribution/admin-bar/index.js:281
+#: src/content-distribution/admin-bar/index.js:241
 msgid "The site did not return a valid response."
 msgstr ""
 
@@ -1347,13 +1351,13 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: dist/admin-bar.js:11
-#: src/content-distribution/admin-bar/index.js:302
+#: src/content-distribution/admin-bar/index.js:262
 msgid "The request timed out. Please try again."
 msgstr ""
 
 #. translators: %s is the error message.
 #: dist/admin-bar.js:12
-#: src/content-distribution/admin-bar/index.js:304
+#: src/content-distribution/admin-bar/index.js:264
 #, js-format
 msgid "Could not distribute: %s"
 msgstr ""

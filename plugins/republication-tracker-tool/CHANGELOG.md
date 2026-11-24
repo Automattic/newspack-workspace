@@ -1,3 +1,40 @@
+## republication-tracker-tool [2.9.9](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.8...republication-tracker-tool@2.9.9) (2026-11-23)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** move republish URL to a data attribute ([#1160](https://github.com/Automattic/newspack-workspace/issues/1160)) ([ffe5ac0](https://github.com/Automattic/newspack-workspace/commit/ffe5ac0fcdb7ec2e4319474dbd0e9eeace6ff9e4))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+## republication-tracker-tool [2.9.8](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.7...republication-tracker-tool@2.9.8) (2026-10-29)
+
+
+### Bug Fixes
+
+* **rtt:** keep Parse.ly tracking on block-editor paste (NPPM-3409) ([#1256](https://github.com/Automattic/newspack-workspace/issues/1256)) ([ba13bde](https://github.com/Automattic/newspack-workspace/commit/ba13bde43b6de8d51680fec53b814bb637836199))
+
+## republication-tracker-tool [2.9.7](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.6...republication-tracker-tool@2.9.7) (2026-10-28)
+
+
+### Bug Fixes
+
+* **rtt:** keep site icon small after a block editor paste (NPPM-3537) ([#1435](https://github.com/Automattic/newspack-workspace/issues/1435)) ([43e1c33](https://github.com/Automattic/newspack-workspace/commit/43e1c3321b4626679f349f996bef7524203c2833))
+
+## republication-tracker-tool [2.9.6](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.5...republication-tracker-tool@2.9.6) (2026-10-27)
+
+
+### Bug Fixes
+
+* **republication-tracker-tool:** add Custom Byline support to modal ([#1128](https://github.com/Automattic/newspack-workspace/issues/1128)) ([36dbf0d](https://github.com/Automattic/newspack-workspace/commit/36dbf0d3852720bd128a25178f242de6caff249d))
+
+## republication-tracker-tool [2.9.5](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.4...republication-tracker-tool@2.9.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* require PHP 8.1 in the WordPress.org plugins ([#1272](https://github.com/Automattic/newspack-workspace/issues/1272)) ([4a9bea1](https://github.com/Automattic/newspack-workspace/commit/4a9bea142fee228fe8613f5f4df3469e7eb72f13))
+* **rtt:** decode only the footer in the republish modal copy (NPPM-3573) ([#1314](https://github.com/Automattic/newspack-workspace/issues/1314)) ([4b63f6d](https://github.com/Automattic/newspack-workspace/commit/4b63f6d77f8cb94ab1f11c42dd81bf8e5fc4a076))
+
 ## republication-tracker-tool [2.9.4](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.9.3...republication-tracker-tool@2.9.4) (2026-10-12)
 
 

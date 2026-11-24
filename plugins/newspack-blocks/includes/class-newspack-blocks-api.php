@@ -440,7 +440,7 @@ class Newspack_Blocks_API {
 		}
 
 		$args = [
-			'post_status'           => 'publish',
+			'post_status'           => Newspack_Blocks::get_included_post_statuses( $params ),
 			'title_wildcard_search' => esc_sql( $params['search'] ),
 			'posts_per_page'        => $params['postsToShow'],
 		];
@@ -461,8 +461,9 @@ class Newspack_Blocks_API {
 			array_map(
 				function( $post ) {
 					return [
-						'id'    => $post->ID,
-						'title' => $post->post_title,
+						'id'          => $post->ID,
+						'title'       => $post->post_title,
+						'post_status' => $post->post_status,
 					];
 				},
 				$query->posts

@@ -122,13 +122,18 @@
 	&__icon {
 		background-color: var(--wp-admin-theme-color-lighter-10);
 		border-radius: 100%;
+		color: var(--wp-admin-theme-color);
 		display: grid;
 		height: 80px;
 		margin-bottom: 8px !important;
 		width: 80px;
 		place-items: center;
 		svg {
-			fill: var(--wp-admin-theme-color);
+			fill: currentcolor;
+
+			* {
+				vector-effect: none;
+			}
 		}
 	}
 
@@ -196,4 +201,9 @@
 			text-align: center;
 		}
 	}
+}
+
+.newspack-section-header--has-back-nav .newspack-section-header:not(.newspack-section-header--small) .newspack-section-header__title {
+	font-size: wp-vars.$grid-unit-30;
+	line-height: var(--wpds-typography-line-height-xl, #{wp-vars.$font-line-height-x-large});
 }

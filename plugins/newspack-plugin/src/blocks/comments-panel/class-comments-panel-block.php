@@ -39,14 +39,23 @@ final class Comments_Panel_Block {
 
 	/**
 	 * Block render callback. Renders the outer wrapper around the pre-rendered
-	 * trigger and content children.
+	 * trigger and content children, or nothing when the post has comments closed
+	 * and no comments to show.
 	 *
-	 * @param array  $attributes Block attributes.
-	 * @param string $content    Pre-rendered inner blocks HTML.
+	 * @param array      $attributes Block attributes.
+	 * @param string     $content    Pre-rendered inner blocks HTML.
+	 * @param ?\WP_Block $block      Block instance.
 	 *
 	 * @return string Block HTML.
 	 */
-	public static function render_block( array $attributes, string $content ) {
+	public static function render_block( array $attributes, string $content, ?\WP_Block $block = null ) {
+		// Nothing to read and nowhere to reply: hide the button rather than open an empty panel.
+		// Closed posts that already have comments keep the button so readers can still read them.
+		$post_id = $block->context['postId'] ?? get_the_ID();
+		if ( $post_id && ! comments_open( $post_id ) && ! get_comments_number( $post_id ) ) {
+			return '';
+		}
+
 		// The compiled view script depends on dist/commons.js (a webpack split chunk).
 		\Newspack\Newspack::load_common_assets();
 

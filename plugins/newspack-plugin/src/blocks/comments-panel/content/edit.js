@@ -165,7 +165,7 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 					{ /* Scrim — outside block wrapper so it covers the full editor canvas. */ }
 					{ isPreviewOpen && (
 						<div
-							className="comments-panel__scrim alignfull"
+							className="comments-panel__scrim comments-panel__scrim--open alignfull"
 							style={ overlayColor ? { background: overlayColor } : {} }
 							onClick={ () => togglePreview( false ) }
 							aria-hidden="true"

@@ -315,4 +315,7 @@ Note that if a member has unsubscribed from a list, but has an active membership
 		\WP_CLI::log( '' );
 	}
 }
-Sync_Membership_Tied_Subscribers_CLI::init();
+// Boot only when the main plugin file loaded this, not another plugin's autoloader.
+if ( defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, set by the main plugin file.
+	Sync_Membership_Tied_Subscribers_CLI::init();
+}

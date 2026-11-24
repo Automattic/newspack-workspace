@@ -150,6 +150,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	};
 
 	updateConfig.current = handleUpdateConfig;
+	const whoCanCommentLabel = __( 'Who can comment', 'newspack-plugin' );
 	const feedMode: string = ( config?.restrict_feeds && ( config?.feed_restriction_mode || feedRestrictionModes[ 0 ]?.value ) ) || FEED_MODE_OFF;
 	return (
 		showModal && (
@@ -157,9 +158,13 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
 					{ governedByMemberships && (
 						<Notice status="warning" isDismissible={ false } spokenMessage="">
-							{ __(
-								'WooCommerce Memberships is active on this site, so the feed and commenting settings have no effect yet. What is saved here applies once Memberships is deactivated.',
-								'newspack-plugin'
+							{ sprintf(
+								/* translators: %s: label of the "Who can comment" setting. */
+								__(
+									'WooCommerce Memberships is active on this site, so the feed setting and "%s" have no effect yet. Those two settings apply once Memberships is deactivated.',
+									'newspack-plugin'
+								),
+								whoCanCommentLabel
 							) }
 						</Notice>
 					) }
@@ -187,7 +192,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 					<SelectControl
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
-						label={ __( 'Who can comment', 'newspack-plugin' ) }
+						label={ whoCanCommentLabel }
 						help={ __(
 							'Limit commenting on every post to readers with access through a gate. Everyone else sees the message below instead of the comment form.',
 							'newspack-plugin'
@@ -219,6 +224,16 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 							/>
 						</>
 					) }
+					<ToggleControl
+						__nextHasNoMarginBottom
+						label={ __( 'Require a first and last name to comment', 'newspack-plugin' ) }
+						help={ __(
+							'Signed-in readers comment under their first and last name instead of their display name. Readers add any missing name in the comment form, and readers with a different display name confirm their names once.',
+							'newspack-plugin'
+						) }
+						checked={ !! config?.comment_require_full_name }
+						onChange={ value => setConfig( { ...config, comment_require_full_name: value } ) }
+					/>
 					{ wizardData?.config?.has_newsletters && (
 						<ToggleControl
 							__nextHasNoMarginBottom

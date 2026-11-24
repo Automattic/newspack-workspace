@@ -232,7 +232,7 @@ class Prompts extends Schema {
 							'name'     => 'overlay_opacity',
 							'type'     => 'integer',
 							'required' => false,
-							'default'  => 30,
+							'default'  => 50,
 							'maximum'  => 100,
 						],
 						'overlay_size'                   => [
@@ -249,6 +249,12 @@ class Prompts extends Schema {
 						],
 						'no_overlay_background'          => [
 							'name'     => 'no_overlay_background',
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						],
+						'manual_only'                    => [
+							'name'     => 'manual_only',
 							'type'     => 'boolean',
 							'required' => false,
 							'default'  => false,
