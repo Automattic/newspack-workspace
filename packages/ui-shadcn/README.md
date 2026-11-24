@@ -2,7 +2,7 @@
 
 A shadcn theme and registry built from the newspack-ui tokens, so sites outside WordPress can use newspack-ui's Neutral style. shadcn and Radix keep the component behavior; this package supplies the tokens and how each component looks.
 
-The package is private and never published to npm. Sites install its items from the registry with `npx shadcn add <url>`. The registry, its docs and a component showcase are served from https://newspack-ui-theme.space.fast/. That site lives in a separate, internal repository, `newspack-ui-theme-site`, which builds this package from a checkout of this monorepo next to it and publishes the result to Spacefast; nothing in this repo deploys it. After a change to this package merges, republish the site with the steps in that repository's `AGENTS.md`.
+The package is private and never published to npm. Sites install its items from the registry with `npx shadcn add <url>`. The registry, its docs and a component showcase are served from https://newspack-ui-theme.space.fast/. That site lives in a separate, internal repository, `newspack-ui-theme-site`, and is published to Spacefast by hand; nothing in this repo deploys it. `AGENTS.md` lists the changes that mean it needs republishing.
 
 ## Build
 

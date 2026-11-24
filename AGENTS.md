@@ -22,6 +22,8 @@ It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lock
 
 Each plugin/theme directory is standalone and can be zipped and installed on its own.
 
+**`packages/ui-shadcn` feeds a website that is published by hand.** When a merged change touches that package, the newspack-ui tokens in `plugins/newspack-plugin/src/newspack-ui`, `packages/colors` or `packages/motion`, the site needs republishing; see `packages/ui-shadcn/AGENTS.md`.
+
 **`repos/`** holds private, customer-specific or licensed checkouts (e.g. `newspack-manager`). Drop a real directory in — no registration needed, `n` commands discover them by path — then `n restart`; `bin/link-repos.sh` symlinks them into the active site. If a name also exists in `plugins/`/`themes/`, the tracked copy wins. Contents are gitignored, and a symlink *inside* `repos/` pointing outside the workspace will dangle in the container.
 
 ### Plugins
