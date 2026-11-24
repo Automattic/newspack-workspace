@@ -37,6 +37,13 @@ describe( 'selectAutoPosts', () => {
 		expect( selectAutoPosts( select, 'post', QUERY ) ).toEqual( { posts: records, isLoading: false } );
 	} );
 
+	it( 'never reads records already on hand as loading', () => {
+		const records = [ { id: 1 } ];
+		const { select } = createSelect( { records, finished: false } );
+
+		expect( selectAutoPosts( select, 'post', QUERY ) ).toEqual( { posts: records, isLoading: false } );
+	} );
+
 	it( 'reads as empty, not loading, when the request failed', () => {
 		const { select } = createSelect( { records: null, finished: true } );
 
