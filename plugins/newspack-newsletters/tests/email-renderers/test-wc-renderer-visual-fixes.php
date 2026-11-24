@@ -356,6 +356,7 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		$html       = $this->render( '<!-- wp:cover {"url":"' . $src . '","id":' . $id . ',"dimRatio":50,"gradient":"luminous-vivid-amber-to-luminous-vivid-orange"} --><div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim has-background-gradient has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background"></span><img class="wp-block-cover__image-background wp-image-' . $id . '" alt="" src="' . $src . '" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
 
 		$this->assertStringNotContainsString( 'linear-gradient(rgba(0, 0, 0', html_entity_decode( $html ) );
+		$this->assertMatchesRegularExpression( '/class="email-block-cover[^"]*"[^>]*style="[^"]*background-image:\s*url\(/', $html, 'Expected the cover image to be left in place.' );
 	}
 
 	// ------------------------------------------------------------------
@@ -390,13 +391,30 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Icons are padded in px around the icon, on the cell, like vanilla WordPress.
+	 * Icon sizes and the padding vanilla WordPress gives each (a quarter of the icon).
+	 *
+	 * @return array
 	 */
-	public function test_social_icon_padding_is_px() {
-		$html = $this->render( self::social( [] ) );
+	public static function social_icon_sizes(): array {
+		return [
+			'normal (24px)' => [ [], '6px' ],
+			'large (36px)'  => [ [ 'size' => 'has-large-icon-size' ], '9px' ],
+		];
+	}
+
+	/**
+	 * Icons are padded in px around the icon, on the cell, in proportion to their size.
+	 *
+	 * @dataProvider social_icon_sizes
+	 *
+	 * @param array  $attrs   Social-links block attributes.
+	 * @param string $padding Expected padding.
+	 */
+	public function test_social_icon_padding_is_px( array $attrs, string $padding ) {
+		$html = $this->render( self::social( $attrs ) );
 
 		$this->assertStringNotContainsString( 'padding: 0.25em', $html, 'Expected the em padding to be replaced.' );
-		$this->assertMatchesRegularExpression( '/<td[^>]*style="[^"]*padding:\s*6px;"/', $html, 'Expected 6px of padding around a 24px icon.' );
+		$this->assertMatchesRegularExpression( '/<td[^>]*style="[^"]*padding:\s*' . $padding . ';"/', $html );
 	}
 
 	/**
@@ -432,7 +450,7 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	 *
 	 * @return array
 	 */
-	public function social_style_variants(): array {
+	public static function social_style_variants(): array {
 		return [
 			'filled black' => [ 'is-style-filled-black', null, 'assets/black-facebook.png' ],
 			'filled white' => [ 'is-style-filled-white', null, 'facebook-white.png' ],
@@ -484,6 +502,17 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		list( $id ) = $this->image_block();
 		$src        = esc_url( wp_get_attachment_url( $id ) );
 		$html       = $this->render( '<!-- wp:paragraph --><p><a href="https://example.test/more">Read more</a><img src="' . $src . '" alt="" width="20"/></p><!-- /wp:paragraph -->' );
+
+		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>Read more/', $html );
+	}
+
+	/**
+	 * A link holding text and then an image is a text link and keeps its underline.
+	 */
+	public function test_link_with_text_and_image_keeps_underline() {
+		list( $id ) = $this->image_block();
+		$src        = esc_url( wp_get_attachment_url( $id ) );
+		$html       = $this->render( '<!-- wp:paragraph --><p><a href="https://example.test/more">Read more <img src="' . $src . '" alt="" width="20"/></a></p><!-- /wp:paragraph -->' );
 
 		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>Read more/', $html );
 	}
