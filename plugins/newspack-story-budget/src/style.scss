@@ -137,7 +137,7 @@ body.toplevel_page_newspack-story-budget {
 			justify-content: center;
 			gap: 4px;
 			svg {
-				color: var(--wp-admin-color-alert-red);
+				color: wp-colors.$alert-red;
 			}
 		}
 		&__popover .components-popover__content {
