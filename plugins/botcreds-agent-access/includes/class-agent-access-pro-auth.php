@@ -21,6 +21,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Experimental Pro Auth: persistent agent tokens with optional Ed25519 request signing.
+ */
 class Agent_Access_Pro_Auth {
 
 	const TOKEN_PREFIX   = 'agt_';
@@ -89,7 +92,7 @@ class Agent_Access_Pro_Auth {
 	/**
 	 * Exchange a setup code for a persistent agent token.
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request The REST request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function handle_activate( WP_REST_Request $request ) {
@@ -131,16 +134,20 @@ class Agent_Access_Pro_Auth {
 		$token_hash = hash( 'sha256', $token );
 
 		global $wpdb;
-		$table     = $wpdb->prefix . self::TABLE_SUFFIX;
+		$table = $wpdb->prefix . self::TABLE_SUFFIX;
+		// REMOTE_ADDR is compared for drift alerts and stored for audit only; it never grants access.
+		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$remote_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 
+		// The plugin's own table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$inserted = $wpdb->insert(
 			$table,
 			array(
 				'token_hash' => $token_hash,
 				'user_id'    => (int) $data['user_id'],
-				'label'      => sanitize_text_field( $data['label'] ?: ( $agent_id ?: 'Agent' ) ),
-				'public_key' => $public_key ?: null,
+				'label'      => sanitize_text_field( $data['label'] ? $data['label'] : ( $agent_id ? $agent_id : 'Agent' ) ),
+				'public_key' => $public_key ? $public_key : null,
 				'origin_ip'  => $remote_ip,
 				'status'     => 'active',
 				'created_at' => current_time( 'mysql' ),
@@ -209,13 +216,15 @@ class Agent_Access_Pro_Auth {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// The plugin's own table; the name is built from $wpdb->prefix and a constant, not user input.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM `{$table}` WHERE token_hash = %s AND status = 'active' LIMIT 1",
 				$token_hash
 			)
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		if ( ! $row ) {
 			return false; // Unknown token — fall through.
@@ -233,12 +242,16 @@ class Agent_Access_Pro_Auth {
 		}
 
 		// Log origin drift (non-blocking — alert only, never reject).
+		// REMOTE_ADDR is compared for drift alerts and stored for audit only; it never grants access.
+		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$remote_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 		if ( $row->origin_ip && $row->origin_ip !== $remote_ip ) {
 			do_action( 'agent_access_origin_drift', (array) $row, $remote_ip );
 		}
 
 		// Stamp last_used.
+		// The plugin's own table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
 			$table,
 			array( 'last_used_at' => current_time( 'mysql' ) ),
@@ -385,13 +398,15 @@ class Agent_Access_Pro_Auth {
 	/**
 	 * Revoke a pro token by its DB row id.
 	 *
-	 * @param int $token_id
+	 * @param int $token_id The token row ID.
 	 * @return bool
 	 */
 	public static function revoke_token( $token_id ) {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
+		// The plugin's own table.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		return (bool) $wpdb->update(
 			$table,
 			array( 'status' => 'revoked' ),
@@ -410,8 +425,9 @@ class Agent_Access_Pro_Auth {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return $wpdb->get_results(
+		// The plugin's own table plus a users join for display names; WP Cloud is not VIP.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+		$tokens = $wpdb->get_results(
 			"SELECT t.id, t.user_id, t.label, t.public_key, t.origin_ip, t.status,
 			        t.created_at, t.last_used_at,
 			        u.display_name, u.user_login
@@ -420,6 +436,9 @@ class Agent_Access_Pro_Auth {
 			 WHERE t.status = 'active'
 			 ORDER BY t.created_at DESC"
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+
+		return $tokens;
 	}
 
 	// ──────────────────────────────────────────────
@@ -460,7 +479,8 @@ class Agent_Access_Pro_Auth {
 	public static function uninstall_table() {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_SUFFIX;
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// The plugin's own table, dropped on uninstall.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" );
 	}
 }

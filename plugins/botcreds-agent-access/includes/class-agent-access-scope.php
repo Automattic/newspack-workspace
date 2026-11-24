@@ -21,14 +21,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Per-credential scope grants: which content types and routes an agent may use.
+ */
 class Agent_Access_Scope {
 
 	const META_PREFIX    = '_agent_access_scope_';
-	const DEFAULT_SCOPE  = 'posts_media';   // kept for back-compat; maps to ['post','attachment']
+	const DEFAULT_SCOPE  = 'posts_media';   // kept for back-compat; maps to ['post','attachment'].
 	const STORAGE_VERSION = 2;
 	const ALL_CUSTOM_ENDPOINTS = '__custom_endpoints__';
 
-	/** Post types excluded from the checklist. */
+	/**
+	 * Post types excluded from the checklist.
+	 *
+	 * @var string[]
+	 */
 	private static $excluded_types = array(
 		'wp_block',
 		'wp_navigation',
@@ -56,9 +63,9 @@ class Agent_Access_Scope {
 	 * Priority 5 — runs before the activity log (10) so blocked requests
 	 * are never recorded as successful writes.
 	 *
-	 * @param mixed            $result  null (pass-through) or existing response.
-	 * @param WP_REST_Server   $server  REST server.
-	 * @param WP_REST_Request  $request Current request.
+	 * @param mixed           $result  null (pass-through) or existing response.
+	 * @param WP_REST_Server  $server  REST server.
+	 * @param WP_REST_Request $request Current request.
 	 * @return mixed Original $result, or WP_Error on scope violation.
 	 */
 	public static function enforce( $result, $server, $request ) {
@@ -168,6 +175,8 @@ class Agent_Access_Scope {
 	}
 
 	/**
+	 * Get the scope for the current request.
+	 *
 	 * @deprecated Use get_slugs_for_current_request() instead.
 	 */
 	public static function get_scope_for_current_request() {
@@ -177,7 +186,7 @@ class Agent_Access_Scope {
 	/**
 	 * Build a flat list of allowed REST route patterns for a slug array.
 	 *
-	 * @param array $slugs
+	 * @param array $slugs The scope slugs.
 	 * @return array
 	 */
 	private static function build_allowed_routes( array $slugs ) {
@@ -188,11 +197,13 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 
 		foreach ( $slugs as $slug ) {
-			if ( Agent_Access_Authors::SCOPE === $slug ) { $routes[] = '/agent-access/v1/authors/*'; continue; }
+			if ( Agent_Access_Authors::SCOPE === $slug ) {
+				$routes[] = '/agent-access/v1/authors/*';
+				continue; }
 			// Literal route pattern (starts with /) — pass through as-is.
 			if ( '/' === $slug[0] ) {
 				$routes[] = $slug;
-				// Also allow sub-routes if the pattern doesn't already end in /*
+				// Also allow sub-routes if the pattern doesn't already end in /*.
 				if ( substr( $slug, -2 ) !== '/*' ) {
 					$routes[] = $slug . '/*';
 				}
@@ -205,9 +216,9 @@ class Agent_Access_Scope {
 
 			// Find the rest_base for this post type.
 			$has_content_scope = true;
-			$rest_base = $slug; // fallback
+			$rest_base = $slug; // fallback.
 			if ( isset( $all_types[ $slug ] ) ) {
-				$rest_base = $all_types[ $slug ]->rest_base ?: $slug;
+				$rest_base = $all_types[ $slug ]->rest_base ? $all_types[ $slug ]->rest_base : $slug;
 			}
 
 			$routes[] = '/wp/v2/' . $rest_base;
@@ -305,11 +316,11 @@ class Agent_Access_Scope {
 	public static function get_custom_integrations() {
 		$labels = array(
 			'newspack-workflows' => __( 'Newspack Workflows', 'botcreds-agent-access' ),
-			'wc'                => __( 'WooCommerce', 'botcreds-agent-access' ),
-			'wc-admin'          => __( 'WooCommerce Admin', 'botcreds-agent-access' ),
-			'wc-analytics'      => __( 'WooCommerce Analytics', 'botcreds-agent-access' ),
-			'wc/store'          => __( 'WooCommerce Store', 'botcreds-agent-access' ),
-			'botcreds-memory'   => __( 'Agent Memory', 'botcreds-agent-access' ),
+			'wc'                 => __( 'WooCommerce', 'botcreds-agent-access' ),
+			'wc-admin'           => __( 'WooCommerce Admin', 'botcreds-agent-access' ),
+			'wc-analytics'       => __( 'WooCommerce Analytics', 'botcreds-agent-access' ),
+			'wc/store'           => __( 'WooCommerce Store', 'botcreds-agent-access' ),
+			'botcreds-memory'    => __( 'Agent Memory', 'botcreds-agent-access' ),
 		);
 		$result = array();
 		$namespaces = rest_get_server()->get_namespaces();
@@ -326,13 +337,18 @@ class Agent_Access_Scope {
 			$parts   = explode( '/', $namespace );
 			$version = array_pop( $parts );
 			$name    = implode( '/', $parts );
-			$label   = $labels[ $name ] ?? ucwords( str_replace( array( '-', '_', '/' ), ' ', $name ?: $namespace ) );
+			$label   = $labels[ $name ] ?? ucwords( str_replace( array( '-', '_', '/' ), ' ', $name ? $name : $namespace ) );
 			$result[] = array(
 				'slug'  => '/' . $namespace . '/*',
 				'label' => $label . ( $name ? ' (' . $version . ')' : '' ),
 			);
 		}
-		usort( $result, static function ( $a, $b ) { return strcasecmp( $a['label'], $b['label'] ); } );
+		usort(
+			$result,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['label'], $b['label'] );
+			}
+		);
 		return $result;
 	}
 
@@ -392,8 +408,8 @@ class Agent_Access_Scope {
 	 *
 	 * Automatically migrates legacy template-key strings.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 * @return array Slug array.
 	 */
 	public static function get( $user_id, $uuid ) {
@@ -443,8 +459,8 @@ class Agent_Access_Scope {
 	/**
 	 * Delete the scope meta when an app password is revoked.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function delete( $user_id, $uuid ) {
 		delete_user_meta( (int) $user_id, self::META_PREFIX . $uuid );
@@ -483,7 +499,7 @@ class Agent_Access_Scope {
 				$result[] = array(
 					'slug'      => $slug,
 					'label'     => $obj->labels->singular_name ?? ucfirst( $slug ),
-					'rest_base' => $obj->rest_base ?: $slug,
+					'rest_base' => $obj->rest_base ? $obj->rest_base : $slug,
 				);
 			}
 		}
@@ -505,7 +521,7 @@ class Agent_Access_Scope {
 			$result[] = array(
 				'slug'      => $slug,
 				'label'     => $obj->labels->singular_name ?? ucfirst( $slug ),
-				'rest_base' => $obj->rest_base ?: $slug,
+				'rest_base' => $obj->rest_base ? $obj->rest_base : $slug,
 			);
 		}
 
@@ -566,6 +582,8 @@ class Agent_Access_Scope {
 	// ──────────────────────────────────────────────
 
 	/**
+	 * Get the legacy scope templates.
+	 *
 	 * @deprecated 2.3.0 Use get_available_post_types() + slug arrays.
 	 *
 	 * @return array
@@ -616,7 +634,12 @@ class Agent_Access_Scope {
 	}
 
 	/**
+	 * Get a single legacy scope template.
+	 *
 	 * @deprecated 2.3.0
+	 *
+	 * @param string $key The template key.
+	 * @return array|null
 	 */
 	public static function get_template( $key ) {
 		$templates = self::get_templates();

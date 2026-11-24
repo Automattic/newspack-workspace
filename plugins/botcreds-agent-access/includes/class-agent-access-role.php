@@ -19,12 +19,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Registers the Agent role.
+ */
 class Agent_Access_Role {
 
-	/** @var string WordPress role slug. */
+	/**
+	 * WordPress role slug.
+	 *
+	 * @var string
+	 */
 	const ROLE_SLUG = 'agent';
 
-	/** @var string Human-readable role display name. */
+	/**
+	 * Human-readable role display name.
+	 *
+	 * @var string
+	 */
 	const ROLE_NAME = 'Agent';
 
 	/**
@@ -40,19 +51,19 @@ class Agent_Access_Role {
 	 * @var array<string,true>
 	 */
 	const DEFAULT_CAPS = array(
-		'read'                     => true,
-		'edit_posts'               => true,
-		'edit_published_posts'     => true,
-		'publish_posts'            => true,
-		'delete_posts'             => true,
-		'delete_published_posts'   => true,
-		'edit_pages'               => true,
-		'edit_published_pages'     => true,
-		'publish_pages'            => true,
-		'delete_pages'             => true,
-		'upload_files'             => true,
-		'manage_categories'        => true,
-		'moderate_comments'        => true,
+		'read'                   => true,
+		'edit_posts'             => true,
+		'edit_published_posts'   => true,
+		'publish_posts'          => true,
+		'delete_posts'           => true,
+		'delete_published_posts' => true,
+		'edit_pages'             => true,
+		'edit_published_pages'   => true,
+		'publish_pages'          => true,
+		'delete_pages'           => true,
+		'upload_files'           => true,
+		'manage_categories'      => true,
+		'moderate_comments'      => true,
 	);
 
 	/**
@@ -67,6 +78,8 @@ class Agent_Access_Role {
 		if ( get_role( self::ROLE_SLUG ) ) {
 			return;
 		}
+		// wpcom_vip_add_role() does not exist on WP Cloud.
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
 		add_role( self::ROLE_SLUG, self::ROLE_NAME, self::DEFAULT_CAPS );
 	}
 

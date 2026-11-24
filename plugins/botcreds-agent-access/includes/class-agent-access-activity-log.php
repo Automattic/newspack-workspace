@@ -10,6 +10,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Audit log of REST requests made with Agent Access credentials.
+ */
 class Agent_Access_Activity_Log {
 
 	const TABLE_NAME     = 'agent_access_log';
@@ -76,13 +79,18 @@ class Agent_Access_Activity_Log {
 		// Always record REMOTE_ADDR as the audit IP. Forwarded headers
 		// (CF-Connecting-IP, X-Forwarded-For) are client-controlled and cannot
 		// be trusted for audit-log integrity on a site not behind a known proxy.
+		// REMOTE_ADDR is stored for the audit log only and never used to make an access decision.
+		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$audit_ip = isset( $_SERVER['REMOTE_ADDR'] )
 			? substr( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ), 0, 45 )
 			: '';
+		// phpcs:enable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 
 		// Build the row; omit object_id when null so the column stores NULL
 		// (its schema default) rather than 0, which %d would cast it to.
-		$row_data    = array(
+		// The user agent is logged only and never used to decide anything.
+		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
+		$row_data = array(
 			'user_id'           => (int) get_current_user_id(),
 			'source'            => $detected['source'],
 			'app_password_name' => $detected['app_password_name'],
@@ -93,11 +101,12 @@ class Agent_Access_Activity_Log {
 			'ip'                => $audit_ip,
 			'created_at'        => current_time( 'mysql' ),
 		);
+		// phpcs:enable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
 		$row_formats = array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' );
 
 		if ( null !== $object_id ) {
 			// Splice object_id in after object_type (position 6).
-			$row_data    = array_slice( $row_data, 0, 6, true )
+			$row_data = array_slice( $row_data, 0, 6, true )
 				+ array( 'object_id' => (int) $object_id )
 				+ array_slice( $row_data, 6, null, true );
 			array_splice( $row_formats, 6, 0, '%d' );
@@ -135,6 +144,9 @@ class Agent_Access_Activity_Log {
 		return is_array( $item ) && isset( $item['name'] ) && AGENT_ACCESS_APP_PASSWORD_NAME === $item['name'] ? $uuid : null;
 	}
 
+	/**
+	 * Detect which kind of agent credential authenticated the current request.
+	 */
 	public static function detect_source() {
 		// Must be a REST API request.
 		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
@@ -148,11 +160,15 @@ class Agent_Access_Activity_Log {
 
 		// Verified credential takes precedence over client-supplied attribution hints.
 		if ( self::get_authenticated_botcreds_uuid() ) {
-			return array( 'source' => self::SOURCE_AA, 'app_password_name' => AGENT_ACCESS_APP_PASSWORD_NAME );
+			return array(
+				'source'            => self::SOURCE_AA,
+				'app_password_name' => AGENT_ACCESS_APP_PASSWORD_NAME,
+			);
 		}
 
 		// ---- WP.com MCP via User-Agent ----
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+		// The user agent is only matched against known client names for logging.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 
 		/**
@@ -160,12 +176,15 @@ class Agent_Access_Activity_Log {
 		 *
 		 * @param string[] $patterns Case-insensitive substring patterns.
 		 */
-		$mcp_ua_patterns = apply_filters( 'agent_access_mcp_ua_patterns', array(
-			'wordpress.com-mcp',
-			'wpcom-mcp',
-			'automattic-mcp',
-			'wp-mcp',
-		) );
+		$mcp_ua_patterns = apply_filters(
+			'agent_access_mcp_ua_patterns',
+			array(
+				'wordpress.com-mcp',
+				'wpcom-mcp',
+				'automattic-mcp',
+				'wp-mcp',
+			)
+		);
 
 		foreach ( $mcp_ua_patterns as $pattern ) {
 			if ( '' !== $pattern && false !== stripos( $ua, $pattern ) ) {
@@ -229,11 +248,14 @@ class Agent_Access_Activity_Log {
 			 *
 			 * @param string[] $patterns Case-insensitive substring patterns.
 			 */
-			$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
-				'wordpress.com',
-				'wpcom',
-				'mcp',
-			) );
+			$mcp_name_patterns = apply_filters(
+				'agent_access_mcp_name_patterns',
+				array(
+					'wordpress.com',
+					'wpcom',
+					'mcp',
+				)
+			);
 
 			foreach ( $mcp_name_patterns as $pattern ) {
 				if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
@@ -315,12 +337,15 @@ class Agent_Access_Activity_Log {
 		$values[] = (int) $args['limit'];
 		$values[] = (int) $args['offset'];
 
+		// Joins the users table only to read display names; WP Cloud is not VIP.
+		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
 		$sql = "SELECT l.*, u.user_login, u.display_name
 		        FROM {$table} l
 		        LEFT JOIN {$wpdb->users} u ON l.user_id = u.ID
-		        WHERE " . implode( ' AND ', $where ) . "
+		        WHERE " . implode( ' AND ', $where ) . '
 		        ORDER BY l.created_at DESC
-		        LIMIT %d OFFSET %d";
+		        LIMIT %d OFFSET %d';
+		// phpcs:enable WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) );
@@ -396,5 +421,4 @@ class Agent_Access_Activity_Log {
 	// -------------------------------------------------------------------------
 	// Utilities
 	// -------------------------------------------------------------------------
-
 }

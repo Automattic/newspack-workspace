@@ -19,20 +19,22 @@ $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_agent_access_created' ) )
 
 // Remove any transients we may have set.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-$wpdb->query( $wpdb->prepare(
-	"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-	$wpdb->esc_like( '_transient_agent_access_' ) . '%',
-	$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
-) );
+$wpdb->query(
+	$wpdb->prepare(
+		"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+		$wpdb->esc_like( '_transient_agent_access_' ) . '%',
+		$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
+	)
+);
 
 // Remove all plugin-managed Application Passwords.
 // Covers the current name and legacy names from previous rebrands so that
 // uninstalling the plugin actually revokes every credential it ever minted.
 $agent_access_managed_names = array(
-	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0)
-	'BotCreds',                      // interim name during rebrand
-	'Agent Access',                  // pre-2.0 legacy name
-	'Agent Access Auto-Provisioned', // legacy provisioner name
+	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0).
+	'BotCreds',                      // interim name during rebrand.
+	'Agent Access',                  // pre-2.0 legacy name.
+	'Agent Access Auto-Provisioned', // legacy provisioner name.
 );
 $agent_access_user_ids = get_users( array( 'fields' => 'ID' ) );
 foreach ( $agent_access_user_ids as $agent_access_uid ) {
