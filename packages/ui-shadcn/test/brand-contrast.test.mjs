@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatHex, formatHex8, interpolate, parse } from 'culori';
-import { brandPairs, brandScopes, colorIn, computeScope, resolveValue } from '../scripts/brand-report.mjs';
+import { brandPairs, brandScopes, computeScope, resolveValue } from '../scripts/brand-report.mjs';
 
 const pairs = brandPairs();
 
@@ -35,7 +35,7 @@ const expectedNames = [
 	'link on blue',
 	'h1 on blue',
 	'display text on blue',
-	'h1 in an inverse section',
+	'h1 in a blue section',
 	'button ink on the white button',
 	'button ink on the white button, hover',
 	'button ink on the white button, pressed',
@@ -65,9 +65,6 @@ const expectedNames = [
 	'inactive tab on blue',
 	'active tab marker on blue',
 	'segmented control unselected on its track',
-	'select highlighted item on its fill, blue',
-	'select checked item on its fill, blue',
-	'toast ink on toast, blue',
 	'default alert text on its fill',
 	'default alert icon on its fill',
 	'success alert text on its fill',
@@ -152,15 +149,7 @@ test( 'a nested translucent mix keeps the inner alpha', () => {
 	assert.equal( formatHex8( color ), '#ffffff40' );
 } );
 
-test( 'blue mode resolves every scored token the same on html and on a section', () => {
-	const { blue, blueOnRoot } = brandScopes();
-	const tokens = new Set( pairs.flatMap( pair => [ pair.fgToken, pair.bgToken ] ) );
-	for ( const token of tokens ) {
-		assert.equal( colorIn( blueOnRoot, token ), colorIn( blue, token ), token );
-	}
-} );
-
-test( 'the inverse section resolves exactly like blue mode', () => {
+test( 'a .newspack-brand-inverse section resolves exactly like a .dark section', () => {
 	const { blue, inverse } = brandScopes();
 	assert.deepEqual( inverse, blue );
 } );

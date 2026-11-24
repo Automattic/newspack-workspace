@@ -39,13 +39,13 @@ test( 'brand.css starts with the dark variant line', () => {
 	assert.ok( readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' ).startsWith( '@custom-variant dark (&:where(.dark, .dark *));' ) );
 } );
 
-test( 'keeps the dark variant line and replaces Neutral dark with blue mode', () => {
+test( 'keeps the dark variant line and replaces Neutral dark with the blue section values', () => {
 	assert.ok( '@custom-variant dark (&:where(.dark, .dark *))' in brand.css );
 	const darkKeys = Object.keys( brand.css ).filter( key => key.startsWith( '.dark' ) );
 	assert.deepEqual( darkKeys, [ '.dark' ] );
 	assert.equal( brand.css[ '.dark' ][ '--newspack-ui-color-surface' ], 'var(--newspack-ui-color-primary-60)' );
 	for ( const key of Object.keys( brand.css[ '.dark' ] ) ) {
-		assert.ok( ! /^--newspack-ui-color-(neutral|primary|success|error|warning|overlay)-\d+$/.test( key ), `palette step ${ key } redefined in blue mode` );
+		assert.ok( ! /^--newspack-ui-color-(neutral|primary|success|error|warning|overlay)-\d+$/.test( key ), `palette step ${ key } redefined in the blue section` );
 	}
 	for ( const [ key, value ] of Object.entries( brand.css ) ) {
 		if ( key.startsWith( '@media' ) ) {
@@ -57,7 +57,7 @@ test( 'keeps the dark variant line and replaces Neutral dark with blue mode', ()
 	assert.equal( brand.cssVars.dark, undefined );
 } );
 
-test( 'blue mode and the inverse section share one set of values', () => {
+test( '.dark and .newspack-brand-inverse share one set of values', () => {
 	assert.deepEqual( brand.css[ '.newspack-brand-inverse' ], brand.css[ '.dark' ] );
 	const contrast = brand.css[ '@media (prefers-contrast: more)' ];
 	assert.ok( contrast[ ':root' ] );
@@ -69,7 +69,7 @@ test( 'blue mode and the inverse section share one set of values', () => {
 	assert.ok( css.lastIndexOf( '@media (prefers-contrast: more)' ) > css.indexOf( '.newspack-brand-inverse {' ) );
 } );
 
-test( 'blue mode restates every shadcn variable, pointing primary at the white button', () => {
+test( 'a blue section restates every shadcn variable, pointing primary at the white button', () => {
 	const blue = brand.css[ '.dark' ];
 	for ( const name of Object.keys( brand.cssVars.light ) ) {
 		assert.ok( blue[ `--${ name }` ], name );
@@ -80,7 +80,7 @@ test( 'blue mode restates every shadcn variable, pointing primary at the white b
 	assert.equal( blue[ '--chart-1' ], 'var(--newspack-ui-color-primary-0)' );
 } );
 
-test( 'blue mode supplies status, invalid and accent values', () => {
+test( 'a blue section supplies status, invalid and accent values', () => {
 	const blue = brand.css[ '.dark' ];
 	for ( const name of [ 'success', 'success-text', 'success-tint', 'success-border', 'warning', 'warning-dot', 'warning-text', 'warning-tint', 'warning-border', 'error', 'error-text', 'error-tint', 'error-border', 'destructive-text' ] ) {
 		assert.ok( blue[ `--newspack-ui-color-${ name }` ], name );
@@ -89,7 +89,7 @@ test( 'blue mode supplies status, invalid and accent values', () => {
 		assert.match( blue[ `--newspack-ui-color-brand-accent-${ name }-subtle` ], /^color-mix\(in oklab, / );
 	}
 	for ( const value of Object.values( blue ) ) {
-		assert.ok( ! /#[0-9a-f]{3,8}\b/i.test( value ), `raw hex in blue mode: ${ value }` );
+		assert.ok( ! /#[0-9a-f]{3,8}\b/i.test( value ), `raw hex in the blue section: ${ value }` );
 		assert.ok( ! value.includes( 'srgb' ), value );
 	}
 } );
@@ -154,7 +154,7 @@ test( 'accent tokens pair a fill with Neutral 900 ink', () => {
 test( 'writes brand.css and the mapping section', () => {
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
 	assert.ok( css.indexOf( ':root {' ) !== -1 && css.indexOf( ':root {' ) < css.indexOf( '.newspack-brand-inverse {' ) );
-	assert.deepEqual( css.match( /^\s*\.dark[^{]*\{/gm ).map( line => line.trim() ), [ '.dark {', '.dark {' ] );
+	assert.deepEqual( css.match( /^\s*\.dark[^{]*\{/gm ).map( line => line.trim() ), [ '.dark, .newspack-brand-inverse {', '.dark h1, .dark .font-display, .newspack-brand-inverse h1, .newspack-brand-inverse .font-display {', '.dark {', '.dark {' ] );
 	assert.ok( ! /\/\*/.test( css ) );
 	const mapping = read( join( root, 'dist', 'mapping.json' ) );
 	assert.ok( mapping.brand.entries.length > 0 );
@@ -262,8 +262,14 @@ test( 'Neutral item matches Neutral theme.css and the brand step never rewrites 
 	}
 } );
 
-test( 'documents blue mode and what it does not cover', () => {
-	assert.match( brand.docs, /Blue mode is the \.dark class/ );
+test( 'never follows the system color scheme', () => {
+	assert.ok( ! readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' ).includes( 'prefers-color-scheme' ) );
+	assert.ok( ! JSON.stringify( brand ).includes( 'prefers-color-scheme' ) );
+	assert.equal( brand.css[ '.dark' ][ 'color-scheme' ], 'dark' );
+} );
+
+test( 'documents blue sections and what they do not cover', () => {
+	assert.match( brand.docs, /The page is always light/ );
 	assert.doesNotMatch( brand.docs, /Alerts/ );
 	assert.ok( read( join( root, 'dist', 'mapping.json' ) ).brand.unsupported.length >= 2 );
 } );

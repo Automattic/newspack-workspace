@@ -123,10 +123,9 @@ export function brandScopes( dist = join( root, 'dist' ) ) {
 	const light = computeScope( rootDecls );
 	const blueDecls = declarations( css, '.dark' );
 	const blue = computeScope( blueDecls, light );
-	const blueOnRoot = computeScope( { ...rootDecls, ...blueDecls } );
 	const inverse = computeScope( declarations( css, '.newspack-brand-inverse' ), light );
 	const blueContrast = computeScope( declarations( css, '.dark', contrastQuery ), blue );
-	return { light, blue, blueOnRoot, inverse, blueContrast };
+	return { light, blue, inverse, blueContrast };
 }
 
 export function colorIn( scope, token ) {
@@ -149,7 +148,7 @@ export function brandPairs( dist = join( root, 'dist' ) ) {
 	const H = ( name, fg, bg, min ) => pair( name, blueContrast, fg, bg, min );
 	const surface = 'newspack-ui-color-surface';
 	const text = 'newspack-ui-color-text';
-	const inverseHeadings = '.newspack-brand-inverse h1, .newspack-brand-inverse .font-display';
+	const inverseHeadings = '.dark h1, .dark .font-display, .newspack-brand-inverse h1, .newspack-brand-inverse .font-display';
 	const accents = Object.keys( accentTokens ).filter( key => key.endsWith( '-ink' ) ).map( name => [ name.replace( /-ink$/, '' ).replace( 'newspack-ui-color-brand-accent-', '' ), name ] );
 	const accentPairs = ( P, where ) => accents.flatMap( ( [ accent, ink ] ) => [
 		P( `${ accent } ink on ${ accent }${ where }`, ink, ink.replace( /-ink$/, '' ), 60 ),
@@ -178,7 +177,7 @@ export function brandPairs( dist = join( root, 'dist' ) ) {
 		B( 'link on blue', 'newspack-ui-color-link', surface, 75 ),
 		B( 'h1 on blue', tokenOf( brandBase.h1.color ), surface, 45 ),
 		B( 'display text on blue', tokenOf( brandBase[ '.font-display' ].color ), surface, 45 ),
-		B( 'h1 in an inverse section', tokenOf( brandBase[ inverseHeadings ].color ), surface, 45 ),
+		B( 'h1 in a blue section', tokenOf( brandBase[ inverseHeadings ].color ), surface, 45 ),
 		B( 'button ink on the white button', 'newspack-ui-color-btn-ink', 'newspack-ui-color-btn', 60 ),
 		B( 'button ink on the white button, hover', 'newspack-ui-color-btn-ink', 'newspack-ui-color-btn-hover', 60 ),
 		B( 'button ink on the white button, pressed', 'newspack-ui-color-btn-ink', 'newspack-ui-color-btn-pressed', 60 ),
@@ -208,9 +207,6 @@ export function brandPairs( dist = join( root, 'dist' ) ) {
 		B( 'inactive tab on blue', 'newspack-ui-color-text-subtle', surface, 60 ),
 		B( 'active tab marker on blue', 'newspack-ui-color-selected', surface, 45 ),
 		B( 'segmented control unselected on its track', 'newspack-ui-color-text-muted', 'newspack-ui-color-neutral-fill', 60 ),
-		B( 'select highlighted item on its fill, blue', text, 'newspack-ui-color-neutral-fill', 60 ),
-		B( 'select checked item on its fill, blue', 'newspack-ui-color-on-selected', 'newspack-ui-color-selected', 60 ),
-		B( 'toast ink on toast, blue', 'newspack-ui-color-inverse-ink', 'newspack-ui-color-inverse-bg', 75 ),
 		B( 'default alert text on its fill', text, 'newspack-ui-color-surface-subtle', 75 ),
 		B( 'default alert icon on its fill', 'newspack-ui-color-text-muted', 'newspack-ui-color-surface-subtle', 45 ),
 		...statuses.flatMap( ( [ label, icon, key ] ) => [

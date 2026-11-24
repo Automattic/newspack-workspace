@@ -36,7 +36,7 @@ export const accentTokens = {
 
 export const blueTokens = {
 	'color-scheme': [ 'dark', 'Native controls and scrollbars on Cobalt use their dark form.' ],
-	'newspack-ui-color-surface': [ 'var(--newspack-ui-color-primary-60)', 'Surface in blue mode and on an inverse section: Cobalt.' ],
+	'newspack-ui-color-surface': [ 'var(--newspack-ui-color-primary-60)', 'Surface of a blue section: Cobalt.' ],
 	'newspack-ui-color-text': [ 'var(--newspack-ui-color-neutral-0)', 'Text on Cobalt: white, Lc 95.' ],
 	'newspack-ui-color-text-muted': [ 'var(--newspack-ui-color-primary-5)', 'Muted text on Cobalt: newspack-colors primary-050.' ],
 	'newspack-ui-color-focus': [ 'var(--newspack-ui-color-neutral-0)', 'Focus ring on Cobalt: white.' ],
@@ -119,10 +119,8 @@ export const blueContrast = {
 };
 
 export const blueUnsupported = [
-	'Portal-rendered popups (Select list, Dialog, Sheet, toasts) mount outside a .newspack-brand-inverse section, so in light mode they render on the light surface. In blue mode they are blue.',
-	'A .newspack-brand-inverse section in blue mode has the same values as the page, so it does not stand out.',
-	'Tokens no kit component reads keep their light values in blue mode: --newspack-ui-chart-0 to -7 (use --chart-1 to --chart-5), --newspack-ui-color-error-tint-hover and -pressed, --newspack-ui-color-primary and --newspack-ui-color-against-primary.',
-	'The Fumadocs stylesheet assumes Neutral\'s dark palette: under .dark the search overlay close button reads --newspack-ui-color-neutral-100, which is black in blue mode.',
+	'Portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under body, outside the blue section, so a popup opened from a blue section renders on the light surface.',
+	'Tokens no kit component reads keep their light values in a blue section: --newspack-ui-chart-0 to -7 (use --chart-1 to --chart-5), --newspack-ui-color-error-tint-hover and -pressed, --newspack-ui-color-primary and --newspack-ui-color-against-primary.',
 ];
 
 const interFallback = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif';
@@ -164,11 +162,11 @@ export const brandBase = {
 		'font-size': `var(--newspack-ui-brand-h${ level }-size)`,
 		'line-height': `var(--newspack-ui-brand-h${ level }-line-height)`,
 	} ] ) ),
-	'.newspack-brand-inverse': {
+	'.dark, .newspack-brand-inverse': {
 		'background-color': 'var(--newspack-ui-color-surface)',
 		color: 'var(--newspack-ui-color-text)',
 	},
-	'.newspack-brand-inverse h1, .newspack-brand-inverse .font-display': {
+	'.dark h1, .dark .font-display, .newspack-brand-inverse h1, .newspack-brand-inverse .font-display': {
 		color: 'var(--newspack-ui-color-text)',
 	},
 	'.font-display': {
