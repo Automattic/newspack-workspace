@@ -58,6 +58,8 @@ Add the `newspack-brand-inverse` class, or `dark`, to a section or slide to make
 
 Blue is a per-section choice, not a page theme. Brand pages set `DARK_MODE = false` in `site.ts`, have no theme toggle and no theme head script, and never follow the system color scheme.
 
+h1 is American Grotesk Compressed Black, uppercase and Cobalt, and `font-display` gives any element the same style. h2 is Compressed Black in sentence case and the text color. h3 to h5 are American Grotesk Medium in the text color. In a blue section every heading is white.
+
 American Grotesk is licensed for Automattic domains only. The files are never committed here. To use them, copy the five woff2 files into the site's `public/fonts/american-grotesk/` and import `styles/newspack-brand-fonts.css` once, before the theme. Without them the theme falls back to Inter. Get the files from the product site's `/fonts/american-grotesk/`.
 
 For a deck, import `styles/newspack-deck.css`, which `deck-section` ships.

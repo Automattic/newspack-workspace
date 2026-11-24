@@ -62,7 +62,7 @@ export function ImageTextSlide( {
 		<DeckSlide id={ id } title={ title } className="grid items-center gap-12 px-[8vw] py-16 md:grid-cols-2">
 			<img src={ image.src } alt={ image.alt } className={ [ 'max-h-[70svh] w-full rounded-(--newspack-ui-radius-surface) object-cover', reverse ? 'md:order-2' : '' ].join( ' ' ) } />
 			<div className="flex flex-col gap-4">
-				<h2 className="font-heading">{ title }</h2>
+				<h2>{ title }</h2>
 				<div className="text-2xl">{ children }</div>
 			</div>
 		</DeckSlide>
@@ -75,7 +75,7 @@ export function ImageTextSlide( {
 export function StatsSlide( { id, title, stats }: { id: string; title: string; stats: Array< { value: string; label: string } > } ) {
 	return (
 		<DeckSlide id={ id } title={ title } className={ SLIDE }>
-			<h2 className="font-heading">{ title }</h2>
+			<h2>{ title }</h2>
 			<div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
 				{ stats.map( ( stat, index ) => (
 					<Card key={ `${ index }-${ stat.label }` } className="gap-2 p-8">
@@ -102,7 +102,7 @@ export function QuoteSlide( { id, title, quote, cite }: { id: string; title: str
 export function LogosSlide( { id, title, logos }: { id: string; title: string; logos: Image[] } ) {
 	return (
 		<DeckSlide id={ id } title={ title } className={ SLIDE }>
-			<h2 className="font-heading">{ title }</h2>
+			<h2>{ title }</h2>
 			<ul className="grid grid-cols-2 items-center gap-12 md:grid-cols-4">
 				{ logos.map( ( logo, index ) => (
 					<li key={ `${ index }-${ logo.src }` } className="flex justify-center">

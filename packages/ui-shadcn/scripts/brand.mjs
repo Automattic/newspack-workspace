@@ -128,13 +128,13 @@ export const blueUnsupported = [
 const interFallback = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif';
 
 export const brandFonts = {
-	'font-heading': [ `"American Grotesk", ${ interFallback }`, 'Subheads h2 to h5: American Grotesk, then Inter 500 where the fonts item is not installed.' ],
-	'font-display': [ `"American Grotesk Compressed", ${ interFallback }`, 'h1 and hero or slide headlines: American Grotesk Compressed Black, then Inter 900 where the fonts item is not installed.' ],
+	'font-heading': [ `"American Grotesk", ${ interFallback }`, 'Subheads h3 to h5: American Grotesk, then Inter 500 where the fonts item is not installed.' ],
+	'font-display': [ `"American Grotesk Compressed", ${ interFallback }`, 'h1, h2 and hero or slide headlines: American Grotesk Compressed Black, then Inter 900 where the fonts item is not installed.' ],
 };
 
 export const brandType = {
 	h1: { size: 'clamp(2.25rem, -3.639rem + 12.048vw, 6rem)', lineHeight: '1', note: 'Figma Brand H1: 36px to 96px, line height 96px (1), Compressed Black 900.' },
-	h2: { size: 'clamp(2rem, -1.141rem + 6.426vw, 4rem)', lineHeight: '1.125', note: 'Figma Brand H2: 32px to 64px, line height 72px at the top (1.125), Medium 500.' },
+	h2: { size: 'clamp(2rem, -1.141rem + 6.426vw, 4rem)', lineHeight: '1.125', note: 'Figma Brand H2 size: 32px to 64px, line height 72px at the top (1.125). Set in Compressed Black 900, sentence case.' },
 	h3: { size: 'clamp(1.75rem, -0.213rem + 4.016vw, 3rem)', lineHeight: '1.25', note: 'Figma Brand H3: 28px to 48px, line height 60px at the top (1.25), Medium 500.' },
 	h4: { size: 'clamp(1.625rem, 0.055rem + 3.213vw, 2.625rem)', lineHeight: '1.3333', note: 'Figma Brand H4: 26px to 42px, line height 56px at the top (1.3333), Medium 500.' },
 	h5: { size: 'clamp(1.375rem, 0.394rem + 2.008vw, 2rem)', lineHeight: '1.375', note: 'Figma Brand H5: 22px to 32px, line height 44px at the top (1.375), Medium 500.' },
@@ -155,12 +155,19 @@ export const brandBase = {
 		'text-transform': 'uppercase',
 		color: 'var(--newspack-ui-color-brand-text)',
 	},
-	'h2, h3, h4, h5': {
+	h2: {
+		'font-family': 'var(--font-display)',
+		'font-weight': '900',
+		'font-size': 'var(--newspack-ui-brand-h2-size)',
+		'line-height': 'var(--newspack-ui-brand-h2-line-height)',
+		color: 'var(--newspack-ui-color-text)',
+	},
+	'h3, h4, h5': {
 		'font-family': 'var(--font-heading)',
 		'font-weight': '500',
 		color: 'var(--newspack-ui-color-text)',
 	},
-	...Object.fromEntries( [ 2, 3, 4, 5 ].map( level => [ `h${ level }`, {
+	...Object.fromEntries( [ 3, 4, 5 ].map( level => [ `h${ level }`, {
 		'font-size': `var(--newspack-ui-brand-h${ level }-size)`,
 		'line-height': `var(--newspack-ui-brand-h${ level }-line-height)`,
 	} ] ) ),
