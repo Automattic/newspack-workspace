@@ -4,12 +4,19 @@ window.wp = { a11y: { speak } };
 
 const RISKY_ROLES = {
 	editor: {
-		title: 'Anyone can sign up as an Editor',
+		title: 'Anyone can register as an Editor',
 		body: 'Editors can publish and change any post.',
+		severity: 'error',
 	},
 	administrator: {
-		title: 'Anyone can sign up as an Administrator',
+		title: 'Anyone can register as an Administrator',
 		body: 'Administrators can change any setting, add users and install plugins.',
+		severity: 'error',
+	},
+	contributor: {
+		title: 'Anyone can register as a Contributor',
+		body: 'Contributors can write posts for review.',
+		severity: 'warning',
 	},
 };
 
@@ -21,15 +28,15 @@ const RISKY_ROLES = {
  * @param {boolean} options.open      Whether "Anyone can register" starts checked.
  * @param {string}  options.role      The selected New User Default Role.
  * @param {boolean} options.botShown  Whether PHP printed the amber notice visible.
- * @param {boolean} options.roleShown Whether PHP printed the red notice visible.
+ * @param {boolean} options.roleShown Whether PHP printed the role notice visible.
  */
 function renderSettings( { open = false, role = 'subscriber', botShown = false, roleShown = false } = {} ) {
-	const roleWarning = roleShown ? RISKY_ROLES[ role ] : { title: '', body: '' };
+	const roleWarning = roleShown ? RISKY_ROLES[ role ] : { title: '', body: '', severity: 'error' };
 	document.body.innerHTML = `
 		<div class="notice notice-warning inline notice-alt" data-newspack-registration-warning="bot"${ botShown ? '' : ' hidden' }>
-			<p><strong>Sign-ups have no bot protection</strong></p><p>reCAPTCHA isn't set up.</p>
+			<p><strong>Registration isn't protected from bots</strong></p><p>Without reCAPTCHA, bots can create accounts.</p>
 		</div>
-		<div class="notice notice-error inline notice-alt" data-newspack-registration-warning="role"${ roleShown ? '' : ' hidden' }>
+		<div class="notice notice-${ roleWarning.severity } inline notice-alt" data-newspack-registration-warning="role"${ roleShown ? '' : ' hidden' }>
 			<p><strong>${ roleWarning.title }</strong></p><p>${ roleWarning.body }</p>
 		</div>
 		<table class="form-table"><tbody>
@@ -40,6 +47,7 @@ function renderSettings( { open = false, role = 'subscriber', botShown = false, 
 				<option value="subscriber">Subscriber</option>
 				<option value="editor">Editor</option>
 				<option value="administrator">Administrator</option>
+				<option value="contributor">Contributor</option>
 				<option value="constructor">Constructor</option>
 			</select></td></tr>
 		</tbody></table>`;
@@ -113,7 +121,7 @@ describe( 'registration warnings', () => {
 		// wp.a11y.speak() clears the live region before each write, so both
 		// warnings go out in one call or only the last is heard.
 		expect( speak ).toHaveBeenCalledTimes( 1 );
-		expect( speak.mock.calls[ 0 ][ 0 ] ).toContain( 'Sign-ups have no bot protection' );
+		expect( speak.mock.calls[ 0 ][ 0 ] ).toContain( "Registration isn't protected from bots" );
 		expect( speak.mock.calls[ 0 ][ 0 ] ).toContain( RISKY_ROLES.editor.title );
 	} );
 
@@ -127,6 +135,17 @@ describe( 'registration warnings', () => {
 		expect( speak ).toHaveBeenCalledTimes( 1 );
 		// The title has no closing punctuation, so it gets a period to keep it a sentence when read aloud.
 		expect( speak ).toHaveBeenCalledWith( `${ RISKY_ROLES.administrator.title }. ${ RISKY_ROLES.administrator.body }` );
+	} );
+
+	it( 'colors the role warning yellow or red to match the role', () => {
+		renderSettings( { open: true, role: 'subscriber', botShown: true } );
+		loadScript();
+		setRole( 'contributor' );
+		expect( roleNotice().classList.contains( 'notice-warning' ) ).toBe( true );
+		expect( roleNotice().classList.contains( 'notice-error' ) ).toBe( false );
+		setRole( 'editor' );
+		expect( roleNotice().classList.contains( 'notice-error' ) ).toBe( true );
+		expect( roleNotice().classList.contains( 'notice-warning' ) ).toBe( false );
 	} );
 
 	it( 'hides the role warning for a role that cannot edit posts', () => {

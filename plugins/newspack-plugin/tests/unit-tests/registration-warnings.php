@@ -218,22 +218,105 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertTrue( Registration_Warnings::has_risky_default_role() );
 
 		$warning = Registration_Warnings::get_role_warning( 'staff_writer' );
-		$this->assertSame( 'Anyone can sign up with the "Staff Writer" role', $warning['title'] );
-		$this->assertStringStartsWith( 'This role can write posts.', $warning['body'] );
+		$this->assertSame( 'Anyone can register with the "Staff Writer" role', $warning['title'] );
+		$this->assertSame( 'This role can write posts. Anyone who registers will have this ability, including spammers. Choose Subscriber unless the users who sign up here need to write posts.', $warning['body'] );
 	}
 
 	/**
-	 * Core roles get their own title and first sentence.
+	 * Capabilities that let a custom role publish or upload files.
 	 */
-	public function test_core_role_copy() {
-		$editor = Registration_Warnings::get_role_warning( 'editor' );
-		$this->assertSame( 'Anyone can sign up as an Editor', $editor['title'] );
-		$this->assertStringStartsWith( 'Editors can publish and change any post.', $editor['body'] );
-		$this->assertStringContainsString( 'Choose Subscriber unless the people who sign up here need to write.', $editor['body'] );
+	public function data_custom_publishing_roles() {
+		return [
+			'publishes' => [ array_fill_keys( [ 'edit_posts', 'publish_posts' ], true ) ],
+			'uploads'   => [ array_fill_keys( [ 'edit_posts', 'upload_files' ], true ) ],
+		];
+	}
 
-		$this->assertSame( 'Anyone can sign up as a Contributor', Registration_Warnings::get_role_warning( 'contributor' )['title'] );
-		$this->assertSame( 'Anyone can sign up as an Administrator', Registration_Warnings::get_role_warning( 'administrator' )['title'] );
-		$this->assertSame( 'Anyone can sign up as an Author', Registration_Warnings::get_role_warning( 'author' )['title'] );
+	/**
+	 * A custom role that can publish or upload files gets the publishing copy.
+	 *
+	 * @dataProvider data_custom_publishing_roles
+	 * @param array $caps Capabilities.
+	 */
+	public function test_custom_role_that_publishes_or_uploads_uses_publishing_copy( $caps ) {
+		$this->add_test_role( 'staff_publisher', 'Staff Publisher', $caps );
+		$warning = Registration_Warnings::get_role_warning( 'staff_publisher' );
+		$this->assertSame( 'Anyone can register with the "Staff Publisher" role', $warning['title'] );
+		$this->assertSame( 'This role can publish posts or upload files. Anyone who registers will have these abilities, including spammers. Choose Subscriber unless the users who sign up here need to publish posts.', $warning['body'] );
+	}
+
+	/**
+	 * Each core role's title and body, as approved.
+	 */
+	public function data_core_role_copy() {
+		return [
+			'contributor'   => [
+				'contributor',
+				'Anyone can register as a Contributor',
+				'Contributors can write posts for review. Anyone who registers will have this ability, including spammers. Choose Subscriber unless the users who sign up here need to write posts.',
+			],
+			'author'        => [
+				'author',
+				'Anyone can register as an Author',
+				'Authors can publish posts without approval and upload files. Anyone who registers will have these abilities, including spammers. Choose Subscriber unless the users who sign up here need to publish posts.',
+			],
+			'editor'        => [
+				'editor',
+				'Anyone can register as an Editor',
+				'Editors can publish and change any post. Anyone who registers will have these abilities, including spammers. Choose Subscriber.',
+			],
+			'administrator' => [
+				'administrator',
+				'Anyone can register as an Administrator',
+				'Administrators can change any setting, add users and install plugins. Anyone who registers will have these abilities, including spammers. Choose Subscriber.',
+			],
+		];
+	}
+
+	/**
+	 * Core roles get their own title and body.
+	 *
+	 * @dataProvider data_core_role_copy
+	 * @param string $role  Role slug.
+	 * @param string $title Expected title.
+	 * @param string $body  Expected body.
+	 */
+	public function test_core_role_copy( $role, $title, $body ) {
+		$warning = Registration_Warnings::get_role_warning( $role );
+		$this->assertSame( $title, $warning['title'] );
+		$this->assertSame( $body, $warning['body'] );
+	}
+
+	/**
+	 * Roles, the capabilities to add a custom one with (null for a core role),
+	 * and the warning's severity: "warning" (yellow) for a role that can only
+	 * write posts for review, "error" (red) for one that can publish or upload.
+	 */
+	public function data_role_severities() {
+		return [
+			'contributor'               => [ 'contributor', null, 'warning' ],
+			'author'                    => [ 'author', null, 'error' ],
+			'editor'                    => [ 'editor', null, 'error' ],
+			'administrator'             => [ 'administrator', null, 'error' ],
+			'custom, writes for review' => [ 'staff_writer', [ 'edit_posts' => true ], 'warning' ],
+			'custom, publishes'         => [ 'staff_publisher', array_fill_keys( [ 'edit_posts', 'publish_posts' ], true ), 'error' ],
+			'custom, uploads'           => [ 'staff_uploader', array_fill_keys( [ 'edit_posts', 'upload_files' ], true ), 'error' ],
+		];
+	}
+
+	/**
+	 * Each risky role's warning carries the severity its color comes from.
+	 *
+	 * @dataProvider data_role_severities
+	 * @param string     $role     Role slug.
+	 * @param array|null $caps     Capabilities for a custom role, or null for a core role.
+	 * @param string     $severity Expected severity.
+	 */
+	public function test_role_warning_severity( $role, $caps, $severity ) {
+		if ( null !== $caps ) {
+			$this->add_test_role( $role, 'Test Role', $caps );
+		}
+		$this->assertSame( $severity, Registration_Warnings::get_role_warning( $role )['severity'] );
 	}
 
 	/**
@@ -273,14 +356,30 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The amber warning's copy covers reCAPTCHA being off and being on without keys.
+	 * Assert that HTML links the Newspack → Settings → Connections path to the
+	 * reCAPTCHA settings. Entities are decoded first, since escaping and
+	 * wp_kses() write the "&" in the address differently.
+	 *
+	 * @param string $html HTML to check.
+	 */
+	private function assert_links_to_recaptcha_settings( $html ) {
+		$this->assertStringContainsString(
+			'<a href="' . admin_url( 'admin.php?page=newspack-settings&scrollTo=newspack-settings-recaptcha' ) . '">Newspack → Settings → Connections</a>',
+			html_entity_decode( $html, ENT_QUOTES )
+		);
+	}
+
+	/**
+	 * The amber warning's copy, as approved, with the settings path linked.
 	 */
 	public function test_bot_protection_copy() {
 		$warning = Registration_Warnings::get_bot_protection_warning();
-		$this->assertSame( 'Sign-ups have no bot protection', $warning['title'] );
-		$this->assertStringStartsWith( "reCAPTCHA isn't set up, so bots can create accounts", $warning['body'] );
-		$this->assertStringContainsString( 'Set up reCAPTCHA in Newspack → Settings → Connections', $warning['body'] );
-		$this->assertStringContainsString( 'uncheck "Anyone can register"', $warning['body'] );
+		$this->assertSame( "Registration isn't protected from bots", $warning['title'] );
+		$this->assertSame(
+			'Without reCAPTCHA, bots can create accounts using fake email addresses. Too many bounced emails can cause your site to be blocked from sending email. Set up reCAPTCHA in Newspack → Settings → Connections, or uncheck "Anyone can register".',
+			html_entity_decode( wp_strip_all_tags( $warning['body_html'] ), ENT_QUOTES )
+		);
+		$this->assert_links_to_recaptcha_settings( $warning['body_html'] );
 	}
 
 	/**
@@ -337,14 +436,18 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 */
 	public function data_role_test_states() {
 		return [
-			'closed'          => [ false, 'editor', 'good', 'No one can sign up with the New User Default Role' ],
-			'open, safe role' => [ true, 'subscriber', 'good', "New accounts get a role that can't edit posts" ],
-			'open, editor'    => [ true, 'editor', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
+			'closed'            => [ false, 'editor', 'good', 'No one can sign up with the New User Default Role' ],
+			'open, safe role'   => [ true, 'subscriber', 'good', "New accounts get a role that can't edit posts" ],
+			'open, contributor' => [ true, 'contributor', 'recommended', 'Open registration gives new accounts a role that can edit posts' ],
+			'open, author'      => [ true, 'author', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
+			'open, editor'      => [ true, 'editor', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
 		];
 	}
 
 	/**
-	 * The role check reports Critical only while the condition holds.
+	 * The role check reports a problem only while the condition holds: Recommended
+	 * for a role that can only write posts for review, Critical for one that can
+	 * publish or upload files.
 	 *
 	 * @dataProvider data_role_test_states
 	 * @param bool   $open   Whether "Anyone can register" is on.
@@ -359,20 +462,20 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertSame( $status, $result['status'] );
 		$this->assertSame( $label, $result['label'] );
 		$this->assertSame( 'newspack_open_registration_role', $result['test'] );
-		if ( 'critical' === $status ) {
+		if ( 'good' !== $status ) {
 			$this->assertStringContainsString( 'options-general.php', $result['actions'] );
 		}
 	}
 
 	/**
-	 * The Critical item names the role, custom roles included, the way the
+	 * The Site Health item names the role, custom roles included, the way the
 	 * Settings → General warning does.
 	 */
 	public function test_role_test_names_the_role() {
 		$this->add_test_role( 'staff_writer', 'Staff Writer', [ 'edit_posts' => true ] );
 		$this->open_registration( 'staff_writer' );
 		$description = Registration_Warnings::site_health_role_test()['description'];
-		$this->assertStringContainsString( esc_html( 'Anyone can sign up with the "Staff Writer" role' ), $description );
+		$this->assertStringContainsString( esc_html( 'Anyone can register with the "Staff Writer" role' ), $description );
 		$this->assertStringContainsString( 'This role can write posts.', $description );
 		$this->assertStringNotContainsString( 'with it.', $description );
 	}
@@ -425,6 +528,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertSame( $label, $result['label'] );
 		$this->assertSame( 'newspack_open_registration_bot_protection', $result['test'] );
 		if ( 'recommended' === $status ) {
+			$this->assert_links_to_recaptcha_settings( $result['description'] );
 			$this->assertStringContainsString( esc_url( admin_url( 'admin.php?page=newspack-settings&scrollTo=newspack-settings-recaptcha' ) ), $result['actions'] );
 			$this->assertStringContainsString( 'Set up reCAPTCHA', $result['actions'] );
 			$this->assertStringContainsString( 'options-general.php', $result['actions'] );
@@ -451,7 +555,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'id="newspack-registration-warning-bot"', $output );
 		$this->assertStringContainsString( 'id="newspack-registration-warning-role"', $output );
 		$this->assertStringNotContainsString( 'hidden', $output );
-		$this->assertStringContainsString( 'Anyone can sign up as an Editor', $output );
+		$this->assertStringContainsString( 'Anyone can register as an Editor', $output );
 
 		set_current_screen( 'dashboard' );
 		$this->assertSame( '', $this->render_notices() );
@@ -520,8 +624,43 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->open_registration( 'editor' );
 		set_current_screen( 'options-general' );
 		$output = $this->render_notices();
-		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="bot"[^>]*><p><strong>Sign-ups have no bot protection</strong></p><p>[^<]+</p></div>#', $output );
-		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="role"[^>]*><p><strong>Anyone can sign up as an Editor</strong></p><p>[^<]+</p></div>#', $output );
+		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="bot"[^>]*><p><strong>Registration isn&\#039;t protected from bots</strong></p><p>(?:[^<]|<a [^>]+>[^<]+</a>)+</p></div>#', $output );
+		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="role"[^>]*><p><strong>Anyone can register as an Editor</strong></p><p>[^<]+</p></div>#', $output );
+	}
+
+	/**
+	 * The bot warning on Settings → General links to the reCAPTCHA settings.
+	 */
+	public function test_bot_notice_links_to_recaptcha_settings() {
+		$this->sign_in_as( 'administrator' );
+		$this->open_registration( 'subscriber' );
+		set_current_screen( 'options-general' );
+		$this->assert_links_to_recaptcha_settings( $this->render_notices() );
+	}
+
+	/**
+	 * Saved role, and the core notice class its warning prints with.
+	 */
+	public function data_role_notice_classes() {
+		return [
+			'contributor' => [ 'contributor', 'notice-warning' ],
+			'author'      => [ 'author', 'notice-error' ],
+		];
+	}
+
+	/**
+	 * The role warning prints yellow for a role that can only write posts for
+	 * review, red for one that can publish.
+	 *
+	 * @dataProvider data_role_notice_classes
+	 * @param string $role  Saved default role.
+	 * @param string $class Expected notice class.
+	 */
+	public function test_role_notice_color_follows_the_saved_role( $role, $class ) {
+		$this->sign_in_as( 'administrator' );
+		$this->open_registration( $role );
+		set_current_screen( 'options-general' );
+		$this->assertStringContainsString( 'class="notice ' . $class . ' inline notice-alt" data-newspack-registration-warning="role"', $this->render_notices() );
 	}
 
 	/**
@@ -536,7 +675,9 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertStringStartsWith( $prefix, $inline );
 		$data = json_decode( rtrim( substr( $inline, strlen( $prefix ) ), ';' ), true );
 		$this->assertFalse( $data['hasBotProtection'] );
-		$this->assertSame( 'Anyone can sign up as an Editor', $data['riskyRoles']['editor']['title'] );
+		$this->assertSame( 'Anyone can register as an Editor', $data['riskyRoles']['editor']['title'] );
+		$this->assertSame( 'error', $data['riskyRoles']['editor']['severity'] );
+		$this->assertSame( 'warning', $data['riskyRoles']['contributor']['severity'] );
 		$this->assertArrayNotHasKey( 'subscriber', $data['riskyRoles'] );
 	}
 
@@ -562,9 +703,10 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The script's data, read with the script's rule, gives the same verdict as
-	 * this class's Site Health tests. (For a saved Editor or Administrator,
-	 * WordPress's own Site Health test reports the same Critical verdict.)
+	 * The script's data, read with the script's rule, gives the same verdict and
+	 * color as this class's Site Health tests. (For a saved Editor or
+	 * Administrator, WordPress's own Site Health test reports the same Critical
+	 * verdict.)
 	 *
 	 * @dataProvider data_option_states
 	 * @param bool         $open      Whether "Anyone can register" is on.
@@ -589,7 +731,11 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$script_shows_role = $open && isset( $script_data['riskyRoles'][ $role ] );
 		$script_shows_bot  = $open && ! $script_data['hasBotProtection'];
 
-		$this->assertSame( 'critical' === Registration_Warnings::site_health_role_test()['status'], $script_shows_role );
+		$role_status = Registration_Warnings::site_health_role_test()['status'];
+		$this->assertSame( 'good' !== $role_status, $script_shows_role );
+		if ( $script_shows_role ) {
+			$this->assertSame( 'warning' === $script_data['riskyRoles'][ $role ]['severity'] ? 'recommended' : 'critical', $role_status );
+		}
 		$this->assertSame( 'recommended' === Registration_Warnings::site_health_bot_protection_test()['status'], $script_shows_bot );
 	}
 }
