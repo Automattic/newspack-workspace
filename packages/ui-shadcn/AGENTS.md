@@ -9,11 +9,11 @@ https://newspack-ui-theme.space.fast/ is built from this package by a separate, 
 The site is built from everything this package reads, so republish it after a pull request merges that changes any of:
 
 - `packages/ui-shadcn`;
-- the newspack-ui tokens in `plugins/newspack-plugin/src/newspack-ui`;
+- newspack-ui, in `plugins/newspack-plugin/src/newspack-ui`;
 - `packages/colors` or `packages/motion`.
 
 Follow "After a pull request merges through you" in the site repository's `AGENTS.md`. That file also says where the site and this monorepo need to be checked out.
 
-When you open a pull request that changes any of those paths, add this line at the end of its "What changes" section:
+When you open a pull request that changes any of those paths, add this line to its "What changes" section, before the issue reference:
 
 > Merging won't update https://newspack-ui-theme.space.fast/. Republish it with the steps in the newspack-ui-theme-site repository's `AGENTS.md`.
