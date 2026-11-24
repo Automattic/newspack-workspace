@@ -66,7 +66,10 @@ test( '.dark and .newspack-brand-inverse share one set of values', () => {
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
 	const body = selector => css.match( new RegExp( `^${ selector.replace( '.', '\\.' ) } \\{([\\s\\S]*?)\\n\\}`, 'm' ) )[ 1 ];
 	assert.equal( body( '.dark' ), body( '.newspack-brand-inverse' ) );
-	assert.ok( css.lastIndexOf( '@media (prefers-contrast: more)' ) > css.indexOf( '.newspack-brand-inverse {' ) );
+	assert.ok( css.lastIndexOf( '@media (prefers-contrast: more)' ) > css.indexOf( '\n.newspack-brand-inverse {' ) );
+	const keys = Object.keys( brand.css );
+	assert.ok( keys.indexOf( '@media (prefers-contrast: more)' ) > keys.indexOf( '.newspack-brand-inverse' ) );
+	assert.ok( keys.indexOf( '@media (prefers-contrast: more)' ) > keys.indexOf( '.dark' ) );
 } );
 
 test( 'a blue section restates every shadcn variable, pointing primary at the white button', () => {

@@ -116,10 +116,13 @@ themeCss.walkAtRules( 'media', atRule => {
 		atRule.remove();
 	}
 } );
+const rootContrast = brand.css[ contrastQuery ];
+delete brand.css[ contrastQuery ];
 for ( const selector of blueSelectors ) {
 	brand.css[ selector ] = { ...blue };
-	brand.css[ contrastQuery ][ selector ] = { ...blueHighContrast };
+	rootContrast[ selector ] = { ...blueHighContrast };
 }
+brand.css[ contrastQuery ] = rootContrast;
 writeJson( join( registryDir, 'newspack-brand.json' ), brand );
 const baseCss = `@layer base {\n${ Object.entries( brandBase ).map( ( [ selector, decls ] ) => block( selector, decls ).replace( /^/gm, '\t' ).replace( /\t$/, '' ) ).join( '\n' ) }}\n`;
 const blueCss = blueSelectors.map( selector => block( selector, blue ) ).join( '\n' );
