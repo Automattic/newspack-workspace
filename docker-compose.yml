@@ -49,9 +49,21 @@ services:
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
-    ports:
-      - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
-      - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
+    ## No published ports: the proxy below listens on 80 and 443 for every site.
+    ## This is its default backend, so any hostname no isolated env claims still
+    ## lands here. That covers localhost, the additional sites and the manager hub.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=newspack-docker_default"
+      - "traefik.tcp.routers.newspack-main.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.newspack-main.priority=1"
+      - "traefik.tcp.routers.newspack-main.entrypoints=websecure"
+      - "traefik.tcp.routers.newspack-main.tls.passthrough=true"
+      - "traefik.tcp.services.newspack-main.loadbalancer.server.port=443"
+      - "traefik.http.routers.newspack-main.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.newspack-main.priority=1"
+      - "traefik.http.routers.newspack-main.entrypoints=web"
+      - "traefik.http.services.newspack-main.loadbalancer.server.port=80"
     env_file:
       - default.env
       - .env
@@ -75,6 +87,40 @@ services:
       timeout: 5s
       retries: 3
       start_period: 180s
+  ## The one listener for every site, main and isolated.
+  ##
+  ## Docker Desktop for Mac 4.97+ binds ports below 1024 on all interfaces, so a
+  ## second container publishing 443 fails whatever loopback address it asks for.
+  ## Each isolated env used to publish 80/443 on a loopback address of its own;
+  ## that can no longer run next to the main site. The proxy takes both ports
+  ## once and routes by hostname instead. Envs register through the labels in
+  ## their docker-compose.env-*.yml (see env_proxy_labels in bin/_common.sh).
+  ##
+  ## TLS is passed through, not terminated: each site keeps serving its own
+  ## mkcert certificate and nothing inside the containers changes.
+  ##
+  ## depends_on is about the upgrade, not startup order: the first `n start`
+  ## after this change has to replace the old wordpress container, which is
+  ## still bound to 443, before the proxy can bind it.
+  proxy:
+    container_name: newspack_proxy
+    image: traefik:v3.7
+    depends_on:
+      - wordpress
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=newspack_envs
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+    ports:
+      - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
+      - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+      - newspack_envs
   mailpit:
     image: axllent/mailpit:latest
     restart: always
@@ -86,3 +132,9 @@ services:
     restart: always
     ports:
       - "127.0.0.1:8088:8080"
+
+## Shared with the isolated envs, which join it under their domain. Created by
+## `n start` (ensure_envs_network), so it outlives `docker compose down`.
+networks:
+  newspack_envs:
+    external: true

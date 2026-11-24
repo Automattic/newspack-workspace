@@ -365,7 +365,7 @@ n worktree remove newspack-plugin fix/my-feature
 
 ### Passwordless networking setup (macOS)
 
-Isolated environments need loopback IP aliases and `/etc/hosts` entries, both of which require `sudo`. This is a problem for non-interactive processes (e.g. AI agents) that can't enter a password.
+Isolated environments need an `/etc/hosts` entry for their domain, which requires `sudo`. This is a problem for non-interactive processes (e.g. AI agents) that can't enter a password.
 
 Run the one-time setup script to allow these specific operations without a password:
 

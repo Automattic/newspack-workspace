@@ -15,38 +15,18 @@ test_db_name_for_env() {
     echo "wp_tests_$(echo "$1" | tr '-' '_')"
 }
 
-# Find the next available loopback IP (127.0.0.2+).
-# Checks both compose files and running containers to avoid conflicts.
-next_loopback_ip() {
-    used_ips=""
-    for f in "$NABSPATH"/docker-compose.env-*.yml; do
-        [[ -f "$f" ]] || continue
-        ip=$(grep -o '127\.0\.0\.[0-9]*' "$f" | head -1)
-        [[ -n "$ip" ]] && used_ips="$used_ips $ip"
-    done
-    # Also check IPs bound by running containers (covers stale/recreated envs).
-    for ip in $(docker ps --format '{{.Ports}}' 2>/dev/null | grep -o '127\.0\.0\.[0-9]*' | sort -u); do
-        used_ips="$used_ips $ip"
-    done
-    octet=2
-    while echo "$used_ips" | grep -qw "127\\.0\\.0\\.$octet"; do
-        octet=$((octet + 1))
-    done
-    if [[ "$octet" -gt 254 ]]; then
-        echo "Error: no available loopback IPs (127.0.0.2-254 exhausted)" >&2
-        exit 1
-    fi
-    echo "127.0.0.$octet"
-}
-
 # Read domain from a compose file's WP_DOMAIN env var.
 domain_for_env() {
     grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
 }
 
-# Read loopback IP from a compose file.
+# The address an env's /etc/hosts entry belongs on: the shared proxy's, or the
+# env's own loopback address for a compose file not yet migrated onto the proxy
+# (see migrate_env_compose_to_proxy).
 ip_for_env() {
-    grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
+    local legacy
+    legacy=$(legacy_env_ip "$1")
+    echo "${legacy:-$ENV_PROXY_IP}"
 }
 
 # Parse a docker-compose volume line for a worktree mount and emit
@@ -344,10 +324,11 @@ case $1 in
                 created_wtdirs+=("$wt_c")
             fi
         done
-        ip=$(next_loopback_ip)
+        ip="$ENV_PROXY_IP"
         if [[ -z "$domain" ]]; then
             domain="${env_name}.test"
         fi
+        proxy_labels=$(env_proxy_labels "$env_name" "$domain")
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
@@ -373,9 +354,7 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
-    ports:
-      - "${ip}:80:80"
-      - "${ip}:443:443"
+${proxy_labels}
     env_file:
       - default.env
       - .env
@@ -405,16 +384,7 @@ networks:
   newspack_envs:
     external: true
 YAML
-        echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
-        # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
-        if [[ "$(uname)" == "Darwin" ]] && ! lo0_alias_exists "$ip"; then
-            warn_if_manage_host_stale
-            if command -v newspack-manage-host >/dev/null 2>&1; then
-                sudo newspack-manage-host alias-add "$ip"
-            else
-                echo "Note: loopback alias for $ip is missing. Run 'n start' or: sudo ifconfig lo0 alias $ip"
-            fi
-        fi
+        echo "Created $compose_file (db: $db_name, domain: $domain)"
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
             if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
@@ -563,7 +533,39 @@ MIGRATE
         fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
-        # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
+        # --- Migration: reach the host through the shared proxy (same reason as above) ---
+        # An env from before the proxy publishes 80/443 on a loopback address of
+        # its own. Docker Desktop for Mac 4.97+ binds those ports on every
+        # interface, so that env can no longer start next to anything else that
+        # publishes them.
+        legacy_ip=$(legacy_env_ip "$compose_file")
+        if [[ -n "$legacy_ip" ]]; then
+            if migrate_env_compose_to_proxy "$compose_file" "$env_name" "$domain"; then
+                echo "Migrated $env_name: served through the shared proxy instead of $legacy_ip"
+            else
+                echo "Warning: could not move $env_name onto the shared proxy ($compose_file has no generated ports block). Recreate the env to pick it up." >&2
+            fi
+            ip=$(ip_for_env "$compose_file")
+        fi
+        # A hosts entry written for the old address would keep the browser on a
+        # loopback alias nothing answers on any more. Remove it here; the block
+        # below adds the current one.
+        stale_host_ip=$(awk -v d="$domain" '$1 ~ /^127\./ { for (i = 2; i <= NF; i++) if ($i == d) { print $1; exit } }' /etc/hosts 2>/dev/null)
+        if [[ -n "$domain" && -n "$stale_host_ip" && "$stale_host_ip" != "$ip" ]]; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
+                sudo newspack-manage-host host-remove "$domain"
+            elif [ -t 0 ] && [ -t 1 ]; then
+                echo "Updating the /etc/hosts entry for $domain (requires sudo)..."
+                escaped_domain="${domain//./\\.}"
+                { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
+                    sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
+            else
+                echo "Warning: /etc/hosts still maps $domain to $stale_host_ip. Browser access won't work until it reads: $ip $domain"
+            fi
+        fi
+        # Only an env the migration above could not move still has an address of its
+        # own, and so still needs the alias. macOS only: Linux routes all 127.x.x.x
+        # by default.
         if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! lo0_alias_exists "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
                 sudo newspack-manage-host alias-add "$ip"
@@ -593,6 +595,7 @@ MIGRATE
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
         set +a
+        ensure_envs_network || exit 1
         # Ensure db is running and create the environment database.
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db
         echo "Creating database $db_name..."
@@ -602,6 +605,13 @@ MIGRATE
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
             echo "Error: failed to start container"
+            exit 1
+        fi
+        # The proxy is what makes the env reachable from the host. --no-deps
+        # because it names the main site as a dependency, and starting an env
+        # is no reason to start that.
+        if ! docker compose -f "$NABSPATH/docker-compose.yml" up -d --no-deps proxy; then
+            echo "Error: could not start the shared proxy on ports 80/443. If another container still publishes them, run 'n restart'." >&2
             exit 1
         fi
         # Generate SSL certificate using host mkcert (trusted CA) and copy into container.

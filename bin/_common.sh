@@ -81,6 +81,98 @@ lo0_alias_exists() {
     ifconfig lo0 2>/dev/null | awk -v ip="$1" '$1 == "inet" && $2 == ip { found = 1 } END { exit !found }'
 }
 
+# The address every site answers on. The shared proxy (the `proxy` service in
+# docker-compose.yml) listens on ports 80 and 443 there and routes by hostname,
+# so an isolated env needs no loopback address of its own. /etc/hosts entries for env
+# domains point here.
+# shellcheck disable=SC2034 # read by the scripts that source this file.
+ENV_PROXY_IP="127.0.0.1"
+
+# The network the proxy and the isolated envs meet on. The proxy's compose
+# service declares it external, so it has to exist before any `docker compose
+# up` that starts the proxy. Safe to call repeatedly.
+ensure_envs_network() {
+    docker network inspect newspack_envs >/dev/null 2>&1 && return 0
+    if ! docker network create newspack_envs >/dev/null; then
+        echo "Error: failed to create Docker network 'newspack_envs'. Is Docker running?" >&2
+        return 1
+    fi
+    echo "Created shared network: newspack_envs"
+}
+
+# The `labels:` block that registers an env's compose service with the proxy:
+# TLS for its domain is passed through to the container's 443, plain HTTP for
+# its domain goes to 80. Anything without such a block falls through to the
+# main site (see the newspack-main routers in docker-compose.yml).
+#
+# Args: env name, domain.
+env_proxy_labels() {
+    local router domain="$2"
+    # Traefik reads a label key as a dotted path, so a dot in the env name would
+    # cut the router name in two. Env names allow dots and underscores.
+    router="env-$(printf '%s' "$1" | tr -c 'a-zA-Z0-9' '-')"
+    printf '    labels:\n'
+    printf '      - "traefik.enable=true"\n'
+    printf '      - "traefik.docker.network=newspack_envs"\n'
+    # shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
+    printf '      - "traefik.tcp.routers.%s.rule=HostSNI(`%s`)"\n' "$router" "$domain"
+    printf '      - "traefik.tcp.routers.%s.entrypoints=websecure"\n' "$router"
+    printf '      - "traefik.tcp.routers.%s.tls.passthrough=true"\n' "$router"
+    printf '      - "traefik.tcp.services.%s.loadbalancer.server.port=443"\n' "$router"
+    # shellcheck disable=SC2016
+    printf '      - "traefik.http.routers.%s.rule=Host(`%s`)"\n' "$router" "$domain"
+    printf '      - "traefik.http.routers.%s.entrypoints=web"\n' "$router"
+    printf '      - "traefik.http.services.%s.loadbalancer.server.port=80"\n' "$router"
+}
+
+# The loopback address an env compose file publishes 443 on, for a file written
+# before the proxy existed. Prints nothing for an env that already goes through
+# the proxy. Matched on the published-port line alone: every env file also
+# mentions 127.0.0.1 in its healthcheck.
+legacy_env_ip() {
+    sed -nE 's/^[[:space:]]*-[[:space:]]*"(127\.0\.0\.[0-9]+):443:443"[[:space:]]*$/\1/p' "$1" 2>/dev/null | head -1
+}
+
+# Move a legacy env compose file onto the proxy: drop the 80/443 ports it
+# published on its own loopback address and add the proxy labels where they
+# were. Compose files are written once at create time, so without this an env
+# made before the proxy keeps asking for a port the proxy is already bound to.
+#
+# Only the two generated port lines are removed. A port someone added by hand
+# stays, under its `ports:` key.
+#
+# Args: compose file, env name, domain. Returns 0 when the file was rewritten,
+# 1 when it had nothing to migrate or the rewrite did not take.
+migrate_env_compose_to_proxy() {
+    local file="$1" labels
+    [[ -n "$(legacy_env_ip "$file")" ]] || return 1
+    labels=$(env_proxy_labels "$2" "$3")
+    # The labels travel through the environment: awk -v rejects a value with
+    # newlines on macOS.
+    ENV_PROXY_LABELS="$labels" awk '
+        function flush_ports(   i) {
+            if (!in_ports) return
+            if (kept > 0) {
+                print "    ports:"
+                for (i = 1; i <= kept; i++) print keep[i]
+            }
+            if (!placed) { print ENVIRON["ENV_PROXY_LABELS"]; placed = 1 }
+            in_ports = 0
+            kept = 0
+        }
+        $0 == "    ports:" && !placed { in_ports = 1; next }
+        in_ports && /^      - / {
+            if ($0 ~ /^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"$/) next
+            keep[++kept] = $0
+            next
+        }
+        { flush_ports(); print }
+        END { flush_ports() }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    # awk cannot report whether it found the block, so read the result back.
+    [[ -z "$(legacy_env_ip "$file")" ]] && grep -q 'traefik.enable=true' "$file"
+}
+
 # Whether a project's vendor/ was installed with its dev dependencies.
 #
 # `n env up` provisions vendor/ with --no-dev (see ensure-vendor.sh): enough to
