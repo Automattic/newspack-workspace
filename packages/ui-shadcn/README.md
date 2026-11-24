@@ -2,7 +2,7 @@
 
 A shadcn theme and registry built from the newspack-ui tokens, so sites outside WordPress can use newspack-ui's Neutral style. shadcn and Radix keep the component behavior; this package supplies the tokens and how each component looks.
 
-The package is private and never published to npm. Sites install its items from the registry with `npx shadcn add <url>`. The registry, its docs and a component showcase are served from https://newspack-ui-theme.space.fast/.
+The package is private and never published to npm. Sites install its items from the registry with `npx shadcn add <url>`. The registry, its docs and a component showcase are served from https://newspack-ui-theme.space.fast/, which is built from this package's `dist/` and published separately; nothing in this repo deploys it.
 
 ## Build
 
@@ -16,7 +16,7 @@ The build runs three steps in order:
 2. `dark-palette/generate.mjs` derives the dark values from those tokens with APCA and writes them to `build/dark-palette/`, with `report.md` listing every pair it checked and `preview.html` showing the result.
 3. `scripts/build.mjs` writes the shadcn theme, the registry items and the site kit to `dist/`.
 
-newspack-ui is read from this checkout, so a change to its tokens reaches the theme on the next build. The build also runs on `pnpm install`, with the other packages.
+newspack-ui is read from this checkout, so a change to its tokens reaches the theme on the next build. The build is left out of the root `build:packages`, so it never runs on `pnpm install`: a renamed newspack-ui token fails this build, not the install.
 
 `REGISTRY_BASE` sets the URL the registry items point at. It defaults to the product site.
 
