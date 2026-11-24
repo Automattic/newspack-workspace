@@ -74,6 +74,9 @@ describe( 'SplitSection', () => {
 	it( 'shows a back link before the title when given one', () => {
 		renderSection( { backNav: '#/experimental-tools' } );
 		expect( screen.getByRole( 'link', { name: 'Go back' } ) ).toHaveAttribute( 'href', '#/experimental-tools' );
+		expect( screen.getByRole( 'link', { name: 'Go back' } ).closest( '.newspack-section-header__container' ) ).toHaveClass(
+			'newspack-section-header--full-width-text'
+		);
 	} );
 
 	it( 'renders the title as an h2 by default, with the description', () => {
