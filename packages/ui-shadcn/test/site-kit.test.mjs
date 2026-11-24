@@ -75,7 +75,7 @@ test( 'the opening slide takes a heading, keeps title as its name and uses the b
 
 test( 'content layouts take tone and className, and SLIDE is exported for custom slides', () => {
 	const source = layoutsSource();
-	assert.match( source, /export const SLIDE_PADDING = 'py-16 ps-\[8vw\] pe-\[max\(8vw,3\.5rem\)\]';/ );
+	assert.match( source, /export const SLIDE_PADDING = 'py-16 pl-\[8vw\] pr-\[max\(8vw,3\.5rem\)\]';/, 'physical padding, like the nav it clears, so a px- override merges' );
 	assert.match( source, /export const SLIDE = `flex flex-col justify-center gap-8 \$\{ SLIDE_PADDING \}`;/ );
 	assert.ok( source.includes( "import { cn } from '@/lib/utils';" ) );
 	for ( const name of [ 'ContentSlide', 'StatementSlide', 'ImageTextSlide', 'StatsSlide', 'QuoteSlide', 'LogosSlide' ] ) {
@@ -140,7 +140,8 @@ test( 'deck dots read as clickable, have a 32px target and grow on hover and foc
 	const button = nav.match( /className="(group [^"]*)"/ )[ 1 ].split( ' ' );
 	const dot = nav.match( /<span className="([^"]*)"/ )[ 1 ].split( ' ' );
 	assert.ok( button.includes( 'cursor-pointer' ) );
-	assert.ok( button.includes( 'size-8' ) && ! button.includes( 'size-6' ), '32px hit target' );
+	assert.ok( button.includes( 'size-[min(2rem,calc((100svh-2rem)/var(--deck-dot-count)))]' ), '32px targets, smaller only when the column would overflow the viewport' );
+	assert.ok( nav.includes( "style={ { '--deck-dot-count': slides.length } as CSSProperties }" ) );
 	assert.ok( ! /flex-col gap-/.test( nav ), 'targets touch, with no gap between them' );
 	assert.ok( dot.includes( 'size-2' ) );
 	assert.ok( dot.includes( 'motion-safe:pointer-fine:group-hover:scale-150' ) );

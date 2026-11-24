@@ -12,9 +12,9 @@ type Image = { src: string; alt: string };
 type SlideProps = { id: string; title: string; tone?: 'default' | 'brand'; className?: string };
 
 /**
- * The slide padding every layout uses. The end padding never drops below 3.5rem, so content clears the dot navigation on phones.
+ * The slide padding every layout uses. The right padding never drops below 3.5rem, so content clears the dot navigation, which sits on the right, on phones.
  */
-export const SLIDE_PADDING = 'py-16 ps-[8vw] pe-[max(8vw,3.5rem)]';
+export const SLIDE_PADDING = 'py-16 pl-[8vw] pr-[max(8vw,3.5rem)]';
 
 /**
  * The classes every content slide shares: a vertically centered column, its gap and `SLIDE_PADDING`. Put them on a custom `DeckSlide` so it lines up with the layouts, or use `ContentSlide`.
@@ -111,7 +111,7 @@ export function ImageTextSlide( {
 }
 
 /**
- * Two to four stats: one row from 1024px, two columns below it. The values scale with their card; up to nine characters fit on one line.
+ * Two to four stats: one row from 1024px, two columns below it. The values scale with their card: in American Grotesk Compressed up to nine characters fit on one line; the wider Inter fallback fits about five.
  */
 export function StatsSlide( { id, title, stats, tone, className }: SlideProps & { stats: Array< { value: string; label: string } > } ) {
 	return (

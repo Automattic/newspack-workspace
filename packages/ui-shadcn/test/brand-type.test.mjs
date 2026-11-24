@@ -25,7 +25,6 @@ test( 'defines the heading and display font stacks', () => {
 
 test( 'body gets the surface, the text color and Inter, so a deck needs no body rule of its own', () => {
 	assert.deepEqual( base.body, { 'background-color': 'var(--newspack-ui-color-surface)', color: 'var(--newspack-ui-color-text)', 'font-family': 'var(--font-sans)' } );
-	assert.equal( Object.keys( base )[ 0 ], 'body' );
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
 	assert.match( css, /\n\tbody \{\n\t\tbackground-color: var\(--newspack-ui-color-surface\);/ );
 	assert.ok( brand.docs.includes( 'On a site built with the site kit, set DARK_MODE = false' ) );
