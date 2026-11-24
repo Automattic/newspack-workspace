@@ -25,10 +25,16 @@ class Fields {
 	protected static $all_fields = [];
 
 	/**
+	 * Whether the registry has been built for this request.
+	 *
+	 * @var bool
+	 */
+	protected static $is_registered = false;
+
+	/**
 	 * Initializes default fields.
 	 */
 	public static function init() {
-		\add_action( 'init', [ __CLASS__, 'register_fields' ] );
 		\add_action( 'set_object_terms', [ __CLASS__, 'on_post_budget_update' ], 10, 2 );
 		\add_action( 'save_post', [ __CLASS__, 'on_post_update' ] );
 
@@ -38,9 +44,31 @@ class Fields {
 	}
 
 	/**
+	 * Build the registry on first read, so requests that never touch a field
+	 * don't pay for querying budgets, statuses and network sites.
+	 *
+	 * Reads before init:10 return nothing and leave the registry unbuilt:
+	 * taxonomies register at init:5 and integrations add their field filters
+	 * by init:10, and a field built too early would stay disabled or missing
+	 * for the rest of the request.
+	 */
+	protected static function maybe_register_fields() {
+		global $wp_filter;
+		if ( self::$is_registered || ! \did_action( 'init' ) ) {
+			return;
+		}
+		if ( \doing_action( 'init' ) && $wp_filter['init']->current_priority() < 10 ) {
+			return;
+		}
+		// Set first: a field filter that reads the registry gets an empty list, not a rebuild.
+		self::$is_registered = true;
+		self::register_fields();
+	}
+
+	/**
 	 * Register fields.
 	 */
-	public static function register_fields() {
+	protected static function register_fields() {
 		$default_fields_config  = self::get_default_fields_config();
 		$protected_field_slugs = [ 'id', 'metadata' ];
 
@@ -235,6 +263,7 @@ class Fields {
 				'description'        => __( 'The user who published the story online.', 'newspack-story-budget' ),
 				'is_editable'        => false,
 				'is_sortable'        => true,
+				'is_filterable'      => 'yes',
 				'name'               => __( 'Published by', 'newspack-story-budget' ),
 				'post_save_callback' => [ __CLASS__, 'get_published_user' ],
 				'slug'               => 'published_by',
@@ -278,8 +307,9 @@ class Fields {
 			[
 				'description'             => __( 'The status of the post in WordPress.', 'newspack-story-budget' ),
 				'get_value_callback'      => [ __CLASS__, 'get_post_wp_status' ],
+				'options'                 => [ __CLASS__, 'get_post_wp_status_options' ],
 				'is_editable'             => false,
-				'is_filterable'           => 'always',
+				'is_filterable'           => 'yes',
 				'name'                    => __( 'WP Status', 'newspack-story-budget' ),
 				'show_in_table'           => true,
 				'slug'                    => 'wp_status',
@@ -299,6 +329,8 @@ class Fields {
 	 * @return \Newspack_Story_Budget\Fields\Abstract_Field|array[] Array of field objects or info.
 	 */
 	public static function get_all_fields( $as_array = false ) {
+		self::maybe_register_fields();
+
 		// Sort fields by default_order.
 		$sorted_fields = array_values( self::$all_fields );
 		uasort(
@@ -328,6 +360,8 @@ class Fields {
 	 * @return \Newspack_Story_Budget\Fields\Abstract_Field|array The field object or info.
 	 */
 	public static function get_field( $slug, $as_array = false ) {
+		self::maybe_register_fields();
+
 		if ( ! isset( self::$all_fields[ $slug ] ) ) {
 			return null;
 		}
@@ -652,11 +686,14 @@ class Fields {
 	}
 
 	/**
-	 * Get the last modified time of the post.
+	 * Get the last modified time of the story: the later of the post's own
+	 * modified time and the last time a story field was saved. Story fields are
+	 * post meta and terms, which don't touch `post_modified`, and bumping it
+	 * would move a published post's public "updated" date for an editorial change.
 	 *
 	 * @param int $post_id The post ID.
 	 *
-	 * @return int The post's last modified time in UNIX format.
+	 * @return int The story's last modified time in UNIX format.
 	 */
 	public static function get_modified_time( $post_id = null ) {
 		if ( ! $post_id ) {
@@ -666,7 +703,10 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return '';
 		}
-		return \get_post_modified_time( 'U', true, $post_id );
+		$post_modified  = (int) \get_post_modified_time( 'U', true, $post_id );
+		$field_modified = (int) \get_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', true );
+		$modified       = max( $post_modified, $field_modified );
+		return $modified ? $modified : '';
 	}
 
 	/**
@@ -782,6 +822,24 @@ class Fields {
 			require_once ABSPATH . 'wp-admin/includes/post.php';
 		}
 		return (bool) \wp_check_post_lock( $post_id );
+	}
+
+	/**
+	 * The WordPress post statuses a story can have, with the labels WordPress
+	 * registers for them.
+	 *
+	 * @return array[] Options with `value` and `label`.
+	 */
+	public static function get_post_wp_status_options() {
+		$options = [];
+		foreach ( Budgets::STORY_POST_STATUSES as $status ) {
+			$status_object = \get_post_status_object( $status );
+			$options[]     = [
+				'value' => $status,
+				'label' => $status_object ? $status_object->label : $status,
+			];
+		}
+		return $options;
 	}
 
 	/**

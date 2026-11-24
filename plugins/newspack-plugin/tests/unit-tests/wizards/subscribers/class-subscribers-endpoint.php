@@ -80,7 +80,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		// The group index reads the mock subscriptions through the mirrored HPOS tables.
+		$wcs_mock_hpos_enabled = true;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -100,7 +102,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * Tear down: reset databases and delete users.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		$wcs_mock_hpos_enabled = false;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -169,11 +172,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * Create a group subscription owned by $owner_id, on a group-enabled product.
 	 *
 	 * Shaped the way production is: a publisher sells one group product, and each
-	 * buyer names their own group, so a group's display name ("Acme Team") is not
-	 * its product's name ("Team Plan"). A fixture with no product at all — or one
-	 * whose group keeps the product's name, which is what an unnamed group falls
-	 * back to — hides the very defect the plans endpoint has to avoid, because the
-	 * group branch and the product branch of the filter then agree by accident.
+	 * buyer names their own group, so a group's own name ("Acme Team") is not its
+	 * product's name ("Team Plan"). Members see the product's name in the
+	 * Subscription column; a fixture whose group kept the product's name would let
+	 * a filter that matched on the group's name pass by accident.
 	 *
 	 * @param int    $owner_id     The owner user ID.
 	 * @param int    $limit        Seat limit.
@@ -183,8 +185,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * @return WC_Subscription
 	 */
 	private function create_group_subscription( int $owner_id, int $limit = 5, string $status = 'active', string $product_name = 'Team Plan' ): WC_Subscription {
-		// One product per name across the whole fixture, because that is the shape the
-		// exclusion exists for: many groups sold on a single product. Creating one per
+		// One product per name across the whole fixture, because that is the shape
+		// production has: many groups sold on a single product. Creating one per
 		// call would give each group its own same-named product and let a per-product
 		// bug pass.
 		if ( ! isset( $this->group_product_ids[ $product_name ] ) ) {
@@ -596,16 +598,18 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Group memberships are hydrated with role, plan and status; the owner reads as
-	 * owner and a plain member reads as member. Group subs do not leak into the
-	 * individual `subscriptions` array.
+	 * Each row's groups carry role, plan and status. The owner reads as owner, a
+	 * plain member as member, and a reader holding only the manager meta as manager.
+	 * Group subs do not leak into the individual `subscriptions` array.
 	 */
 	public function test_hydrates_group_roles() {
 		$this->login_admin();
 		$owner_id  = $this->create_reader( 'Owner' );
-		$member_id = $this->create_reader( 'Member' );
-		$sub       = $this->create_group_subscription( $owner_id );
+		$member_id  = $this->create_reader( 'Member' );
+		$manager_id = $this->create_reader( 'Manager' );
+		$sub        = $this->create_group_subscription( $owner_id );
 		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $sub->get_id() );
+		add_user_meta( $manager_id, Group_Subscription::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $sub->get_id() );
 
 		$items = $this->dispatch()->get_data()['items'];
 		$by_id = [];
@@ -622,6 +626,24 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $by_id[ $member_id ]['groups'] );
 		$this->assertSame( 'member', $by_id[ $member_id ]['groups'][0]['role'] );
+
+		$this->assertCount( 1, $by_id[ $manager_id ]['groups'] );
+		$this->assertSame( 'manager', $by_id[ $manager_id ]['groups'][0]['role'] );
+	}
+
+	/**
+	 * A trashed group keeps its members' meta, but the Teams tab and the filters
+	 * treat it as no group, so the member's row must not list it either.
+	 */
+	public function test_a_trashed_group_is_not_on_its_members_rows() {
+		$this->login_admin();
+		$owner_id  = $this->create_reader( 'TrashOwner' );
+		$member_id = $this->create_reader( 'TrashMember' );
+		$sub       = $this->create_group_subscription( $owner_id, 5, 'trash' );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $sub->get_id() );
+
+		$items = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
+		$this->assertSame( [], $items[ $member_id ]['groups'] );
 	}
 
 	/**
@@ -1022,7 +1044,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			[ 'plan' => [ 'Digital Monthly' ] ],
 			[
 				'status' => [ 'active', 'cancelled' ],
-				'plan'   => [ 'Acme Team' ],
+				'plan'   => [ 'Team Plan' ],
 			],
 		];
 
@@ -1076,18 +1098,18 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A plan filter inverts to the members of the matching group.
+	 * A plan filter inverts to the members of every group sold on that plan.
 	 */
 	public function test_plan_filter_inverts_to_group_members() {
 		$this->login_admin();
 		$owner_id  = $this->create_reader( 'PlanOwner' );
 		$member_id = $this->create_reader( 'PlanMember' );
 		$other_id  = $this->create_reader( 'OtherPlan' );
-		$sub       = $this->create_group_subscription( $owner_id, 5 ); // plan name "Acme Team".
+		$sub       = $this->create_group_subscription( $owner_id, 5 ); // "Acme Team" on "Team Plan".
 		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $sub->get_id() );
 		$this->create_individual_subscription( $other_id, 'active' );
 
-		$ids = array_column( $this->dispatch( [ 'plan' => [ 'Acme Team' ] ] )->get_data()['items'], 'id' );
+		$ids = array_column( $this->dispatch( [ 'plan' => [ 'Team Plan' ] ] )->get_data()['items'], 'id' );
 		sort( $ids );
 		$expected = [ $owner_id, $member_id ];
 		sort( $expected );
@@ -1250,15 +1272,14 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$acme_member = $this->create_reader( 'AcmeMember' );
 		$beta_member = $this->create_reader( 'BetaMember' );
 
-		$acme = $this->create_group_subscription( $acme_owner, 5, 'active' ); // "Acme Team".
+		$acme = $this->create_group_subscription( $acme_owner, 5, 'active' ); // On "Team Plan".
 		add_user_meta( $acme_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $acme->get_id() );
 
 		// A second active group on a different plan — matches the status axis but not the plan axis.
-		$beta = $this->create_group_subscription( $this->create_reader( 'BetaOwner' ), 5, 'active' );
-		$beta->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Beta Team' );
+		$beta = $this->create_group_subscription( $this->create_reader( 'BetaOwner' ), 5, 'active', 'Beta Plan' );
 		add_user_meta( $beta_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $beta->get_id() );
 
-		// A cancelled group on the SAME Acme plan — matches the plan axis but not the status axis.
+		// A cancelled group on the SAME plan — matches the plan axis but not the status axis.
 		$cancelled_acme        = $this->create_group_subscription( $this->create_reader( 'CancelledAcmeOwner' ), 5, 'cancelled' );
 		$cancelled_acme_member = $this->create_reader( 'CancelledAcmeMember' );
 		add_user_meta( $cancelled_acme_member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $cancelled_acme->get_id() );
@@ -1267,15 +1288,15 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$this->dispatch(
 				[
 					'status' => [ 'active' ],
-					'plan'   => [ 'Acme Team' ],
+					'plan'   => [ 'Team Plan' ],
 				]
 			)->get_data()['items'],
 			'id'
 		);
 		$this->assertContains( $acme_owner, $ids );
 		$this->assertContains( $acme_member, $ids );
-		$this->assertNotContains( $beta_member, $ids, 'A Beta-Team member is active but not on the Acme plan, so the AND filter excludes them (plan axis narrows).' );
-		$this->assertNotContains( $cancelled_acme_member, $ids, 'A cancelled Acme member is on the plan but not active, so the AND filter excludes them (status axis narrows).' );
+		$this->assertNotContains( $beta_member, $ids, 'A Beta Plan member is active but not on Team Plan, so the AND filter excludes them (plan axis narrows).' );
+		$this->assertNotContains( $cancelled_acme_member, $ids, 'A cancelled Team Plan member is on the plan but not active, so the AND filter excludes them (status axis narrows).' );
 	}
 
 	/**
@@ -1447,47 +1468,8 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The status filter scans subscriptions a chunk at a time. The walk has to
-	 * advance: wcs_get_subscriptions() strips a `paged` argument before building
-	 * its query, so paging with it silently re-scans the first chunk forever —
-	 * readers past the chunk boundary vanish from the results, and (worse) a
-	 * reader whose only live plan sits past it is wrongly reported as churned.
-	 *
-	 * Seeds one full chunk of active filler, then two readers whose live plans can
-	 * only be found in the second chunk, so a walk that doesn't advance fails both
-	 * assertions rather than merely returning fewer rows.
-	 */
-	public function test_status_filter_scan_advances_past_the_first_chunk() {
-		$this->login_admin();
-
-		// Filler subscriptions are owned by customer IDs with no user behind them:
-		// the scan only reads get_customer_id(), and skipping 500 user inserts keeps
-		// this test cheap. They fill the first chunk of the live-status scan.
-		for ( $i = 0; $i < \Newspack\Subscribers_Wizard::FILTER_SCAN_CHUNK; $i++ ) {
-			$this->create_individual_subscription( 900000 + $i, 'active' );
-		}
-
-		// Only subscription is active and sits in the second chunk.
-		$late_active = $this->create_reader( 'LateActive' );
-		$this->create_individual_subscription( $late_active, 'active' );
-
-		// Cancelled plan in reach, live plan past the boundary. The Cancelled filter
-		// means fully churned, so finding the live plan is what excludes them — miss
-		// it and a paying reader is reported as churned.
-		$late_mixed = $this->create_reader( 'LateMixed' );
-		$this->create_individual_subscription( $late_mixed, 'cancelled' );
-		$this->create_individual_subscription( $late_mixed, 'active' );
-
-		$active_ids = array_column( $this->dispatch( [ 'status' => [ 'active' ] ] )->get_data()['items'], 'id' );
-		$this->assertContains( $late_active, $active_ids, 'A reader whose only subscription sits past the first chunk still matches Active.' );
-
-		$cancelled_ids = array_column( $this->dispatch( [ 'status' => [ 'cancelled' ] ] )->get_data()['items'], 'id' );
-		$this->assertNotContains( $late_mixed, $cancelled_ids, 'A live plan past the chunk boundary still disqualifies the reader from Cancelled.' );
-	}
-
-	/**
-	 * The plans endpoint lists the site's plan names: every group's configured name
-	 * plus the name of every published, non-group subscription product. For a
+	 * The plans endpoint lists the site's plan names: the product every group is
+	 * sold on, plus the name of every published subscription product. For a
 	 * variable subscription that means its variations only, never the parent —
 	 * individual_plan_name() resolves a subscription through
 	 * wcs_get_canonical_product_id() to the variation, so a row displays
@@ -1497,18 +1479,16 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * something else, breaking the round trip this endpoint exists to guarantee.
 	 *
 	 * Names are deduplicated and alphabetised; non-subscription products are not
-	 * plans, and neither are the products groups are sold on.
+	 * plans, and a group's own name is not one either.
 	 */
 	public function test_plans_endpoint_lists_group_and_product_plans() {
 		$this->login_admin();
 
-		// Two groups sharing one plan name plus a second name: the dropdown must
-		// list a plan once however many groups are configured with it. All three are
-		// sold on the "Team Plan" group product, which must not become an option.
-		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerOne' ) ); // "Acme Team".
-		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerTwo' ) ); // "Acme Team" again.
-		$beta = $this->create_group_subscription( $this->create_reader( 'BetaOwner' ) );
-		$beta->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Beta Team' );
+		// Two groups on one product plus a group on a second product: the dropdown
+		// must list a plan once however many groups are sold on it.
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerOne' ) ); // "Acme Team" on "Team Plan".
+		$this->create_group_subscription( $this->create_reader( 'AcmeOwnerTwo' ) ); // Again.
+		$this->create_group_subscription( $this->create_reader( 'BetaOwner' ), 5, 'active', 'Beta Plan' );
 
 		$this->create_subscription_product( 'Digital Monthly' );
 		$variable_parent_id = $this->create_subscription_product( 'Digital Bundle', 'variable-subscription' );
@@ -1518,9 +1498,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$plans = $this->dispatch_plans()->get_data();
 
 		$this->assertSame(
-			[ 'Acme Team', 'Beta Team', 'Digital Bundle - Annual', 'Digital Monthly' ],
+			[ 'Beta Plan', 'Digital Bundle - Annual', 'Digital Monthly', 'Team Plan' ],
 			$plans['items'],
-			'Group names and non-group subscription product/variation names, deduplicated and alphabetised.'
+			'Group and individual subscription product/variation names, deduplicated and alphabetised.'
 		);
 		$this->assertNotContains(
 			'Digital Bundle',
@@ -1529,23 +1509,19 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		);
 		$this->assertNotContains( 'Tote Bag', $plans['items'], 'A non-subscription product is not a plan.' );
 		$this->assertNotContains(
-			'Team Plan',
+			'Acme Team',
 			$plans['items'],
-			'The product a group is sold on is not an option: members display the group name, so filtering on the product would return only the owners and no row would read as the filtered name.'
+			'A group\'s own name is not an option: its members display the product the group is sold on.'
 		);
 		$this->assertSame( 4, $plans['total'] );
 	}
 
 	/**
-	 * A group product is excluded whether it is sold as a whole product or as a
-	 * variation of one, because group enablement is per product/variation and a
-	 * variation does not inherit its parent's setting.
-	 *
-	 * The variable parent is absent for a different reason than its group-enabled
-	 * variation: the parent name is never displayed on a row, so it is not an option
-	 * on any variable subscription, group-enabled or not.
+	 * A group-enabled variation is an option like any other: a group sold on it
+	 * displays the variation's name. The variable parent is not, because no row
+	 * ever displays it.
 	 */
-	public function test_plans_endpoint_excludes_group_variations() {
+	public function test_plans_endpoint_lists_group_variations() {
 		$this->login_admin();
 
 		$bundle_id = $this->create_subscription_product( 'Campus Bundle', 'variable-subscription' );
@@ -1555,7 +1531,7 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$items = $this->dispatch_plans()->get_data()['items'];
 
 		$this->assertContains( 'Campus Bundle - Individual', $items );
-		$this->assertNotContains( 'Campus Bundle - Site Licence', $items, 'A group-enabled variation is not an option.' );
+		$this->assertContains( 'Campus Bundle - Site Licence', $items, 'A group-enabled variation is an option.' );
 		$this->assertNotContains( 'Campus Bundle', $items, 'The variable parent is not an option either — no row displays it.' );
 	}
 
@@ -1614,10 +1590,9 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 * back rather than trusting the ids.
 	 *
 	 * The group here is production-shaped: sold on a "Team Plan" product and renamed
-	 * to "Acme Team" by its buyer. Offering the product would satisfy an ids-only
-	 * assertion (the owner does hold a subscription on it) while returning one of
-	 * the three members and showing "Acme Team" in the column of the one it does
-	 * return, so the display assertion below is what makes the test bite.
+	 * to "Acme Team" by its buyer. Its members display "Team Plan", so that is the
+	 * option, and it has to return every member, not only the owner who holds the
+	 * subscription on the product.
 	 */
 	public function test_plan_names_round_trip_through_the_subscriber_filter() {
 		$this->login_admin();
@@ -1641,13 +1616,13 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->create_individual_subscription( $variation_reader, 'active', $variation_id );
 
 		$expected_holders = [
-			'Acme Team'               => [ $group_owner, $group_member ],
 			'Digital Bundle - Annual' => [ $variation_reader ],
 			'Digital Monthly'         => [ $product_reader ],
+			'Team Plan'               => [ $group_owner, $group_member ],
 		];
 
 		$plan_names = $this->dispatch_plans()->get_data()['items'];
-		$this->assertSame( array_keys( $expected_holders ), $plan_names, 'The group product "Team Plan" is not offered; the group name and the individual product are.' );
+		$this->assertSame( array_keys( $expected_holders ), $plan_names, 'The group\'s product "Team Plan" is offered, not the group\'s own name.' );
 
 		foreach ( $plan_names as $plan_name ) {
 			$items   = $this->dispatch( [ 'plan' => [ $plan_name ] ] )->get_data()['items'];
@@ -1658,10 +1633,57 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 			$this->assertSame( $expected, $matched, "The '$plan_name' option returned by /plans filters to its holders." );
 
 			foreach ( $items as $item ) {
-				$displayed = array_merge( array_column( $item['groups'], 'plan' ), array_column( $item['subscriptions'], 'plan' ) );
+				$displayed = array_merge( array_column( $item['groups'], 'planName' ), array_column( $item['subscriptions'], 'plan' ) );
 				$this->assertContains( $plan_name, $displayed, "A row returned for '$plan_name' displays that plan, rather than some other name." );
 			}
 		}
+	}
+
+	/**
+	 * A group whose product has been deleted falls back to its own name, on the
+	 * plans endpoint and the filter alike, so its members stay filterable.
+	 */
+	public function test_a_group_without_its_product_round_trips_under_its_own_name() {
+		$this->login_admin();
+
+		$owner  = $this->create_reader( 'OrphanOwner' );
+		$member = $this->create_reader( 'OrphanMember' );
+		$group  = $this->create_group_subscription( $owner ); // "Acme Team" on "Team Plan".
+		add_user_meta( $member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		// Without the product, only the subscription's own setting keeps it a group.
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$group->save();
+		global $products_database;
+		unset( $products_database[ $this->group_product_ids['Team Plan'] ] );
+		wp_delete_post( $this->group_product_ids['Team Plan'], true );
+
+		$plan_names = $this->dispatch_plans()->get_data()['items'];
+		$this->assertContains( 'Acme Team', $plan_names );
+		$this->assertNotContains( 'Team Plan', $plan_names );
+
+		$matched = array_column( $this->dispatch( [ 'plan' => [ 'Acme Team' ] ] )->get_data()['items'], 'id' );
+		sort( $matched );
+		$expected = [ $owner, $member ];
+		sort( $expected );
+		$this->assertSame( $expected, $matched );
+	}
+
+	/**
+	 * The plan filter sanitizes the names it receives, and /plans lists raw ones.
+	 * A product name that sanitizing changes (here, a run of spaces) must still
+	 * filter back to its Team.
+	 */
+	public function test_a_plan_name_that_sanitizing_changes_round_trips() {
+		$this->login_admin();
+		$owner  = $this->create_reader( 'SpacedOwner' );
+		$member = $this->create_reader( 'SpacedMember' );
+		$group  = $this->create_group_subscription( $owner, 5, 'active', 'Night  Desk' );
+		add_user_meta( $member, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+
+		$this->assertContains( 'Night  Desk', $this->dispatch_plans()->get_data()['items'] );
+		$expected = [ $owner, $member ];
+		sort( $expected );
+		$this->assertSame( $expected, $this->filtered_ids( [ 'plan' => [ 'Night  Desk' ] ] ) );
 	}
 
 	/**

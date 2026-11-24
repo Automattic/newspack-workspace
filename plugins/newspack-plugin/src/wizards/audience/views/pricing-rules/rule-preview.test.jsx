@@ -74,7 +74,7 @@ describe( 'RulePreview', () => {
 		render( <RulePreview body={ { simple: { value: 0 } } } /> );
 		await settle();
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
-		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Affected products' ) ).toBeInTheDocument();
 	} );
 
 	// A flat rule's preview can still carry cycles composed in by other active
@@ -111,7 +111,7 @@ describe( 'RulePreview', () => {
 		expect( screen.getByText( '36' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$5.00' ) ).toBeInTheDocument();
 
-		const stats = screen.getByText( 'Products affected' );
+		const stats = screen.getByText( 'Affected products' );
 		const table = screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } );
 		// eslint-disable-next-line no-bitwise
 		expect( stats.compareDocumentPosition( table ) & Node.DOCUMENT_POSITION_FOLLOWING ).toBeTruthy();
@@ -128,7 +128,7 @@ describe( 'RulePreview', () => {
 		apiFetch.mockResolvedValue( response( { preview_limited: true, sample_count: 1, total_matching: 3 } ) );
 		render( <RulePreview body={ {} } /> );
 		await settle();
-		expect( screen.getByText( 'Products affected' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Affected products' ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'region', { name: 'Resulting prices by product and reader segment' } ) ).toBeInTheDocument();
 	} );
 
@@ -170,7 +170,7 @@ describe( 'RulePreview', () => {
 		await settle();
 		expect( screen.getByRole( 'heading', { name: 'No products match this rule' } ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'No products to show.' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Products affected' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Affected products' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'says so when the engine returns no preview', async () => {

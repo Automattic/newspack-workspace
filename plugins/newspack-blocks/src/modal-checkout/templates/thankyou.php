@@ -69,18 +69,7 @@ $after_success_label    = $after_success_params['after_success_button_label'] ??
 ?>
 <div class="woocommerce-order">
 <?php if ( $is_success ) : ?>
-	<div class="modal-checkout-thankyou newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__stack--gap-half newspack-ui__spacing-bottom--5">
-		<?php if ( method_exists( '\Newspack\Newspack_UI_Icons', 'get_svg' ) && \Newspack\Newspack_UI_Icons::get_svg( 'published' ) ) : ?>
-			<span class="newspack-ui__icon newspack-ui__icon--large newspack-ui__icon--success">
-				<?php \Newspack\Newspack_UI_Icons::print_svg( 'published' ); ?>
-			</span>
-		<?php else : ?>
-			<span class="newspack-ui__icon newspack-ui__icon--success">
-				<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<path d="M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z"></path>
-				</svg>
-			</span>
-		<?php endif; ?>
+	<div class="modal-checkout-thankyou newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--align-center newspack-ui__spacing-bottom--5">
 		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
 			<h2 id="modal-checkout-product-details" class="newspack-ui__font--m" tabindex="-1" <?php Checkout_Data::print_data_checkout_attr( $checkout_data ); ?>>
 				<?php echo esc_html( Modal_Checkout::get_modal_checkout_labels( 'checkout_success' ) ); ?>

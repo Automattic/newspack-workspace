@@ -182,4 +182,67 @@ class Test_Statuses extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertEquals( 'permission_denied', $result->get_error_code() );
 	}
+
+	/**
+	 * The five default statuses name the glyphs they have always had.
+	 */
+	public function test_default_statuses_keep_their_icons() {
+		$icons = [];
+		foreach ( Statuses::get_statuses_arrays() as $status ) {
+			$icons[ $status['value'] ] = $status['icon'];
+		}
+		$this->assertSame(
+			[
+				'writing'   => 'draft',
+				'editing'   => 'pending',
+				'factcheck' => 'search',
+				'approved'  => 'check',
+				'published' => 'active',
+			],
+			$icons
+		);
+	}
+
+	/**
+	 * A custom status that names a glyph passes it through, and one that does not,
+	 * or names an unknown one, passes an empty string for the neutral glyph.
+	 */
+	public function test_custom_status_icons() {
+		$add_statuses = function( $statuses ) {
+			$statuses[] = [
+				'slug'       => 'legal',
+				'label'      => 'Legal review',
+				'capability' => '',
+				'order'      => 6,
+				'icon'       => 'scheduled',
+			];
+			$statuses[] = [
+				'slug'       => 'plain',
+				'label'      => 'Plain',
+				'capability' => '',
+				'order'      => 7,
+			];
+			$statuses[] = [
+				'slug'       => 'odd',
+				'label'      => 'Odd',
+				'capability' => '',
+				'order'      => 8,
+				'icon'       => 'rocket',
+			];
+			return $statuses;
+		};
+		add_filter( 'newspack_story_budget_statuses', $add_statuses );
+		delete_option( 'np_story_budget_default_statuses_initialized' );
+		Statuses::register_default_statuses();
+
+		$icons = [];
+		foreach ( Statuses::get_statuses_arrays() as $status ) {
+			$icons[ $status['value'] ] = $status['icon'];
+		}
+		remove_filter( 'newspack_story_budget_statuses', $add_statuses );
+
+		$this->assertSame( 'scheduled', $icons['legal'] );
+		$this->assertSame( '', $icons['plain'] );
+		$this->assertSame( '', $icons['odd'] );
+	}
 }

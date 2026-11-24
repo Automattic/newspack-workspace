@@ -1,0 +1,28 @@
+{
+	"name": "newspack-ui-shadcn",
+	"version": "0.1.0",
+	"description": "A shadcn theme and registry built from the newspack-ui tokens",
+	"license": "GPL-2.0-or-later",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=22.18.0"
+	},
+	"exports": {
+		"./theme.css": "./dist/theme.css",
+		"./brand.css": "./dist/brand.css",
+		"./dark.css": "./dist/newspack-ui-dark.css",
+		"./mapping.json": "./dist/mapping.json",
+		"./registry/*": "./dist/registry/*",
+		"./site-kit/*": "./dist/site-kit/*"
+	},
+	"scripts": {
+		"test": "node --test test/*.test.mjs",
+		"build": "node scripts/tokens.mjs && node dark-palette/generate.mjs && node scripts/build.mjs && node scripts/build-brand.mjs"
+	},
+	"devDependencies": {
+		"culori": "^4.0.2",
+		"postcss": "^8.5.15",
+		"sass": "^1.100.0"
+	}
+}

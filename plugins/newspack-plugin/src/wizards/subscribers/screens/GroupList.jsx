@@ -2,11 +2,10 @@
 /**
  * L0 — Group list (DataViews, full-width).
  *
- * Admin-facing list of every group/team subscription on the site. Unlike the
- * subscriber list, the group set is small enough to load in full and filter,
- * sort and paginate client-side. Filterable by status and subscription,
- * sortable, and searchable by group name, owner name, owner email and
- * subscription.
+ * Admin-facing list of every group/team subscription on the site. A site can
+ * hold thousands of groups, so the list is server-paginated like the subscriber
+ * list: the endpoint filters by status and subscription, sorts, and searches by
+ * group name, owner name, owner email and subscription.
  *
  * A row is a group, so clicking it opens that group's detail screen inside the
  * wizard. The product name in the Subscription column keeps its own link to the
@@ -21,24 +20,25 @@
 import { useLayoutEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
-import { filterSortAndPaginate } from '@wordpress/dataviews';
 import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Badge } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, DataViews, Router, StatusIndicator, Waiting } from '../../../../packages/components/src';
+import { Button, DataViews, Router, StatusBadge, Waiting } from '../../../../packages/components/src';
 import { fmtDate } from '../format';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
+import RefreshOverlay, { useAnnounceRefresh } from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
-import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
-import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel, groupNameLabel } from '../labels';
+import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
+
+const FIT_COLUMNS = [ 'status' ];
 
 const { useHistory } = Router;
 
@@ -49,15 +49,14 @@ const DEFAULT_VIEW = {
 	sort: { field: 'createdAt', direction: 'desc' },
 	search: '',
 	// `product` is visible by default because it is the only place a group's
-	// subscription is reachable — see the name field below for why the title
+	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
-	fields: [ 'owner', 'product', 'members', 'status', 'createdAt' ],
-	// Hide cancelled groups by default: they add noise with little value. Still
-	// reachable by ticking "Cancelled" in the Status filter (or clearing it).
-	// A group awaiting its first payment sits in `pending`, so it stays visible.
-	filters: [ { field: 'status', operator: 'isAny', value: [ 'active', 'pending', 'on-hold' ] } ],
+	fields: [ 'status', 'product', 'members', 'createdAt' ],
+	// Hide cancelled groups by default: they add noise with little value.
+	// Clearing the Status filter brings them back.
+	filters: [ { field: 'status', operator: 'isNot', value: 'cancelled' } ],
 	layout: {},
-	titleField: 'name',
+	titleField: 'owner',
 };
 
 export default function GroupList() {
@@ -66,7 +65,7 @@ export default function GroupList() {
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const { groups, loading: groupsLoading, error, reload } = useGroups();
+	const { groups, total, pages, products, loading: groupsLoading, settled, error, reload } = useGroups( view );
 
 	// A row is a group, so it opens that group's detail screen in the wizard. The
 	// owner's own screen is reachable from the group detail rather than from here
@@ -78,46 +77,31 @@ export default function GroupList() {
 		}
 	};
 
-	// Resolve owner avatar URLs, keyed by group id. The table renders immediately
-	// with the avatar placeholder and each avatar fills in as it resolves.
-	const ownerEmails = useMemo( () => groups.map( g => g.owner?.email ), [ groups ] );
-	const { avatars: avatarsByEmail } = useAvatars( ownerEmails );
-	const avatars = useMemo( () => {
-		const byId = {};
-		groups.forEach( g => {
-			const email = g.owner?.email;
-			byId[ g.id ] = email ? avatarsByEmail[ email ] : undefined;
-		} );
-		return byId;
-	}, [ groups, avatarsByEmail ] );
-
-	// Subscription filter options come from the loaded groups, which are the full
-	// set, not from /plans: that endpoint also lists individual plans, which match
-	// no group. Distinct, in first-seen order.
-	const productElements = useMemo(
-		() => [ ...new Set( groups.map( g => g.product ).filter( Boolean ) ) ].map( n => ( { value: n, label: n } ) ),
-		[ groups ]
-	);
+	// Subscription filter options: every product behind a group on the site, as
+	// the endpoint lists them, not /plans, which also lists individual plans that
+	// match no group.
+	const productElements = useMemo( () => products.map( n => ( { value: n, label: n } ) ), [ products ] );
 
 	const fields = useMemo(
 		() => [
 			{
-				id: 'name',
-				label: groupNameLabel(),
+				id: 'owner',
+				label: __( 'Owner', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				// The group's own name; the endpoint already falls back to the
-				// product name for a group that was never renamed.
-				getValue: ( { item } ) => item.plan || '',
+				getValue: ( { item } ) => item.owner?.name || '',
+				// Owners tell groups apart where group names repeat, so the owner leads.
+				// The group's name sits under it only when it was renamed: an unnamed
+				// group takes its subscription's name, which the next column shows.
+				//
 				// This is the DataViews title field, which ColumnPrimary wraps in an
-				// ItemClickWrapper: a role="button" whose own Enter/Space handler
-				// fires onClickItem regardless of where the key originated, so a link
-				// nested here resolves to two destinations at once, and ARIA treats
-				// descendants of role="button" as presentational. The subscription's
-				// link lives in the `product` column below, outside the wrapper.
+				// ItemClickWrapper: a role="button" whose own Enter/Space handler fires
+				// onClickItem regardless of where the key originated, so a link nested
+				// here would resolve to two destinations at once. The subscription's
+				// link lives in the `product` column instead.
 				render: ( { item } ) => (
 					<div data-group-id={ item.id }>
 						<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
-							<span>{ item.plan || '—' }</span>
+							<span>{ item.owner?.name || '—' }</span>
 							{ item.seatRequest && (
 								<Badge intent="medium">
 									{ item.seatRequest.status === 'awaiting-payment'
@@ -126,38 +110,9 @@ export default function GroupList() {
 								</Badge>
 							) }
 						</HStack>
+						{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
 					</div>
 				),
-				enableSorting: true,
-			},
-			{
-				id: 'owner',
-				label: __( 'Owner', 'newspack-plugin' ),
-				enableGlobalSearch: true,
-				getValue: ( { item } ) => item.owner?.name || '',
-				// The secondary line is the owner's email, mirroring the subscriber
-				// list's title cell.
-				render: ( { item } ) => {
-					const details = (
-						<div>
-							<div>{ item.owner ? item.owner.name : '—' }</div>
-							<div className="newspack-subscribers__email">{ item.owner?.email }</div>
-						</div>
-					);
-					if ( ! SHOW_AVATARS ) {
-						return details;
-					}
-					return (
-						<HStack spacing={ 3 } justify="flex-start" alignment="center">
-							{ avatars[ item.id ] ? (
-								<img className="newspack-subscribers__avatar" src={ avatars[ item.id ] } alt="" width={ 32 } height={ 32 } />
-							) : (
-								<span className="newspack-subscribers__avatar" aria-hidden="true" />
-							) }
-							{ details }
-						</HStack>
-					);
-				},
 				enableSorting: true,
 			},
 			{
@@ -179,6 +134,9 @@ export default function GroupList() {
 				label: __( 'Members', 'newspack-plugin' ),
 				// The endpoint returns the owner-inclusive member count directly.
 				getValue: ( { item } ) => item.members,
+				// The count comes from each group's people, which the endpoint reads
+				// per row on the page it returns, so it cannot sort the whole list by it.
+				enableSorting: false,
 				// A seat limit of 0 means the group is uncapped, so there is no
 				// denominator to show against the count.
 				render: ( { item } ) => (
@@ -189,40 +147,26 @@ export default function GroupList() {
 							  sprintf( __( '%s / Unlimited', 'newspack-plugin' ), item.members ) }
 					</span>
 				),
-				enableSorting: true,
 			},
 			{
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				elements: Object.entries( STATUS_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
-				filterBy: { operators: [ 'isAny' ] },
+				filterBy: { operators: [ 'is', 'isNot' ] },
 				getValue: ( { item } ) => item.status,
-				render: ( { item } ) => (
-					<StatusIndicator status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusIndicator>
-				),
+				// The endpoint sorts by name, owner and created date only.
+				enableSorting: false,
+				render: ( { item } ) => <StatusBadge status={ STATUS_INDICATORS[ item.status ] }>{ STATUS_LABELS[ item.status ] }</StatusBadge>,
 			},
 			{
 				id: 'createdAt',
 				label: __( 'Created', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.createdAt,
-				render: ( { item } ) => <span>{ fmtDate( item.createdAt ) }</span>,
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ fmtDate( item.createdAt ) }</span>,
 				enableSorting: true,
 			},
 		],
-		[ avatars, productElements ]
-	);
-
-	// The owner's email shows under their name, so search matches it too. It has
-	// no column of its own, so it joins the search as a query-only field rather
-	// than going into `fields`, where DataViews would offer it as a column.
-	const queryFields = useMemo(
-		() => [ ...fields, { id: 'ownerEmail', enableGlobalSearch: true, getValue: ( { item } ) => item.owner?.email || '' } ],
-		[ fields ]
-	);
-
-	const { data: processedData, paginationInfo } = useMemo(
-		() => filterSortAndPaginate( groups, view, queryFields ),
-		[ groups, view, queryFields ]
+		[ productElements ]
 	);
 
 	// Whole-row click → the group's detail screen (DataViews only wires up the
@@ -251,8 +195,6 @@ export default function GroupList() {
 		}
 	};
 
-	const total = paginationInfo?.totalItems ?? 0;
-
 	// Surface the group count in the header breadcrumb, e.g. "/ Groups (14)".
 	// Before paint: this carries the width override, and an error arrives outside a
 	// React event, so a passive effect would paint full-bleed for one frame first.
@@ -273,7 +215,17 @@ export default function GroupList() {
 
 	const { retryRef, retry } = useRetryFocus( { settled: ! groupsLoading, failed: Boolean( error ), reload } );
 
-	if ( groupsLoading ) {
+	// Only the load that has nothing to show blanks the screen. Search, filters and
+	// sorting are refetches, and unmounting DataViews for them would take the
+	// search box's focus with it. See the subscriber list, which does the same.
+	//
+	// A refetch with rows showing covers the screen with a spinner (see
+	// RefreshOverlay). With no rows to cover, DataViews' own spinner stands in for
+	// the empty state.
+	const isRefreshing = groupsLoading && groups.length > 0;
+	useAnnounceRefresh( isRefreshing, groupCountLabel( total ) );
+
+	if ( groupsLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
 				<Waiting isCenter />
@@ -299,19 +251,23 @@ export default function GroupList() {
 
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick }>
+		<div className="newspack-subscribers__clickable-rows" onClick={ onRowClick } aria-busy={ isRefreshing || undefined }>
 			<DataViews
-				data={ processedData }
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ groupCountLabel }
+				data={ groups }
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
-				paginationInfo={ paginationInfo }
+				isLoading={ groupsLoading && ! isRefreshing }
+				paginationInfo={ { totalItems: total, totalPages: pages } }
 				defaultLayouts={ { table: {} } }
 				getItemId={ item => item.id }
 				onClickItem={ openGroup }
 				search
 				inlineFilters
 			/>
+			{ isRefreshing && <RefreshOverlay /> }
 		</div>
 	);
 }

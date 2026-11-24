@@ -27,7 +27,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Grid, SectionHeader, SelectControl, TextControl } from '../../../../../../packages/components/src';
+import { SelectControl, SplitSection, TextControl } from '../../../../../../packages/components/src';
 import BannerStyleControl, { getBannerPreviewProps } from '../../../components/banner-style';
 
 interface CountdownBannerProps {
@@ -109,13 +109,11 @@ export default function CountdownBanner( {
 
 	return (
 		<Stack direction="column" gap="xl">
-			<Grid columns={ 2 } noMargin>
-				<Stack direction="column" gap="xl">
-					<SectionHeader
-						heading={ 2 }
-						title={ __( 'Countdown Banner', 'newspack-plugin' ) }
-						description={ __( 'Tell readers how many free views they have left before a gate applies.', 'newspack-plugin' ) }
-					/>
+			<SplitSection.Root>
+				<SplitSection.Header
+					title={ __( 'Countdown Banner', 'newspack-plugin' ) }
+					description={ __( 'Tell readers how many free views they have left before a gate applies.', 'newspack-plugin' ) }
+				>
 					{ isEnabled && ! hasActiveMetering && (
 						<Notice status="warning" isDismissible={ false } spokenMessage="">
 							{ __(
@@ -124,8 +122,8 @@ export default function CountdownBanner( {
 							) }
 						</Notice>
 					) }
-				</Stack>
-				<Stack direction="column" gap="xl">
+				</SplitSection.Header>
+				<SplitSection.Content>
 					<ToggleGroupControl
 						label={ __( 'Banner', 'newspack-plugin' ) }
 						value={ isEnabled ? 'enabled' : 'disabled' }
@@ -196,8 +194,8 @@ export default function CountdownBanner( {
 							<BannerStyleControl settings={ countdown } onChange={ update } disabled={ ! isEnabled } />
 						</Stack>
 					</fieldset>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<div
 				className={ classnames( 'newspack-countdown-banner__preview', {
 					'newspack-countdown-banner__preview--disabled': ! isEnabled,

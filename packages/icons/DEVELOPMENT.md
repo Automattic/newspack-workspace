@@ -36,13 +36,15 @@ Follow this step-by-step process when selecting an icon:
 All icons in this package are designed on a **24×24 grid/viewbox**. This ensures consistency and scalability:
 
 - **Design grid:** All icons use `viewBox="0 0 24 24"`
+- **Stroke:** Icons are stroke-based, matching `@wordpress/icons`. The root `<SVG>` sets `style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5"`, and each line is drawn on its centerline. Solid parts of a drawing (dots, letterforms, sparkles, a lock body) are child paths with `fill="currentColor" stroke="none"`. The `newspack` brand mark stays filled.
+- **Color:** Icons follow the CSS `color` of their context. Recolor them with `color`, never `fill`: a `fill` rule on the `svg` loses to the inline `fill: none`, while one with `!important`, or one aimed at the children (`svg path`, `svg *`), fills the outlines solid.
 - **Display flexibility:** Icons can be displayed at different sizes (e.g., 48×48, 40×40) depending on context
 - **Scalability:** SVG format allows crisp rendering at any size
 - **Consistency:** Uniform grid system ensures visual harmony across the icon set
 
 ## Available Icons
 
-This package includes 52 custom icons:
+This package includes 53 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -71,6 +73,7 @@ This package includes 52 custom icons:
 - `emailError` - Email error icon
 - `emailPremium` - Email premium icon
 - `emailSend` - Email send icon
+- `feather` - Feather icon
 - `gift` - Gift icon
 - `hand` - Hand icon
 - `iframe` - Iframe icon
@@ -142,13 +145,15 @@ Edit `includes/class-newspack-ui-icons.php` and add your icon to the `$ui_icons`
 public static $ui_icons = array(
 	// ... existing icons ...
 	'myNewIcon' =>
-		'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--my-new-icon">
+		'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--my-new-icon">
 			<path d="..." />
 		</svg>',
 );
 ```
 
-**Important:** Extract the SVG markup from the React component in `packages/icons/src/` and convert it to a plain SVG string with proper attributes (`aria-hidden="true"`, `focusable="false"`, and a CSS class).
+**Important:** `Newspack_UI_Icons` icons are stroked, like the React icons in `packages/icons/src/` and `@wordpress/icons`. Draw each line on its centerline on the 24×24 grid, and give the root `<svg>` `style="fill:none" stroke="currentColor" stroke-width="1.5"`, `aria-hidden="true"`, `focusable="false"` and a CSS class. The `fill:none` goes in `style` rather than a `fill` attribute because frontend `svg { fill: currentcolor }` rules outrank an attribute but not an inline style. Solid parts of a drawing are child elements with `fill="currentColor" stroke="none"`. Recolor icons with `color`; a `fill` rule aimed at the children (`svg path`, `svg *`) fills the outlines solid. `sanitize_svgs()` lists the elements and attributes `wp_kses()` keeps, so add any new one there.
+
+The icons registered as admin menu icons through `base64_encode( get_svg() )` (`ad`, `collections`, `curatedList`, `email`, `globe`, `newspack` and `people`) stay filled, along with the multicolor `google` logo. WordPress repaints menu icons by rewriting every `fill` and `style` attribute in the SVG, which would fill a stroked outline solid.
 
 #### Step 2: Use Icon in PHP Templates
 

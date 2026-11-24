@@ -67,7 +67,8 @@ describe( 'every screen empty state carries the shell contract', () => {
 	} );
 
 	it.each( sources )( '%s sets the heading level from the shell', ( _name, source ) => {
-		expect( source ).toContain( 'heading={ getEmptyStateHeading() }' );
+		expect( source ).toMatch( /HeadingTag = getEmptyStateHeading\(\) === 1 \? 'h1' : 'h2'/ );
+		expect( source ).toMatch( /<EmptyState\.Title\b[^>]*\brender=\{ <HeadingTag \/> \}/ );
 	} );
 
 	// The trash term defaults to inert, so a screen that holds a count but never passes it

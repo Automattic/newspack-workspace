@@ -386,6 +386,53 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * The Static mode search offers the statuses ticked on the block, to users who can
+	 * edit others' posts. Statuses the block has no checkbox for stay out of the results.
+	 */
+	public function test_specific_posts_search_follows_included_post_statuses() {
+		$post_ids = [];
+		foreach ( [ 'publish', 'draft', 'future', 'private' ] as $status ) {
+			$post_ids[ $status ] = self::factory()->post->create(
+				[
+					'post_title'  => 'Static search ' . $status,
+					'post_status' => $status,
+					'post_date'   => 'future' === $status ? gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) : '',
+				]
+			);
+		}
+
+		$search = function( $statuses ) {
+			$request = new WP_REST_Request( 'GET', '/newspack-blocks/v1/newspack-blocks-specific-posts' );
+			$request->set_param( 'search', 'Static search' );
+			$request->set_param( 'postsToShow', 10 );
+			if ( $statuses ) {
+				$request->set_param( 'includedPostStatuses', $statuses );
+			}
+			return rest_do_request( $request )->get_data();
+		};
+		$search_ids = function( $statuses ) use ( $search ) {
+			$ids = wp_list_pluck( $search( $statuses ), 'id' );
+			sort( $ids );
+			return $ids;
+		};
+		$only_published = [ $post_ids['publish'] ];
+		$all_statuses   = [ 'publish', 'draft', 'future', 'private' ];
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		self::assertSame( $only_published, $search_ids( null ), 'The search stays on published posts by default.' );
+		self::assertSame(
+			[ $post_ids['publish'], $post_ids['draft'], $post_ids['future'] ],
+			$search_ids( $all_statuses ),
+			'An editor finds the ticked draft and scheduled posts, but never private ones.'
+		);
+		self::assertSame( [ 'draft' ], wp_list_pluck( $search( [ 'draft' ] ), 'post_status' ), 'Each result names its status.' );
+		self::assertSame( $only_published, $search_ids( [ 'private' ] ), 'A list with no offered status falls back to published.' );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'author' ] ) );
+		self::assertSame( $only_published, $search_ids( $all_statuses ), 'An author only finds published posts.' );
+	}
+
+	/**
 	 * Specific-posts mode must not surface a non-viewable post by ID even when the
 	 * requested postType is viewable. This reaches the WP_Query post_type + post__in
 	 * intersection (the realistic attack), not the empty-guard short-circuit.
@@ -764,6 +811,21 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		ob_start();
 		Newspack_Blocks::display_tag_labels( null );
 		self::assertSame( '', ob_get_clean(), 'Empty labels must render nothing, not an empty wrapper.' );
+	}
+
+	/**
+	 * `display_tag_labels()` passes a label with no `link` through, and it renders
+	 * as an unlinked span. This suite loads the test stub rather than the plugin,
+	 * so this checks the blocks caller against the stub's copy of the NPPM-3051
+	 * logic; the plugin's own suite pins the fix itself.
+	 */
+	public function test_display_tag_labels_renders_flag_only_label_as_span() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels( [ [ 'flag' => 'Opinion' ] ] );
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( '<span class="newspack-tag-label tag-label flag">Opinion</span>', $html );
+		self::assertStringNotContainsString( '<a ', $html, 'A label without a link must not render an anchor.' );
 	}
 
 	/**
@@ -1181,9 +1243,10 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			Newspack_Blocks::sanitize_post_subtitle( 'A <em>real</em> <strong>subtitle</strong>' ),
 			'Allowed inline tags survive sanitization.'
 		);
-		self::assertSame(
+		self::assertEqualHTML(
 			'<a href="https://example.com" target="_blank" rel="noopener">Link</a>',
 			Newspack_Blocks::sanitize_post_subtitle( '<a href="https://example.com" target="_blank" rel="noopener">Link</a>' ),
+			'<body>',
 			'A link keeps href, target and rel.'
 		);
 	}

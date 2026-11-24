@@ -1,7 +1,5 @@
 .sd-content ul li.share-republish a.sd-button svg,
-.sd-content ul li.share-republish a.sd-button svg path,
-li.service.share-republish .options-left svg,
-li.service.share-republish .options-left svg path {
+li.service.share-republish .options-left svg {
 	fill: currentColor;
 }
 
@@ -43,10 +41,6 @@ li.service.share-republish .options-left svg {
 }
 
 .jetpack-sharing-button__button.share-republish svg {
-	fill: currentColor;
-}
-
-.jetpack-sharing-button__button.share-republish svg path {
 	fill: currentColor;
 }
 

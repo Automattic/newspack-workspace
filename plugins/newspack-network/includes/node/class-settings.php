@@ -394,8 +394,8 @@ class Settings {
 				}
 				$r             = json_decode( $request['body'], true );
 				$data          = Crypto::decrypt_message( $r['data'], $secret_key, $r['nonce'] );
-				$date          = gmdate( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $r['timestamp'] );
-				$scheduled_for = gmdate( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $request['scheduled'] );
+				$date          = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $r['timestamp'] );
+				$scheduled_for = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $request['scheduled'] );
 				?>
 
 				<tr>

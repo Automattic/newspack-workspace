@@ -47,7 +47,11 @@ class Test_Subscriptions_Search_API extends \WP_UnitTestCase {
 		register_post_type( 'product_variation', [ 'public' => true ] );
 		register_taxonomy( 'product_type', 'product' );
 		( new \Newspack\Audience_Subscriptions() )->register_api_endpoints();
-		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		// WooCommerce grants administrators `manage_woocommerce` on install, and the
+		// routes require it; the mocks don't install WooCommerce.
+		$administrator = $this->factory->user->create_and_get( [ 'role' => 'administrator' ] );
+		$administrator->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $administrator->ID );
 	}
 
 	/**

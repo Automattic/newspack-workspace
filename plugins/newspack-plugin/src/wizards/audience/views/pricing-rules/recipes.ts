@@ -128,11 +128,11 @@ function ownValue( map: Record< PricingPath, string >, path: PricingPath ): stri
 /** A one-line summary of a path, shown on its card in the goal picker. */
 export function pathSummary( path: PricingPath ): string {
 	const map: Record< PricingPath, string > = {
-		new_subscriptions: __( 'An introduction or stepped offer for first-time subscribers.', 'newspack-plugin' ),
+		new_subscriptions: __( 'An introductory or stepped price for first-time subscribers.', 'newspack-plugin' ),
 		retention: __( 'A renewal discount to keep existing subscribers.', 'newspack-plugin' ),
-		save: __( 'A last-chance offer made at the cancellation moment.', 'newspack-plugin' ),
-		winback: __( 'Re-acquisition pricing to bring lapsed subscribers back.', 'newspack-plugin' ),
-		custom: __( 'Full manual control, with none of the options preset.', 'newspack-plugin' ),
+		save: __( 'A last-chance offer when a subscriber cancels.', 'newspack-plugin' ),
+		winback: __( 'A price to bring back subscribers who left.', 'newspack-plugin' ),
+		custom: __( 'Set every option yourself.', 'newspack-plugin' ),
 	};
 	return ownValue( map, path );
 }

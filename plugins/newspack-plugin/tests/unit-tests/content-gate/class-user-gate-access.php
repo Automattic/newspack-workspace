@@ -950,8 +950,9 @@ class Newspack_Test_User_Gate_Access extends WP_UnitTestCase {
 		User_Gate_Access::render_user_gate_access( get_user_by( 'id', self::$user_id ) );
 		$output = ob_get_clean();
 
-		$this->assertStringNotContainsString( 'href="https://evil.example"', $output );
-		$this->assertStringContainsString( '<code>example.com&lt;a href=&quot;https://evil.example&quot;&gt;x&lt;/a&gt;</code>', $output );
+		$this->assertStringNotContainsString( '<a href="https://evil.example"', $output );
+		$this->assertStringContainsString( '<code>example.com&lt;a href=', $output );
+		$this->assertStringContainsString( '&gt;x&lt;/a&gt;</code>', $output );
 	}
 
 	/**

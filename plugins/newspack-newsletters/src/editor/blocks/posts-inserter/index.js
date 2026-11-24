@@ -123,12 +123,13 @@ const PostsInserterBlock = ( {
 
 	const handledPostIds = postList.map( post => post.id );
 
-	useEffect( () => {
-		if ( attributes.areBlocksInserted ) {
-			replaceBlocks( templateBlocks );
-			setInsertedPostsIds( handledPostIds );
-		}
-	}, [ attributes.areBlocksInserted ] );
+	const insertPosts = () => {
+		replaceBlocks( templateBlocks );
+		setInsertedPostsIds(
+			handledPostIds,
+			templateBlocks.map( block => block.clientId )
+		);
+	};
 
 	useEffect( () => {
 		if ( ! attributes.preventDeduplication ) {
@@ -176,7 +177,7 @@ const PostsInserterBlock = ( {
 		},
 	];
 
-	return attributes.areBlocksInserted ? null : (
+	return (
 		<Fragment>
 			<InspectorControls>
 				<PanelBody title={ __( 'Post Content', 'newspack-newsletters' ) }>
@@ -310,9 +311,7 @@ const PostsInserterBlock = ( {
 			<BlockControls>
 				{ attributes.displayFeaturedImage && <Toolbar controls={ blockControlsImages } /> }
 				<Toolbar>
-					<ToolbarButton onClick={ () => setAttributes( { areBlocksInserted: true } ) }>
-						{ __( 'Insert posts', 'newspack-newsletters' ) }
-					</ToolbarButton>
+					<ToolbarButton onClick={ insertPosts }>{ __( 'Insert posts', 'newspack-newsletters' ) }</ToolbarButton>
 				</Toolbar>
 			</BlockControls>
 
@@ -346,7 +345,7 @@ const PostsInserterBlockWithSelect = compose( [
 			displaySponsoredPosts,
 		} = props.attributes;
 		const { getEntityRecords } = select( 'core' );
-		const { getSelectedBlock, getBlocks, getSettings } = select( 'core/block-editor' );
+		const { getBlocks, getSettings } = select( 'core/block-editor' );
 		const catIds = categories && categories.length > 0 ? categories.map( cat => cat.id ) : [];
 
 		const { getHandledPostIds } = select( POSTS_INSERTER_STORE_NAME );
@@ -389,7 +388,6 @@ const PostsInserterBlockWithSelect = compose( [
 			// Not used by the component, but needed in deduplication.
 			existingBlocks: getBlocks(),
 			blockEditorSettings: getSettings(),
-			selectedBlock: getSelectedBlock(),
 			postList: posts,
 		};
 	} ),
@@ -398,7 +396,7 @@ const PostsInserterBlockWithSelect = compose( [
 		const { setHandledPostsIds, setInsertedPostsIds, removeBlock } = dispatch( POSTS_INSERTER_STORE_NAME );
 		return {
 			replaceBlocks: blocks => {
-				replaceBlocks( props.selectedBlock.clientId, blocks );
+				replaceBlocks( props.clientId, blocks );
 			},
 			setHandledPostsIds: ids => setHandledPostsIds( ids, props ),
 			setInsertedPostsIds,

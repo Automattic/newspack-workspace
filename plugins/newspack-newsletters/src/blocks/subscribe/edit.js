@@ -34,7 +34,7 @@ import { select } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { hasGatedLists, isListGated, listsToKeep, syncListOrder } from './utils';
+import { hasGatedLists, isListGated, listsToKeep, syncListOrder, usesSiteButtonStyle } from './utils';
 import './editor.scss';
 
 const getListCheckboxId = listId => {
@@ -110,6 +110,9 @@ export default function SubscribeEdit( {
 	},
 } ) {
 	const blockProps = useBlockProps();
+	const useSiteStyle = usesSiteButtonStyle( backgroundColor, textColor );
+	const isBlockTheme = !! window.newspackIsBlockTheme;
+	const buttonStyle = useSiteStyle ? undefined : { backgroundColor: backgroundColor ?? '#dd3333', color: textColor ?? '#ffffff' };
 	const [ editedState, setEditedState ] = useState( editedStateOptions[ 0 ].value );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ listConfig, setListConfig ] = useState( {} );
@@ -577,7 +580,7 @@ export default function SubscribeEdit( {
 										) }
 									</label>
 									<input type="email" placeholder={ placeholder || __( 'Your email address', 'newspack-newsletters' ) } />
-									<div className="submit-button" style={ { backgroundColor, color: textColor } }>
+									<div className={ classnames( 'submit-button', { 'wp-element-button': isBlockTheme } ) } style={ buttonStyle }>
 										<RichText
 											onChange={ value => setAttributes( { label: value } ) }
 											placeholder={ __( 'Sign up', 'newspack-newsletters' ) }
@@ -606,8 +609,10 @@ export default function SubscribeEdit( {
 									// renders no button on the published page, so don't preview one.
 									! ( 'custom' === afterSuccessBehavior && ! afterSuccessURL ) && (
 										<div
-											className="newspack-newsletters-subscribe__continue submit-button"
-											style={ { backgroundColor, color: textColor } }
+											className={ classnames( 'newspack-newsletters-subscribe__continue submit-button', {
+												'wp-element-button': isBlockTheme,
+											} ) }
+											style={ buttonStyle }
 										>
 											{ afterSuccessButtonLabel || __( 'Continue', 'newspack-newsletters' ) }
 										</div>

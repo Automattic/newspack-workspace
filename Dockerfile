@@ -154,6 +154,9 @@ COPY ./config/apache_manager /etc/apache2/sites-available/001-manager.conf
 RUN a2ensite 001-manager.conf
 
 
+# Tune Apache prefork for local dev: fewer idle workers, recycle after 500 requests.
+COPY ./config/mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
+
 # Copy a default set of settings for PHP (php.ini).
 COPY ./config/php.ini /etc/php/${PHP_VERSION}/apache2/conf.d/20-jetpack-wordpress.ini
 COPY ./config/php.ini /etc/php/${PHP_VERSION}/cli/conf.d/20-jetpack-wordpress.ini

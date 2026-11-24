@@ -22,7 +22,7 @@ import ThemeSelection from './theme-select';
 import WizardsTab from '../../../../wizards-tab';
 import WizardSection from '../../../../wizards-section';
 import { HomepageSelect } from './homepage-select';
-import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, SplitSection, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
@@ -311,10 +311,10 @@ const ThemeBrand = ( { isPartOfSetup = false, renderSetupFooter, renderSetupSect
 				sections.map( ( { key, title, description, content } ) => (
 					<Fragment key={ key }>
 						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader noMargin heading={ 2 } title={ title } description={ description } />
-							{ content }
-						</Grid>
+						<SplitSection.Root>
+							<SplitSection.Header title={ title } description={ description } />
+							<SplitSection.Content>{ content }</SplitSection.Content>
+						</SplitSection.Root>
 					</Fragment>
 				) ) }
 			{ isPartOfSetup &&

@@ -16,7 +16,7 @@ import { discountFields } from './fields';
 // Only the fields' values are under test here, never their rendering, so the
 // component library is stubbed rather than pulled in whole.
 jest.mock( '../../../../../../../packages/components/src', () => ( {
-	StatusIndicator: ( { children } ) => children,
+	StatusBadge: ( { children } ) => children,
 } ) );
 
 const SUBSCRIPTIONS = [

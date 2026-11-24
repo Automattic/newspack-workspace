@@ -5,32 +5,23 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs, cleanForSlug } from '@wordpress/url';
-import { Fragment, useState, useEffect } from '@wordpress/element';
-import { Notice } from '@wordpress/components';
+import { Fragment, useState, useEffect, useRef } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
+import { Notice, RadioControl, SelectControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import {
-	Router,
-	Card,
-	Grid,
-	Button,
-	SectionHeader,
-	TextControl,
-	ImageUpload,
-	ColorPicker,
-	SelectControl,
-	RadioControl,
-	hooks,
-} from '../../../../../../packages/components/src';
+import { Router, Divider, SplitSection, Button, TextControl, ImageUpload, ColorPicker, hooks } from '../../../../../../packages/components/src';
 
 import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 
 import './style.scss';
-import { TAB_PATH } from './constants';
+import { BlockThemeColors, BlockThemeMenus, BlockThemeParts, isBlockTheme } from './block-theme';
 
 const { useParams } = Router;
 
@@ -46,6 +37,7 @@ export default function Brand( {
 	wizardApiFetch,
 	fetchLogoAttachment,
 	errorMessage,
+	isFetching = false,
 }: {
 	brands: Brand[];
 	editBrand?: number;
@@ -53,6 +45,7 @@ export default function Brand( {
 	wizardApiFetch: WizardApiFetch;
 	fetchLogoAttachment: ( brandId: number, logoId: number ) => void;
 	errorMessage?: string | null;
+	isFetching?: boolean;
 } ) {
 	const { brandId = '0' } = useParams();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
@@ -73,6 +66,9 @@ export default function Brand( {
 			_logo: 0,
 			_theme_colors: [],
 			_menus: [],
+			_block_theme_menus: {},
+			_block_theme_parts: {},
+			_block_theme_palette: '',
 		},
 		count: 0,
 		description: '',
@@ -171,6 +167,37 @@ export default function Brand( {
 		} );
 	}
 
+	function updateMeta( meta: Partial< Brand[ 'meta' ] > ) {
+		updateBrand( { meta: { ...brand.meta, ...meta } } );
+	}
+
+	function landingPageOwner( pageId: number ) {
+		return brands.find( other => other.id !== brand.id && Number( other.meta._show_page_on_front ) === pageId );
+	}
+
+	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	// The header holds on to the Save function it was given. Pointing it at this ref means
+	// 'Save' always uses the latest edits, not the brand as it was when the header was set.
+	const save = useRef( () => {} );
+	save.current = () => {
+		registerSubmit();
+		upsertBrand( Number( brandId ), brand );
+	};
+
+	useEffect( () => {
+		setHeaderData( {
+			actions: [
+				{
+					type: 'primary',
+					label: __( 'Save', 'newspack-plugin' ),
+					action: () => save.current(),
+					disabled: isFetching || ! isBrandValid,
+				},
+			],
+		} );
+	}, [ isFetching, isBrandValid, setHeaderData ] );
+
 	const baseUrl = `${ window.newspack_urls.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
 
 	function findSelectedMenu( location: string ) {
@@ -190,174 +217,215 @@ export default function Brand( {
 					</Notice>
 				</div>
 			) }
-			<SectionHeader title={ __( 'Brand', 'newspack-plugin' ) } description={ __( 'Set your brand identity', 'newspack-plugin' ) } />
-			<Grid gutter={ 32 }>
-				<Grid columns={ 1 } gutter={ 16 }>
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'Brand', 'newspack-plugin' ) } description={ __( 'Set your brand identity', 'newspack-plugin' ) } />
+				<SplitSection.Content>
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ brand.name || '' }
 						onChange={ updateBrand( 'name' ) }
 						onBlur={ updateSlugFromName }
 						placeholder={ __( 'Brand Name', 'newspack-plugin' ) }
+						withMargin={ false }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
 					/>
-				</Grid>
-				<Grid columns={ 1 } gutter={ 16 }>
 					<ImageUpload
 						className="newspack-brand__header__logo"
 						buttonLabel={ isFetchingLogo() ? __( 'Fetching logo…', 'newspack-plugin' ) : undefined }
 						label={ __( 'Logo', 'newspack-plugin' ) }
 						image={ isFetchingLogo() ? undefined : brand.meta._logo }
+						withMargin={ false }
 						onChange={ ( logoId: number ) =>
 							updateBrand( {
 								meta: { ...brand.meta, _logo: logoId },
 							} )
 						}
 					/>
-				</Grid>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			{ /* Theme Colors Section */ }
 			{ registeredThemeColors && (
 				<Fragment>
-					<SectionHeader
-						title={ __( 'Colors', 'newspack-plugin' ) }
-						description={ __( 'These are the colors you can customize for this brand in the active theme', 'newspack-plugin' ) }
-					/>
-					{ registeredThemeColors.map( color => (
-						<Card noBorder key={ color.theme_mod_name }>
-							<ColorPicker
-								className="newspack-brand__theme-mod-color-picker"
-								label={
-									<Fragment>
-										<span>{ color.label }</span>
-										{ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color && (
-											<Button variant="link" onClick={ () => updateThemeColor( color.theme_mod_name, '' ) }>
-												{ __( 'Reset default color', 'newspack-plugin' ) }
-											</Button>
-										) }
-									</Fragment>
-								}
-								color={ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color ?? color.default }
-								onChange={ ( newColor: string ) => updateThemeColor( color.theme_mod_name, newColor ) }
-							/>
-						</Card>
-					) ) }
+					<Divider alignment="full-width" variant="tertiary" />
+					<SplitSection.Root>
+						<SplitSection.Header
+							title={ __( 'Colors', 'newspack-plugin' ) }
+							description={
+								isBlockTheme
+									? __( 'Choose a palette for this brand, then adjust any of its colors.', 'newspack-plugin' )
+									: __( 'Change any of the theme’s colors for this brand.', 'newspack-plugin' )
+							}
+						/>
+						<SplitSection.Content>
+							{ isBlockTheme ? (
+								<BlockThemeColors brand={ brand } themeColors={ registeredThemeColors } updateMeta={ updateMeta } />
+							) : (
+								<>
+									{ registeredThemeColors.map( color => (
+										<ColorPicker
+											key={ color.theme_mod_name }
+											className="newspack-brand__theme-mod-color-picker"
+											label={
+												<Fragment>
+													<span>{ color.label }</span>
+													{ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color && (
+														<Button variant="link" onClick={ () => updateThemeColor( color.theme_mod_name, '' ) }>
+															{ __( 'Reset default color', 'newspack-plugin' ) }
+														</Button>
+													) }
+												</Fragment>
+											}
+											color={ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color ?? color.default }
+											onChange={ ( newColor: string ) => updateThemeColor( color.theme_mod_name, newColor ) }
+										/>
+									) ) }
+								</>
+							) }
+						</SplitSection.Content>
+					</SplitSection.Root>
 				</Fragment>
 			) }
 
-			{ /* URL Settings */ }
-			<SectionHeader title={ __( 'Settings', 'newspack-plugin' ) } />
-			<Card noBorder>
-				<RadioControl
-					className="newspack-brand__base-url-radio-control"
-					label={ __( 'URL Base', 'newspack-plugin' ) }
-					selected={ brand.meta._custom_url || 'yes' }
-					options={ [
-						{
-							label: __( 'Homepage', 'newspack-plugin' ),
-							value: 'yes',
-						},
-						{
-							label: __( 'Default', 'newspack-plugin' ),
-							value: 'no',
-						},
-					] }
-					onChange={ ( _custom_url: string ) => updateBrand( { meta: { ...brand.meta, _custom_url } } ) }
+			{ /* URL and front page settings */ }
+			<Divider alignment="full-width" variant="tertiary" />
+			<SplitSection.Root>
+				<SplitSection.Header
+					title={ __( 'Settings', 'newspack-plugin' ) }
+					description={ __( 'Where the brand lives on the site, and what its URL shows.', 'newspack-plugin' ) }
 				/>
-				<div className="newspack-brand__base-url-component">
-					<span>{ baseUrl }</span>
-					<TextControl
-						className="newspack-brand__base-url-component__text-control"
-						label={ __( 'Slug', 'newspack-plugin' ) }
-						hideLabelFromVision
-						withMargin={ false }
-						value={ brand.slug || '' }
-						onChange={ ( slug: string ) => updateBrand( { slug } ) }
-						placeholder="brand-slug"
-					/>
-				</div>
-			</Card>
-
-			{ /* Front Page Settings */ }
-			<Card noBorder>
-				<RadioControl
-					className="newspack-brand__base-url-radio-control"
-					label={ __( 'Show on Front', 'newspack-plugin' ) }
-					selected={ showOnFrontSelect }
-					options={ [
-						{
-							label: __( 'Latest posts', 'newspack-plugin' ),
-							value: 'no',
-						},
-						{
-							label: __( 'A page', 'newspack-plugin' ),
-							value: 'yes',
-						},
-					] }
-					onChange={ updateShowOnFront }
-				/>
-				{ showOnFrontSelect === 'yes' && (
-					<SelectControl
-						label={ __( 'Homepage URL', 'newspack-plugin' ) }
-						value={ brand.meta._show_page_on_front || 0 }
-						options={ [
-							{
-								label: __( 'Select a Page', 'newspack-plugin' ),
-								value: 0,
-								disabled: true,
-							},
-							...publicPages.map( page => ( {
-								label: page.title.rendered,
-								value: Number( page.id ),
-							} ) ),
-						] }
-						onChange={ ( _show_page_on_front: number ) =>
-							updateBrand( {
-								meta: {
-									...brand.meta,
-									_show_page_on_front: Number( _show_page_on_front ),
+				<SplitSection.Content>
+					<Stack direction="column" gap="md">
+						<RadioControl
+							label={ __( 'URL Base', 'newspack-plugin' ) }
+							selected={ brand.meta._custom_url || 'yes' }
+							options={ [
+								{
+									label: __( 'Homepage', 'newspack-plugin' ),
+									value: 'yes',
 								},
-							} )
-						}
-						required
-					/>
-				) }
-			</Card>
+								{
+									label: __( 'Default', 'newspack-plugin' ),
+									value: 'no',
+								},
+							] }
+							onChange={ ( _custom_url: string ) => updateBrand( { meta: { ...brand.meta, _custom_url } } ) }
+						/>
+						<Stack direction="row" align="baseline">
+							<span>{ baseUrl }</span>
+							<TextControl
+								className="newspack-brand__base-url-component__text-control"
+								label={ __( 'Slug', 'newspack-plugin' ) }
+								hideLabelFromVision
+								withMargin={ false }
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								value={ brand.slug || '' }
+								onChange={ ( slug: string ) => updateBrand( { slug } ) }
+								placeholder="brand-slug"
+							/>
+						</Stack>
+					</Stack>
+					<Stack direction="column" gap="md">
+						<RadioControl
+							label={ __( 'Show on Front', 'newspack-plugin' ) }
+							selected={ showOnFrontSelect }
+							options={ [
+								{
+									label: __( 'Latest posts', 'newspack-plugin' ),
+									value: 'no',
+								},
+								{
+									label: __( 'A page', 'newspack-plugin' ),
+									value: 'yes',
+								},
+							] }
+							onChange={ updateShowOnFront }
+						/>
+						{ showOnFrontSelect === 'yes' && (
+							<SelectControl
+								__next40pxDefaultSize
+								__nextHasNoMarginBottom
+								label={ __( 'Page to show', 'newspack-plugin' ) }
+								hideLabelFromVision
+								value={ String( brand.meta._show_page_on_front || 0 ) }
+								options={ [
+									{
+										label: __( 'Select a Page', 'newspack-plugin' ),
+										value: '0',
+										disabled: true,
+									},
+									...publicPages.map( page => {
+										const owner = landingPageOwner( Number( page.id ) );
+										return {
+											label: owner
+												? sprintf(
+														/* translators: 1: page title, 2: brand name. */
+														__( '%1$s (landing page for %2$s)', 'newspack-plugin' ),
+														page.title.rendered,
+														owner.name
+												  )
+												: page.title.rendered,
+											value: String( page.id ),
+											disabled: Boolean( owner ),
+										};
+									} ),
+								] }
+								onChange={ ( value: string ) =>
+									updateBrand( {
+										meta: {
+											...brand.meta,
+											_show_page_on_front: Number( value ),
+										},
+									} )
+								}
+								required
+							/>
+						) }
+					</Stack>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			{ /* Menu Settings */ }
-			<SectionHeader title={ __( 'Menus', 'newspack-plugin' ) } description={ __( 'Customize the menus for this brand', 'newspack-plugin' ) } />
-			{ menuLocations &&
-				Object.keys( menuLocations ).map( location => (
-					<SelectControl
-						key={ location }
-						label={ menuLocations[ location ] }
-						value={ findSelectedMenu( location ) }
-						options={ [
-							{
-								label: __( 'Same as site', 'newspack-plugin' ),
-								value: 0,
-							},
-							...availableMenus,
-						] }
-						onChange={ ( menuId: number ) => updateMenus( location, menuId ) }
+			<Divider alignment="full-width" variant="tertiary" />
+			{ isBlockTheme ? (
+				<Fragment>
+					<BlockThemeMenus brand={ brand } brands={ brands } updateMeta={ updateMeta } wizardApiFetch={ wizardApiFetch } />
+					<Divider alignment="full-width" variant="tertiary" />
+					<BlockThemeParts brand={ brand } brands={ brands } updateMeta={ updateMeta } wizardApiFetch={ wizardApiFetch } />
+				</Fragment>
+			) : (
+				<SplitSection.Root>
+					<SplitSection.Header
+						title={ __( 'Menus', 'newspack-plugin' ) }
+						description={ __( 'Customize the menus for this brand', 'newspack-plugin' ) }
 					/>
-				) ) }
-			{ /* Action Buttons */ }
-			<div className="newspack-buttons-card">
-				<Button
-					disabled={ ! isBrandValid }
-					variant="primary"
-					onClick={ ( event?: React.MouseEvent< HTMLElement > ) => {
-						registerSubmit( event );
-						upsertBrand( Number( brandId ), brand );
-					} }
-				>
-					{ __( 'Save', 'newspack-plugin' ) }
-				</Button>
-				<Button variant="secondary" href={ `#${ TAB_PATH }` }>
-					{ __( 'Cancel', 'newspack-plugin' ) }
-				</Button>
-			</div>
+					<SplitSection.Content>
+						{ menuLocations &&
+							Object.keys( menuLocations ).map( location => (
+								<SelectControl
+									__next40pxDefaultSize
+									__nextHasNoMarginBottom
+									key={ location }
+									label={ menuLocations[ location ] }
+									value={ String( findSelectedMenu( location ) ) }
+									options={ [
+										{
+											label: __( 'Same as site', 'newspack-plugin' ),
+											value: '0',
+										},
+										...availableMenus.map( ( menu: { value: number; label: string } ) => ( {
+											...menu,
+											value: String( menu.value ),
+										} ) ),
+									] }
+									onChange={ ( menuId: string ) => updateMenus( location, Number( menuId ) ) }
+								/>
+							) ) }
+					</SplitSection.Content>
+				</SplitSection.Root>
+			) }
 		</Fragment>
 	);
 }

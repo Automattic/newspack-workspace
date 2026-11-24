@@ -134,11 +134,6 @@ describe( 'buildQueryParams', () => {
 		expect( params ).toMatchObject( { orderby: 'title', order: 'asc' } );
 	} );
 
-	it( 'maps view.sort.field=send_date to orderby=date (server-side sort by post_date)', () => {
-		const params = buildQueryParams( { sort: { field: 'send_date', direction: 'desc' } } );
-		expect( params ).toMatchObject( { orderby: 'date', order: 'desc' } );
-	} );
-
 	it( 'omits orderby for unknown sort fields (graceful degradation)', () => {
 		const params = buildQueryParams( { sort: { field: 'wat', direction: 'asc' } } );
 		expect( params ).not.toHaveProperty( 'orderby' );

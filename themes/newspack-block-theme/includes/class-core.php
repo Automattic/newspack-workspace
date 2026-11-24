@@ -24,6 +24,25 @@ final class Core {
 		\add_filter( 'body_class', [ __CLASS__, 'body_class' ] );
 		\add_filter( 'block_type_metadata', [ __CLASS__, 'block_variations' ] );
 		\add_filter( 'default_template_types', [ __CLASS__, 'register_newsletter_template_types' ] );
+		\add_filter( 'default_wp_template_part_areas', [ __CLASS__, 'register_sidebar_area' ] );
+	}
+
+	/**
+	 * Adds a Sidebar template part area, so sidebars are grouped in the Site Editor and
+	 * anything listing template parts by area (such as per-brand sidebars) can offer only sidebars.
+	 *
+	 * @param array $areas Template part areas.
+	 * @return array
+	 */
+	public static function register_sidebar_area( $areas ) {
+		$areas[] = [
+			'area'        => 'sidebar',
+			'label'       => \esc_html__( 'Sidebar', 'newspack-block-theme' ),
+			'description' => \esc_html__( 'Sidebars hold content shown next to a post, such as on the Sidebar Layout post template.', 'newspack-block-theme' ),
+			'icon'        => 'sidebar',
+			'area_tag'    => 'aside',
+		];
+		return $areas;
 	}
 
 	/**

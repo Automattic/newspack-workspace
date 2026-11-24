@@ -1,4 +1,21 @@
-import { getColorForContrast } from './utils';
+import { getColorForContrast, getMinimumDonation, usesSiteButtonStyle } from './utils';
+
+describe( 'getMinimumDonation', () => {
+	it.each( [
+		[ 1200, 1200 ],
+		[ '1200', 1200 ],
+		[ '12.5', 12.5 ],
+		[ 0, 0 ],
+	] )( 'reads %p as the minimum %p', ( value, expected ) => {
+		expect( getMinimumDonation( value ) ).toBe( expected );
+	} );
+
+	// An unset minimum leaves the block following the site-wide one. A number
+	// must never count as unset, or the block's own minimum is dropped.
+	it.each( [ undefined, null, '', 'abc' ] )( 'treats %p as no minimum', value => {
+		expect( getMinimumDonation( value ) ).toBeUndefined();
+	} );
+} );
 
 describe( 'getColorForContrast', () => {
 	// Must stay in parity with Newspack_Blocks::get_color_for_contrast(), which
@@ -35,5 +52,25 @@ describe( 'getColorForContrast', () => {
 	it( 'expands 3-digit hex the same as 6-digit hex', () => {
 		expect( getColorForContrast( '#36c' ) ).toBe( getColorForContrast( '#3366cc' ) );
 		expect( getColorForContrast( '#fff' ) ).toBe( getColorForContrast( '#ffffff' ) );
+	} );
+} );
+
+describe( 'usesSiteButtonStyle', () => {
+	it( 'is true for the default color on a block theme, ignoring case', () => {
+		expect( usesSiteButtonStyle( '#dd3333', true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '#DD3333', true ) ).toBe( true );
+	} );
+
+	it( 'treats a cleared or missing color like the default', () => {
+		expect( usesSiteButtonStyle( undefined, true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '', true ) ).toBe( true );
+	} );
+
+	it( 'is false for a picked color', () => {
+		expect( usesSiteButtonStyle( '#6c6c6c', true ) ).toBe( false );
+	} );
+
+	it( 'is false off a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', false ) ).toBe( false );
 	} );
 } );

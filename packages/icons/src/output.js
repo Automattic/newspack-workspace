@@ -4,8 +4,8 @@
 import { SVG, Path } from '@wordpress/primitives';
 
 const output = (
-	<SVG xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-		<Path d="M17.03 9.03L15.97 10.09L12.75 6.87V17H11.25V6.87L8.03 10.09L6.97 9.03L12 4L17.03 9.03ZM4 18.5H20V20H4V18.5Z" />
+	<SVG xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5">
+		<Path d="M7.5 9.56L12 5.06L16.5 9.56M12 17V5.5M4 19.25H20" />
 	</SVG>
 );
 

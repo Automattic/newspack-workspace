@@ -40,6 +40,10 @@ export const promptEditorPropsSelector = select => {
 		excluded_categories,
 		excluded_tags,
 		expiration_date,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
 	} = meta || {};
 
 	const isOverlay = isOverlayPlacement( placement );
@@ -80,6 +84,11 @@ export const promptEditorPropsSelector = select => {
 		excluded_tags,
 		expiration_date,
 		postStatus,
+		newspack_popups_ab_test_id,
+		newspack_popups_ab_variant,
+		newspack_popups_ab_test_goal,
+		newspack_popups_ab_control_share,
+		postId: select( 'core/editor' ).getCurrentPostId(),
 	};
 };
 
@@ -168,17 +177,33 @@ export const whenEditorReady = callback => {
  * Set the background color meta field.
  * Based on https://github.com/Automattic/newspack-theme/blob/trunk/newspack-theme/inc/template-functions.php#L401-L431
  *
+ * On block themes, an overlay left on the default white background previews the
+ * theme's own colors, as it renders on the front end.
+ *
  * @param {string} backgroundColor color string
+ * @param {string} placement       Placement of the prompt.
  */
-export const updateEditorColors = backgroundColor => {
+export const updateEditorColors = ( backgroundColor, placement ) => {
 	if ( ! backgroundColor ) {
 		return;
 	}
-	const foregroundColor = getContrastColor( backgroundColor ) === 'black' ? '#000000' : '#ffffff';
-
 	const editorDoc = getEditorDocument();
 	const editorStylesEl = editorDoc.querySelector( '.editor-styles-wrapper' );
 	const editorPostTitleEl = editorDoc.querySelector( '.wp-block.editor-post-title__block .editor-post-title__input' );
+
+	if ( usesSiteBackground( backgroundColor, placement ) ) {
+		if ( editorStylesEl ) {
+			editorStylesEl.style.removeProperty( 'background-color' );
+			editorStylesEl.style.removeProperty( 'color' );
+		}
+		if ( editorPostTitleEl ) {
+			editorPostTitleEl.style.removeProperty( 'color' );
+			editorPostTitleEl.style.removeProperty( '--newspack-popups-editor-placeholder-color' );
+		}
+		return;
+	}
+
+	const foregroundColor = getContrastColor( backgroundColor ) === 'black' ? '#000000' : '#ffffff';
 	if ( editorStylesEl ) {
 		editorStylesEl.style.backgroundColor = backgroundColor;
 		editorStylesEl.style.color = foregroundColor;
@@ -188,6 +213,18 @@ export const updateEditorColors = backgroundColor => {
 		editorPostTitleEl.style.setProperty( '--newspack-popups-editor-placeholder-color', `${ foregroundColor }80` );
 	}
 };
+
+/**
+ * Whether an overlay prompt takes the site's background, as Newspack_Popups_Model::uses_site_background() decides.
+ *
+ * @param {string} backgroundColor color string
+ * @param {string} placement       Placement of the prompt.
+ * @return {boolean} True when the site supplies the colors, for an overlay on the default white background.
+ */
+export const usesSiteBackground = ( backgroundColor, placement ) =>
+	Boolean( window.newspack_popups_data?.site_background_available ) &&
+	isOverlayPlacement( placement ) &&
+	/^#?(fff|ffffff|ffffff[0-9a-f]{2})$/i.test( String( backgroundColor ).trim() );
 
 /**
  * Is the given placement value an overlay placement?

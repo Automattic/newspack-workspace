@@ -8,12 +8,12 @@
  */
 
 import { Button } from '@wordpress/components';
-import { DataViews } from '@wordpress/dataviews/wp';
 import { useCallback, useMemo, useState } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { store } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
-import { EmptyState } from 'newspack-components';
+import { DataViews } from 'newspack-components';
 import LoadingState from '../../components/loading-state';
 import HeaderCount from '../../components/header-count';
 import ItemsPerPage from '../../components/items-per-page';
@@ -36,15 +36,20 @@ const DEFAULT_VIEW = {
 	search: '',
 	filters: [],
 	titleField: 'name',
-	fields: [ 'description', 'slug', 'count' ],
+	descriptionField: 'description',
+	fields: [ 'slug', 'count' ],
 };
 
 const DEFAULT_LAYOUTS = { table: {} };
+
+const FIT_COLUMNS = [ 'count' ];
 
 const PERSIST_OPTIONS = {
 	fieldIds: FIELD_IDS,
 	layoutTypes: Object.keys( DEFAULT_LAYOUTS ),
 	urlPatch: getInitialView(),
+	// A view saved while the description had its own column would show it twice.
+	normalize: view => ( { ...view, fields: ( view.fields || [] ).filter( field => field !== 'description' ) } ),
 };
 
 // Suppress the built-in ViewConfig per-page control — the custom
@@ -81,6 +86,7 @@ export default function AdvertisersListScreen() {
 	// `trashCount` is omitted, not forgotten: advertisers are terms and have no trash.
 	// Passing the `null` `useAdvertisersData` hands back would block this empty state.
 	const isStrictEmpty = isStrictlyEmpty( { hasLoadedOnce, isLoading, paginationInfo, view } );
+	const HeadingTag = getEmptyStateHeading() === 1 ? 'h1' : 'h2';
 
 	useHeaderActions(
 		useMemo(
@@ -106,25 +112,31 @@ export default function AdvertisersListScreen() {
 		<>
 			<HeaderCount count={ paginationInfo.totalItems } />
 			{ isStrictEmpty ? (
-				<EmptyState.Root className={ EMPTY_STATE_CLASS }>
-					<EmptyState.Header
-						icon={ store }
-						heading={ getEmptyStateHeading() }
-						title={ __( 'Get started with advertisers', 'newspack-newsletters' ) }
-						description={ __(
-							'Group ads by the advertiser they belong to so you can track and report on each one separately.',
-							'newspack-newsletters'
-						) }
-					/>
-					<EmptyState.Actions>
-						<Button variant="primary" onClick={ openAdd }>
-							{ __( 'Add Advertiser', 'newspack-newsletters' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root className={ EMPTY_STATE_CLASS }>
+						<EmptyState.Icon icon={ store } />
+						<EmptyState.Title render={ <HeadingTag /> }>{ __( 'No advertisers yet', 'newspack-newsletters' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Add the businesses that buy ad space, then keep each advertiser’s ads together.', 'newspack-newsletters' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button variant="primary" onClick={ openAdd }>
+								{ __( 'Add Advertiser', 'newspack-newsletters' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			) : (
 				<DataViews
+					countLabel={ ( count, formatted ) =>
+						sprintf(
+							/* translators: %s: number of advertisers. */
+							_n( '%s advertiser', '%s advertisers', count, 'newspack-newsletters' ),
+							formatted
+						)
+					}
 					className="newspack-newsletters-list newspack-newsletters-advertisers-list"
+					fitColumns={ FIT_COLUMNS }
 					data={ data }
 					fields={ fields }
 					view={ view }
@@ -134,8 +146,8 @@ export default function AdvertisersListScreen() {
 					defaultLayouts={ DEFAULT_LAYOUTS }
 					isLoading={ isLoading }
 					getItemId={ item => String( item.id ) }
-					search
 					config={ DATAVIEWS_CONFIG }
+					inlineFilters
 					header={
 						<ItemsPerPage value={ view.perPage } onChange={ perPage => setView( current => ( { ...current, perPage, page: 1 } ) ) } />
 					}

@@ -396,6 +396,12 @@ class Newspack_Blocks {
 				$localized_data
 			);
 
+			wp_add_inline_script(
+				'newspack-blocks-editor',
+				'if ( undefined === window.newspackIsBlockTheme ) { window.newspackIsBlockTheme = ' . ( wp_is_block_theme() ? 'true' : 'false' ) . '; }',
+				'before'
+			);
+
 			wp_set_script_translations(
 				'newspack-blocks-editor',
 				'newspack-blocks',
@@ -992,15 +998,7 @@ class Newspack_Blocks {
 		// previews, which are open to anyone who can edit posts. So the post type restriction
 		// lives here rather than in each caller.
 		$post_type              = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
-		$included_post_statuses = [ 'publish' ];
-		if ( current_user_can( 'edit_others_posts' ) && isset( $attributes['includedPostStatuses'] ) ) {
-			// Only the statuses the editor offers. Anything else (private, or core's request-*
-			// statuses) would let the editor routes read content the block was never meant to show.
-			$included_post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
-			if ( empty( $included_post_statuses ) ) {
-				$included_post_statuses = [ 'publish' ];
-			}
-		}
+		$included_post_statuses = self::get_included_post_statuses( $attributes );
 		$authors                    = isset( $attributes['authors'] ) ? $attributes['authors'] : array();
 		$categories                 = isset( $attributes['categories'] ) ? $attributes['categories'] : array();
 		$include_subcategories      = isset( $attributes['includeSubcategories'] ) ? intval( $attributes['includeSubcategories'] ) : false;
@@ -1779,6 +1777,23 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Get the post statuses a block query may use for the current user.
+	 *
+	 * @param array $attributes Block attributes, or request params carrying the same key.
+	 * @return string[] Post statuses.
+	 */
+	public static function get_included_post_statuses( $attributes ) {
+		if ( ! current_user_can( 'edit_others_posts' ) || empty( $attributes['includedPostStatuses'] ) ) {
+			return [ 'publish' ];
+		}
+		// Only the statuses the block editor offers. Anything else (private, or core's request-*
+		// statuses) would let the editor routes read content the block was never meant to show.
+		// An empty list would let WP_Query choose, which adds private posts.
+		$post_statuses = array_values( array_intersect( (array) $attributes['includedPostStatuses'], [ 'publish', 'draft', 'future' ] ) );
+		return empty( $post_statuses ) ? [ 'publish' ] : $post_statuses;
+	}
+
+	/**
 	 * Get post status label.
 	 */
 	public static function get_post_status_label() {
@@ -1817,6 +1832,20 @@ class Newspack_Blocks {
 		$white_lc     = self::get_apca_contrast( $background_y, self::get_apca_luminance( '#ffffff' ) );
 
 		return abs( $white_lc ) > abs( $black_lc ) ? 'white' : 'black';
+	}
+
+	/**
+	 * Whether a Donate block button left at the default color should render as the site's own button.
+	 *
+	 * @param array $attributes Block attributes.
+	 * @return bool
+	 */
+	public static function donate_button_uses_site_style( array $attributes ): bool {
+		if ( ! wp_is_block_theme() ) {
+			return false;
+		}
+		$color = strtolower( (string) ( $attributes['buttonColor'] ?? '' ) );
+		return '' === $color || '#dd3333' === $color;
 	}
 
 	/**
