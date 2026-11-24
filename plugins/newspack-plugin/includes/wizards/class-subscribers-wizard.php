@@ -1625,10 +1625,12 @@ class Subscribers_Wizard extends Wizard {
 	 * matches the existing convention elsewhere in the plugin
 	 * (Sync\Contact_Metadata\Engagement::get_latest_order).
 	 *
-	 * A One-time donor's row adds one more bounded order query: the latest donation
-	 * among the reader's newest Subscribers_Donors::ORDER_SCAN_LIMIT completed
-	 * orders. That query can load up to that many orders and read their line items
-	 * before it finds a donation. Every other row adds none, Recurring and Former
+	 * A One-time donor's row adds one more bounded order query: the IDs of the
+	 * reader's newest Subscribers_Donors::ORDER_SCAN_LIMIT completed orders. It
+	 * then loads those orders one at a time, newest first, reading each one's line
+	 * items, and stops at the first donation, so a reader whose latest order is the
+	 * gift costs one load. A reader whose window holds no donation costs
+	 * ORDER_SCAN_LIMIT loads. Every other row adds none, Recurring and Former
 	 * donors included.
 	 *
 	 * @param \WP_User $user     The reader user.

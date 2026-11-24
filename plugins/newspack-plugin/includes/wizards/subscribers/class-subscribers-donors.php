@@ -47,7 +47,8 @@ class Subscribers_Donors {
 	 * The lookup runs once per One-time donor row, so it can't page through a
 	 * reader's whole history the way the ESP sync's one-off lookup does. A donation
 	 * older than this many completed orders is not found, and the row has nothing to
-	 * link. Raising it makes every One-time donor row on a page read more orders.
+	 * link. Raising it lets a One-time donor row whose gift is further back load
+	 * more orders before it finds it, or gives up.
 	 *
 	 * @var int
 	 */
@@ -191,13 +192,17 @@ class Subscribers_Donors {
 	/**
 	 * A reader's latest completed donation order.
 	 *
-	 * Reads the reader's newest completed orders, up to ORDER_SCAN_LIMIT, and stops
-	 * at the first donation. Only a completed order counts: a processing one may
-	 * still fail. The query asks for `shop_order` because WooCommerce otherwise
-	 * returns refunds alongside orders. Callers check is_enabled() first and ask
-	 * only for One-time donors, so no other row pays for this query. It is one
-	 * query, but wc_get_orders() can load up to ORDER_SCAN_LIMIT orders, and the
-	 * donation check reads each one's line items, before a donation turns up.
+	 * Asks for the IDs of the reader's newest completed orders, up to
+	 * ORDER_SCAN_LIMIT, then loads them one at a time, newest first, and stops at
+	 * the first donation. Renewal orders are `shop_order` too, so a plan's
+	 * renewals can sit in front of the latest gift; loading the orders one at a
+	 * time means only those in front of it are loaded. Only a completed order
+	 * counts: a processing one may still fail. The query asks for `shop_order`
+	 * because WooCommerce otherwise returns refunds alongside orders. Callers check
+	 * is_enabled() first and ask only for One-time donors, so no other row pays
+	 * for this query. It is one query, plus one order load, and a read of its line
+	 * items, per order up to and including the first donation. A reader whose
+	 * window holds no donation costs ORDER_SCAN_LIMIT loads.
 	 *
 	 * @param int $user_id The reader's user ID.
 	 *
@@ -205,10 +210,10 @@ class Subscribers_Donors {
 	 *                        donation.
 	 */
 	public static function latest_donation_order( int $user_id ): ?\WC_Order {
-		if ( ! function_exists( 'wc_get_orders' ) ) {
+		if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order' ) ) {
 			return null;
 		}
-		$orders = \wc_get_orders(
+		$order_ids = \wc_get_orders(
 			[
 				'customer_id' => $user_id,
 				'status'      => [ 'wc-completed' ],
@@ -216,10 +221,12 @@ class Subscribers_Donors {
 				'limit'       => self::ORDER_SCAN_LIMIT,
 				'orderby'     => 'date',
 				'order'       => 'DESC',
+				'return'      => 'ids',
 			]
 		);
-		foreach ( $orders as $order ) {
-			if ( Donations::is_donation_order( $order ) ) {
+		foreach ( $order_ids as $order_id ) {
+			$order = \wc_get_order( $order_id );
+			if ( $order instanceof \WC_Order && Donations::is_donation_order( $order ) ) {
 				return $order;
 			}
 		}

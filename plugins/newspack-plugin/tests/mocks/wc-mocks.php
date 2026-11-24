@@ -2625,6 +2625,9 @@ function wc_get_orders( $args ) {
 		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
 		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
+	if ( isset( $args['return'] ) && 'ids' === $args['return'] ) {
+		return array_map( fn( $order ) => $order->get_id(), array_values( $orders ) );
+	}
 	return $orders;
 }
 
@@ -2662,7 +2665,10 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	return false;
 }
 function wc_get_order( $order_id ) {
-	global $orders_database, $subscriptions_database;
+	global $orders_database, $subscriptions_database, $wc_mocks_get_order_ids;
+	// Every ID asked for, in order, so a test can see which orders a caller loaded
+	// one at a time. A test that reads it empties it first.
+	$wc_mocks_get_order_ids[] = $order_id;
 	foreach ( $orders_database as $order ) {
 		if ( $order->get_id() === $order_id ) {
 			return $order;

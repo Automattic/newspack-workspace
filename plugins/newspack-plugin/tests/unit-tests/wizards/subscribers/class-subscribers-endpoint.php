@@ -2332,6 +2332,28 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The lookup asks for the reader's order IDs and loads the orders one at a
+	 * time, newest first, stopping at the first donation. Renewal and plan orders
+	 * newer than the latest gift are loaded on the way; older orders never are.
+	 */
+	public function test_last_donation_lookup_stops_at_the_first_donation() {
+		global $wc_mocks_get_order_ids;
+		$donation_product_id = $this->create_donation_product( 'simple' );
+		$other_product_id    = $this->create_subscription_product( 'Digital', 'simple' );
+		$reader_id           = $this->create_reader( 'Regular Giver' );
+		$this->create_donation_order( $reader_id, $donation_product_id );
+		$this->create_donation_order( $reader_id, $other_product_id );
+		$latest_gift  = $this->create_donation_order( $reader_id, $donation_product_id );
+		$newest_order = $this->create_donation_order( $reader_id, $other_product_id );
+
+		$wc_mocks_get_order_ids = [];
+		$order                  = Subscribers_Donors::latest_donation_order( $reader_id );
+
+		$this->assertSame( $latest_gift->get_id(), $order->get_id() );
+		$this->assertSame( [ $newest_order->get_id(), $latest_gift->get_id() ], $wc_mocks_get_order_ids, 'Only the orders down to the first donation are loaded, newest first.' );
+	}
+
+	/**
 	 * Only a One-time donor's row looks up orders for the donor label. A non-donor,
 	 * a Recurring donor and a Former donor add none, so the page costs the same as
 	 * it does with donor labels off.
