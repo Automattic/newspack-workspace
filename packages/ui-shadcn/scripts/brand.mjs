@@ -147,6 +147,11 @@ export const brandTypeTokens = Object.fromEntries( Object.entries( brandType ).f
 ] ) );
 
 export const brandBase = {
+	body: {
+		'background-color': 'var(--newspack-ui-color-surface)',
+		color: 'var(--newspack-ui-color-text)',
+		'font-family': 'var(--font-sans)',
+	},
 	h1: {
 		'font-family': 'var(--font-display)',
 		'font-weight': '900',
