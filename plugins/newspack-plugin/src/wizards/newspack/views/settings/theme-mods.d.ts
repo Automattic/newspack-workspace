@@ -131,6 +131,9 @@ interface AdvancedSettings {
 	post_updated_date: boolean;
 	post_updated_date_threshold: number;
 
+	// Web app display mode.
+	pwa_display_mode: string;
+
 	// Post content fallback image.
 	post_content_fallback_image?: string | null;
 
