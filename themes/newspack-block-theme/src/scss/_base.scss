@@ -135,6 +135,12 @@ ol {
 		position: fixed;
 		top: 0;
 		@include header-position(fixed);
+
+		.admin-bar & {
+			@include sass-utils.media(small) {
+				top: var(--wp-admin--admin-bar--height);
+			}
+		}
 	}
 
 	&-sticky {
