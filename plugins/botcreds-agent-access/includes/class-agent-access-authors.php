@@ -5,30 +5,56 @@
  *
  * @package BotCreds Agent Access
  */
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Administrator-authorized, byline-only Co-Authors Plus assignment endpoint.
+ */
 class Agent_Access_Authors {
 	const SCOPE = '__assign_authors__';
 
+	/**
+	 * Build a REST error with the given status.
+	 *
+	 * @param string $code    The error code.
+	 * @param string $message The error message.
+	 * @param int    $status  The HTTP status code.
+	 * @return WP_Error
+	 */
 	public static function error( $code, $message, $status = 403 ) {
 		return new WP_Error( $code, $message, array( 'status' => $status ) );
 	}
 
+	/**
+	 * Register hooks.
+	 */
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register' ) );
 	}
 
+	/**
+	 * Whether the current administrator may assign this scope to the given user.
+	 *
+	 * @param int $user_id The user ID.
+	 */
 	public static function can_assign( $user_id ) {
 		return Agent_Access_Yoast_SEO::can_assign( $user_id );
 	}
 
+	/**
+	 * Whether the required dependency is active.
+	 */
 	public static function available() {
 		global $coauthors_plus;
 		return is_object( $coauthors_plus ) && method_exists( $coauthors_plus, 'add_coauthors' );
 	}
 
+	/**
+	 * Register the REST routes.
+	 */
 	public static function register() {
 		register_rest_route(
 			'agent-access/v1',
@@ -50,6 +76,11 @@ class Agent_Access_Authors {
 		);
 	}
 
+	/**
+	 * Permission callback for the REST route.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function permissions( $request ) {
 		if ( ! class_exists( 'Agent_Access_Activity_Log' ) ) {
 			return self::error( 'agent_authors_unavailable', __( 'Agent Access is unavailable.', 'botcreds-agent-access' ), 503 );
@@ -81,6 +112,11 @@ class Agent_Access_Authors {
 		return true;
 	}
 
+	/**
+	 * Get the author term IDs assigned to a post.
+	 *
+	 * @param int $id The record ID.
+	 */
 	public static function term_ids( $id ) {
 		global $coauthors_plus;
 		$ids = array();
@@ -94,7 +130,11 @@ class Agent_Access_Authors {
 		return $ids;
 	}
 
-	/** Resolve through CAP, then require a canonical term round-trip (3.x/4.x). */
+	/**
+	 * Resolve through CAP, then require a canonical term round-trip (3.x/4.x).
+	 *
+	 * @param WP_Term $term The author term.
+	 */
 	public static function author_for_term( $term ) {
 		global $coauthors_plus;
 		if ( method_exists( $coauthors_plus, 'get_coauthor_by_term' ) ) {
@@ -107,6 +147,11 @@ class Agent_Access_Authors {
 		return $canonical && ! is_wp_error( $canonical ) && (int) $canonical->term_id === (int) $term->term_id ? $author : null;
 	}
 
+	/**
+	 * Handle the REST request.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function handle( $request ) {
 		global $coauthors_plus;
 		$id = (int) $request->get_url_params()['id'];
@@ -179,7 +224,11 @@ class Agent_Access_Authors {
 			) 
 		);
 	}
-	/** Minimal CAP discovery: current canonical term IDs and public display names only. */
+	/**
+	 * Minimal CAP discovery: current canonical term IDs and public display names only.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function search( $request ) {
 		global $coauthors_plus;
 		$query = $request->get_query_params();

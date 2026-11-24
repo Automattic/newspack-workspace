@@ -21,6 +21,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Experimental Pro Auth: persistent agent tokens with optional Ed25519 request signing.
+ */
 class Agent_Access_Pro_Auth {
 
 	const TOKEN_PREFIX   = 'agt_';
@@ -89,7 +92,7 @@ class Agent_Access_Pro_Auth {
 	/**
 	 * Exchange a setup code for a persistent agent token.
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request The REST request.
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function handle_activate( WP_REST_Request $request ) {
@@ -131,7 +134,7 @@ class Agent_Access_Pro_Auth {
 		$token_hash = hash( 'sha256', $token );
 
 		global $wpdb;
-		$table     = $wpdb->prefix . self::TABLE_SUFFIX;
+		$table = $wpdb->prefix . self::TABLE_SUFFIX;
 		// REMOTE_ADDR is compared for drift alerts and stored for audit only; it never grants access.
 		// phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$remote_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
@@ -395,7 +398,7 @@ class Agent_Access_Pro_Auth {
 	/**
 	 * Revoke a pro token by its DB row id.
 	 *
-	 * @param int $token_id
+	 * @param int $token_id The token row ID.
 	 * @return bool
 	 */
 	public static function revoke_token( $token_id ) {

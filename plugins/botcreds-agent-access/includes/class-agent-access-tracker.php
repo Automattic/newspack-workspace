@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Tags content created by agents and reports on it.
+ */
 class Agent_Access_Tracker {
 
 	const META_KEY = '_agent_access_created';
@@ -28,7 +31,7 @@ class Agent_Access_Tracker {
 	 * @param WP_Post $post    The post object.
 	 */
 	public function maybe_tag_post( $post_id, $post ) {
-		// Skip revisions and attachments (attachments handled separately)
+		// Skip revisions and attachments (attachments handled separately).
 		if ( wp_is_post_revision( $post_id ) || 'attachment' === $post->post_type ) {
 			return;
 		}
@@ -233,7 +236,7 @@ class Agent_Access_Tracker {
 
 		// Joins the users table only to read display names; WP Cloud is not VIP.
 		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
-		$sql    = "SELECT {$select_expr}
+		$sql = "SELECT {$select_expr}
 		           FROM {$wpdb->posts} p
 		           INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 		           INNER JOIN {$wpdb->users} u ON p.post_author = u.ID

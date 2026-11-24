@@ -31,10 +31,10 @@ $wpdb->query(
 // Covers the current name and legacy names from previous rebrands so that
 // uninstalling the plugin actually revokes every credential it ever minted.
 $agent_access_managed_names = array(
-	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0)
-	'BotCreds',                      // interim name during rebrand
-	'Agent Access',                  // pre-2.0 legacy name
-	'Agent Access Auto-Provisioned', // legacy provisioner name
+	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0).
+	'BotCreds',                      // interim name during rebrand.
+	'Agent Access',                  // pre-2.0 legacy name.
+	'Agent Access Auto-Provisioned', // legacy provisioner name.
 );
 $agent_access_user_ids = get_users( array( 'fields' => 'ID' ) );
 foreach ( $agent_access_user_ids as $agent_access_uid ) {

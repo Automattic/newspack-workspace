@@ -4,16 +4,26 @@
  *
  * @package BotCreds Agent Access
  */
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Read-only discovery endpoint for the authenticated managed credential.
+ */
 class Agent_Access_Connection {
+	/**
+	 * Register hooks.
+	 */
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 		add_filter( 'rest_post_dispatch', array( __CLASS__, 'private_response' ), 10, 3 );
 	}
 
+	/**
+	 * Register the REST routes.
+	 */
 	public static function register_routes() {
 		register_rest_route(
 			'agent-access/v1',
@@ -26,6 +36,9 @@ class Agent_Access_Connection {
 		);
 	}
 
+	/**
+	 * Permission callback for the REST route.
+	 */
 	public static function permissions() {
 		if ( ! get_current_user_id() ) {
 			return new WP_Error( 'agent_connection_auth_required', __( 'Authenticate with your managed Agent Access application password.', 'botcreds-agent-access' ), array( 'status' => 401 ) );
@@ -36,7 +49,13 @@ class Agent_Access_Connection {
 		return true;
 	}
 
-	/** Include errors as well as successful discovery responses in the cache rule. */
+	/**
+	 * Include errors as well as successful discovery responses in the cache rule.
+	 *
+	 * @param WP_REST_Response $response The response.
+	 * @param WP_REST_Server   $server The REST server.
+	 * @param WP_REST_Request  $request The REST request.
+	 */
 	public static function private_response( $response, $server, $request ) {
 		if ( '/agent-access/v1/connection' === untrailingslashit( $request->get_route() ) ) {
 			$response = rest_ensure_response( $response );
@@ -46,6 +65,9 @@ class Agent_Access_Connection {
 		return $response;
 	}
 
+	/**
+	 * Handle the connection discovery request.
+	 */
 	public static function get() {
 		$user = wp_get_current_user();
 		$uuid = Agent_Access_Activity_Log::get_authenticated_botcreds_uuid();

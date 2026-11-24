@@ -24,6 +24,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Snapshots posts and media before agent edits so they can be restored.
+ */
 class Agent_Access_Rollback {
 
 	const TABLE_SUFFIX = 'agent_access_snapshots';
@@ -47,9 +50,9 @@ class Agent_Access_Rollback {
 	 * Only fires on PUT / PATCH / DELETE targeting /wp/v2/posts/{id}
 	 * or /wp/v2/media/{id}.  POST (create) has no before-state to capture.
 	 *
-	 * @param mixed           $result
-	 * @param WP_REST_Server  $server
-	 * @param WP_REST_Request $request
+	 * @param mixed           $result The current dispatch result.
+	 * @param WP_REST_Server  $server The REST server.
+	 * @param WP_REST_Request $request The REST request.
 	 * @return mixed  Always returns $result unchanged.
 	 */
 	public static function capture( $result, $server, $request ) {
@@ -82,7 +85,7 @@ class Agent_Access_Rollback {
 			return $result;
 		}
 
-		$kind    = $m[1]; // 'posts' or 'media'
+		$kind    = $m[1]; // Either 'posts' or 'media'.
 		$post_id = (int) $m[2];
 
 		if ( $post_id < 1 ) {
@@ -107,9 +110,9 @@ class Agent_Access_Rollback {
 	/**
 	 * Write a snapshot row for a post.
 	 *
-	 * @param WP_Post $post
+	 * @param WP_Post $post The post.
 	 * @param string  $uuid  App password UUID.
-	 * @param string  $kind  'posts' | 'media'
+	 * @param string  $kind  Either 'posts' or 'media'.
 	 */
 	private static function save_snapshot( $post, $uuid, $kind ) {
 		global $wpdb;
@@ -246,7 +249,7 @@ class Agent_Access_Rollback {
 	/**
 	 * Get a single snapshot by ID.
 	 *
-	 * @param int $id
+	 * @param int $id The record ID.
 	 * @return object|null
 	 */
 	public static function get_snapshot( $id ) {
@@ -265,7 +268,7 @@ class Agent_Access_Rollback {
 	/**
 	 * Get recent snapshots for the admin UI.
 	 *
-	 * @param int $limit
+	 * @param int $limit The maximum number of rows to return.
 	 * @return array
 	 */
 	public static function get_recent_snapshots( $limit = 50 ) {

@@ -19,12 +19,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Registers the Agent role.
+ */
 class Agent_Access_Role {
 
-	/** @var string WordPress role slug. */
+	/**
+	 * WordPress role slug.
+	 *
+	 * @var string
+	 */
 	const ROLE_SLUG = 'agent';
 
-	/** @var string Human-readable role display name. */
+	/**
+	 * Human-readable role display name.
+	 *
+	 * @var string
+	 */
 	const ROLE_NAME = 'Agent';
 
 	/**

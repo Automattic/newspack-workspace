@@ -10,6 +10,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Audit log of REST requests made with Agent Access credentials.
+ */
 class Agent_Access_Activity_Log {
 
 	const TABLE_NAME     = 'agent_access_log';
@@ -87,7 +90,7 @@ class Agent_Access_Activity_Log {
 		// (its schema default) rather than 0, which %d would cast it to.
 		// The user agent is logged only and never used to decide anything.
 		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__
-		$row_data    = array(
+		$row_data = array(
 			'user_id'           => (int) get_current_user_id(),
 			'source'            => $detected['source'],
 			'app_password_name' => $detected['app_password_name'],
@@ -141,6 +144,9 @@ class Agent_Access_Activity_Log {
 		return is_array( $item ) && isset( $item['name'] ) && AGENT_ACCESS_APP_PASSWORD_NAME === $item['name'] ? $uuid : null;
 	}
 
+	/**
+	 * Detect which kind of agent credential authenticated the current request.
+	 */
 	public static function detect_source() {
 		// Must be a REST API request.
 		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {

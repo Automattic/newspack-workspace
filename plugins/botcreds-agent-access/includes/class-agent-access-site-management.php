@@ -13,6 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Optional account-wide site management access for an agent.
+ */
 class Agent_Access_Site_Management {
 	const META_PREFIX = '_agent_access_site_management_';
 	const CAPS = array( 'manage_options', 'edit_theme_options' );
@@ -25,7 +28,11 @@ class Agent_Access_Site_Management {
 		add_action( 'remove_user_role', array( __CLASS__, 'clear_if_not_agent' ) );
 	}
 
-	/** @return string Site-specific metadata key; usermeta is shared on multisite. */
+	/**
+	 * Get the site-specific metadata key; usermeta is shared on multisite.
+	 *
+	 * @return string
+	 */
 	public static function meta_key() {
 		return self::META_PREFIX . get_current_blog_id();
 	}

@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Application password creation and management for agents.
+ */
 class Agent_Access_API {
 
 	/**

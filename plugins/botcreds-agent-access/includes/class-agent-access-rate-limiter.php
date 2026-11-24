@@ -22,6 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Per-credential rate limiting with configurable tiers.
+ */
 class Agent_Access_Rate_Limiter {
 
 	const META_PREFIX   = '_agent_access_rl_';
@@ -42,9 +45,9 @@ class Agent_Access_Rate_Limiter {
 	 * Check the current request against the credential's rate-limit tier.
 	 * Returns a 429 WP_Error on violation; null otherwise.
 	 *
-	 * @param mixed           $result
-	 * @param WP_REST_Server  $server
-	 * @param WP_REST_Request $request
+	 * @param mixed           $result The current dispatch result.
+	 * @param WP_REST_Server  $server The REST server.
+	 * @param WP_REST_Request $request The REST request.
 	 * @return mixed
 	 */
 	public static function enforce( $result, $server, $request ) {
@@ -204,8 +207,8 @@ class Agent_Access_Rate_Limiter {
 	/**
 	 * Get the saved tier key for a user+UUID pair.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 * @return string Tier key, or DEFAULT_TIER if none set.
 	 */
 	public static function get( $user_id, $uuid ) {
@@ -216,8 +219,8 @@ class Agent_Access_Rate_Limiter {
 	/**
 	 * Delete rate-limit meta when a credential is revoked.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function delete( $user_id, $uuid ) {
 		delete_user_meta( (int) $user_id, self::META_PREFIX . $uuid );
@@ -230,7 +233,7 @@ class Agent_Access_Rate_Limiter {
 	/**
 	 * Return all rate-limit tiers.
 	 *
-	 * per_minute / per_hour of 0 means no cap for that window.
+	 * A per_minute or per_hour value of 0 means no cap for that window.
 	 *
 	 * @return array<string, array{label: string, description: string, per_minute: int, per_hour: int}>
 	 */
@@ -266,7 +269,7 @@ class Agent_Access_Rate_Limiter {
 	/**
 	 * Return a single tier by key, or null.
 	 *
-	 * @param string $key
+	 * @param string $key The tier key.
 	 * @return array|null
 	 */
 	public static function get_tier( $key ) {
@@ -277,7 +280,7 @@ class Agent_Access_Rate_Limiter {
 	/**
 	 * Return the display label for a tier key.
 	 *
-	 * @param string $key
+	 * @param string $key The tier key.
 	 * @return string
 	 */
 	public static function get_label( $key ) {

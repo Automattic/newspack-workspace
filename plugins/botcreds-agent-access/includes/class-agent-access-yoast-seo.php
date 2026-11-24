@@ -4,10 +4,14 @@
  *
  * @package BotCreds Agent Access
  */
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Narrow REST endpoint for reading and writing Yoast SEO metadata.
+ */
 class Agent_Access_Yoast_SEO {
 	const SCOPE = '__yoast_seo_all__';
 	// rc.9 was self-selectable. Never silently promote its saved grants.
@@ -15,11 +19,18 @@ class Agent_Access_Yoast_SEO {
 	const ROUTE = '/agent-access/v1/yoast-seo/';
 	const FIELDS = array( 'title', 'metadesc', 'focuskw', 'opengraph-title', 'opengraph-description', 'twitter-title', 'twitter-description' );
 
+	/**
+	 * Register hooks.
+	 */
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
 	}
 
-	/** Only a separate, user-managing human administrator may assign this scope. */
+	/**
+	 * Only a separate, user-managing human administrator may assign this scope.
+	 *
+	 * @param int $user_id The user ID.
+	 */
 	public static function can_assign( $user_id ) {
 		if ( ! $user_id || ! get_userdata( $user_id ) || get_current_user_id() === (int) $user_id || in_array( Agent_Access_Role::ROLE_SLUG, wp_get_current_user()->roles, true ) ) {
 			return false;
@@ -30,14 +41,25 @@ class Agent_Access_Yoast_SEO {
 		return (int) wp_validate_auth_cookie( '', 'logged_in' ) === get_current_user_id();
 	}
 
+	/**
+	 * Whether the scope list includes the Yoast SEO grant.
+	 *
+	 * @param array $scope The scope.
+	 */
 	public static function has_scope( $scope ) {
 		return is_array( $scope ) && ( in_array( self::SCOPE, $scope, true ) || in_array( self::LEGACY_SCOPE, $scope, true ) );
 	}
 
+	/**
+	 * Whether the required dependency is active.
+	 */
 	public static function available() {
 		return defined( 'WPSEO_VERSION' ) && class_exists( 'WPSEO_Meta' );
 	}
 
+	/**
+	 * Register the REST routes.
+	 */
 	public static function register_routes() {
 		register_rest_route(
 			'agent-access/v1',
@@ -50,6 +72,11 @@ class Agent_Access_Yoast_SEO {
 		);
 	}
 
+	/**
+	 * Permission callback for the REST route.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function permissions( $request ) {
 		if ( ! self::available() ) {
 			return new WP_Error( 'agent_seo_unavailable', __( 'Yoast SEO must be active.', 'botcreds-agent-access' ), array( 'status' => 503 ) );
@@ -70,7 +97,11 @@ class Agent_Access_Yoast_SEO {
 		return true;
 	}
 
-	/** Strict JSON allowlist, checked in full before the first durable write. */
+	/**
+	 * Strict JSON allowlist, checked in full before the first durable write.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function validate_write( $request ) {
 		if ( ! in_array( $request->get_method(), array( 'POST', 'PUT', 'PATCH' ), true ) || ! preg_match( '#^/agent-access/v1/yoast-seo/[1-9][0-9]*$#D', $request->get_route() ) ) {
 			return new WP_Error( 'agent_scope_violation', __( 'SEO-only credentials may only update the dedicated Yoast SEO endpoint.', 'botcreds-agent-access' ), array( 'status' => 403 ) );
@@ -87,6 +118,11 @@ class Agent_Access_Yoast_SEO {
 		return true;
 	}
 
+	/**
+	 * Handle the REST request.
+	 *
+	 * @param WP_REST_Request $request The REST request.
+	 */
 	public static function handle( $request ) {
 		$id = (int) $request->get_url_params()['id'];
 		if ( ! in_array( $request->get_method(), array( 'GET', 'HEAD' ), true ) ) {

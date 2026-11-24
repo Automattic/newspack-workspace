@@ -11,6 +11,8 @@
  * Text Domain: botcreds-agent-access
  * Requires at least: 5.7
  * Requires PHP: 7.4
+ *
+ * @package BotCreds Agent Access
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

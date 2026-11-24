@@ -23,6 +23,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Per-credential content policy tiers, such as publish gating and daily post limits.
+ */
 class Agent_Access_Content_Policy {
 
 	const META_PREFIX    = '_agent_access_cp_';
@@ -60,8 +63,8 @@ class Agent_Access_Content_Policy {
 	 *
 	 * Called by rest_pre_insert_{post_type} — returning WP_Error aborts the write.
 	 *
-	 * @param stdClass        $prepared_post
-	 * @param WP_REST_Request $request
+	 * @param stdClass        $prepared_post The prepared post object.
+	 * @param WP_REST_Request $request The REST request.
 	 * @return stdClass|WP_Error
 	 */
 	public static function apply( $prepared_post, $request ) {
@@ -124,8 +127,8 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Increment the daily creation counter after a successful REST insert.
 	 *
-	 * @param WP_Post         $post
-	 * @param WP_REST_Request $request
+	 * @param WP_Post         $post The post.
+	 * @param WP_REST_Request $request The REST request.
 	 * @param bool            $creating True on create, false on update.
 	 */
 	public static function record_creation( $post, $request, $creating ) {
@@ -154,7 +157,7 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Transient key for the current UTC day + uuid.
 	 *
-	 * @param string $uuid
+	 * @param string $uuid The application password UUID.
 	 * @return string
 	 */
 	private static function daily_key( $uuid ) {
@@ -164,7 +167,7 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Get the number of posts created by this credential today.
 	 *
-	 * @param string $uuid
+	 * @param string $uuid The application password UUID.
 	 * @return int
 	 */
 	public static function get_daily_count( $uuid ) {
@@ -174,7 +177,7 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Increment today's creation counter. TTL = rest of day + 5 min buffer.
 	 *
-	 * @param string $uuid
+	 * @param string $uuid The application password UUID.
 	 */
 	private static function increment_daily_count( $uuid ) {
 		$key   = self::daily_key( $uuid );
@@ -190,9 +193,9 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Save a content policy tier for a credential.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
-	 * @param string $policy_key
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
+	 * @param string $policy_key The policy key.
 	 */
 	public static function save( $user_id, $uuid, $policy_key ) {
 		$allowed = array_keys( self::get_policies() );
@@ -205,8 +208,8 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Get the saved policy key for a user+UUID pair.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 * @return string
 	 */
 	public static function get( $user_id, $uuid ) {
@@ -217,8 +220,8 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Delete policy meta when a credential is revoked.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function delete( $user_id, $uuid ) {
 		delete_user_meta( (int) $user_id, self::META_PREFIX . $uuid );
@@ -231,8 +234,8 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Return all content policy tiers.
 	 *
-	 * publish_gating: 'allow' | 'draft' | 'pending'
-	 * max_daily_posts: 0 = unlimited
+	 * The publish_gating value is one of 'allow', 'draft' or 'pending'.
+	 * A max_daily_posts value of 0 means unlimited.
 	 *
 	 * @return array
 	 */
@@ -262,7 +265,7 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Return a single policy by key, or null.
 	 *
-	 * @param string $key
+	 * @param string $key The policy key.
 	 * @return array|null
 	 */
 	public static function get_policy( $key ) {
@@ -273,7 +276,7 @@ class Agent_Access_Content_Policy {
 	/**
 	 * Return the display label for a policy key.
 	 *
-	 * @param string $key
+	 * @param string $key The policy key.
 	 * @return string
 	 */
 	public static function get_label( $key ) {

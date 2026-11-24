@@ -9,15 +9,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Admin screens and handlers for managing agent credentials.
+ */
 class Agent_Access_Admin {
 
 	/**
+	 * API instance.
+	 *
 	 * @var Agent_Access_API
 	 */
 	private $api;
 
 	/**
-	 * @param Agent_Access_API $api
+	 * Constructor.
+	 *
+	 * @param Agent_Access_API $api The API instance.
 	 */
 	public function __construct( Agent_Access_API $api ) {
 		$this->api = $api;
@@ -264,6 +271,11 @@ class Agent_Access_Admin {
 		);
 	}
 
+	/**
+	 * Enqueue admin scripts and styles on the plugin screens.
+	 *
+	 * @param string $hook_suffix The current admin page hook suffix.
+	 */
 	public function enqueue_assets( $hook_suffix ) {
 		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_agent-access', 'users_page_agent-access-add-agent' ), true ) ) {
 			return;
@@ -564,7 +576,8 @@ class Agent_Access_Admin {
 	/**
 	 * Render the administrator-only, per-account site-management switch.
 	 *
-	 * @param int $user_id Dedicated agent account.
+	 * @param int  $user_id Dedicated agent account.
+	 * @param bool $table_row Whether to render as a table row.
 	 */
 	private function render_site_management_control( $user_id, $table_row = true ) {
 		if ( ! Agent_Access_Site_Management::can_manage( $user_id ) ) {
@@ -596,6 +609,7 @@ class Agent_Access_Admin {
 	 * Shared scope controls for self-service creation, admin creation and updates.
 	 *
 	 * @param array $scope Existing grants or creation defaults.
+	 * @param int   $user_id The user ID.
 	 */
 	private function render_scope_controls( array $scope, $user_id = 0 ) {
 		$read_only    = in_array( '__read_only__', $scope, true );
@@ -725,6 +739,7 @@ class Agent_Access_Admin {
 	 *
 	 * Collects content, integration and custom route grants for Scope::save().
 	 *
+	 * @param int $user_id The user ID.
 	 * @return array|WP_Error
 	 */
 	private static function collect_scope_from_post( $user_id = 0 ) {
@@ -1221,7 +1236,7 @@ class Agent_Access_Admin {
 	 * Render the "disconnected" state with create button.
 	 */
 	private function render_disconnected_state() {
-		// Default checked: post + attachment (posts_media equivalent)
+		// Default checked: post + attachment (posts_media equivalent).
 		$default_slugs = array( 'post', 'attachment' );
 		?>
 		<div id="agent-access-card">
@@ -1412,6 +1427,9 @@ class Agent_Access_Admin {
 		<?php
 	}
 
+	/**
+	 * Render the Experimental tab.
+	 */
 	private function render_experimental_tab() {
 		$is_enabled = Agent_Access_Pro_Auth::is_enabled();
 		$tokens     = $is_enabled ? Agent_Access_Pro_Auth::get_tokens() : array();
@@ -1666,7 +1684,7 @@ class Agent_Access_Admin {
 	}
 
 	/**
-	 * admin-post: save Pro Auth enabled/disabled setting.
+	 * Admin-post: save Pro Auth enabled/disabled setting.
 	 */
 	public function handle_save_pro_auth() {
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -2217,7 +2235,7 @@ class Agent_Access_Admin {
 				$role_obj   = get_role( $role_slug );
 				$role_name  = $role_obj ? ucfirst( $role_slug ) : $role_slug;
 
-				// Use wp_roles() for display name
+				// Use wp_roles() for display name.
 				$wp_roles  = wp_roles();
 				$role_name = isset( $wp_roles->role_names[ $role_slug ] ) ? translate_user_role( $wp_roles->role_names[ $role_slug ] ) : ucfirst( $role_slug );
 
@@ -2240,7 +2258,7 @@ class Agent_Access_Admin {
 					'stats'        => Agent_Access_Tracker::get_stats( $user->ID ),
 				);
 
-				break; // Only one Agent Access password per user
+				break; // Only one Agent Access password per user.
 			}
 		}
 

@@ -21,14 +21,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Per-credential scope grants: which content types and routes an agent may use.
+ */
 class Agent_Access_Scope {
 
 	const META_PREFIX    = '_agent_access_scope_';
-	const DEFAULT_SCOPE  = 'posts_media';   // kept for back-compat; maps to ['post','attachment']
+	const DEFAULT_SCOPE  = 'posts_media';   // kept for back-compat; maps to ['post','attachment'].
 	const STORAGE_VERSION = 2;
 	const ALL_CUSTOM_ENDPOINTS = '__custom_endpoints__';
 
-	/** Post types excluded from the checklist. */
+	/**
+	 * Post types excluded from the checklist.
+	 *
+	 * @var string[]
+	 */
 	private static $excluded_types = array(
 		'wp_block',
 		'wp_navigation',
@@ -168,6 +175,8 @@ class Agent_Access_Scope {
 	}
 
 	/**
+	 * Get the scope for the current request.
+	 *
 	 * @deprecated Use get_slugs_for_current_request() instead.
 	 */
 	public static function get_scope_for_current_request() {
@@ -177,7 +186,7 @@ class Agent_Access_Scope {
 	/**
 	 * Build a flat list of allowed REST route patterns for a slug array.
 	 *
-	 * @param array $slugs
+	 * @param array $slugs The scope slugs.
 	 * @return array
 	 */
 	private static function build_allowed_routes( array $slugs ) {
@@ -194,7 +203,7 @@ class Agent_Access_Scope {
 			// Literal route pattern (starts with /) — pass through as-is.
 			if ( '/' === $slug[0] ) {
 				$routes[] = $slug;
-				// Also allow sub-routes if the pattern doesn't already end in /*
+				// Also allow sub-routes if the pattern doesn't already end in /*.
 				if ( substr( $slug, -2 ) !== '/*' ) {
 					$routes[] = $slug . '/*';
 				}
@@ -207,7 +216,7 @@ class Agent_Access_Scope {
 
 			// Find the rest_base for this post type.
 			$has_content_scope = true;
-			$rest_base = $slug; // fallback
+			$rest_base = $slug; // fallback.
 			if ( isset( $all_types[ $slug ] ) ) {
 				$rest_base = $all_types[ $slug ]->rest_base ?: $slug;
 			}
@@ -399,8 +408,8 @@ class Agent_Access_Scope {
 	 *
 	 * Automatically migrates legacy template-key strings.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 * @return array Slug array.
 	 */
 	public static function get( $user_id, $uuid ) {
@@ -450,8 +459,8 @@ class Agent_Access_Scope {
 	/**
 	 * Delete the scope meta when an app password is revoked.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function delete( $user_id, $uuid ) {
 		delete_user_meta( (int) $user_id, self::META_PREFIX . $uuid );
@@ -573,6 +582,8 @@ class Agent_Access_Scope {
 	// ──────────────────────────────────────────────
 
 	/**
+	 * Get the legacy scope templates.
+	 *
 	 * @deprecated 2.3.0 Use get_available_post_types() + slug arrays.
 	 *
 	 * @return array
@@ -623,7 +634,12 @@ class Agent_Access_Scope {
 	}
 
 	/**
+	 * Get a single legacy scope template.
+	 *
 	 * @deprecated 2.3.0
+	 *
+	 * @param string $key The template key.
+	 * @return array|null
 	 */
 	public static function get_template( $key ) {
 		$templates = self::get_templates();

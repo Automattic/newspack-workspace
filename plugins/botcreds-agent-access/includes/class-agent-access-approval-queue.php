@@ -25,6 +25,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Optional approval requirement for content created by agents.
+ */
 class Agent_Access_Approval_Queue {
 
 	const META_PREFIX      = '_agent_access_status_';
@@ -48,9 +51,9 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Block write requests from pending credentials.
 	 *
-	 * @param mixed           $result
-	 * @param WP_REST_Server  $server
-	 * @param WP_REST_Request $request
+	 * @param mixed           $result The current dispatch result.
+	 * @param WP_REST_Server  $server The REST server.
+	 * @param WP_REST_Request $request The REST request.
 	 * @return mixed
 	 */
 	public static function enforce( $result, $server, $request ) {
@@ -102,8 +105,8 @@ class Agent_Access_Approval_Queue {
 	 * Credentials created before this feature existed (no meta) are treated
 	 * as 'approved' so existing deployments are unaffected.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 * @return string 'pending' | 'approved'
 	 */
 	public static function get_status( $user_id, $uuid ) {
@@ -114,8 +117,8 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Mark a credential as pending (called at creation time when required).
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function set_pending( $user_id, $uuid ) {
 		update_user_meta( (int) $user_id, self::META_PREFIX . $uuid, self::STATUS_PENDING );
@@ -124,8 +127,8 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Approve a credential.
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function approve( $user_id, $uuid ) {
 		update_user_meta( (int) $user_id, self::META_PREFIX . $uuid, self::STATUS_APPROVED );
@@ -134,8 +137,8 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Remove status meta (called on credential revocation).
 	 *
-	 * @param int    $user_id
-	 * @param string $uuid
+	 * @param int    $user_id The user ID.
+	 * @param string $uuid The application password UUID.
 	 */
 	public static function delete( $user_id, $uuid ) {
 		delete_user_meta( (int) $user_id, self::META_PREFIX . $uuid );
@@ -157,7 +160,7 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Enable or disable the approval requirement.
 	 *
-	 * @param bool $enabled
+	 * @param bool $enabled Whether the setting is enabled.
 	 */
 	public static function set_required( $enabled ) {
 		if ( $enabled ) {
@@ -252,7 +255,7 @@ class Agent_Access_Approval_Queue {
 	/**
 	 * Return the display label for a status value.
 	 *
-	 * @param string $status
+	 * @param string $status The status value.
 	 * @return string
 	 */
 	public static function get_label( $status ) {

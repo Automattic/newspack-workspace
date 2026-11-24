@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Notifies users when an agent mentions them in a comment.
+ */
 class Agent_Access_Mentions {
 
 	/**
