@@ -188,6 +188,30 @@ final class Api {
 	}
 
 	/**
+	 * Narrows a requested post type to listing post types.
+	 *
+	 * @param string|array|null $type Requested post type slug or slugs. Empty or 'any' means all listing post types.
+	 * @return array Listing post type slugs. Empty if the request names no listing post type.
+	 */
+	public static function get_requested_listing_post_types( $type ) {
+		$listing_post_types = self::get_listing_post_types();
+
+		// If not given a post type, look up posts of any listing type.
+		if ( empty( $type ) || 'any' === $type ) {
+			return $listing_post_types;
+		}
+
+		return array_values(
+			array_filter(
+				(array) $type,
+				function( $post_type ) use ( $listing_post_types ) {
+					return in_array( $post_type, $listing_post_types, true );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Build query args for listings.
 	 *
 	 * @param array $query Query options given as block attributes from Curated List block.
@@ -206,12 +230,7 @@ final class Api {
 
 		$args = wp_parse_args( $args, $default_args );
 
-		if ( ! empty( $query['type'] ) && 'any' !== $query['type'] ) {
-			$args['post_type'] = $query['type'];
-		} else {
-			// If not given a post type, look up posts of any listing type.
-			$args['post_type'] = self::get_listing_post_types();
-		}
+		$args['post_type'] = self::get_requested_listing_post_types( $query['type'] ?? null );
 		if ( ! empty( $query['maxItems'] ) ) {
 			$args['posts_per_page'] = $query['maxItems'];
 		}
@@ -276,6 +295,11 @@ final class Api {
 			$args['tax_query']['relation'] = 'AND';
 		}
 
+		// A type that names no listing post type finds nothing. WP_Query would look up posts if given no post type.
+		if ( empty( $args['post_type'] ) ) {
+			$args['post__in'] = [ 0 ];
+		}
+
 		return $args;
 	}
 
@@ -292,17 +316,12 @@ final class Api {
 		$search     = ! empty( $params['search'] ) ? $params['search'] : null;
 		$query      = ! empty( $params['query'] ) ? $params['query'] : null;
 		$id         = ! empty( $params['id'] ) ? $params['id'] : null;
-		$post_types = ! empty( $params['type'] ) ? $params['type'] : [];
+		$post_types = self::get_requested_listing_post_types( $params['type'] ?? null );
 		$per_page   = ! empty( $params['per_page'] ) ? $params['per_page'] : 10;
 		$page       = ! empty( $params['page'] ) ? $params['page'] : 1;
 		$next_page  = $page + 1;
 		$attributes = ! empty( $params['attributes'] ) ? $params['attributes'] : [];
 		$is_amp     = $request->get_param( 'amp' );
-
-		// If not given a post type, look up posts of any listing type.
-		if ( empty( $post_types ) ) {
-			$post_types = self::get_listing_post_types();
-		}
 
 		// Query args.
 		$args = [
@@ -325,6 +344,11 @@ final class Api {
 		// If given an ID, just look up that post.
 		if ( ! empty( $id ) ) {
 			$args['p'] = esc_sql( $id );
+		}
+
+		// A type that names no listing post type finds nothing.
+		if ( empty( $args['post_type'] ) ) {
+			return rest_ensure_response( $response );
 		}
 
 		$listings_query = new \WP_Query( $args );
