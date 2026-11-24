@@ -59,6 +59,11 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
 	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
 	SectionHeader: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+	SplitSection: {
+		Root: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+		Header: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+		Content: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+	},
 	Waiting: () => null,
 	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
 } ) );
