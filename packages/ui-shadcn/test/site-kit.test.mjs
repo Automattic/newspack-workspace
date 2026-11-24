@@ -253,10 +253,11 @@ test( 'each dot takes its tone from the slide behind it, not from the current sl
 	assert.ok( ! /className=\{ `newspack-deck-nav\$\{/.test( nav ), 'the nav itself no longer flips tone' );
 	const button = nav.match( /className="(group [^"]*)"/ )[ 1 ].split( ' ' );
 	assert.ok( button.includes( 'bg-transparent' ), 'the blue base rule never paints the button' );
-	const toneEffect = nav.slice( nav.indexOf( 'useEffect', nav.indexOf( 'dotTones(' ) - 1200 ), nav.indexOf( '}, [ scrollerRef, slides.length ] );' ) );
+	const toneEffect = nav.slice( nav.lastIndexOf( 'useEffect', nav.indexOf( 'dotTones(' ) ), nav.indexOf( '}, [ scrollerRef, slides.length ] );' ) );
 	assert.ok( toneEffect.includes( 'dotTones(' ) );
 	assert.ok( [ 'scroll', 'resize' ].every( event => toneEffect.includes( `addEventListener( '${ event }', update` ) ), 'the tone follows scrolls and resizes' );
-	assert.ok( /setAttribute\( 'data-settling', '' \);\n\t\tupdate\(\);\n.*\n\t\tnav\.getBoundingClientRect\(\);\n\t\tnav\.removeAttribute\( 'data-settling' \);/.test( toneEffect ), 'the first tone is set with transitions off, not faded in' );
+	const order = [ "nav.setAttribute( 'data-settling', '' );", 'update();', 'nav.getBoundingClientRect();', "nav.removeAttribute( 'data-settling' );" ].map( line => toneEffect.indexOf( line ) );
+	assert.ok( order.every( ( at, index ) => at >= 0 && ( index === 0 || at > order[ index - 1 ] ) ), 'the first tone is set with transitions off, not faded in' );
 } );
 
 const reveal = await import( '../registry/components/deck/deck-nav-reveal.ts' );
