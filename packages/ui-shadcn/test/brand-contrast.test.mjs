@@ -33,6 +33,7 @@ const expectedNames = [
 	'body text on blue',
 	'muted text on blue',
 	'link on blue',
+	'current-page underline on blue',
 	'h1 on blue',
 	'display text on blue',
 	'h1 in a blue section',

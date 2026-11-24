@@ -46,6 +46,7 @@ export const blueTokens = {
 	'newspack-ui-color-btn-pressed': [ 'color-mix(in oklab, var(--newspack-ui-color-btn) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-surface))', 'Button pressed on Cobalt: restated so it resolves against the white fill and the Cobalt surface.' ],
 	'newspack-ui-color-focus-halo': [ 'color-mix(in oklab, var(--newspack-ui-color-focus) var(--newspack-ui-focus-halo-mix), transparent)', 'Focus halo on Cobalt: restated so it mixes from the white ring.' ],
 	'newspack-ui-color-link': [ 'var(--newspack-ui-color-text)', 'Links on Cobalt: the inverse text color, since Cobalt link text would vanish into the Cobalt surface.' ],
+	'newspack-ui-color-accent': [ 'var(--newspack-ui-color-text)', 'Current-page underline in the site header on Cobalt: white.' ],
 	'newspack-ui-color-button-text-hover': [ 'var(--newspack-ui-color-btn-ink)', 'Button text on hover: the Cobalt ink, since the white Neutral value would vanish on the light hover fill.' ],
 	'newspack-ui-color-focus-on-brand': [ 'var(--newspack-ui-color-primary-60)', 'Focus ring on the white button: Cobalt.' ],
 	'newspack-ui-color-brand-text': [ 'var(--newspack-ui-color-text)', 'Brand text on Cobalt: white.' ],

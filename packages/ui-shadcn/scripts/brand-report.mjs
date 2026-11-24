@@ -175,6 +175,7 @@ export function brandPairs( dist = join( root, 'dist' ) ) {
 		B( 'body text on blue', text, surface, 75 ),
 		B( 'muted text on blue', 'newspack-ui-color-text-muted', surface, 60 ),
 		B( 'link on blue', 'newspack-ui-color-link', surface, 75 ),
+		B( 'current-page underline on blue', 'newspack-ui-color-accent', surface, 45 ),
 		B( 'h1 on blue', tokenOf( brandBase.h1.color ), surface, 45 ),
 		B( 'display text on blue', tokenOf( brandBase[ '.font-display' ].color ), surface, 45 ),
 		B( 'h1 in a blue section', tokenOf( brandBase[ inverseHeadings ].color ), surface, 45 ),
