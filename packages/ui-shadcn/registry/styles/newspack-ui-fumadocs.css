@@ -75,6 +75,33 @@
 	backdrop-filter: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+	:root,
+	#nd-sidebar-mobile {
+		--animate-fd-dialog-in: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-dialog-out: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-popover-in: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-popover-out: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-enterFromLeft: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-enterFromRight: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-exitToLeft: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-exitToRight: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-sidebar-in: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-sidebar-out: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-collapsible-down: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-collapsible-up: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-accordion-down: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-accordion-up: fd-fade-out var(--newspack-ui-duration-modal) ease;
+		--animate-fd-nav-menu-in: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-nav-menu-out: fd-fade-out var(--newspack-ui-duration-modal) ease;
+	}
+
+	:has(+ #nd-sidebar-mobile)[data-state] {
+		--animate-fd-fade-in: fd-fade-in var(--newspack-ui-duration-modal) ease;
+		--animate-fd-fade-out: fd-fade-out var(--newspack-ui-duration-modal) ease;
+	}
+}
+
 a.sr-only[href='#nd-page'] {
 	display: none;
 }
