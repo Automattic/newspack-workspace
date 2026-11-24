@@ -1,19 +1,18 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
-import { DataViews as WPDataViews } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Drawer, StatusIndicator } from '../../../../../packages/components/src';
+import { DataViews, Drawer, StatusBadge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
 import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getStatusDisplay, getEmptyMessage } from './push-log-utils';
@@ -21,28 +20,29 @@ import { SyncActivityDetails } from './sync-activity-details';
 import { useRunAction } from './use-run-action';
 import { DetailsLink } from './details-link';
 
+const FIT_COLUMNS = [ 'status' ];
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
 	perPage: 25,
 	sort: { field: 'updated_at', direction: 'desc' },
 	search: '',
-	fields: [ 'updated_at', 'email', 'operation', 'context', 'status' ],
+	fields: [ 'email', 'status', 'operation', 'context', 'updated_at' ],
 	filters: [],
-	layout: {
-		styles: {
-			updated_at: { width: '20%' },
-			email: { width: '26%' },
-			operation: { width: '14%' },
-			context: { width: '20%' },
-			status: { width: '20%' },
-		},
-	},
+	layout: {},
 };
+
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
 
 // The retry's action finishing does not say the push worked, so the notice
 // sends the reader to the entry rather than calling it a success.
 const RETRY_RAN_NOTICE = { message: __( 'The retry ran. Its entry shows the result.', 'newspack-plugin' ), type: 'info' };
+
+const STATUS_FILTER_ELEMENTS = [
+	{ value: NEEDS_ATTENTION_VALUE, label: __( 'Needs attention', 'newspack-plugin' ) },
+	...Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
+];
 
 const toElements = labels => Object.entries( labels ).map( ( [ value, label ] ) => ( { value, label } ) );
 
@@ -131,7 +131,11 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'updated_at',
 				label: __( 'Last activity', 'newspack-plugin' ),
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ formatTimestamp( item.updated_at ) }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) }>
+						<span className="newspack-dataviews__date">{ formatTimestamp( item.updated_at ) }</span>
+					</DetailsLink>
+				),
 				enableSorting: true,
 				enableHiding: false,
 			},
@@ -139,7 +143,11 @@ export const SyncActivity = ( { integrationId } ) => {
 				id: 'email',
 				label: __( 'Reader', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.email,
-				render: ( { item } ) => <DetailsLink onClick={ () => openDetails( item ) }>{ item.email }</DetailsLink>,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+						{ item.email }
+					</DetailsLink>
+				),
 				enableSorting: false,
 			},
 			{
@@ -160,8 +168,8 @@ export const SyncActivity = ( { integrationId } ) => {
 					// out in a row and does not wrap, so the notes need a
 					// column of their own to sit under the status.
 					return (
-						<Stack direction="column" gap="xs">
-							<StatusIndicator status={ mapped.status }>{ mapped.label }</StatusIndicator>
+						<Stack direction="column" align="flex-start" gap="xs">
+							<StatusBadge status={ mapped.status }>{ mapped.label }</StatusBadge>
 							{ notes.map( note => (
 								<span key={ note } className="newspack-integration-logs__status-note">
 									{ note }
@@ -171,7 +179,7 @@ export const SyncActivity = ( { integrationId } ) => {
 					);
 				},
 				enableSorting: false,
-				elements: Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
+				elements: STATUS_FILTER_ELEMENTS,
 				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 			{
@@ -190,7 +198,7 @@ export const SyncActivity = ( { integrationId } ) => {
 			{
 				id: 'created_at',
 				label: __( 'First attempt', 'newspack-plugin' ),
-				render: ( { item } ) => formatTimestamp( item.created_at ),
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ formatTimestamp( item.created_at ) }</span>,
 				enableSorting: false,
 			},
 			{
@@ -198,17 +206,6 @@ export const SyncActivity = ( { integrationId } ) => {
 				label: __( 'Repeats', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.repeat_count,
 				enableSorting: false,
-			},
-			{
-				// Carries the filter only: what needs attention is worked out by
-				// the server from later pushes, so there is no column to show.
-				id: 'needs_attention',
-				label: __( 'Needs attention', 'newspack-plugin' ),
-				getValue: () => '',
-				enableSorting: false,
-				enableHiding: false,
-				elements: [ { value: NEEDS_ATTENTION_VALUE, label: __( 'Retrying or failed, with no later success', 'newspack-plugin' ) } ],
-				filterBy: { isPrimary: true, operators: [ 'is' ] },
 			},
 		],
 		[ openDetails ]
@@ -250,6 +247,14 @@ export const SyncActivity = ( { integrationId } ) => {
 	return (
 		<>
 			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of sync activity entries. */
+						_n( '%s entry', '%s entries', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
 				className="newspack-integration-logs"
 				data={ data }
 				fields={ fields }
@@ -262,16 +267,10 @@ export const SyncActivity = ( { integrationId } ) => {
 				getItemId={ item => item.id }
 				empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
 				search
-			>
-				<Stack direction="row" align="flex-start" gap="sm" className="dataviews__view-actions">
-					<Stack direction="row" align="center" gap="xl" wrap="wrap" className="dataviews__search">
-						<WPDataViews.Search label={ __( 'Search by reader email', 'newspack-plugin' ) } />
-						<WPDataViews.Filters />
-					</Stack>
-				</Stack>
-				<WPDataViews.Layout />
-				<WPDataViews.Footer />
-			</DataViews>
+				searchLabel={ __( 'Search by reader email', 'newspack-plugin' ) }
+				config={ PER_PAGE_CONFIG }
+				inlineFilters
+			/>
 			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
 				<Drawer.Header>
 					<Drawer.Title>{ __( 'Sync Details', 'newspack-plugin' ) }</Drawer.Title>

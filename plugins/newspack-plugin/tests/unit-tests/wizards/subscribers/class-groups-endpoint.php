@@ -42,7 +42,9 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $wcs_mock_hpos_enabled;
+		// The group index reads the mock subscriptions through the mirrored HPOS tables.
+		$wcs_mock_hpos_enabled = true;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$this->user_ids         = [];
@@ -55,7 +57,8 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	 * Tear down: reset databases and delete users.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $wcs_mock_hpos_enabled;
+		$wcs_mock_hpos_enabled = false;
 		$subscriptions_database = [];
 		$products_database      = [];
 		foreach ( $this->user_ids as $user_id ) {
@@ -95,20 +98,25 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	 * @param int    $owner_id The owner user ID.
 	 * @param int    $limit    Seat limit (owner-inclusive).
 	 * @param string $status   Subscription status.
+	 * @param string $name     The group's custom name; empty leaves it unnamed.
+	 * @param string $created  Creation date, parseable by WC_DateTime.
 	 *
 	 * @return WC_Subscription
 	 */
-	private function create_group_subscription( int $owner_id, int $limit, string $status = 'active' ): WC_Subscription {
+	private function create_group_subscription( int $owner_id, int $limit, string $status = 'active', string $name = 'Acme Team', string $created = 'now' ): WC_Subscription {
 		$sub = wcs_create_subscription(
 			[
 				'customer_id'    => $owner_id,
 				'status'         => $status,
 				'billing_period' => 'month',
+				'date_created'   => $created,
 			]
 		);
 		$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
 		$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', (string) $limit );
-		$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Acme Team' );
+		if ( '' !== $name ) {
+			$sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', $name );
+		}
 		return $sub;
 	}
 
@@ -125,10 +133,25 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	/**
 	 * Dispatch the groups endpoint as the current user.
 	 *
+	 * @param array $params Query parameters.
+	 *
 	 * @return WP_REST_Response
 	 */
-	private function dispatch(): WP_REST_Response {
-		return rest_get_server()->dispatch( new WP_REST_Request( 'GET', self::ROUTE ) );
+	private function dispatch( array $params = [] ): WP_REST_Response {
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_query_params( $params );
+		return rest_get_server()->dispatch( $request );
+	}
+
+	/**
+	 * The IDs of the groups in a response, in order.
+	 *
+	 * @param WP_REST_Response $response The response.
+	 *
+	 * @return int[]
+	 */
+	private function group_ids( WP_REST_Response $response ): array {
+		return array_column( $response->get_data()['items'], 'id' );
 	}
 
 	/**
@@ -262,6 +285,132 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 				sprintf( 'WCS status "%s" should surface as "%s".', $wcs_status, $prototype_status_by_wcs_status[ $wcs_status ] )
 			);
 		}
+	}
+
+	/**
+	 * The server returns one page: a site can hold thousands of groups, and
+	 * loading them all runs the request out of memory. The default order is
+	 * newest first, and `total` and `pages` describe the whole list.
+	 */
+	public function test_returns_one_page_of_groups() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$ids_newest_first = [];
+		foreach ( [ '2026-05-01', '2026-04-01', '2026-03-01', '2026-02-01', '2026-01-01' ] as $created ) {
+			$ids_newest_first[] = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Acme Team', $created )->get_id();
+		}
+
+		$response = $this->dispatch(
+			[
+				'per_page' => 2,
+				'page'     => 2,
+			]
+		);
+
+		$this->assertSame( array_slice( $ids_newest_first, 2, 2 ), $this->group_ids( $response ) );
+		$this->assertSame( 5, $response->get_data()['total'] );
+		$this->assertSame( 3, $response->get_data()['pages'] );
+	}
+
+	/**
+	 * Search matches the group name, the product name and the owner's email. An
+	 * unnamed group goes by its product's name, and searching for that name finds
+	 * it, even when the name holds a `%`.
+	 */
+	public function test_search_matches_group_product_and_owner() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4343,
+				'name' => '50% Off Team',
+			]
+		);
+
+		$acme     = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Acme Team' );
+		$beta     = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Beta Newsroom' );
+		$unnamed  = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', '' );
+		$unnamed->add_product( $product );
+		$owner_id = $this->create_reader_user();
+		$owned    = $this->create_group_subscription( $owner_id, 3, 'active', 'Gamma Desk' );
+
+		$this->assertSame( [ $beta->get_id() ], $this->group_ids( $this->dispatch( [ 'search' => 'beta news' ] ) ) );
+		$this->assertSame( [ $unnamed->get_id() ], $this->group_ids( $this->dispatch( [ 'search' => '50% Off' ] ) ) );
+		$this->assertSame( '50% Off Team', $this->dispatch( [ 'search' => '50% Off' ] )->get_data()['items'][0]['plan'] );
+		$this->assertSame( [ $owned->get_id() ], $this->group_ids( $this->dispatch( [ 'search' => get_userdata( $owner_id )->user_email ] ) ) );
+		$this->assertNotContains( $acme->get_id(), $this->group_ids( $this->dispatch( [ 'search' => 'beta' ] ) ) );
+	}
+
+	/**
+	 * Status and Subscription filters run on the server. The response lists every
+	 * group product as a Subscription filter option, not only those on the page.
+	 */
+	public function test_filters_by_status_and_product() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$annual  = wc_create_mock_product(
+			[
+				'id'   => 4444,
+				'name' => 'Team Annual',
+			]
+		);
+		$monthly = wc_create_mock_product(
+			[
+				'id'   => 4445,
+				'name' => 'Team Monthly',
+			]
+		);
+
+		$active_annual = $this->create_group_subscription( $this->create_reader_user(), 3, 'active' );
+		$active_annual->add_product( $annual );
+		$expired_annual = $this->create_group_subscription( $this->create_reader_user(), 3, 'expired' );
+		$expired_annual->add_product( $annual );
+		$active_monthly = $this->create_group_subscription( $this->create_reader_user(), 3, 'active' );
+		$active_monthly->add_product( $monthly );
+
+		$response = $this->dispatch(
+			[
+				'status'   => [ 'active' ],
+				'product'  => [ 'Team Annual' ],
+				'per_page' => 1,
+			]
+		);
+
+		$this->assertSame( [ $active_annual->get_id() ], $this->group_ids( $response ) );
+		$this->assertSame( 1, $response->get_data()['total'] );
+		$this->assertSame( [ 'Team Annual', 'Team Monthly' ], $response->get_data()['products'] );
+		$this->assertSame( [ $expired_annual->get_id() ], $this->group_ids( $this->dispatch( [ 'status' => [ 'cancelled' ] ] ) ) );
+	}
+
+	/**
+	 * A trashed group subscription is not a group on the list: it is neither a row
+	 * nor counted, rather than showing as on hold.
+	 */
+	public function test_excludes_trashed_groups() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$live = $this->create_group_subscription( $this->create_reader_user(), 3 );
+		$this->create_group_subscription( $this->create_reader_user(), 3, 'trash' );
+
+		$response = $this->dispatch();
+
+		$this->assertSame( [ $live->get_id() ], $this->group_ids( $response ) );
+		$this->assertSame( 1, $response->get_data()['total'] );
+	}
+
+	/**
+	 * Sorting by name runs on the server, across pages.
+	 */
+	public function test_sorts_by_name() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+		$charlie = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Charlie' );
+		$alpha   = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Alpha' );
+		$bravo   = $this->create_group_subscription( $this->create_reader_user(), 3, 'active', 'Bravo' );
+
+		$response = $this->dispatch(
+			[
+				'orderby' => 'name',
+				'order'   => 'asc',
+			]
+		);
+
+		$this->assertSame( [ $alpha->get_id(), $bravo->get_id(), $charlie->get_id() ], $this->group_ids( $response ) );
 	}
 
 	/**

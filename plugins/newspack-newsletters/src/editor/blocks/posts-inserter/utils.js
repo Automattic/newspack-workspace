@@ -96,6 +96,23 @@ export const sanitizeSubtitle = html => {
 	return parsed.body.innerHTML;
 };
 
+/**
+ * Removes every class attribute from a custom byline before it becomes block content.
+ *
+ * Rich text reads any element whose class matches a registered format's className as
+ * that format, whatever the tag. Newspack's hCard author links carry `fn`, which becomes
+ * a core/footnote with no attributes and breaks the editor after insertion. Bylines are
+ * editor-authored HTML that can carry other format classes too, so strip them all.
+ *
+ * @param {string} html Custom byline HTML.
+ * @return {string} The byline without class attributes.
+ */
+export const stripClassAttributes = html => {
+	const parsed = new DOMParser().parseFromString( html, 'text/html' );
+	parsed.body.querySelectorAll( '[class]' ).forEach( element => element.removeAttribute( 'class' ) );
+	return parsed.body.innerHTML;
+};
+
 const assignFontSize = ( fontSize, attributes ) => {
 	if ( typeof fontSize === 'number' ) {
 		fontSize = fontSize + 'px';
@@ -157,7 +174,7 @@ const getContinueReadingLinkBlockTemplate = ( post, { textFontSize, textColor } 
 	return [ 'core/paragraph', assignFontSize( textFontSize, attributes ) ];
 };
 
-const getAuthorBlockTemplate = ( post, { textFontSize, textColor } ) => {
+export const getAuthorBlockTemplate = ( post, { textFontSize, textColor } ) => {
 	const { newspack_custom_byline, newspack_author_info } = post;
 
 	// Check for custom byline first.
@@ -165,7 +182,7 @@ const getAuthorBlockTemplate = ( post, { textFontSize, textColor } ) => {
 		return [
 			'core/heading',
 			assignFontSize( textFontSize, {
-				content: newspack_custom_byline,
+				content: stripClassAttributes( newspack_custom_byline ),
 				fontSize: 'normal',
 				level: 6,
 				style: { color: { text: textColor } },

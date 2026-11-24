@@ -16,7 +16,7 @@ namespace Newspack_Network\Utils;
 class Icons {
 
 	/**
-	 * The broadcast mark, mirroring newspack-icons' broadcast export.
+	 * The filled broadcast mark, from newspack-icons before its stroke redraw. It stays filled to match the admin bar's Dashicons.
 	 *
 	 * @param int $size Width and height in pixels.
 	 *

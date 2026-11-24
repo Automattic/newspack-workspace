@@ -114,7 +114,7 @@ class WebPreview extends Component {
 		return createPortal(
 			<div className={ classes }>
 				<div className="newspack-web-preview__interior">
-					<div className="newspack-web-preview__toolbar">
+					<div className={ classnames( 'newspack-web-preview__toolbar', ! title && 'newspack-web-preview__toolbar--no-title' ) }>
 						{ title && (
 							<div className="newspack-web-preview__toolbar-left">
 								<h3>{ title }</h3>

@@ -91,6 +91,7 @@ jest.mock( '../../../../../packages/components/src', () => {
 		AutocompleteTokenField,
 		Grid: passthrough,
 		SectionHeader: () => null,
+		SplitSection: { Root: passthrough, Header: () => null, Content: passthrough },
 		Divider: () => null,
 		useConfirmDialog,
 		Router: { useHistory: () => history, useLocation: () => ( { pathname: '/new' } ) },

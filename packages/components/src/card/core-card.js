@@ -172,7 +172,7 @@ const CoreCard = ( {
 					) }
 					{ actions?.length > 0 && (
 						<DropdownMenu icon={ moreVertical } label={ actionsLabel || __( 'More actions', 'newspack-plugin' ) }>
-							{ () =>
+							{ ( { onClose } ) =>
 								actions.map( ( action, index ) => {
 									// Actions can be an array of sub-actions, which are rendered within a MenuGroup.
 									if ( Array.isArray( action ) ) {
@@ -183,7 +183,10 @@ const CoreCard = ( {
 														<MenuItem
 															key={ i }
 															icon={ subAction.icon }
-															onClick={ subAction.action }
+															onClick={ event => {
+																onClose();
+																subAction.action?.( event );
+															} }
 															href={ subAction.href }
 															aria-label={ subAction.ariaLabel }
 															disabled={ subAction.disabled || false }
@@ -200,7 +203,10 @@ const CoreCard = ( {
 										<MenuItem
 											key={ index }
 											icon={ action.icon }
-											onClick={ action.action }
+											onClick={ event => {
+												onClose();
+												action.action?.( event );
+											} }
 											href={ action.href }
 											aria-label={ action.ariaLabel }
 											disabled={ action.disabled || false }

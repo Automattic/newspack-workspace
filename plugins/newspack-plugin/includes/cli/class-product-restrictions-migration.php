@@ -13,7 +13,6 @@
 namespace Newspack\CLI;
 
 use Newspack\Product_Targeting;
-use Newspack\Subscriber_Commerce;
 use Newspack\Subscriber_Only_Products;
 use Newspack\WooCommerce_Subscriptions;
 use WP_CLI;
@@ -41,6 +40,21 @@ class Product_Restrictions_Migration {
 	const HIDE_RESTRICTED_PRODUCTS_OPTION = 'wc_memberships_hide_restricted_products';
 
 	/**
+	 * Store-wide restriction mode: what a restricted page does for a reader without access.
+	 */
+	const RESTRICTION_MODE_OPTION = 'wc_memberships_restriction_mode';
+
+	/**
+	 * The page the "redirect" restriction mode sends readers to.
+	 */
+	const REDIRECT_PAGE_ID_OPTION = 'wc_memberships_redirect_page_id';
+
+	/**
+	 * The shortcode Memberships puts on the page it creates as the redirect target.
+	 */
+	const RESTRICTED_CONTENT_SHORTCODE = 'wcm_content_restricted';
+
+	/**
 	 * The only product taxonomy a subscriber-only restriction can target.
 	 */
 	const SUPPORTED_TAXONOMY = 'product_cat';
@@ -60,7 +74,9 @@ class Product_Restrictions_Migration {
 	 * Re-running brings the restrictions it wrote back in line with Memberships:
 	 * it updates them in place, removes any whose source rule is gone, and keeps
 	 * a restriction paused if the publisher paused it. Any other edit made to a
-	 * migrated restriction in Access Control is overwritten.
+	 * migrated restriction in Access Control is overwritten. Where a "view" rule
+	 * migrates, the restriction settings (product lists, product page) are
+	 * overwritten with Memberships' too.
 	 *
 	 * ## OPTIONS
 	 *
@@ -119,6 +135,14 @@ class Product_Restrictions_Migration {
 		foreach ( $mapped['rules'] as $rule ) {
 			$existing_rule = Subscriber_Only_Products::get_rule( $rule['id'] );
 			$exists        = null !== $existing_rule;
+			// A "view" rule's restriction on a site migrated before the type
+			// existed sits under the "Purchase" id; a pause made there carries over.
+			if ( ! $exists && Subscriber_Only_Products::RESTRICTION_TYPE_VIEW === $rule['restriction_type'] ) {
+				$legacy_rule = Subscriber_Only_Products::get_rule( self::migrated_rule_id( $rule['_source_plan_id'], $rule['targeting'] ) );
+				if ( $legacy_rule && empty( $legacy_rule['active'] ) ) {
+					$rule['active'] = false;
+				}
+			}
 			if ( $exists ) {
 				// Memberships has no pause for this rule type, so a pause can only
 				// be the publisher's own, made after the first run. Keep it.
@@ -126,7 +150,7 @@ class Product_Restrictions_Migration {
 			}
 			if ( ! $exists ) {
 				$result = $dry_run ? 'would create' : 'created';
-			} elseif ( self::without_created_at( $existing_rule ) === self::without_created_at( Subscriber_Commerce::sanitize_base_rule( $rule ) ) ) {
+			} elseif ( self::without_created_at( $existing_rule ) === self::without_created_at( Subscriber_Only_Products::sanitize_rule( $rule ) ) ) {
 				$result = 'unchanged';
 			} else {
 				$result = $dry_run ? 'would update' : 'updated';
@@ -134,6 +158,7 @@ class Product_Restrictions_Migration {
 
 			$summary[] = [
 				'plan'     => self::describe_plan( $rule['_source_plan_id'] ),
+				'restrict' => Subscriber_Only_Products::RESTRICTION_TYPE_VIEW === $rule['restriction_type'] ? 'purchase and visibility' : 'purchase',
 				'products' => self::describe_targeting( $rule ),
 				'audience' => implode( ', ', $rule['subscription_product_ids'] ),
 				'result'   => $result,
@@ -148,7 +173,7 @@ class Product_Restrictions_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::line( $dry_run ? '=== DRY RUN SUMMARY ===' : '=== MIGRATION SUMMARY ===' );
 		if ( ! empty( $summary ) ) {
-			\WP_CLI\Utils\format_items( 'table', $summary, [ 'plan', 'products', 'audience', 'result' ] );
+			\WP_CLI\Utils\format_items( 'table', $summary, [ 'plan', 'restrict', 'products', 'audience', 'result' ] );
 		}
 
 		if ( ! empty( $mapped['skipped'] ) ) {
@@ -167,27 +192,9 @@ class Product_Restrictions_Migration {
 			}
 		}
 
-		self::report_hidden( $mapped['hidden'] );
-
-		foreach ( $mapped['view_only_buyers'] as $view_only_buyer ) {
-			WP_CLI::warning(
-				sprintf(
-					'Product %1$d "%2$s": members of %3$s could see it but not buy it in Memberships. After the flip their subscribers can buy it.',
-					$view_only_buyer['product_id'],
-					get_the_title( $view_only_buyer['product_id'] ),
-					implode( ', ', array_map( [ __CLASS__, 'describe_plan' ], $view_only_buyer['plans'] ) )
-				)
-			);
-		}
-
-		foreach ( $mapped['unchecked_view_overlaps'] as $view_overlap ) {
-			WP_CLI::warning(
-				sprintf(
-					'Memberships rule %1$s let members of %2$s see products without buying them, and may overlap another plan\'s purchase rule. Check by hand: after the flip those subscribers can buy every product it covers.',
-					$view_overlap['source'],
-					self::describe_plan( $view_overlap['plan'] )
-				)
-			);
+		// The settings only shape what "Purchase and visibility" products do.
+		if ( in_array( Subscriber_Only_Products::RESTRICTION_TYPE_VIEW, wp_list_pluck( $mapped['rules'], 'restriction_type' ), true ) ) {
+			self::migrate_settings( $dry_run );
 		}
 
 		foreach ( $mapped['delayed'] as $delayed_rule ) {
@@ -232,44 +239,78 @@ class Product_Restrictions_Migration {
 	}
 
 	/**
-	 * Warn about each product a Memberships rule hid from non-members.
+	 * Carry the store-wide settings that decide what a "Purchase and
+	 * visibility" product does for readers who can't see it.
 	 *
-	 * A "view" restriction hides the product as well as blocking its purchase.
-	 * Subscriber-only products block the purchase and nothing else, so these
-	 * products become visible to every reader after the flip.
-	 *
-	 * @param array[] $hidden Hidden entries from map_rules().
+	 * @param bool $dry_run Whether to report without writing.
 	 */
-	private static function report_hidden( array $hidden ): void {
-		if ( empty( $hidden ) ) {
+	private static function migrate_settings( bool $dry_run ): void {
+		$current = Subscriber_Only_Products::get_settings();
+		$mapped  = self::map_settings(
+			(string) get_option( self::RESTRICTION_MODE_OPTION, '' ),
+			(string) get_option( self::HIDE_RESTRICTED_PRODUCTS_OPTION, 'no' ),
+			(int) get_option( self::REDIRECT_PAGE_ID_OPTION, 0 )
+		);
+
+		$description = sprintf(
+			'hide from product lists: %1$s; product page: %2$s',
+			$mapped['hide_from_product_lists'] ? 'yes' : 'no',
+			Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT === $mapped['product_page'] ? 'redirect to page ' . $mapped['redirect_page_id'] : $mapped['product_page']
+		);
+		self::warn_about_redirect_page( $mapped );
+		if ( $current === $mapped ) {
+			WP_CLI::line( sprintf( 'Restriction settings unchanged (%s).', $description ) );
 			return;
 		}
-
-		WP_CLI::line( '' );
-		foreach ( $hidden as $entry ) {
-			switch ( $entry['kind'] ) {
-				case Product_Targeting::TARGETING_ALL:
-					$what = 'Every product';
-					break;
-				case Product_Targeting::TARGETING_CATEGORY:
-					$term = get_term( $entry['object_id'], self::SUPPORTED_TAXONOMY );
-					$what = sprintf( 'Every product in category %d "%s"', $entry['object_id'], $term && ! is_wp_error( $term ) ? $term->name : '' );
-					break;
-				default:
-					$what = sprintf( 'Product %d "%s"', $entry['object_id'], get_the_title( $entry['object_id'] ) );
-			}
-			WP_CLI::warning(
-				sprintf(
-					'%1$s is hidden from non-members of %2$s in Memberships. Access Control only blocks its purchase, so it will be visible to everyone.',
-					$what,
-					self::describe_plan( $entry['plan'] )
-				)
-			);
+		WP_CLI::line( sprintf( 'Restriction settings %1$s (%2$s).', $dry_run ? 'would be updated' : 'updated', $description ) );
+		if ( ! $dry_run ) {
+			Subscriber_Only_Products::update_settings( $mapped );
 		}
+	}
 
-		if ( 'yes' === get_option( self::HIDE_RESTRICTED_PRODUCTS_OPTION, 'no' ) ) {
-			WP_CLI::line( 'Memberships also hides these products from the shop catalog. Access Control\'s "Hide from product lists" setting does that for every subscriber-only product, not only these.' );
+	/**
+	 * Warn when the redirect target won't work once Memberships is off.
+	 *
+	 * Without a published page, readers get the "hide content" page instead. The
+	 * page Memberships creates for this holds only its own shortcode, which
+	 * prints as raw text once the plugin is deactivated.
+	 *
+	 * @param array $settings Mapped settings.
+	 */
+	private static function warn_about_redirect_page( array $settings ): void {
+		if ( Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT !== $settings['product_page'] ) {
+			return;
 		}
+		$page = $settings['redirect_page_id'] ? get_post( $settings['redirect_page_id'] ) : null;
+		if ( ! $page || 'page' !== $page->post_type || 'publish' !== $page->post_status ) {
+			WP_CLI::warning( 'Products hidden from non-subscribers redirect to a page that is not a published page, so their product pages will hide their content instead. Pick a page under Audience > Subscriptions > Subscriber-only products > Settings.' );
+			return;
+		}
+		// A plain match: has_shortcode() only sees registered shortcodes.
+		if ( false !== strpos( $page->post_content, '[' . self::RESTRICTED_CONTENT_SHORTCODE ) ) {
+			WP_CLI::warning( sprintf( 'Products hidden from non-subscribers redirect to page %1$d "%2$s", which uses the [%3$s] shortcode. It prints as text once Memberships is deactivated: edit the page or pick another one before the switch.', $page->ID, $page->post_title, self::RESTRICTED_CONTENT_SHORTCODE ) );
+		}
+	}
+
+	/**
+	 * Map the store-wide Memberships settings to subscriber-only product settings.
+	 *
+	 * @param string $restriction_mode         The Memberships restriction mode: "hide_content", "hide" or "redirect".
+	 * @param string $hide_restricted_products The Memberships "hide restricted products" option, "yes" or "no".
+	 * @param int    $redirect_page_id         The page the "redirect" mode sends readers to.
+	 * @return array Settings shaped for Subscriber_Only_Products::update_settings().
+	 */
+	public static function map_settings( string $restriction_mode, string $hide_restricted_products, int $redirect_page_id ): array {
+		$product_page = in_array( $restriction_mode, [ Subscriber_Only_Products::PRODUCT_PAGE_HIDE, Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT ], true )
+			? $restriction_mode
+			: Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT;
+		return [
+			// "Hide completely" keeps hidden products out of lists whatever this
+			// says, here as in Memberships, so the option carries over as it is.
+			'hide_from_product_lists' => 'yes' === $hide_restricted_products,
+			'product_page'            => $product_page,
+			'redirect_page_id'        => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT === $product_page ? max( 0, $redirect_page_id ) : 0,
+		];
 	}
 
 	/**
@@ -285,26 +326,17 @@ class Product_Restrictions_Migration {
 	 * @return array {
 	 *     @type array[] $rules   Restrictions ready for the store, one per plan and targeting.
 	 *     @type array[] $skipped Memberships rules that need a human decision, with a reason.
-	 *     @type array[] $hidden  What view-restricted rules hid from non-members.
 	 *     @type array[] $delayed Rules that granted purchase only some time after joining.
-	 *     @type array[] $view_only_buyers Named products a view-only plan could see but not buy.
-	 *     @type array[] $unchecked_view_overlaps View rules that may overlap another plan's purchase rule by category or catalog.
 	 *     @type string[] $still_enforced_rule_ids Earlier restrictions for rules skipped here that Memberships still enforces.
 	 * }
 	 */
 	public static function map_rules( array $memberships_rules, callable $plan_products_getter, array $force_public_product_ids = [], ?callable $plan_is_published = null ): array {
 		$force_public_product_ids = array_map( 'intval', $force_public_product_ids );
 
-		$grouped = [];
-		$skipped = [];
-		$hidden  = [];
-		$delayed = [];
-		// Plans per named product and access type, to find view-only plans
-		// that gain purchase rights; see the end of this method.
-		$plans_by_product_access = [];
+		$grouped                 = [];
+		$skipped                 = [];
+		$delayed                 = [];
 		$still_enforced_rule_ids = [];
-		$view_scopes             = [];
-		$purchase_scopes         = [];
 
 		foreach ( $memberships_rules as $memberships_rule ) {
 			if ( ! is_array( $memberships_rule ) || 'product_restriction' !== ( $memberships_rule['rule_type'] ?? '' ) ) {
@@ -333,8 +365,9 @@ class Product_Restrictions_Migration {
 				continue;
 			}
 
-			$object_ids  = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
-			$is_taxonomy = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
+			$object_ids       = array_values( array_filter( array_map( 'absint', (array) ( $memberships_rule['object_ids'] ?? [] ) ) ) );
+			$is_taxonomy      = 'taxonomy' === ( $memberships_rule['content_type'] ?? '' );
+			$restriction_type = 'view' === ( $memberships_rule['access_type'] ?? '' ) ? Subscriber_Only_Products::RESTRICTION_TYPE_VIEW : Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE;
 
 			if ( $is_taxonomy && self::SUPPORTED_TAXONOMY !== ( $memberships_rule['content_type_name'] ?? '' ) ) {
 				$skip(
@@ -358,6 +391,9 @@ class Product_Restrictions_Migration {
 				} else {
 					$skipped_targeting = $is_taxonomy ? Product_Targeting::TARGETING_CATEGORY : Product_Targeting::TARGETING_PRODUCTS;
 				}
+				$still_enforced_rule_ids[] = self::migrated_rule_id( $plan_id, $skipped_targeting, $restriction_type );
+				// A site migrated before the type existed holds a "view" rule under
+				// the "Purchase" id, which must stay for the same reason.
 				$still_enforced_rule_ids[] = self::migrated_rule_id( $plan_id, $skipped_targeting );
 				continue;
 			}
@@ -377,13 +413,14 @@ class Product_Restrictions_Migration {
 				}
 			}
 
-			$key = $plan_id . '|' . $targeting;
+			$key = $plan_id . '|' . $targeting . '|' . $restriction_type;
 			if ( ! isset( $grouped[ $key ] ) ) {
 				$grouped[ $key ] = [
 					'_source_plan_id'          => $plan_id,
 					// Derived from the plan and targeting so a re-run updates the
 					// same restriction in place instead of adding a copy.
-					'id'                       => self::migrated_rule_id( $plan_id, $targeting ),
+					'id'                       => self::migrated_rule_id( $plan_id, $targeting, $restriction_type ),
+					'restriction_type'         => $restriction_type,
 					'subscription_product_ids' => $subscription_product_ids,
 					'targeting'                => $targeting,
 					'product_ids'              => [],
@@ -396,10 +433,6 @@ class Product_Restrictions_Migration {
 			}
 			if ( Product_Targeting::TARGETING_PRODUCTS === $targeting ) {
 				$grouped[ $key ]['product_ids'] = array_values( array_unique( array_merge( $grouped[ $key ]['product_ids'], $object_ids ) ) );
-				$access_type                    = 'view' === ( $memberships_rule['access_type'] ?? '' ) ? 'view' : 'purchase';
-				foreach ( $object_ids as $object_id ) {
-					$plans_by_product_access[ $object_id ][ $access_type ][] = $plan_id;
-				}
 			} elseif ( Product_Targeting::TARGETING_CATEGORY === $targeting ) {
 				$grouped[ $key ]['category_ids'] = array_values( array_unique( array_merge( $grouped[ $key ]['category_ids'], $object_ids ) ) );
 			}
@@ -414,78 +447,35 @@ class Product_Restrictions_Migration {
 					'schedule' => $access_schedule,
 				];
 			}
-
-			$scope = [
-				'source'    => $source_id,
-				'plan'      => $plan_id,
-				'targeting' => $targeting,
-			];
-			if ( 'view' === ( $memberships_rule['access_type'] ?? '' ) ) {
-				$view_scopes[] = $scope;
-			} else {
-				$purchase_scopes[] = $scope;
-			}
-
-			if ( 'view' === ( $memberships_rule['access_type'] ?? '' ) ) {
-				foreach ( Product_Targeting::TARGETING_ALL === $targeting ? [ 0 ] : $object_ids as $object_id ) {
-					$hidden[] = [
-						'plan'      => $plan_id,
-						'kind'      => $targeting,
-						'object_id' => $object_id,
-					];
-				}
-			}
-		}
-
-		// Once any plan has a "purchase" rule on a product, Memberships lets
-		// only those plans buy it; a plan with just a "view" rule may look but
-		// not buy. Each migrated rule is a way in on its own, so that plan's
-		// subscribers would be able to buy.
-		$view_only_buyers = [];
-		foreach ( $plans_by_product_access as $product_id => $plans_by_access ) {
-			$view_only_plan_ids = array_values( array_diff( array_unique( $plans_by_access['view'] ?? [] ), $plans_by_access['purchase'] ?? [] ) );
-			if ( ! empty( $plans_by_access['purchase'] ) && ! empty( $view_only_plan_ids ) ) {
-				$view_only_buyers[] = [
-					'product_id' => $product_id,
-					'plans'      => $view_only_plan_ids,
-				];
-			}
-		}
-
-		// Where either rule covers a category or the whole catalog, the overlap
-		// can't be settled without expanding the catalog, so the view rule is
-		// named for a human to check instead.
-		$unchecked_view_overlaps = [];
-		foreach ( $view_scopes as $view_scope ) {
-			foreach ( $purchase_scopes as $purchase_scope ) {
-				$named_on_both_sides = Product_Targeting::TARGETING_PRODUCTS === $view_scope['targeting'] && Product_Targeting::TARGETING_PRODUCTS === $purchase_scope['targeting'];
-				if ( $purchase_scope['plan'] !== $view_scope['plan'] && ! $named_on_both_sides ) {
-					$unchecked_view_overlaps[ $view_scope['source'] ] = $view_scope;
-					break;
-				}
-			}
 		}
 
 		return [
 			'rules'                   => array_values( $grouped ),
 			'skipped'                 => $skipped,
-			'hidden'                  => $hidden,
 			'delayed'                 => $delayed,
-			'view_only_buyers'        => $view_only_buyers,
-			'unchecked_view_overlaps' => array_values( $unchecked_view_overlaps ),
 			'still_enforced_rule_ids' => array_values( array_unique( $still_enforced_rule_ids ) ),
 		];
 	}
 
 	/**
-	 * A stable subscriber-only restriction id for one plan's rules of one targeting.
+	 * A stable subscriber-only restriction id for one plan's rules of one
+	 * targeting and type.
 	 *
-	 * @param int    $plan_id   Plan post id.
-	 * @param string $targeting Targeting mode.
+	 * A "Purchase" restriction's id hashes the plan and targeting only, the
+	 * id that sites migrated before the type existed carry, so a re-run there
+	 * updates those restrictions in place.
+	 *
+	 * @param int    $plan_id          Plan post id.
+	 * @param string $targeting        Targeting mode.
+	 * @param string $restriction_type Restriction type.
 	 * @return string
 	 */
-	public static function migrated_rule_id( int $plan_id, string $targeting ): string {
-		return self::MIGRATED_RULE_ID_PREFIX . substr( md5( $plan_id . '|' . $targeting ), 0, 24 );
+	public static function migrated_rule_id( int $plan_id, string $targeting, string $restriction_type = Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE ): string {
+		$key = $plan_id . '|' . $targeting;
+		if ( Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE !== $restriction_type ) {
+			$key .= '|' . $restriction_type;
+		}
+		return self::MIGRATED_RULE_ID_PREFIX . substr( md5( $key ), 0, 24 );
 	}
 
 	/**

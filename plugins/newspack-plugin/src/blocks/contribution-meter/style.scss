@@ -1,3 +1,5 @@
+@use "newspack-motion" as motion;
+
 /**
  * Contribution Meter Block Styles.
  */
@@ -40,7 +42,7 @@
 	}
 
 	.contribution-meter__bar-track {
-		background-color: color-mix(in srgb, currentcolor 17%, transparent);
+		background-color: color-mix(in oklab, currentcolor 17%, transparent);
 		overflow: hidden;
 		position: relative;
 		width: 100%;
@@ -50,7 +52,7 @@
 		background-color: currentcolor;
 		height: 100%;
 		position: relative;
-		transition: width 125ms ease-in-out;
+		transition: width motion.$duration-indicator motion.$ease-out;
 	}
 
 	// Thickness variations for linear (with matching border-radius).
@@ -122,12 +124,12 @@
 	}
 
 	.contribution-meter__circle-track {
-		stroke: color-mix(in srgb, currentcolor 17%, transparent);
+		stroke: color-mix(in oklab, currentcolor 17%, transparent);
 	}
 
 	.contribution-meter__circle-progress {
 		stroke: currentcolor;
-		transition: stroke-dashoffset 125ms ease-in-out;
+		transition: stroke-dashoffset motion.$duration-indicator motion.$ease-out;
 	}
 
 	.contribution-meter__circle-percentage {

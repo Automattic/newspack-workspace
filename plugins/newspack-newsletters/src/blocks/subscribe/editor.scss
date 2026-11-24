@@ -49,14 +49,10 @@
 		[type="submit"],
 		.submit-button {
 			transition: background 150ms ease-in-out;
-			background: #d33;
 			border: none;
 			border-radius: 5px;
 			box-sizing: border-box;
-			color: #fff;
-			font-family: var(--newspack-theme-font-heading);
 			font-size: 1rem;
-			font-weight: 700;
 			line-height: 1.2;
 			outline: none;
 			padding: 0.76rem 1rem;
@@ -68,6 +64,16 @@
 			@media ( min-width: 782px ) {
 				width: auto;
 			}
+		}
+		[type="submit"]:where(:not(.wp-element-button)),
+		.submit-button:where(:not(.wp-element-button)) {
+			font-family: var(--newspack-theme-font-heading);
+			font-weight: 700;
+		}
+		[type="submit"]:not(.wp-element-button),
+		.submit-button:not(.wp-element-button) {
+			background: #d33;
+			color: #fff;
 		}
 	}
 	.newspack-newsletters-subscribe__state-bar {

@@ -30,5 +30,6 @@ class Initializer {
 		Customizations\Site_Title::init();
 		Integrations\Google_Analytics::init();
 		Integrations\Access_Control::init();
+		Block_Theme\Block_Theme::init();
 	}
 }

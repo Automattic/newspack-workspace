@@ -85,6 +85,7 @@ export const queryCriteriaFromAttributes = ( attributes: Block[ 'attributes' ] )
 					include: cleanPosts,
 					postsToShow: specificPosts.length,
 					postType,
+					includedPostStatuses,
 			  }
 			: {
 					postsToShow,

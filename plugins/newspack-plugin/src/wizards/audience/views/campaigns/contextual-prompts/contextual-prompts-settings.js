@@ -29,12 +29,12 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 import { megaphone } from '@wordpress/icons';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
+import { Button, Divider, Modal, SplitSection } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
@@ -269,22 +269,28 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 				{ /* Sibling, not a child: the error is about the settings request, so it takes
 				     the tab's full width rather than the empty state's centred column. */ }
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ megaphone }
-						title={ __( 'Get started with Contextual Prompts', 'newspack-plugin' ) }
-						description={ __(
-							'Let editors generate story-specific donation prompts with AI. Approved copy appears in the story as a Contextual Prompt, pairing a tailored message with your donation call to action.',
-							'newspack-plugin'
-						) }
-					/>
-					<EmptyState.Actions orientation="column">
-						<Button variant="primary" disabled={ ! canManage } onClick={ () => setModalOpen( true ) }>
-							{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
-						</Button>
-						{ ! canManage && <p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p> }
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ megaphone } />
+						<EmptyState.Title>{ __( 'Contextual Prompts are off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __(
+								'Editors can generate donation prompts tailored to each story with AI. Approved copy appears in the story with the donation call to action.',
+								'newspack-plugin'
+							) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Stack direction="column" gap="lg" align="center">
+								<Button variant="primary" disabled={ ! canManage } onClick={ () => setModalOpen( true ) }>
+									{ __( 'Enable Contextual Prompts', 'newspack-plugin' ) }
+								</Button>
+								{ ! canManage && (
+									<p style={ { margin: 0 } }>{ __( 'An administrator must enable this feature.', 'newspack-plugin' ) }</p>
+								) }
+							</Stack>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 				{ modalOpen && (
 					<Modal
 						title={ __( 'Enable Contextual Prompts?', 'newspack-plugin' ) }
@@ -423,41 +429,35 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	return (
 		<WizardsTab>
 			{ errorNotice }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Publisher Profile', 'newspack-plugin' ) }
 					description={ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>{ renderFields( 'profile' ) }</VStack>
-			</Grid>
+				<SplitSection.Content>{ renderFields( 'profile' ) }</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Site-Wide Override', 'newspack-plugin' ) }
 					description={ __( 'Temporarily replace every Contextual Prompt with a single call to action.', 'newspack-plugin' ) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
-			</Grid>
+				<SplitSection.Content>{ renderFields( 'override' ) }</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Control Test', 'newspack-plugin' ) }
 					description={ __(
 						'Show a generic control ask on every Nth story to compare it against story-aware copy. The call to action stays the same. If the site-wide override is on, it takes precedence and the test pauses.',
 						'newspack-plugin'
 					) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>
+				<SplitSection.Content>
 					{ renderFields( 'control' ) }
 					<ControlPreview enabled={ controlEnabled } interval={ Number( values[ CONTROL_INTERVAL_KEY ] ) || 3 } />
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</WizardsTab>
 	);
 };

@@ -117,8 +117,8 @@ class Institution {
 				 * are not covered here: core does not gate reads of a published
 				 * post through this map, so the REST read requirement is
 				 * enforced separately by Institution_REST_Controller (below),
-				 * which admits `edit_others_posts` in addition to
-				 * `manage_options`.
+				 * which admits Block_Visibility::CONFIGURE_CAPABILITY in
+				 * addition to `manage_options`.
 				 */
 				'capabilities'          => $capabilities,
 				/**

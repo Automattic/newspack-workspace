@@ -30,11 +30,11 @@ export const DONOR_FILTER_ELEMENTS = [
 	{ value: 'none', label: __( 'Not a donor', 'newspack-plugin' ) },
 ];
 
-// The badge sits beside the subscription statuses, which already use stable, low,
-// medium and high, so a donor badge takes none of those: a shared colour would
-// read as a status. Of the intents left, a reader who still gives (One-time or
-// Recurring) is informational. Former is none, the intent the Badge guidelines
-// give inactive and expired states; draft means work in progress.
+// The badge sits beside the subscription status badges, which use stable, draft,
+// medium and high (STATUS_BADGE_INTENT in status.js), so a donor badge takes none
+// of those: a shared colour would read as a status. Of the intents left, a reader
+// who still gives (One-time or Recurring) is informational. Former is none, the
+// intent the Badge guidelines give inactive and expired states.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
 export const DONOR_BADGE_INTENT = {
 	'one-time': 'informational',

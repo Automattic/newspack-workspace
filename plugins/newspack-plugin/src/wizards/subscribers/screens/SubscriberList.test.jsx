@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, act, screen, fireEvent } from '@testing-library/react';
+import { render, act, screen, fireEvent, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -33,6 +33,7 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 // router at module scope, so the proxy has to answer here too.
 let mockDataViewsProps = null;
 jest.mock( '../../../../packages/components/src', () => ( {
+	CellList: jest.requireActual( '../../../../packages/components/src/cell-list' ).default,
 	DataViews: props => {
 		mockDataViewsProps = props;
 		return null;
@@ -42,8 +43,9 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Notice: () => null,
-	// The status column's indicator, reduced to its label.
-	StatusIndicator: ( { children } ) => require( 'react' ).createElement( 'span', null, children ),
+	// The real status badge, so a test can tell the status badges from the donor
+	// badge beside them.
+	StatusBadge: jest.requireActual( '../../../../packages/components/src/status-badge' ).default,
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -538,6 +540,65 @@ describe( 'the network subscription rows', () => {
 		expect( container.textContent ).toBe( 'All-Access Premium\u00a0(Riverbend Daily)' );
 	} );
 
+	it( 'names a group membership by the plan it is sold on, not the group', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			groups: [
+				{ id: 5, plan: 'Acme Team', planName: 'Team Plan', status: 'active', role: 'member', editUrl: '/edit/5', isComplimentary: false },
+			],
+		};
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelector( 'a' ).textContent ).toBe( 'Team Plan' );
+		expect( container.textContent ).toBe( 'Team Plan\u00a0(Group)' );
+		expect( field( 'plans' ).getValue( { item } ) ).toEqual( [ 'Team Plan' ] );
+	} );
+
+	it( 'shows two subscriptions and toggles the rest', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ 7, 8, 9, 10 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
+		};
+		const { container, getByRole } = render( field( 'plans' ).render( { item } ) );
+		const toggle = getByRole( 'button', { name: 'Show 2 more' } );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
+		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'false' );
+		expect( container.querySelector( `#${ CSS.escape( toggle.getAttribute( 'aria-controls' ) ) }` ) ).not.toBeNull();
+
+		fireEvent.click( toggle );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 4 );
+		expect( toggle.getAttribute( 'aria-expanded' ) ).toBe( 'true' );
+		expect( toggle.textContent ).toBe( 'Show less' );
+	} );
+
+	it( 'keeps an open row open when DataViews remounts the cell', async () => {
+		await mount();
+		const item = {
+			...subscriber( 1 ),
+			subscriptions: [ 7, 8, 9, 10 ].map( id => ( { ...localSubscription, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }` } ) ),
+		};
+		const first = render( field( 'plans' ).render( { item } ) );
+		fireEvent.click( first.getByRole( 'button', { name: 'Show 2 more' } ) );
+		first.unmount();
+
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 4 );
+	} );
+
+	it( 'leaves the toggle out for two subscriptions or fewer', async () => {
+		await mount();
+		const item = { ...subscriber( 1 ), subscriptions: [ localSubscription, { ...localSubscription, id: 8, plan: 'Print' } ] };
+		const { container } = render( field( 'plans' ).render( { item } ) );
+
+		expect( container.querySelectorAll( 'a' ) ).toHaveLength( 2 );
+		expect( container.querySelector( 'button' ) ).toBeNull();
+	} );
+
 	it( 'keeps the plan-and-site label as the value the Subscription filter matches', async () => {
 		await mount();
 		const item = { ...subscriber( 1 ), subscriptions: [ networkSubscription( 12, 'Riverbend Daily' ) ] };
@@ -592,8 +653,42 @@ describe( 'the network subscription rows', () => {
 	} );
 } );
 
+describe( 'the subscriber column', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	// The avatar setting is off in this file's mock, so DataViews must get no media
+	// field: an empty slot would still take its square beside every name.
+	it( 'shows the email under the name and leaves out the avatar slot when avatars are off', async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+
+		expect( mockDataViewsProps.view.descriptionField ).toBe( 'email' );
+		expect( mockDataViewsProps.view.mediaField ).toBeUndefined();
+		expect( mockDataViewsProps.fields.some( field => 'avatar' === field.id ) ).toBe( false );
+	} );
+
+	// The whole-row click resolves the reader from this id, wherever in the row the
+	// click lands, so it has to stay on the name.
+	it( 'stamps the subscriber id on the name the row click resolves', async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		const name = mockDataViewsProps.fields.find( field => 'name' === field.id );
+		const { container } = render( name.render( { item: subscriber( 4 ) } ) );
+
+		expect( container.querySelector( '[data-subscriber-id="4"]' ).textContent ).toBe( 'Reader 4' );
+	} );
+} );
+
 /**
- * A donor's kind shows as a badge under the subscription statuses, a one-time
+ * A donor's kind shows as a badge after the subscription status badges, a one-time
  * donor's latest gift sits in the Subscription column, and the hidden Donor field
  * lets the list narrow by kind. The kind is decided on the server; these cells only
  * show it.
@@ -634,11 +729,15 @@ describe( 'the donor badge and filter', () => {
 			expect( cell( field( 'status' ), item ).textContent ).toBe( 'One-time donor' );
 		} );
 
-		it( 'puts the donor badge after the subscription statuses', async () => {
+		it( 'puts the donor badge after the status badges, as a badge of its own', async () => {
 			const field = await mount();
 			const item = { ...subscriber( 1 ), subscriptions: [ donationPlan ], donor: { kind: 'recurring', lastDonation: null } };
+			const badges = [ ...cell( field( 'status' ), item ).firstChild.children ];
 
-			expect( cell( field( 'status' ), item ).textContent ).toBe( 'ActiveRecurring donor' );
+			expect( badges.map( badge => badge.textContent ) ).toEqual( [ 'Active', 'Recurring donor' ] );
+			// A status badge would read as one more subscription status.
+			expect( badges[ 0 ].classList.contains( 'newspack-status-badge' ) ).toBe( true );
+			expect( badges[ 1 ].classList.contains( 'newspack-status-badge' ) ).toBe( false );
 		} );
 
 		it( 'labels a former donor', async () => {
@@ -702,6 +801,20 @@ describe( 'the donor badge and filter', () => {
 			expect( cell( field( 'plans' ), recurring ).textContent ).toBe( 'Monthly gift' );
 			expect( cell( field( 'plans' ), { ...subscriber( 1 ), donor: { kind: 'former', lastDonation: null } } ).textContent ).toBe( '—' );
 			expect( cell( field( 'plans' ), subscriber( 1 ) ).textContent ).toBe( '—' );
+		} );
+
+		it( 'folds the donation into the list toggle as its last line', async () => {
+			const field = await mount();
+			const plans = [ 3, 4, 5 ].map( id => ( { ...donationPlan, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }`, isDonation: false } ) );
+			const item = { ...subscriber( 1 ), subscriptions: plans, donor: { kind: 'one-time', lastDonation } };
+			const container = cell( field( 'plans' ), item );
+
+			expect( container.textContent ).not.toContain( 'One-time donation' );
+
+			fireEvent.click( within( container ).getByRole( 'button', { name: 'Show 2 more' } ) );
+
+			const links = [ ...container.querySelectorAll( 'a' ) ];
+			expect( links.map( link => link.textContent ) ).toEqual( [ 'Plan 3', 'Plan 4', 'Plan 5', 'One-time donation' ] );
 		} );
 
 		it( 'keeps the donation out of the Subscription filter values', async () => {

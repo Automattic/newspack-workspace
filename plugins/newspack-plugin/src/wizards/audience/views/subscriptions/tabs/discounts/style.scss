@@ -12,15 +12,6 @@
 		padding: 0 var(--newspack-wizard-section-space);
 	}
 
-	&__applies-to {
-		display: inline-block;
-	}
-
-	&__applies-to-excluded {
-		color: wp-colors.$gray-700;
-		display: block;
-	}
-
 	&__fetching {
 		display: flex;
 		justify-content: center;
@@ -34,25 +25,6 @@
 	&__header-count {
 		color: wp-colors.$gray-700;
 		font-weight: normal;
-	}
-
-	&__subscriptions {
-		align-items: baseline;
-		display: flex;
-		gap: wp-vars.$grid-unit-05;
-		min-width: 0;
-	}
-
-	&__subscriptions-named {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	&__subscriptions-more {
-		color: wp-colors.$gray-700;
-		flex-shrink: 0;
 	}
 
 	&__preview {
@@ -94,11 +66,6 @@
 	// rather than on which stylesheet a bundler happens to emit last.
 	.dataviews-view-table__primary-column-content:not(.dataviews-column-primary__media) {
 		max-width: 40ch;
-	}
-
-	.dataviews-title-field--clickable:focus:not(:focus-visible) {
-		box-shadow: none;
-		color: inherit;
 	}
 
 	&__preview-more td {

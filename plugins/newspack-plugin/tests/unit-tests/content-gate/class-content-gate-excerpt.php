@@ -273,6 +273,32 @@ class Newspack_Test_Content_Gate_Excerpt extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Teasers, and whether each ends with the overlay layout's ellipsis.
+	 *
+	 * @return array
+	 */
+	public function overlay_ellipsis_teasers() {
+		return [
+			'entity, as WordPress 7.1 prints it'    => [ '<p>Free text. [&hellip;]</p>', true ],
+			'character, as WordPress 7.2 prints it' => [ '<p>Free text. […]</p>', true ],
+			'no ellipsis'                           => [ '<p>Free text.</p>', false ],
+			'author ellipsis after wptexturize'     => [ '<p>Free text [&#8230;]</p>', false ],
+		];
+	}
+
+	/**
+	 * The overlay's ellipsis is recognized in either form WordPress prints it.
+	 *
+	 * @dataProvider overlay_ellipsis_teasers
+	 *
+	 * @param string $teaser   Teaser HTML.
+	 * @param bool   $expected Whether it ends with the overlay ellipsis.
+	 */
+	public function test_only_the_overlays_own_ellipsis_counts( $teaser, $expected ) {
+		$this->assertSame( $expected, Content_Gate_Excerpt::has_overlay_ellipsis( $teaser ) );
+	}
+
+	/**
 	 * A manual excerpt plus a non-empty upstream $text does not leak gated blocks.
 	 *
 	 * Core returns a non-empty $text verbatim, so a filter deriving $text from

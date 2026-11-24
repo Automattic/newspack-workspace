@@ -16,8 +16,8 @@ describe( 'donor labels and badge intents', () => {
 	} );
 
 	it( 'borrows no colour that already means a subscription status', () => {
-		// The badge sits beside the status indicators in the list and the status
-		// badges on the profile; a shared colour would read as a status.
+		// The badge sits beside the status badges in the list and on the profile;
+		// a shared colour would read as a status.
 		const statusIntents = Object.values( STATUS_BADGE_INTENT );
 		Object.values( DONOR_BADGE_INTENT ).forEach( intent => expect( statusIntents ).not.toContain( intent ) );
 	} );

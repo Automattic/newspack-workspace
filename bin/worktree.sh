@@ -191,12 +191,21 @@ case $1 in
         ;;
     remove)
         skip_confirm=false
+        keep_branch=false
         shift  # consume "remove"
         # Parse flags.
         args=()
         for arg in "$@"; do
             if [[ "$arg" == "--yes" ]]; then
                 skip_confirm=true
+            elif [[ "$arg" == "--keep-branch" ]]; then
+                keep_branch=true
+            elif [[ "$arg" == -* ]]; then
+                # Refused rather than kept as a positional: before the branch it
+                # would fill the ignored legacy repo slot, so a mistyped
+                # --keep-branch would delete the branch it was meant to keep.
+                echo "Unknown option: $arg"
+                exit 1
             else
                 args+=("$arg")
             fi
@@ -207,7 +216,7 @@ case $1 in
         elif [[ ${#args[@]} -eq 1 ]]; then
             branch="${args[0]}"
         else
-            echo "Usage: n worktree remove <branch> [--yes]"
+            echo "Usage: n worktree remove <branch> [--yes] [--keep-branch]"
             exit 1
         fi
         safe_branch=$(sanitize_branch "$branch")
@@ -227,7 +236,23 @@ case $1 in
             exit 1
         fi
         echo "Worktree: $worktree_dir"
-        echo "Branch:   $branch (will be deleted)"
+        # env destroy passes the directory-safe name (feat-foo for feat/foo). With
+        # --keep-branch nothing is deleted, so name the real branch, but only when
+        # it is the given one: a worktree switched to another branch would
+        # otherwise show a name that is not the one kept. When deleting, the line
+        # must name exactly what `git branch -D` below acts on.
+        shown_branch="$branch"
+        if [[ "$keep_branch" == true ]]; then
+            checked_out=$(git -C "$worktree_dir" branch --show-current 2>/dev/null)
+            if [[ -n "$checked_out" && "$(sanitize_branch "$checked_out")" == "$safe_branch" ]]; then
+                shown_branch="$checked_out"
+            fi
+        fi
+        if [[ "$keep_branch" == true ]]; then
+            echo "Branch:   $shown_branch (kept)"
+        else
+            echo "Branch:   $shown_branch (will be deleted)"
+        fi
         if [[ -d "$worktree_dir" ]]; then
             changes=$(cd "$worktree_dir" && git status --porcelain 2>/dev/null)
             if [[ -n "$changes" ]]; then
@@ -244,7 +269,11 @@ case $1 in
         fi
         if [[ "$skip_confirm" != true ]]; then
             echo ""
-            read -p "Remove worktree and delete branch? (y/N): " confirm
+            if [[ "$keep_branch" == true ]]; then
+                read -p "Remove worktree? (y/N): " confirm
+            else
+                read -p "Remove worktree and delete branch? (y/N): " confirm
+            fi
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
                 echo "Aborted."
                 exit 0
@@ -255,7 +284,9 @@ case $1 in
         else
             git worktree prune
         fi
-        git branch -D "$branch" 2>/dev/null && echo "Deleted branch $branch"
+        if [[ "$keep_branch" != true ]]; then
+            git branch -D "$branch" 2>/dev/null && echo "Deleted branch $branch"
+        fi
         ;;
     cleanup)
         shift
@@ -363,7 +394,7 @@ case $1 in
         echo "  add <branch>                       Create a monorepo worktree at the given branch"
         echo "  add-repos <name> <branch>          Create a worktree of a standalone repos/ checkout"
         echo "  list                               List all worktrees"
-        echo "  remove <branch> [--yes]            Remove a monorepo worktree and delete the branch"
+        echo "  remove <branch> [--yes] [--keep-branch]  Remove a monorepo worktree and delete the branch (--keep-branch keeps it)"
         echo "  remove-repos <name> <safe_branch> [--yes]  Remove a standalone-repo worktree (keeps the branch)"
         echo "  cleanup [--all] [--yes]            Interactive bulk cleanup"
         ;;

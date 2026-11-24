@@ -10,7 +10,7 @@ import classNames from 'classnames';
  * Internal dependencies
  */
 import type { ComponentProps, DonateBlockAttributes, TierBasedOptionValue } from '../types';
-import { getColorForContrast, getFrequencyLabelWithAmount, isModernStyle } from '../utils';
+import { getColorForContrast, getFrequencyLabelWithAmount, isModernStyle, usesSiteButtonStyle } from '../utils';
 import { FREQUENCIES, DISABLED_IN_TIERS_BASED_LAYOUT_TIER_INDEX } from '../consts';
 
 const TierBasedLayout = ( props: ComponentProps ) => {
@@ -36,6 +36,20 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 
 	const isAnyRecommended = attributes.tiersBasedOptions.some( tier => Boolean( tier.recommendLabel ) );
 	const isModern = isModernStyle( attributes.className );
+	const useSiteStyle = usesSiteButtonStyle( attributes.buttonColor );
+
+	const getButtonStyle = ( isReverse: boolean ) => {
+		if ( useSiteStyle ) {
+			return { appearance: 'button' as const };
+		}
+		return {
+			appearance: 'button' as const,
+			borderColor: attributes.buttonColor,
+			...( isReverse
+				? { backgroundColor: 'transparent', color: attributes.buttonColor }
+				: { backgroundColor: attributes.buttonColor, color: getColorForContrast( attributes.buttonColor ) } ),
+		};
+	};
 
 	return (
 		<form className="wpbnbd__tiers" onSubmit={ e => e.preventDefault() }>
@@ -82,6 +96,7 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 			<div className="wpbnbd__tiers__options">
 				{ displayedAmounts.map( ( amount, index ) => {
 					const recommendLabel = attributes.tiersBasedOptions[ index ].recommendLabel || '';
+					const isReverse = isAnyRecommended && ! recommendLabel;
 					return (
 						<div
 							key={ index }
@@ -126,20 +141,11 @@ const TierBasedLayout = ( props: ComponentProps ) => {
 								/>
 							</div>
 							<div
-								className="submit-button"
-								style={ {
-									appearance: 'button',
-									borderColor: attributes.buttonColor,
-									...( isAnyRecommended && ! recommendLabel
-										? {
-												backgroundColor: 'transparent',
-												color: attributes.buttonColor,
-										  }
-										: {
-												backgroundColor: attributes.buttonColor,
-												color: getColorForContrast( attributes.buttonColor ),
-										  } ),
-								} }
+								className={ classNames( 'submit-button', {
+									'wp-element-button': useSiteStyle,
+									wpbnbd__tiers__outline: useSiteStyle && isReverse,
+								} ) }
+								style={ getButtonStyle( isReverse ) }
 							>
 								<RichText
 									onChange={ handleTierOptionChange( index, 'buttonText' ) }

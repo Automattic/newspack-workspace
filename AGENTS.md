@@ -14,13 +14,15 @@ It is a **pnpm workspace** (`plugins/*`, `themes/*`, `packages/*`) with one lock
 | --- | --- | --- |
 | `plugins/<name>/` | 12 product plugins | `/newspack-plugins/` |
 | `themes/<name>/` | `newspack-theme` (classic; style variations nested inside it) and `newspack-block-theme` (FSE) | `/newspack-themes/` |
-| `packages/<name>/` | `scripts`, `components`, `colors`, `icons` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
+| `packages/<name>/` | `scripts`, `components`, `colors`, `icons`, `motion`, and the private, never published `playground` and `ui-shadcn` — note the directories are unprefixed, the npm packages are `newspack-<name>` | – |
 | `repos/plugins/<name>/`, `repos/themes/<name>/` | Checkouts that live outside the monorepo | `/newspack-repos` |
 | `html/` | Main WordPress site | `/var/www/html` |
 | `bin/` | Shell scripts | `/var/scripts/` |
 | `config/` | Apache, PHP, MySQL config | – |
 
 Each plugin/theme directory is standalone and can be zipped and installed on its own.
+
+**`packages/ui-shadcn` feeds a website that is published by hand.** A pull request that touches that package, newspack-ui (`plugins/newspack-plugin/src/newspack-ui`), `packages/colors` or `packages/motion` carries a republish note, and the site needs republishing once it merges; see `packages/ui-shadcn/AGENTS.md`.
 
 **`repos/`** holds private, customer-specific or licensed checkouts (e.g. `newspack-manager`). Drop a real directory in — no registration needed, `n` commands discover them by path — then `n restart`; `bin/link-repos.sh` symlinks them into the active site. If a name also exists in `plugins/`/`themes/`, the tracked copy wins. Contents are gitignored, and a symlink *inside* `repos/` pointing outside the workspace will dangle in the container.
 
@@ -158,12 +160,13 @@ n env up <name> [--build]     # or --all
 n setup --env <name> --yes
 n env down|destroy <name>
 n env list [--porcelain]
+n env which [name] [--porcelain]   # Env serving the current worktree
 n env cleanup                 # Interactive bulk cleanup
 ```
 
 - Reachable at `https://<name>.test` (mkcert HTTPS) on its own loopback IP. `n start` pre-creates the aliases so envs can be created without sudo; `./bin/setup-networking.sh` removes the remaining password prompts.
 - Own database (`wordpress_<name>`), own `WP_CACHE_KEY_SALT`, own `envs/<name>/html/`.
-- Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch; a `repos/` worktree keeps it.
+- Worktrees override individual plugins while the rest are shared. Monorepo worktrees live in `worktrees/<branch>/`; standalone `repos/` worktrees in `worktrees-repos/<name>/<branch>/`, mounted over just that path so other envs keep the base checkout. Destroying a monorepo worktree deletes its branch unless you pass `--keep-branch`; a `repos/` worktree keeps it.
 - All env containers share the `newspack_envs` bridge network with their domain as a DNS alias, so they can reach each other (hub/node setups).
 - `n env destroy` removes the container, DB, html dir, hosts entry and worktrees.
 

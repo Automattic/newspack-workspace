@@ -31,6 +31,14 @@ describe( 'ColorPicker', () => {
 		expect( expander ).toHaveAttribute( 'aria-expanded', 'true' );
 	} );
 
+	it( 'should pick white expander text on orange and black on yellow', () => {
+		const orange = render( <ColorPicker label="Background color" color="#e65100" onChange={ () => {} } /> );
+		expect( orange.getByRole( 'button' ).style.color ).toBe( 'white' );
+		orange.unmount();
+		const yellow = render( <ColorPicker label="Background color" color="#ffcc00" onChange={ () => {} } /> );
+		expect( yellow.getByRole( 'button' ).style.color ).toBe( 'black' );
+	} );
+
 	it( 'should associate label via aria-labelledby', () => {
 		const { getByRole, getByText } = render( <ColorPicker label="Background color" onChange={ () => {} } /> );
 		const expander = getByRole( 'button' );
@@ -43,6 +51,14 @@ describe( 'ColorPicker', () => {
 		const expander = getByRole( 'button' );
 		const help = getByText( 'Choose a color' );
 		expect( expander.getAttribute( 'aria-describedby' ) ).toBe( help.id );
+	} );
+
+	it( 'should keep help attached to the swatch when an action sits beside it', () => {
+		const { getByRole, getByText } = render(
+			<ColorPicker label="Background color" help="Choose a color" action={ <button>Reset</button> } onChange={ () => {} } />
+		);
+		expect( getByRole( 'button', { name: 'Background color' } ).getAttribute( 'aria-describedby' ) ).toBe( getByText( 'Choose a color' ).id );
+		expect( getByRole( 'button', { name: 'Reset' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'should not set aria-describedby when no help is provided', () => {

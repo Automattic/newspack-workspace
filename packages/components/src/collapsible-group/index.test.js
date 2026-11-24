@@ -106,6 +106,56 @@ describe( 'CollapsibleGroup titleLevel', () => {
 	} );
 } );
 
+describe( 'CollapsibleGroup titleSize', () => {
+	it( 'marks the group with the lg size by default', () => {
+		const { container } = renderItems( 1 );
+		expect( container.querySelector( '.newspack-collapsible-group' ) ).toHaveClass( 'newspack-collapsible-group--title-lg' );
+	} );
+
+	it( 'marks the group with the size given', () => {
+		const { container } = renderItems( 1, { titleSize: 'xl' } );
+		expect( container.querySelector( '.newspack-collapsible-group' ) ).toHaveClass( 'newspack-collapsible-group--title-xl' );
+	} );
+} );
+
+describe( 'CollapsibleGroup item description', () => {
+	it( 'renders the description under the title and describes the trigger with it', () => {
+		render(
+			<CollapsibleGroup>
+				<CollapsibleGroup.Item title="Homepage" description="Select a homepage layout.">
+					content
+				</CollapsibleGroup.Item>
+			</CollapsibleGroup>
+		);
+		const trigger = screen.getByRole( 'button', { name: 'Homepage' } );
+		expect( trigger ).toHaveAccessibleDescription( 'Select a homepage layout.' );
+		expect( screen.getByText( 'Select a homepage layout.' ) ).toBeVisible();
+	} );
+
+	it( 'keeps the description visible while the item is closed', () => {
+		render(
+			<CollapsibleGroup>
+				<CollapsibleGroup.Item title="Homepage" description="Select a homepage layout.">
+					content
+				</CollapsibleGroup.Item>
+			</CollapsibleGroup>
+		);
+		expect( screen.getByRole( 'button', { name: 'Homepage' } ) ).toHaveAttribute( 'aria-expanded', 'false' );
+		expect( screen.getByText( 'Select a homepage layout.' ) ).toBeVisible();
+	} );
+
+	it( 'drops the description with the title under hideSingleTitle', () => {
+		render(
+			<CollapsibleGroup hideSingleTitle>
+				<CollapsibleGroup.Item title="Homepage" description="Select a homepage layout.">
+					content
+				</CollapsibleGroup.Item>
+			</CollapsibleGroup>
+		);
+		expect( screen.queryByText( 'Select a homepage layout.' ) ).not.toBeInTheDocument();
+	} );
+} );
+
 describe( 'CollapsibleGroup hideSingleTitle', () => {
 	it( 'keeps the title on a lone item by default', () => {
 		renderItems( 1 );

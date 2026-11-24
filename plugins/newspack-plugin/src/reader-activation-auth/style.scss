@@ -16,12 +16,6 @@
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		margin-top: 0.8rem;
-		&--disabled {
-			button {
-				opacity: 0.5;
-				pointer-events: none;
-			}
-		}
 		button {
 			display: flex;
 			justify-content: center;
@@ -29,9 +23,16 @@
 			width: 100%;
 			background-color: var(--newspack-ui-color-neutral-fill);
 			color: var(--newspack-ui-color-text);
-			transition: background-color var(--newspack-ui-duration-color) ease;
+			transition: background-color var(--newspack-ui-duration-color) var(--newspack-ui-ease-color);
 			span {
 				padding-left: 10px;
+			}
+		}
+		&--disabled {
+			button {
+				background-color: var(--newspack-ui-color-neutral-fill);
+				color: var(--newspack-ui-color-disabled-ink);
+				pointer-events: none;
 			}
 		}
 	}
