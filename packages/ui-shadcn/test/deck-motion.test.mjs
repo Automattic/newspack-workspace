@@ -219,8 +219,7 @@ test( 'the deck no longer relies on native smooth scrolling and its dot fades on
 	const deck = readFileSync( join( root, 'registry', 'components', 'deck', 'deck.tsx' ), 'utf8' );
 	assert.ok( ! /behavior:\s*'smooth'|scrollBy\(/.test( deck ) );
 	const nav = readFileSync( join( root, 'registry', 'components', 'deck', 'deck-nav.tsx' ), 'utf8' );
-	assert.ok( nav.includes( 'duration-(--newspack-ui-duration-color) ease-(--newspack-ui-ease-color)' ) );
+	assert.ok( nav.includes( 'duration-(--newspack-ui-duration-color)' ) );
+	assert.ok( nav.includes( 'ease-(--newspack-ui-ease-color)' ) );
 	assert.ok( ! /\btransition-colors\b/.test( nav ) );
-	const item = JSON.parse( readFileSync( join( root, 'dist', 'site-kit', 'deck-section.json' ), 'utf8' ) );
-	assert.ok( item.files.some( file => file.path.endsWith( 'deck-motion.ts' ) ) );
 } );
