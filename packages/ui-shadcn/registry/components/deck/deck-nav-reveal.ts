@@ -1,6 +1,6 @@
 export const REVEAL_EDGE = 80;
 export const HIDE_DELAY = 1000;
-export const ALWAYS_VISIBLE_QUERY = '(hover: none), (pointer: coarse)';
+export const ALWAYS_VISIBLE_QUERY = 'not all and (hover: hover) and (pointer: fine)';
 
 export type RevealTimers = {
 	setTimeout: ( callback: () => void, ms: number ) => unknown;
@@ -12,14 +12,17 @@ export function nearEdge( x: number, width: number, edge = REVEAL_EDGE ) {
 }
 
 /**
- * Shows and hides the dot navigation like the macOS Dock: shown while the pointer is within
- * REVEAL_EDGE px of the right edge or over the nav, or while keyboard focus is inside it, and
- * hidden HIDE_DELAY ms after the last of those ends. `start` shows it on load and tucks it away
- * after the same delay. `setVisible` is called only when the state changes.
+ * Shows and hides the dot navigation like the macOS Dock: shown while the mouse is within
+ * REVEAL_EDGE px of the right edge or over the nav, while keyboard focus is inside it, or always
+ * on a device without a fine hovering pointer, and hidden HIDE_DELAY ms after the last of those
+ * ends. `start` shows it on load and `touch` on a tap, each then tucking it away after the same
+ * delay. `setVisible` is called only when the state changes.
  */
 export function createNavReveal( setVisible: ( visible: boolean ) => void, timers: RevealTimers ) {
 	let visible = true;
-	let pinned = false;
+	let focused = false;
+	let always = false;
+	let near = false;
 	let timer: unknown = null;
 
 	const set = ( next: boolean ) => {
@@ -39,7 +42,7 @@ export function createNavReveal( setVisible: ( visible: boolean ) => void, timer
 		set( true );
 	};
 	const hideLater = () => {
-		if ( pinned || ! visible || timer !== null ) {
+		if ( focused || always || near || ! visible || timer !== null ) {
 			return;
 		}
 		timer = timers.setTimeout( () => {
@@ -54,20 +57,36 @@ export function createNavReveal( setVisible: ( visible: boolean ) => void, timer
 		},
 		start: hideLater,
 		pointer( x: number, width: number, overNav: boolean ) {
-			if ( overNav || nearEdge( x, width ) ) {
+			near = overNav || nearEdge( x, width );
+			if ( near ) {
 				show();
 			} else {
 				hideLater();
 			}
 		},
-		leave: hideLater,
+		leave() {
+			near = false;
+			hideLater();
+		},
+		touch() {
+			show();
+			hideLater();
+		},
 		pin() {
-			pinned = true;
+			focused = true;
 			show();
 		},
 		unpin() {
-			pinned = false;
+			focused = false;
 			hideLater();
+		},
+		setAlways( on: boolean ) {
+			always = on;
+			if ( on ) {
+				show();
+			} else {
+				hideLater();
+			}
 		},
 		destroy: cancel,
 	};

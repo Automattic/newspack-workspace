@@ -78,7 +78,7 @@ export function currentDeckIndex( scroller: Boxed, slides: Boxed[] ) {
 }
 
 /**
- * For each dot's vertical center, whether the slide behind it is blue. The dots follow the slide that is actually behind them, so each one changes tone as a slide boundary passes it.
+ * For each dot's vertical center, whether the slide behind it is blue.
  */
 export function dotTones( centers: number[], slides: Array< { top: number; bottom: number; inverse: boolean } > ) {
 	return centers.map( y => slides.find( slide => slide.top <= y && y < slide.bottom )?.inverse ?? false );

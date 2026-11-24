@@ -253,7 +253,10 @@ test( 'each dot takes its tone from the slide behind it, not from the current sl
 	assert.ok( ! /className=\{ `newspack-deck-nav\$\{/.test( nav ), 'the nav itself no longer flips tone' );
 	const button = nav.match( /className="(group [^"]*)"/ )[ 1 ].split( ' ' );
 	assert.ok( button.includes( 'bg-transparent' ), 'the blue base rule never paints the button' );
-	assert.ok( [ 'scroll', 'resize' ].every( event => nav.includes( `'${ event }', update` ) ) );
+	const toneEffect = nav.slice( nav.indexOf( 'useEffect', nav.indexOf( 'dotTones(' ) - 1200 ), nav.indexOf( '}, [ scrollerRef, slides.length ] );' ) );
+	assert.ok( toneEffect.includes( 'dotTones(' ) );
+	assert.ok( [ 'scroll', 'resize' ].every( event => toneEffect.includes( `addEventListener( '${ event }', update` ) ), 'the tone follows scrolls and resizes' );
+	assert.ok( /setAttribute\( 'data-settling', '' \);\n\t\tupdate\(\);\n.*\n\t\tnav\.getBoundingClientRect\(\);\n\t\tnav\.removeAttribute\( 'data-settling' \);/.test( toneEffect ), 'the first tone is set with transitions off, not faded in' );
 } );
 
 const reveal = await import( '../registry/components/deck/deck-nav-reveal.ts' );
@@ -320,10 +323,27 @@ test( 'the dot nav reveals near the right edge and hides a second after the poin
 	controller.leave();
 	timers.advance( 1000 );
 	assert.deepEqual( calls, [ false, true, false, true, false ], 'leaving the window hides it after the delay' );
+	controller.touch();
+	timers.advance( 999 );
+	assert.deepEqual( calls, [ false, true, false, true, false, true ], 'a tap shows it' );
+	timers.advance( 1 );
+	assert.deepEqual( calls, [ false, true, false, true, false, true, false ], 'and tucks it away after the delay' );
+} );
+
+test( 'the dot nav stays under a resting pointer when focus leaves it', () => {
+	const { timers, calls, controller } = setupReveal();
+	controller.pointer( 1250, 1280, false );
+	controller.start();
+	timers.advance( 5000 );
+	assert.deepEqual( calls, [], 'loaded with the pointer at the edge, it stays shown' );
+	controller.pin();
+	controller.unpin();
+	timers.advance( 5000 );
+	assert.deepEqual( calls, [], 'tabbing out with the mouse still on the nav keeps it shown' );
 } );
 
 test( 'keyboard focus and no-hover devices keep the dot nav visible', () => {
-	assert.equal( reveal.ALWAYS_VISIBLE_QUERY, '(hover: none), (pointer: coarse)' );
+	assert.equal( reveal.ALWAYS_VISIBLE_QUERY, 'not all and (hover: hover) and (pointer: fine)', 'the exact negation of the newspack-motion hover query' );
 	const { timers, calls, controller } = setupReveal();
 	controller.start();
 	timers.advance( 1000 );
@@ -335,12 +355,23 @@ test( 'keyboard focus and no-hover devices keep the dot nav visible', () => {
 	timers.advance( 1000 );
 	assert.deepEqual( calls, [ false, true, false ] );
 	const touch = setupReveal();
-	touch.controller.pin();
+	touch.controller.setAlways( true );
+	touch.controller.start();
 	touch.timers.advance( 5000 );
-	assert.deepEqual( touch.calls, [], 'a no-hover device pins it from the start and never hides it' );
+	assert.deepEqual( touch.calls, [], 'a device without a fine hovering pointer never hides it' );
+	touch.controller.pin();
+	touch.controller.setAlways( false );
+	touch.timers.advance( 5000 );
+	assert.deepEqual( touch.calls, [], 'losing the touch query while focus is inside keeps it shown' );
+	touch.controller.unpin();
+	touch.timers.advance( 1000 );
+	assert.deepEqual( touch.calls, [ false ] );
 	const nav = readItem( 'deck-nav' ).files.find( f => f.path.endsWith( 'deck-nav.tsx' ) ).content;
 	assert.ok( nav.includes( "matches( ':focus-visible' )" ), 'only keyboard focus pins it' );
-	assert.ok( /if \( query\.matches \) \{\n\t\t\treveal\.pin\(\);\n\t\t\} else \{\n\t\t\treveal\.start\(\);/.test( nav ), 'touch pins, a mouse gets the load reveal' );
+	assert.ok( nav.includes( 'const onQueryChange = () => reveal.setAlways( query.matches );\n\t\tonQueryChange();\n\t\treveal.start();' ) );
+	assert.ok( nav.includes( "if ( event.pointerType !== 'mouse' ) {\n\t\t\t\treveal.touch();" ), 'a tap from touch or pen shows it' );
+	assert.ok( nav.includes( "if ( event.pointerType === 'mouse' ) {\n\t\t\t\treveal.pointer(" ) );
+	assert.ok( nav.includes( 'index, event.detail > 0 )' ), 'a mouse click moves focus to the slide, so no hidden dot keeps focus' );
 	assert.deepEqual( readItem( 'deck-nav' ).files.map( f => f.path.split( '/' ).pop() ), [ 'deck-nav.tsx', 'deck-nav-reveal.ts' ] );
 } );
 
@@ -351,6 +382,9 @@ test( 'the hidden dot nav fades and slides on the reveal tokens and lets clicks 
 	assert.ok( classes.includes( 'data-[hidden]:opacity-0' ) );
 	assert.ok( classes.includes( 'data-[hidden]:pointer-events-none' ) );
 	assert.ok( classes.includes( 'motion-safe:data-[hidden]:translate-x-1' ), 'under reduced motion it only fades' );
+	assert.ok( classes.includes( 'data-[instant]:transition-none' ), 'a focus reveal shows the ring at once' );
+	assert.ok( nav.includes( "nav.setAttribute( 'data-instant', '' );\n\t\t\t\treveal.pin();" ) && nav.includes( "nav.removeAttribute( 'data-instant' );\n\t\t\t\treveal.unpin();" ) );
+	assert.ok( classes.includes( 'data-[settling]:[&_*]:transition-none' ) );
 	assert.ok( ! classes.some( name => /^(?!motion-safe:)[^ ]*translate-x/.test( name ) ) );
 	assert.ok( nav.includes( "data-hidden={ visible ? undefined : '' }" ) );
 	assert.ok( ! nav.includes( 'aria-hidden' ) && ! /tabIndex|inert/.test( nav ), 'hidden dots stay in the accessibility tree and the tab order' );
