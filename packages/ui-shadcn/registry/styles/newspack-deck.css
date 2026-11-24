@@ -1,13 +1,3 @@
-.newspack-deck {
-	scroll-behavior: smooth;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.newspack-deck {
-		scroll-behavior: auto;
-	}
-}
-
 @media print {
 	.newspack-deck-nav {
 		display: none;
