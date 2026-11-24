@@ -32,6 +32,19 @@ test( 'body gets the surface, the text color and Inter, so a deck needs no body 
 	assert.ok( brand.description.includes( 'For newspack.com and anything under space.fast.' ) );
 } );
 
+test( 'the card title class sizes a heading in a Card at the brand h5 step', () => {
+	assert.deepEqual( base[ '.newspack-brand-card-title' ], {
+		'font-family': 'var(--font-heading)',
+		'font-weight': '500',
+		'font-size': 'var(--newspack-ui-brand-h5-size)',
+		'line-height': 'var(--newspack-ui-brand-h5-line-height)',
+		color: 'var(--newspack-ui-color-text)',
+	} );
+	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	assert.match( css, /\n\t\.newspack-brand-card-title \{\n\t\tfont-family: var\(--font-heading\);/ );
+	assert.ok( brand.docs.includes( '.newspack-brand-card-title' ) );
+} );
+
 test( 'h1 is Cobalt Compressed Black uppercase', () => {
 	assert.equal( base.h1[ 'font-family' ], 'var(--font-display)' );
 	assert.equal( base.h1[ 'font-weight' ], '900' );
