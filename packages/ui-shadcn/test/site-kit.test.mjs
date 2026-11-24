@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +57,17 @@ test( 'deck-layouts ships the seven starter slides, with brand opening and closi
 	assert.ok( source.includes( "@/components/brand/newspack-logo" ), 'logo import keeps the brand/ path' );
 	assert.ok( ! source.includes( 'size="lg"' ), 'no size the Button lacks' );
 	assert.ok( ! /<h2 [^>]*className="[^"]*\bfont-/.test( source ), 'slide titles set no font utility, so they take the brand h2 face' );
+} );
+
+test( 'every item that imports @/lib/utils declares the shadcn utils item', () => {
+	const read = dir => readdirSync( join( dist, dir ) ).filter( file => file.endsWith( '.json' ) && file !== 'registry.json' ).map( file => JSON.parse( readFileSync( join( dist, dir, file ), 'utf8' ) ) );
+	const items = [ ...read( 'registry' ), ...read( 'site-kit' ) ].filter( item => item.files?.length );
+	const users = items.filter( item => item.files.some( file => file.content?.includes( '@/lib/utils' ) ) );
+	assert.ok( users.some( item => item.name === 'card' ) );
+	for ( const item of items ) {
+		const declares = ( item.registryDependencies ?? [] ).includes( 'utils' );
+		assert.equal( declares, users.includes( item ), item.name );
+	}
 } );
 
 test( 'deck dot navigation uses the kit tokens, the brand surface and renders for one slide', () => {
