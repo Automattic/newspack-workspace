@@ -646,6 +646,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 								value={ title }
 								onChange={ setTitle }
 								hideLabelFromVision
+								withMargin={ false }
+								__nextHasNoMarginBottom
 								__next40pxDefaultSize
 							/>
 						</SplitSection.Content>

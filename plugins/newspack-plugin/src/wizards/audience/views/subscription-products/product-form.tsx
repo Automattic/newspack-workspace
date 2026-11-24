@@ -1,6 +1,6 @@
 /**
  * Full-page create/edit form for a plan, rendered as a routed wizard section (mirroring the
- * institutions editor). Save / back live in the wizard header; the body is a stack of SplitSection
+ * institutions editor). Save / back live in the wizard header; the body is a stack of SplitSection rows
  * (header left, fields right). Covers simple, variable (plan repeater), grouped
  * (bundle picker), and one-time, plus category + availability + group subscription. POSTs to
  * create or PUTs to update, then returns to the list. Type is locked when editing.
