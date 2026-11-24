@@ -551,7 +551,7 @@ export default function PersonProfile() {
 					headerNode
 				) }
 
-			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) }>
+			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ shouldShowPaymentMethods( subscriber ) }>
 				<VStack spacing={ 4 }>
 					{ 0 === cards.length && (
 						<Card __experimentalCoreCard className="newspack-subscribers__card">

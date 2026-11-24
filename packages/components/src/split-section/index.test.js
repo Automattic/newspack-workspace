@@ -11,7 +11,12 @@ import SplitSection from '.';
 const renderSection = ( headerProps = {}, headerChildren = null ) =>
 	render(
 		<SplitSection.Root data-testid="root">
-			<SplitSection.Header title="Group Names" description="Choose how a group bought at checkout is named." { ...headerProps }>
+			<SplitSection.Header
+				title="Group Names"
+				description="Choose how a group bought at checkout is named."
+				data-testid="header"
+				{ ...headerProps }
+			>
 				{ headerChildren }
 			</SplitSection.Header>
 			<SplitSection.Content data-testid="content">
@@ -43,9 +48,35 @@ describe( 'SplitSection', () => {
 		renderSection();
 		const root = screen.getByTestId( 'root' );
 		expect( root.children ).toHaveLength( 2 );
-		expect( root.children[ 0 ] ).toHaveClass( 'newspack-split-section__header' );
+		expect( root.children[ 0 ] ).toBe( screen.getByTestId( 'header' ) );
 		expect( root.children[ 1 ] ).toBe( screen.getByTestId( 'content' ) );
 		expect( screen.getByTestId( 'content' ) ).toContainElement( screen.getByRole( 'textbox', { name: 'Name' } ) );
+	} );
+
+	it( 'spaces the fields 24px apart and header extras 16px apart', () => {
+		renderSection();
+		expect( screen.getByTestId( 'content' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
+		expect( screen.getByTestId( 'header' ).style.gap ).toContain( '--wpds-dimension-gap-lg' );
+	} );
+
+	it( 'keeps its layout when a caller passes layout props', () => {
+		render(
+			<SplitSection.Root data-testid="root" columns={ 1 } gutter={ 16 }>
+				<SplitSection.Header title="Title" />
+				<SplitSection.Content data-testid="content" gap="sm" direction="row" />
+			</SplitSection.Root>
+		);
+		expect( screen.getByTestId( 'root' ) ).toHaveClass( 'newspack-grid__columns-2', 'newspack-grid__gutter-32' );
+		expect( screen.getByTestId( 'content' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
+		expect( screen.getByTestId( 'content' ).style.flexDirection ).toBe( 'column' );
+	} );
+
+	it( 'shows a back link before the title when given one', () => {
+		renderSection( { backNav: '#/experimental-tools' } );
+		expect( screen.getByRole( 'link', { name: 'Go back' } ) ).toHaveAttribute( 'href', '#/experimental-tools' );
+		expect( screen.getByRole( 'link', { name: 'Go back' } ).closest( '.newspack-section-header__container' ) ).toHaveClass(
+			'newspack-section-header--full-width-text'
+		);
 	} );
 
 	it( 'renders the title as an h2 by default, with the description', () => {
@@ -72,7 +103,7 @@ describe( 'SplitSection', () => {
 
 	it( 'shows header children below the title and description', () => {
 		renderSection( {}, <button type="button">Add Label</button> );
-		const header = screen.getByRole( 'heading', { name: 'Group Names' } ).closest( '.newspack-split-section__header' );
+		const header = screen.getByTestId( 'header' );
 		const button = screen.getByRole( 'button', { name: 'Add Label' } );
 		expect( header ).toContainElement( button );
 		expect( header.lastElementChild ).toBe( button );

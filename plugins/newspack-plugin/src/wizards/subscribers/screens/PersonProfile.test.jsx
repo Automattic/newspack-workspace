@@ -37,8 +37,8 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 
 // Button is real enough to take a ref and to name the card's "more" toggle. Card
 // and Grid pass their content through so the real SubscriptionCard, with its real
-// "more" menu, renders inside the profile. SectionHeader renders its title as a
-// heading, so the sections the profile lays out can be found.
+// "more" menu, renders inside the profile. SplitSection.Header renders its title as
+// a heading, so the sections the profile lays out can be found.
 jest.mock( '../../../../packages/components/src', () => ( {
 	Button: require( 'react' ).forwardRef( ( { children, label, ...props }, ref ) => {
 		// Component-only props that a DOM button would warn about.
@@ -58,7 +58,6 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	// The money flows open in a modal; this one renders inline so its copy is queryable.
 	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
 	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
-	SectionHeader: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
 	SplitSection: {
 		Root: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
 		Header: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),

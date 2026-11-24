@@ -11,7 +11,7 @@ import type { SplitSectionRootProps } from './types';
 
 export default function Root( { className, children, ...props }: SplitSectionRootProps ) {
 	return (
-		<Grid columns={ 2 } gutter={ 32 } noMargin className={ classnames( 'newspack-split-section', className ) } { ...props }>
+		<Grid { ...props } columns={ 2 } gutter={ 32 } noMargin className={ classnames( 'newspack-split-section', className ) }>
 			{ children }
 		</Grid>
 	);
