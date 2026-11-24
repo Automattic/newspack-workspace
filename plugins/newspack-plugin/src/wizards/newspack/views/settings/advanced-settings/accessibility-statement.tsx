@@ -14,7 +14,7 @@ import { speak } from '@wordpress/a11y';
 /**
  * Internal dependencies.
  */
-import { Button, Grid, SectionHeader } from '../../../../../../packages/components/src';
+import { Button, SplitSection } from '../../../../../../packages/components/src';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 
 interface AccessibilityStatementProps {
@@ -166,17 +166,15 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	const action = renderAction();
 
 	return (
-		<Grid columns={ 2 } gutter={ 32 } noMargin>
-			<SectionHeader
-				noMargin
-				heading={ 2 }
+		<SplitSection.Root>
+			<SplitSection.Header
 				title={ __( 'Accessibility Statement', 'newspack-plugin' ) }
 				description={ __(
 					'Edit and publish an accessibility statement page. Once published, a link to this page will display in the footer of your site.',
 					'newspack-plugin'
 				) }
 			/>
-			<Stack direction="column" gap="xl">
+			<SplitSection.Content>
 				<Notice
 					status={ statusInfo.type }
 					isDismissible={ false }
@@ -216,7 +214,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 						</ExternalLink>
 					</p>
 				</Stack>
-			</Stack>
-		</Grid>
+			</SplitSection.Content>
+		</SplitSection.Root>
 	);
 }

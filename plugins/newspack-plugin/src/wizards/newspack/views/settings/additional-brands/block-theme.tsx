@@ -27,7 +27,7 @@ import { reset as resetIcon } from '@wordpress/icons';
 /**
  * Internal dependencies.
  */
-import { Button, Grid, SectionHeader, useConfirmDialog } from '../../../../../../packages/components/src';
+import { Button, SplitSection, useConfirmDialog } from '../../../../../../packages/components/src';
 
 const blockThemeData: BlockThemeData | null = window.newspackSettings[ 'additional-brands' ].sections.additionalBrands.blockTheme || null;
 
@@ -354,17 +354,15 @@ export function BlockThemeMenus( { brand, brands, updateMeta, wizardApiFetch }: 
 	};
 
 	return (
-		<Grid columns={ 2 } gutter={ 32 } noMargin>
-			<SectionHeader
-				heading={ 2 }
-				noMargin
+		<SplitSection.Root>
+			<SplitSection.Header
 				title={ __( 'Menus', 'newspack-plugin' ) }
 				description={ __(
 					'Brands use the main site’s menus unless you pick another one here. “Copy” (a copy of the main menu) or “Add new” (an empty menu) makes a menu named “… [Brand]” that you can edit in the Site Editor.',
 					'newspack-plugin'
 				) }
 			/>
-			<Stack direction="column" gap="lg">
+			<SplitSection.Content>
 				{ message && (
 					<Notice status="success" isDismissible={ false }>
 						{ message }
@@ -459,8 +457,8 @@ export function BlockThemeMenus( { brand, brands, updateMeta, wizardApiFetch }: 
 						{ __( 'This brand’s header, footer and sidebar have no menus.', 'newspack-plugin' ) }
 					</Text>
 				) }
-			</Stack>
-		</Grid>
+			</SplitSection.Content>
+		</SplitSection.Root>
 	);
 }
 
@@ -557,17 +555,15 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 
 	return (
 		<Fragment>
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
-					noMargin
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Header, footer and sidebar', 'newspack-plugin' ) }
 					description={ __(
 						'Leave these on the main header, footer and sidebar unless this brand needs a different layout. “Copy” makes a template part named “… [Brand]” that you can edit in the Site Editor. A copy is separate from the main one: later changes to the main part don’t appear in it.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="lg">
+				<SplitSection.Content>
 					<Text variant="body-md" render={ <p /> }>
 						{ status }
 					</Text>
@@ -665,8 +661,8 @@ export function BlockThemeParts( { brand, brands, updateMeta, wizardApiFetch }: 
 							</Stack>
 						);
 					} ) }
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			{ confirmDialog }
 		</Fragment>
 	);
