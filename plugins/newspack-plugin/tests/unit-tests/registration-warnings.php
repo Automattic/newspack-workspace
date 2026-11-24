@@ -1,0 +1,564 @@
+<?php
+/**
+ * Tests for the Registration_Warnings class.
+ *
+ * @package Newspack\Tests
+ */
+
+use Newspack\Registration_Warnings;
+
+/**
+ * Class Test_Registration_Warnings
+ *
+ * @group registration-warnings
+ */
+class Test_Registration_Warnings extends WP_UnitTestCase {
+	/**
+	 * Roles added by a test, removed in tear_down().
+	 *
+	 * @var string[]
+	 */
+	private $added_roles = [];
+
+	/**
+	 * Start every test with registration closed, the core default role and reCAPTCHA off.
+	 */
+	public function set_up() {
+		parent::set_up();
+		delete_option( 'users_can_register' );
+		update_option( 'default_role', 'subscriber' );
+		delete_option( 'newspack_recaptcha_use_captcha' );
+		delete_option( 'newspack_recaptcha_version' );
+		delete_option( 'newspack_recaptcha_credentials' );
+	}
+
+	/**
+	 * Remove roles added by the test.
+	 */
+	public function tear_down() {
+		foreach ( $this->added_roles as $role ) {
+			remove_role( $role );
+		}
+		$this->added_roles = [];
+		wp_dequeue_script( 'newspack-registration-warnings' );
+		wp_deregister_script( 'newspack-registration-warnings' );
+		set_current_screen( 'front' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Sign in as a user with the given role.
+	 *
+	 * @param string $role Role slug.
+	 */
+	private function sign_in_as( $role ) {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+	}
+
+	/**
+	 * Capture the Settings → General notices.
+	 *
+	 * @return string
+	 */
+	private function render_notices() {
+		ob_start();
+		Registration_Warnings::render_settings_notices();
+		return ob_get_clean();
+	}
+
+	/**
+	 * Add a role for this test only.
+	 *
+	 * @param string $role         Role slug.
+	 * @param string $display_name Role display name.
+	 * @param array  $caps         Capabilities.
+	 */
+	private function add_test_role( $role, $display_name, $caps = [] ) {
+		add_role( $role, $display_name, $caps ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$this->added_roles[] = $role;
+	}
+
+	/**
+	 * Configure valid reCAPTCHA v3 credentials so can_use_captcha() returns true.
+	 */
+	private function enable_recaptcha() {
+		update_option( 'newspack_recaptcha_use_captcha', true );
+		update_option( 'newspack_recaptcha_version', 'v3' );
+		update_option(
+			'newspack_recaptcha_credentials',
+			[
+				'v3' => [
+					'site_key'    => 'test-site-key',
+					'site_secret' => 'test-site-secret',
+				],
+			]
+		);
+	}
+
+	/**
+	 * Open registration with the given default role.
+	 *
+	 * @param string $role Role slug.
+	 */
+	private function open_registration( $role ) {
+		update_option( 'users_can_register', 1 );
+		update_option( 'default_role', $role );
+	}
+
+	/**
+	 * Make the saved default role one that doesn't exist. WordPress resets the
+	 * option to Subscriber when the role is saved or removed through its API,
+	 * so this stands in for a role deleted some other way, such as a role
+	 * editor rewriting the roles option directly.
+	 *
+	 * @param string $role Missing role slug.
+	 */
+	private function point_default_role_at_missing_role( $role ) {
+		add_filter(
+			'pre_option_default_role',
+			function () use ( $role ) {
+				return $role;
+			}
+		);
+	}
+
+	/**
+	 * With the box unchecked, neither warning applies, whatever the role and reCAPTCHA state.
+	 */
+	public function test_closed_registration_is_quiet() {
+		update_option( 'default_role', 'administrator' );
+		$this->assertFalse( Registration_Warnings::is_open() );
+		$this->assertFalse( Registration_Warnings::has_risky_default_role() );
+		$this->assertFalse( Registration_Warnings::is_missing_bot_protection() );
+	}
+
+	/**
+	 * Core roles that can edit posts.
+	 */
+	public function data_risky_roles() {
+		return [
+			[ 'administrator' ],
+			[ 'editor' ],
+			[ 'author' ],
+			[ 'contributor' ],
+		];
+	}
+
+	/**
+	 * Open registration with a role that can edit posts warns.
+	 *
+	 * @dataProvider data_risky_roles
+	 * @param string $role Role slug.
+	 */
+	public function test_risky_default_roles_warn( $role ) {
+		$this->open_registration( $role );
+		$this->assertTrue( Registration_Warnings::has_risky_default_role() );
+	}
+
+	/**
+	 * Roles that cannot edit posts, built the way their owners register them.
+	 */
+	public function data_safe_roles() {
+		return [
+			'subscriber'          => [ 'subscriber', null, [] ],
+			'customer'            => [ 'customer', 'Customer', [ 'read' => true ] ],
+			'network_reader'      => [ 'network_reader', 'Network Reader', [] ],
+			'contributor_no_edit' => [ 'contributor_no_edit', 'Guest Contributor', [ 'edit_cap_posts' => true ] ],
+		];
+	}
+
+	/**
+	 * Open registration with a role that cannot edit posts stays quiet.
+	 *
+	 * @dataProvider data_safe_roles
+	 * @param string      $role         Role slug.
+	 * @param string|null $display_name Display name to add the role with, or null for a core role.
+	 * @param array       $caps         Capabilities.
+	 */
+	public function test_safe_default_roles_are_quiet( $role, $display_name, $caps ) {
+		if ( null !== $display_name ) {
+			$this->add_test_role( $role, $display_name, $caps );
+		}
+		$this->open_registration( $role );
+		$this->assertFalse( Registration_Warnings::has_risky_default_role() );
+	}
+
+	/**
+	 * A default role that no longer exists is treated as safe.
+	 */
+	public function test_missing_role_is_quiet() {
+		$this->open_registration( 'subscriber' );
+		$this->point_default_role_at_missing_role( 'gone_role' );
+		$this->assertSame( 'gone_role', get_option( 'default_role' ) );
+		$this->assertFalse( Registration_Warnings::has_risky_default_role() );
+		$this->assertNull( Registration_Warnings::get_role_warning( 'gone_role' ) );
+	}
+
+	/**
+	 * A custom role with edit_posts gets the generic copy, naming the role.
+	 */
+	public function test_custom_role_with_edit_posts_uses_generic_copy() {
+		$this->add_test_role( 'staff_writer', 'Staff Writer', [ 'edit_posts' => true ] );
+		$this->open_registration( 'staff_writer' );
+		$this->assertTrue( Registration_Warnings::has_risky_default_role() );
+
+		$warning = Registration_Warnings::get_role_warning( 'staff_writer' );
+		$this->assertSame( 'Anyone can sign up with the "Staff Writer" role', $warning['title'] );
+		$this->assertStringStartsWith( 'This role can write posts.', $warning['body'] );
+	}
+
+	/**
+	 * Core roles get their own title and first sentence.
+	 */
+	public function test_core_role_copy() {
+		$editor = Registration_Warnings::get_role_warning( 'editor' );
+		$this->assertSame( 'Anyone can sign up as an Editor', $editor['title'] );
+		$this->assertStringStartsWith( 'Editors can publish and change any post.', $editor['body'] );
+		$this->assertStringContainsString( 'Choose Subscriber unless the people who sign up here need to write.', $editor['body'] );
+
+		$this->assertSame( 'Anyone can sign up as a Contributor', Registration_Warnings::get_role_warning( 'contributor' )['title'] );
+		$this->assertSame( 'Anyone can sign up as an Administrator', Registration_Warnings::get_role_warning( 'administrator' )['title'] );
+		$this->assertSame( 'Anyone can sign up as an Author', Registration_Warnings::get_role_warning( 'author' )['title'] );
+	}
+
+	/**
+	 * Only roles that can edit posts are listed as risky.
+	 */
+	public function test_get_risky_roles_lists_only_edit_posts_roles() {
+		$roles = Registration_Warnings::get_risky_roles();
+		foreach ( [ 'administrator', 'editor', 'author', 'contributor' ] as $role ) {
+			$this->assertArrayHasKey( $role, $roles );
+		}
+		$this->assertArrayNotHasKey( 'subscriber', $roles );
+	}
+
+	/**
+	 * Open registration with reCAPTCHA off warns.
+	 */
+	public function test_recaptcha_off_warns() {
+		$this->open_registration( 'subscriber' );
+		$this->assertTrue( Registration_Warnings::is_missing_bot_protection() );
+	}
+
+	/**
+	 * Open registration with reCAPTCHA on stays quiet.
+	 */
+	public function test_recaptcha_on_is_quiet() {
+		$this->enable_recaptcha();
+		$this->open_registration( 'subscriber' );
+		$this->assertFalse( Registration_Warnings::is_missing_bot_protection() );
+	}
+
+	/**
+	 * A reCAPTCHA switched on without keys protects nothing, so it still warns.
+	 */
+	public function test_recaptcha_on_without_keys_warns() {
+		update_option( 'newspack_recaptcha_use_captcha', true );
+		$this->open_registration( 'subscriber' );
+		$this->assertTrue( Registration_Warnings::is_missing_bot_protection() );
+	}
+
+	/**
+	 * The amber warning's copy.
+	 */
+	public function test_bot_protection_copy() {
+		$warning = Registration_Warnings::get_bot_protection_warning();
+		$this->assertSame( 'Sign-ups have no bot protection', $warning['title'] );
+		$this->assertStringContainsString( 'Newspack → Settings → Connections', $warning['body'] );
+		$this->assertStringContainsString( 'uncheck "Anyone can register"', $warning['body'] );
+	}
+
+	/**
+	 * Both checks are registered with Site Health.
+	 */
+	public function test_site_health_registers_both_tests() {
+		$tests = apply_filters( 'site_status_tests', [ 'direct' => [] ] );
+		$this->assertArrayHasKey( 'newspack_open_registration_role', $tests['direct'] );
+		$this->assertArrayHasKey( 'newspack_open_registration_bot_protection', $tests['direct'] );
+	}
+
+	/**
+	 * Default role, whether core's own check is registered, and whether ours should be.
+	 */
+	public function data_role_test_alongside_core() {
+		return [
+			'editor, core check present'        => [ 'editor', true, false ],
+			'administrator, core check present' => [ 'administrator', true, false ],
+			'author, core check present'        => [ 'author', true, true ],
+			'contributor, core check present'   => [ 'contributor', true, true ],
+			'editor, no core check'             => [ 'editor', false, true ],
+		];
+	}
+
+	/**
+	 * Core's check already reports open registration with Editor or Administrator,
+	 * so ours stays out of Site Health then and covers the roles core doesn't.
+	 *
+	 * @dataProvider data_role_test_alongside_core
+	 * @param string $role           Default role.
+	 * @param bool   $core_check     Whether core's insecure_registration check is registered.
+	 * @param bool   $expect_ours    Whether our role check should be registered.
+	 */
+	public function test_role_test_leaves_editor_and_administrator_to_core( $role, $core_check, $expect_ours ) {
+		$this->open_registration( $role );
+		$tests = [ 'direct' => [] ];
+		if ( $core_check ) {
+			$tests['direct']['insecure_registration'] = [
+				'label' => 'Open Registration with privileged default role',
+				'test'  => 'insecure_registration',
+			];
+		}
+		$tests = Registration_Warnings::add_site_health_tests( $tests );
+
+		$this->assertSame( $expect_ours, isset( $tests['direct']['newspack_open_registration_role'] ) );
+		$this->assertArrayHasKey( 'newspack_open_registration_bot_protection', $tests['direct'] );
+		if ( $core_check ) {
+			$this->assertArrayHasKey( 'insecure_registration', $tests['direct'] );
+		}
+	}
+
+	/**
+	 * Role check states: box state, default role, expected status and label.
+	 */
+	public function data_role_test_states() {
+		return [
+			'closed'          => [ false, 'editor', 'good', '"Anyone can register" is off' ],
+			'open, safe role' => [ true, 'subscriber', 'good', "New accounts get a role that can't edit posts" ],
+			'open, editor'    => [ true, 'editor', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
+		];
+	}
+
+	/**
+	 * The role check reports Critical only while the condition holds.
+	 *
+	 * @dataProvider data_role_test_states
+	 * @param bool   $open   Whether "Anyone can register" is on.
+	 * @param string $role   Default role.
+	 * @param string $status Expected status.
+	 * @param string $label  Expected label.
+	 */
+	public function test_role_test_states( $open, $role, $status, $label ) {
+		update_option( 'users_can_register', $open ? 1 : 0 );
+		update_option( 'default_role', $role );
+		$result = Registration_Warnings::site_health_role_test();
+		$this->assertSame( $status, $result['status'] );
+		$this->assertSame( $label, $result['label'] );
+		$this->assertSame( 'newspack_open_registration_role', $result['test'] );
+		if ( 'critical' === $status ) {
+			$this->assertStringContainsString( 'options-general.php', $result['actions'] );
+		}
+	}
+
+	/**
+	 * Bot protection check states: box state, reCAPTCHA state, expected status and label.
+	 */
+	public function data_bot_protection_test_states() {
+		return [
+			'closed'              => [ false, false, 'good', '"Anyone can register" is off' ],
+			'open, reCAPTCHA on'  => [ true, true, 'good', 'Sign-ups are protected by reCAPTCHA' ],
+			'open, reCAPTCHA off' => [ true, false, 'recommended', 'Open registration has no bot protection' ],
+		];
+	}
+
+	/**
+	 * The bot protection check reports Recommended only while the condition holds.
+	 *
+	 * @dataProvider data_bot_protection_test_states
+	 * @param bool   $open      Whether "Anyone can register" is on.
+	 * @param bool   $recaptcha Whether reCAPTCHA is set up.
+	 * @param string $status    Expected status.
+	 * @param string $label     Expected label.
+	 */
+	public function test_bot_protection_test_states( $open, $recaptcha, $status, $label ) {
+		update_option( 'users_can_register', $open ? 1 : 0 );
+		if ( $recaptcha ) {
+			$this->enable_recaptcha();
+		}
+		$result = Registration_Warnings::site_health_bot_protection_test();
+		$this->assertSame( $status, $result['status'] );
+		$this->assertSame( $label, $result['label'] );
+		$this->assertSame( 'newspack_open_registration_bot_protection', $result['test'] );
+		if ( 'recommended' === $status ) {
+			$this->assertStringContainsString( 'admin.php?page=newspack-settings', $result['actions'] );
+			$this->assertStringContainsString( 'options-general.php', $result['actions'] );
+		}
+	}
+
+	/**
+	 * Both checks sit under Site Health's Security category.
+	 */
+	public function test_site_health_badge_is_security() {
+		$this->assertSame( 'Security', Registration_Warnings::site_health_role_test()['badge']['label'] );
+		$this->assertSame( 'Security', Registration_Warnings::site_health_bot_protection_test()['badge']['label'] );
+	}
+
+	/**
+	 * The notices print on Settings → General only, and show while their condition holds.
+	 */
+	public function test_notices_render_only_on_general_settings() {
+		$this->sign_in_as( 'administrator' );
+		$this->open_registration( 'editor' );
+
+		set_current_screen( 'options-general' );
+		$output = $this->render_notices();
+		$this->assertStringContainsString( 'id="newspack-registration-warning-bot"', $output );
+		$this->assertStringContainsString( 'id="newspack-registration-warning-role"', $output );
+		$this->assertStringNotContainsString( 'hidden', $output );
+		$this->assertStringContainsString( 'Anyone can sign up as an Editor', $output );
+
+		set_current_screen( 'dashboard' );
+		$this->assertSame( '', $this->render_notices() );
+	}
+
+	/**
+	 * With the saved settings safe, both notices print hidden so the script can show them live.
+	 */
+	public function test_notices_hidden_for_saved_safe_state() {
+		$this->sign_in_as( 'administrator' );
+		set_current_screen( 'options-general' );
+		$output = $this->render_notices();
+		$this->assertSame( 2, substr_count( $output, ' hidden' ) );
+	}
+
+	/**
+	 * Users who can't manage options get no notices.
+	 */
+	public function test_notices_require_manage_options() {
+		$this->sign_in_as( 'editor' );
+		$this->open_registration( 'editor' );
+		set_current_screen( 'options-general' );
+		$this->assertSame( '', $this->render_notices() );
+	}
+
+	/**
+	 * A role name containing markup is printed as text.
+	 */
+	public function test_notice_text_is_escaped() {
+		$this->add_test_role( 'markup_role', '<b>Writer</b>', [ 'edit_posts' => true ] );
+		$this->sign_in_as( 'administrator' );
+		$this->open_registration( 'markup_role' );
+		set_current_screen( 'options-general' );
+		$output = $this->render_notices();
+		$this->assertStringContainsString( '&lt;b&gt;Writer&lt;/b&gt;', $output );
+		$this->assertStringNotContainsString( '<b>Writer</b>', $output );
+	}
+
+	/**
+	 * The live script loads on Settings → General only.
+	 */
+	public function test_script_enqueued_only_on_general_settings() {
+		$this->sign_in_as( 'administrator' );
+		Registration_Warnings::enqueue_settings_script( 'index.php' );
+		$this->assertFalse( wp_script_is( 'newspack-registration-warnings', 'enqueued' ) );
+
+		Registration_Warnings::enqueue_settings_script( 'options-general.php' );
+		$this->assertTrue( wp_script_is( 'newspack-registration-warnings', 'enqueued' ) );
+	}
+
+	/**
+	 * Users who can't manage options don't get the script.
+	 */
+	public function test_script_requires_manage_options() {
+		$this->sign_in_as( 'editor' );
+		Registration_Warnings::enqueue_settings_script( 'options-general.php' );
+		$this->assertFalse( wp_script_is( 'newspack-registration-warnings', 'enqueued' ) );
+	}
+
+	/**
+	 * Each notice carries the attribute the script finds it by, and the title
+	 * and body paragraphs the script rewrites.
+	 */
+	public function test_notices_carry_what_the_script_reads() {
+		$this->sign_in_as( 'administrator' );
+		$this->open_registration( 'editor' );
+		set_current_screen( 'options-general' );
+		$output = $this->render_notices();
+		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="bot"[^>]*><p><strong>Sign-ups have no bot protection</strong></p><p>[^<]+</p></div>#', $output );
+		$this->assertMatchesRegularExpression( '#<div [^>]*data-newspack-registration-warning="role"[^>]*><p><strong>Anyone can sign up as an Editor</strong></p><p>[^<]+</p></div>#', $output );
+	}
+
+	/**
+	 * The script gets its data as JSON under the global it reads, so whether
+	 * reCAPTCHA is on stays a real boolean.
+	 */
+	public function test_script_receives_its_data() {
+		$this->sign_in_as( 'administrator' );
+		Registration_Warnings::enqueue_settings_script( 'options-general.php' );
+		$inline = implode( '', array_filter( (array) wp_scripts()->get_data( 'newspack-registration-warnings', 'before' ) ) );
+		$prefix = 'window.newspackRegistrationWarnings = ';
+		$this->assertStringStartsWith( $prefix, $inline );
+		$data = json_decode( rtrim( substr( $inline, strlen( $prefix ) ), ';' ), true );
+		$this->assertFalse( $data['hasBotProtection'] );
+		$this->assertSame( 'Anyone can sign up as an Editor', $data['riskyRoles']['editor']['title'] );
+		$this->assertArrayNotHasKey( 'subscriber', $data['riskyRoles'] );
+	}
+
+	/**
+	 * Box state, default role, and reCAPTCHA: false for off, "keys" for set up,
+	 * "no-keys" for switched on without credentials. "custom_writer" is a
+	 * custom role that can edit posts; "deleted_role" doesn't exist.
+	 */
+	public function data_option_states() {
+		return [
+			'closed, editor, no reCAPTCHA'                => [ false, 'editor', false ],
+			'open, editor, no reCAPTCHA'                  => [ true, 'editor', false ],
+			'open, author, no reCAPTCHA'                  => [ true, 'author', false ],
+			'open, contributor, reCAPTCHA'                => [ true, 'contributor', 'keys' ],
+			'open, custom writer role, reCAPTCHA'         => [ true, 'custom_writer', 'keys' ],
+			'open, deleted role, reCAPTCHA'               => [ true, 'deleted_role', 'keys' ],
+			'open, subscriber, no reCAPTCHA'              => [ true, 'subscriber', false ],
+			'open, subscriber, reCAPTCHA on without keys' => [ true, 'subscriber', 'no-keys' ],
+			'open, editor, reCAPTCHA'                     => [ true, 'editor', 'keys' ],
+			'open, administrator, reCAPTCHA'              => [ true, 'administrator', 'keys' ],
+			'open, subscriber, reCAPTCHA'                 => [ true, 'subscriber', 'keys' ],
+		];
+	}
+
+	/**
+	 * The script's data, read with the script's rule, gives the same verdict as
+	 * this class's Site Health tests. (For a saved Editor or Administrator,
+	 * WordPress's own Site Health test reports the same Critical verdict.)
+	 *
+	 * @dataProvider data_option_states
+	 * @param bool         $open      Whether "Anyone can register" is on.
+	 * @param string       $role      Default role.
+	 * @param string|false $recaptcha reCAPTCHA state.
+	 */
+	public function test_script_data_matches_site_health( $open, $role, $recaptcha ) {
+		// WordPress saves an unknown default role as Subscriber, so the custom
+		// role has to exist first.
+		if ( 'custom_writer' === $role ) {
+			$this->add_test_role( $role, 'Writer', [ 'edit_posts' => true ] );
+		}
+		update_option( 'users_can_register', $open ? 1 : 0 );
+		update_option( 'default_role', $role );
+		if ( 'deleted_role' === $role ) {
+			$this->point_default_role_at_missing_role( $role );
+		}
+		$this->assertSame( $role, get_option( 'default_role' ) );
+		if ( 'keys' === $recaptcha ) {
+			$this->enable_recaptcha();
+		} elseif ( 'no-keys' === $recaptcha ) {
+			update_option( 'newspack_recaptcha_use_captcha', true );
+		}
+		$script_data = Registration_Warnings::get_script_data();
+
+		$script_shows_role = $open && isset( $script_data['riskyRoles'][ $role ] );
+		$script_shows_bot  = $open && ! $script_data['hasBotProtection'];
+
+		$this->assertSame( 'critical' === Registration_Warnings::site_health_role_test()['status'], $script_shows_role );
+		$this->assertSame( 'recommended' === Registration_Warnings::site_health_bot_protection_test()['status'], $script_shows_bot );
+	}
+
+	/**
+	 * Multisite uses a network-level registration setting, so no warning applies.
+	 */
+	public function test_multisite_is_quiet() {
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Runs only in a multisite test suite.' );
+		}
+		$this->open_registration( 'administrator' );
+		$this->assertFalse( Registration_Warnings::has_risky_default_role() );
+		$this->assertFalse( Registration_Warnings::is_missing_bot_protection() );
+	}
+}
