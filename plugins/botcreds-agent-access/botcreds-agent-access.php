@@ -19,7 +19,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.4.5' );
+// The release tooling bumps the Version header only, so read it from there.
+$agent_access_plugin_data = get_file_data( __FILE__, array( 'Version' => 'Version' ) );
+define( 'AGENT_ACCESS_VERSION', $agent_access_plugin_data['Version'] );
+unset( $agent_access_plugin_data );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );

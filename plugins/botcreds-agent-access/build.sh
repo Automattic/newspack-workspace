@@ -11,7 +11,7 @@ set -euo pipefail
 
 PLUGIN_SLUG="botcreds-agent-access"
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION=$(sed -n "s/^define( 'AGENT_ACCESS_VERSION', '\([^']*\)' );/\1/p" "$PLUGIN_DIR/botcreds-agent-access.php")
+VERSION=$(sed -n 's/^ \* Version: *\([^ ]*\)$/\1/p' "$PLUGIN_DIR/botcreds-agent-access.php" | head -1)
 if [[ -z "$VERSION" || ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]]; then
   echo "Invalid or missing plugin version" >&2
   exit 1
