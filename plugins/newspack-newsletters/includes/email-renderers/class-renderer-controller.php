@@ -129,6 +129,10 @@ class Renderer_Controller {
 		};
 		add_filter( 'render_block', $wrap_conditionals, 20, 2 );
 
+		// Rewrite attributes the engine can't read (render-time block supports) before
+		// its own preprocessing of each parsed block list. See Block_Normalizer.
+		Block_Normalizer::add_hooks();
+
 		// Save/restore so nested render_wc() calls leave the outer post intact.
 		$previous             = self::$rendering_post;
 		self::$rendering_post = $post;
@@ -164,6 +168,7 @@ class Renderer_Controller {
 			\Newspack_Newsletters_Renderer::$newsletter_id = $previous_newsletter_id;
 			remove_filter( 'the_content', $inject_content, 0 );
 			remove_filter( 'render_block', $wrap_conditionals, 20 );
+			Block_Normalizer::remove_hooks();
 		}
 	}
 
@@ -182,9 +187,44 @@ class Renderer_Controller {
 		if ( class_exists( '\Newspack_Newsletters_Renderer' ) ) {
 			$html = (string) \Newspack_Newsletters_Renderer::process_links( $html, $post );
 		}
+		$html = self::undecorate_image_links( $html );
 		$html = self::inject_custom_css( $html, $post );
 		$html = self::inject_tracking_pixel( $html, $post );
 		return $html;
+	}
+
+	/**
+	 * Remove the text-link underline from links that wrap an image.
+	 *
+	 * Links are underlined like text links in the editor (see Theme_Json_Builder), which
+	 * the CSS inliner applies to every link. On a link around an image, some email
+	 * clients draw that underline as a line under the image.
+	 *
+	 * @param string $html Email HTML.
+	 * @return string
+	 */
+	private static function undecorate_image_links( string $html ): string {
+		if ( false === stripos( $html, 'text-decoration: underline' ) && false === stripos( $html, 'text-decoration:underline' ) ) {
+			return $html;
+		}
+		$processor = new \WP_HTML_Tag_Processor( $html );
+		while ( $processor->next_tag( 'a' ) ) {
+			if ( $processor->is_tag_closer() ) {
+				continue;
+			}
+			$style = (string) $processor->get_attribute( 'style' );
+			if ( ! preg_match( '/text-decoration:\s*underline/i', $style ) ) {
+				continue;
+			}
+			$processor->set_bookmark( 'link' );
+			$wraps_image = $processor->next_tag() && 'IMG' === $processor->get_tag();
+			$processor->seek( 'link' );
+			$processor->release_bookmark( 'link' );
+			if ( $wraps_image ) {
+				$processor->set_attribute( 'style', (string) preg_replace( '/text-decoration:\s*underline/i', 'text-decoration: none', $style ) );
+			}
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**

@@ -15,6 +15,7 @@ namespace Newspack\Newsletters\Email_Renderers\Blocks;
 
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Abstract_Block_Renderer;
+use Newspack\Newsletters\Email_Renderers\Nested_Blocks;
 use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 use Newspack_Newsletters\Ads;
 use Newspack_Newsletters\Ads_Placements;
@@ -62,11 +63,12 @@ class Ad extends Abstract_Block_Renderer {
 			return '';
 		}
 
-		// do_blocks() routes inner blocks through the WC email pipeline because
-		// Content_Renderer::initialize() keeps its render_block hook active during render_wc().
+		// Render the ad's blocks through the WC email pipeline (Content_Renderer keeps its
+		// render_block hook active during render_wc()), sized to this block's own width so
+		// they aren't indented by the email gutter a second time — see Nested_Blocks.
 		self::$render_stack[] = $ad_post->ID;
 		try {
-			$html = (string) do_blocks( $ad_post->post_content );
+			$html = Nested_Blocks::render( $ad_post->post_content, $parsed_block['email_attrs']['width'] ?? null );
 			// Route ad links through process_links() with the ad's own post context, so ad
 			// URLs get UTM params and are proxied through the click endpoint. Click tracking
 			// only proxies ad links, so this must run with the ad post (not the newsletter);

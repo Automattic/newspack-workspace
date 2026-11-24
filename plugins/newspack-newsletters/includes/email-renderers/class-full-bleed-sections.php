@@ -230,12 +230,20 @@ class Full_Bleed_Sections {
 		$pad_top      = self::style_value( $cell_style, 'padding-top' );
 		$pad_bottom   = self::style_value( $cell_style, 'padding-bottom' );
 
-		$inner = '';
+		$inner          = '';
+		$children_inset = false;
 		if ( $content_cell instanceof \DOMElement ) {
 			foreach ( $content_cell->childNodes as $node ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
 				$inner .= $dom->saveHTML( $node );
+				if ( $node instanceof \DOMElement && self::has_class( $node, 'email-root-padding' ) ) {
+					$children_inset = true;
+				}
 			}
 		}
+		// The package hands the email's root padding down to the children of a full-width
+		// group that sets no side padding of its own, so they already carry the gutter.
+		// Insetting the band too would indent them twice (content at 48px, not 24px).
+		$inset = $children_inset ? '0' : $root_padding;
 
 		$cell_padding = sprintf(
 			'padding-top:%s;padding-bottom:%s;',
@@ -247,7 +255,7 @@ class Full_Bleed_Sections {
 		$inner_style = sprintf(
 			'box-sizing:border-box;max-width:%1$dpx;margin:0 auto;padding-left:%2$s;padding-right:%2$s;%3$s',
 			self::CONTENT_WIDTH,
-			$root_padding,
+			$inset,
 			$color ? 'color:' . $color . ';' : ''
 		);
 
@@ -400,6 +408,17 @@ class Full_Bleed_Sections {
 	 */
 	private static function comment_value( \DOMNode $node ): string {
 		return (string) $node->nodeValue; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+	}
+
+	/**
+	 * Whether an element carries a class.
+	 *
+	 * @param \DOMElement $node  Element.
+	 * @param string      $class Class name.
+	 * @return bool
+	 */
+	private static function has_class( \DOMElement $node, string $class ): bool {
+		return in_array( $class, preg_split( '/\s+/', trim( $node->getAttribute( 'class' ) ) ), true );
 	}
 
 	/**

@@ -12,8 +12,8 @@
 namespace Newspack\Newsletters\Email_Renderers\Blocks;
 
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
-use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Preprocessors\Blocks_Width_Preprocessor;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Abstract_Block_Renderer;
+use Newspack\Newsletters\Email_Renderers\Nested_Blocks;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -59,6 +59,12 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	const POST_GAP = '24px';
 
 	/**
+	 * Horizontal gap between the image and text columns of an image-left/right post item,
+	 * matching the editor canvas.
+	 */
+	const COLUMN_GAP = '16px';
+
+	/**
 	 * Top/bottom padding for each block in the flat layout (image-on-top or no image).
 	 * Matches the editor canvas's per-block 6px padding so email and editor read the same.
 	 */
@@ -72,8 +78,6 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 *    anchor already carrying a style attribute (no duplicate). The CSS inliner
 	 *    preserves existing inline styles, so this wins.
 	 * 2. Block spacing: collapse the package's 16px gap to META_GAP.
-	 * 3. Root padding: zero the inner 24px root padding to prevent double-indent
-	 *    (each child picks up the email's root padding again as a top-level block).
 	 *
 	 * @param string $html Rendered posts-inserter HTML.
 	 * @return string
@@ -84,8 +88,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			'<a$1 style="text-decoration: underline; color: inherit;">',
 			$html
 		);
-		$html = (string) preg_replace( '/margin-top:\s*16px/i', 'margin-top: ' . self::META_GAP, $html );
-		return (string) preg_replace( '/padding-left:\s*24px;\s*padding-right:\s*24px/i', 'padding-left: 0; padding-right: 0', $html );
+		return (string) preg_replace( '/margin-top:\s*16px/i', 'margin-top: ' . self::META_GAP, $html );
 	}
 
 	/**
@@ -121,6 +124,11 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 				if ( $index > 0 ) {
 					$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
 				}
+				// The engine only puts a gap between columns when one is set explicitly;
+				// the editor shows COLUMN_GAP between the image and the text.
+				if ( ! isset( $child['attrs']['style']['spacing']['blockGap']['left'] ) ) {
+					$child['attrs']['style']['spacing']['blockGap']['left'] = self::COLUMN_GAP;
+				}
 				$html .= self::render_child_markup( self::serialize_inserted_block( $child ), $content_width );
 			} else {
 				// Flat layout (image on top, or no image): wrap each rendered block in
@@ -136,29 +144,16 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Render inserted block markup, constraining widths to the available width.
 	 *
-	 * A plain `do_blocks()` pass has no `email_attrs`, so inserted images fall back to
-	 * the full email width and overflow a narrow column. When a width is known, run the
-	 * package's width preprocessor with it as the content size so each block's
-	 * `email_attrs.width` reaches the image renderer; otherwise fall back to `do_blocks()`.
+	 * See Nested_Blocks: rendering the markup directly would give each inserted block
+	 * the email's root padding and a full-email width again, indenting it twice and
+	 * shrinking images by the gutter.
 	 *
 	 * @param string      $markup        Block markup.
 	 * @param string|null $content_width Available width (e.g. `330px`), or null.
 	 * @return string Rendered email HTML.
 	 */
 	private static function render_child_markup( string $markup, ?string $content_width ): string {
-		if ( null === $content_width || '' === $content_width || ! class_exists( Blocks_Width_Preprocessor::class ) ) {
-			return do_blocks( $markup );
-		}
-		$blocks = ( new Blocks_Width_Preprocessor() )->preprocess(
-			parse_blocks( $markup ),
-			[ 'contentSize' => $content_width ],
-			[]
-		);
-		$html = '';
-		foreach ( $blocks as $block ) {
-			$html .= render_block( $block );
-		}
-		return $html;
+		return Nested_Blocks::render( $markup, $content_width );
 	}
 
 	/**

@@ -87,6 +87,18 @@ Translates a newsletter's configured theme into a theme.json array. **Read-only.
 | `fontSizes` presets | Newspack font-size scale; **fluid typography off** (fixed px in email) |
 | `spacingSizes` presets | Newspack spacing scale (`var:preset|spacing|*` resolves) |
 | `color.palette` | `NEWSPACK_NEWSLETTERS_PALETTE_META` option — **omitted when empty** (an empty palette would wipe the editor's default presets on merge) |
+| `elements.link` | Fixed: underlined, `color: inherit` — links follow the surrounding text, as in the editor canvas. A block's own link color still wins. `render_wc()` then removes the underline from links that wrap an image. |
+
+### `Block_Normalizer` — `class-block-normalizer.php`
+Render-scoped hooks (`add_hooks()` / `remove_hooks()`, called by `render_wc()`) that rewrite parsed blocks before the package preprocesses them, on `woocommerce_email_blocks_renderer_parsed_blocks` at priority 5:
+
+- **Render-time block supports.** The engine renders from saved markup and attributes, so anything WordPress only works out in `render_block` is lost. A survey of the allowed blocks (NPPD-2188) found one that matters in email: a WordPress 7.1 button's `style.dimensions.width`, mapped onto the `width` attribute the engine sizes buttons from. (Per-block link colors and column gaps already survive; row/flex group layouts are not supported by the engine at all.)
+- **Top-level full-width groups.** Zero side padding is dropped, so the engine hands the email gutter to the children as it does when no padding is set; a group that draws nothing (no background or border) also loses its full alignment. This keeps the content in the content column, as in the editor.
+
+It also makes core's block-hooks pass on `the_content` (priority 8) use core's plain parser. That pass parses and re-serializes the content; through the engine's parser the widths it computes would be written into block attributes and override the correct ones in the real render.
+
+### `Nested_Blocks` — `class-nested-blocks.php`
+`render( $markup, $width )` renders markup a block pulls in from elsewhere — posts inserted by the Posts Inserter, an ad's content. During a render the package's parser preprocesses every `parse_blocks()` call as top-level email content, giving each block the email gutter and a full-email width again; this strips the distributed padding and recomputes widths against the host block's width.
 
 ### `Block_Renderer_Registry` + `blocks/`
 The block override system. The package sets each block's `render_email_callback` during the `block_type_metadata_settings` filter (priority 10); this registry hooks the same filter later and re-points that callback for the blocks Newspack overrides. See [below](#adding-an-override).

@@ -94,6 +94,18 @@ class Theme_Json_Builder {
 						'fontFamily' => $header_font,
 					],
 				],
+				// Links in text follow the editor canvas: underlined and in the color of
+				// the surrounding text. The package's base styles strip the underline and
+				// set no color, so clients fall back to their own link blue. A block's own
+				// link color still overrides this.
+				'link'    => [
+					'color'      => [
+						'text' => 'inherit',
+					],
+					'typography' => [
+						'textDecoration' => 'underline',
+					],
+				],
 			],
 		];
 
