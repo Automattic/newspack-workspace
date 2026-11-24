@@ -63,10 +63,7 @@ class Social_Links extends Package_Social_Links {
 	];
 
 	/**
-	 * Render the social-links block, then space the icons.
-	 *
-	 * Defers to the package renderer for all markup, then injects a horizontal
-	 * margin on each icon pill so the email matches the editor canvas.
+	 * Render the social-links block, then adjust its icons to match the editor.
 	 *
 	 * @param string            $block_content     Block content.
 	 * @param array             $parsed_block      Parsed block.
@@ -76,7 +73,7 @@ class Social_Links extends Package_Social_Links {
 	protected function render_content( $block_content, array $parsed_block, Rendering_Context $rendering_context ): string {
 		$parsed_block = self::apply_justification( $parsed_block );
 		$html         = parent::render_content( $block_content, $parsed_block, $rendering_context );
-		$html         = self::style_icons( $html, $parsed_block['attrs'] ?? [] );
+		$html         = self::style_icons( $html, $parsed_block );
 		return $this->space_icons( $html );
 	}
 
@@ -114,21 +111,20 @@ class Social_Links extends Package_Social_Links {
 	 *
 	 * Leaves logos-only rows (brand-colored icons, no background) to the package.
 	 *
-	 * @param string $html  Rendered social-links HTML.
-	 * @param array  $attrs Social-links block attributes.
+	 * @param string $html         Rendered social-links HTML.
+	 * @param array  $parsed_block Parsed social-links block.
 	 * @return string
 	 */
-	public static function style_icons( string $html, array $attrs ): string {
+	public static function style_icons( string $html, array $parsed_block ): string {
+		$attrs      = $parsed_block['attrs'] ?? [];
 		$class_name = (string) ( $attrs['className'] ?? '' );
 		if ( false !== strpos( $class_name, 'is-style-logos-only' ) ) {
 			return $html;
 		}
 		list( $background, $icon ) = self::resolve_appearance( $attrs );
-		$is_pill_shape             = false !== strpos( $class_name, 'is-style-pill-shape' );
-
-		// Services in pill order, so each pill's brand color is known before its icon.
-		preg_match_all( self::ICON_URL_PATTERN, $html, $found );
-		$services = $found[1];
+		$services                  = self::rendered_services( $parsed_block );
+		$padding                   = self::icon_padding( (int) Social_Links_Helper::get_social_link_size_option_value( $attrs['size'] ?? Social_Links_Helper::get_default_social_link_size() ) );
+		$cell_padding              = false !== strpos( $class_name, 'is-style-pill-shape' ) ? $padding . ' 0' : $padding;
 
 		$processor = new \WP_HTML_Tag_Processor( $html );
 		$index     = -1;
@@ -160,30 +156,43 @@ class Social_Links extends Package_Social_Links {
 			}
 			if ( 'row' === $state && 'TD' === $tag ) {
 				$state = 'cell';
-				$processor->set_bookmark( 'icon-cell' );
+				$style = rtrim( trim( $style ), ';' );
+				$processor->set_attribute( 'style', ( '' === $style ? '' : $style . ';' ) . 'padding:' . $cell_padding . ';' );
 				continue;
 			}
 			if ( 'cell' === $state && 'IMG' === $tag ) {
 				$state = '';
-				$src   = (string) $processor->get_attribute( 'src' );
-				if ( preg_match( self::ICON_URL_PATTERN, $src, $matches ) ) {
+				if ( preg_match( self::ICON_URL_PATTERN, (string) $processor->get_attribute( 'src' ), $matches ) ) {
 					$url = self::icon_url( $matches[1], $icon, $background );
 					if ( '' !== $url ) {
 						$processor->set_attribute( 'src', $url );
 					}
 				}
-				$padding = self::icon_padding( (int) $processor->get_attribute( 'width' ) );
-				if ( $processor->seek( 'icon-cell' ) ) {
-					$cell_style = rtrim( trim( (string) $processor->get_attribute( 'style' ) ), ';' );
-					$cell_style = ( '' === $cell_style ? '' : $cell_style . ';' ) . 'padding:' . ( $is_pill_shape ? $padding . ' 0' : $padding ) . ';';
-					$processor->set_attribute( 'style', $cell_style );
-					// Return to the image before continuing the walk.
-					$processor->next_tag( 'img' );
-				}
-				$processor->release_bookmark( 'icon-cell' );
 			}
 		}
 		return $processor->get_updated_html();
+	}
+
+	/**
+	 * Services of the links the package renders, in order: one per icon pill.
+	 *
+	 * Read from the block rather than from the icon URLs in the rendered HTML, because
+	 * the package still renders a pill, with an empty image, for a service it has no icon
+	 * for; reading the URLs would shift every later pill onto the wrong service.
+	 *
+	 * @param array $parsed_block Parsed social-links block.
+	 * @return string[]
+	 */
+	private static function rendered_services( array $parsed_block ): array {
+		$services = [];
+		foreach ( $parsed_block['innerBlocks'] ?? [] as $link ) {
+			$service = (string) ( $link['attrs']['service'] ?? '' );
+			// The package skips links without a service or URL, so they get no pill.
+			if ( '' !== $service && '' !== (string) ( $link['attrs']['url'] ?? '' ) ) {
+				$services[] = strtolower( $service );
+			}
+		}
+		return $services;
 	}
 
 	/**
