@@ -44,6 +44,7 @@ class ModelTest extends WP_UnitTestCase {
 				'overlay_opacity'                => '30',
 				'overlay_size'                   => 'medium',
 				'no_overlay_background'          => false,
+				'manual_only'                    => false,
 				'placement'                      => 'inline',
 				'trigger_type'                   => 'scroll',
 				'trigger_delay'                  => '3',

@@ -4,13 +4,17 @@ declare module '@wordpress/block-editor';
 // module and strip every type below of its global scope. Use inline
 // import() types instead.
 type HeaderAction = {
-	type: 'primary' | 'secondary' | 'more';
+	type: 'primary' | 'secondary' | 'tertiary' | 'more';
 	label: string;
+	id?: string;
 	ariaLabel?: string;
 	icon?: import('@wordpress/icons').Icon | string;
+	mobileIcon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
+	isBusy?: boolean;
 	action?: () => void;
+	onClick?: () => void;
 	href?: string;
 	separator?: boolean;
 };

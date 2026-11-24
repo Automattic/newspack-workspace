@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integrations\Contact_Pull;
 use Newspack\Reader_Data;
@@ -55,19 +56,91 @@ class Test_Contact_Pull_Retries extends WP_UnitTestCase {
 		}
 	}
 
+	private function get_pending_retries() {
+		return as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			]
+		);
+	}
+
+	private function provider_has_no_contact() {
+		Failing_Sample_Integration::$pull_should_fail = true;
+		Failing_Sample_Integration::$pull_error_code  = Integration::CONTACT_NOT_FOUND_ERROR_CODE;
+	}
+
 	public function test_pull_all_does_not_schedule_retries_for_permanent_write_failures() {
 		$this->fill_reader_to_cap();
 
 		$result = Contact_Pull::pull_all( $this->user_id );
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'The failure still surfaces to the caller.' );
-		$pending = as_get_scheduled_actions(
+		$this->assertCount( 0, $this->get_pending_retries(), 'A permanent write failure must not schedule retries.' );
+	}
+
+	/**
+	 * A provider with no contact for the reader is nothing to pull. No retry
+	 * can make the contact appear, and the reader's next visit queues another
+	 * pull anyway, so the batch pull neither retries nor reports a failure.
+	 */
+	public function test_pull_all_skips_a_reader_the_provider_has_no_contact_for() {
+		$this->provider_has_no_contact();
+
+		$result = Contact_Pull::pull_all( $this->user_id );
+
+		$this->assertTrue( $result );
+		$this->assertCount( 0, $this->get_pending_retries() );
+	}
+
+	/**
+	 * A chain that another failure started ends when the contact turns out to
+	 * be missing, rather than retrying it to the cap.
+	 */
+	public function test_a_retry_that_finds_no_contact_ends_the_chain() {
+		$this->provider_has_no_contact();
+
+		Contact_Pull::execute_integration_retry(
 			[
-				'hook'   => Contact_Pull::RETRY_HOOK,
-				'status' => \ActionScheduler_Store::STATUS_PENDING,
+				'integration_id' => 'retry_mock',
+				'user_id'        => $this->user_id,
+				'retry_count'    => 1,
 			]
 		);
-		$this->assertCount( 0, $pending, 'A permanent write failure must not schedule retries.' );
+
+		$this->assertCount( 0, $this->get_pending_retries() );
+	}
+
+	/**
+	 * A failed synchronous pull queues the reader for the batch pull, so the
+	 * loopback must not answer a missing contact as a failure.
+	 */
+	public function test_the_loopback_pull_answers_success_when_the_provider_has_no_contact() {
+		$this->provider_has_no_contact();
+		wp_set_current_user( $this->user_id );
+		$_REQUEST['nonce']       = wp_create_nonce( Contact_Pull::NONCE_ACTION );
+		$_POST['integration_id'] = 'retry_mock';
+		// wp_send_json() ends the request; stop at the response it printed.
+		$stop_at_the_response = function () {
+			return function () {
+				throw new \WPAjaxDieContinueException();
+			};
+		};
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		add_filter( 'wp_die_ajax_handler', $stop_at_the_response );
+		ob_start();
+
+		try {
+			Contact_Pull::handle_ajax_pull();
+		} catch ( \WPAjaxDieContinueException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The response is the output.
+		} finally {
+			$response = json_decode( ob_get_clean(), true );
+			remove_filter( 'wp_die_ajax_handler', $stop_at_the_response );
+			remove_filter( 'wp_doing_ajax', '__return_true' );
+			unset( $_REQUEST['nonce'], $_POST['integration_id'] );
+		}
+
+		$this->assertTrue( $response['success'] );
 	}
 
 	/**

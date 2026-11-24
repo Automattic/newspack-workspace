@@ -40,6 +40,13 @@ final class Push_Log {
 	const OPERATION_DELETE = 'delete';
 
 	/**
+	 * The error code of a push the provider saved without some of its fields.
+	 * No retry can fix it, so an identical push collapses into it like a
+	 * clean one.
+	 */
+	const ERROR_FIELDS_NOT_SYNCED = 'fields_not_synced';
+
+	/**
 	 * What a list returns for each row. The payload, its hash and the error
 	 * message stay out, so a page of rows stays light: a provider's message
 	 * can run to thousands of characters and a list does not show it. get()
@@ -79,10 +86,11 @@ final class Push_Log {
 	/**
 	 * Create or update the table when the stored schema version differs.
 	 *
-	 * The version is recorded only once the table exists, so a failed creation
-	 * is retried instead of leaving every write to fail. It is retried hourly,
-	 * not on every request: a host that refuses the table, a database user
-	 * without CREATE for one, refuses it each time.
+	 * The version is recorded only once the table exists with nothing left to
+	 * change, so a failed creation or change is retried instead of leaving
+	 * every write to fail. It is retried hourly, not on every request: a host
+	 * that refuses the table, a database user without CREATE for one, refuses
+	 * it each time.
 	 */
 	public static function maybe_create_table() {
 		if ( self::TABLE_VERSION === get_option( self::TABLE_VERSION_OPTION ) ) {
@@ -125,9 +133,13 @@ final class Push_Log {
 		) {$charset_collate};";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		$changes = dbDelta( $sql );
 
-		if ( self::table_exists() ) {
+		// dbDelta does not report a statement that failed. The table being
+		// there confirms a creation, not a change to a table that already
+		// existed, so when it changed something, ask it what is still left: a
+		// version recorded over a failed ALTER would never be tried again.
+		if ( self::table_exists() && ( empty( $changes ) || empty( dbDelta( $sql, false ) ) ) ) {
 			update_option( self::TABLE_VERSION_OPTION, self::TABLE_VERSION );
 		} else {
 			set_transient( self::CREATION_RETRY_AFTER, 1, HOUR_IN_SECONDS );
@@ -280,11 +292,11 @@ final class Push_Log {
 			}
 		}
 
-		$is_clean_first_upsert = ! $failed
+		$is_collapsible_first_upsert = ( ! $failed || self::ERROR_FIELDS_NOT_SYNCED === $data['error_code'] )
 			&& 1 === $data['attempts']
 			&& self::OPERATION_UPSERT === $args['operation']
 			&& null !== $data['payload_hash'];
-		if ( $is_clean_first_upsert ) {
+		if ( $is_collapsible_first_upsert ) {
 			$collapsed_into = self::collapse_into_latest( $integration_id, $email, $data );
 			if ( $collapsed_into > 0 ) {
 				return $collapsed_into;
@@ -616,8 +628,8 @@ final class Push_Log {
 
 	/**
 	 * The push a row is compared with: the reader's previous one that reached
-	 * the provider. A failed push never arrived, so it says nothing about what
-	 * the provider holds.
+	 * the provider. A failed push never arrived, and a benign one changed
+	 * nothing there, so neither says what the provider holds.
 	 *
 	 * @param array $row A row, as get() returns it.
 	 *
@@ -648,11 +660,12 @@ final class Push_Log {
 
 		$by_address = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT * FROM %i WHERE email = %s AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				'SELECT * FROM %i WHERE email = %s AND integration_id = %s AND status = %s AND ( error_class IS NULL OR error_class <> %s ) AND id < %d ORDER BY id DESC LIMIT 1',
 				$table_name,
 				$row['email'],
 				$row['integration_id'],
 				self::STATUS_SUCCESS,
+				'benign',
 				(int) $row['id']
 			),
 			ARRAY_A
@@ -668,11 +681,12 @@ final class Push_Log {
 
 		$by_account = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT * FROM %i WHERE user_id = %d AND integration_id = %s AND status = %s AND id < %d ORDER BY id DESC LIMIT 1',
+				'SELECT * FROM %i WHERE user_id = %d AND integration_id = %s AND status = %s AND ( error_class IS NULL OR error_class <> %s ) AND id < %d ORDER BY id DESC LIMIT 1',
 				$table_name,
 				$user_id,
 				$row['integration_id'],
 				self::STATUS_SUCCESS,
+				'benign',
 				(int) $row['id']
 			),
 			ARRAY_A
@@ -865,8 +879,9 @@ final class Push_Log {
 	}
 
 	/**
-	 * Fold a clean successful upsert into the reader's latest row when that
-	 * row already stands for the same data at the provider.
+	 * Fold a first-attempt upsert into the reader's latest row when that row
+	 * already stands for the same data at the provider, with the same outcome:
+	 * a clean success, or a save that left out the same fields.
 	 *
 	 * The payload is refreshed so volatile values stay current, and the row's
 	 * context is kept: it names what caused this data state.
@@ -883,7 +898,7 @@ final class Push_Log {
 
 		$latest = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				'SELECT id, status, error_class, operation, payload_hash FROM %i WHERE email = %s AND integration_id = %s ORDER BY id DESC LIMIT 1',
+				'SELECT id, status, error_class, error_code, error_message, operation, payload_hash FROM %i WHERE email = %s AND integration_id = %s ORDER BY id DESC LIMIT 1',
 				$table_name,
 				$email,
 				$integration_id
@@ -892,8 +907,10 @@ final class Push_Log {
 		);
 		if (
 			! $latest
-			|| self::STATUS_SUCCESS !== $latest['status']
-			|| null !== $latest['error_class']
+			|| $data['status'] !== $latest['status']
+			|| ( $data['error_class'] ?? null ) !== $latest['error_class']
+			|| ( $data['error_code'] ?? null ) !== $latest['error_code']
+			|| ( $data['error_message'] ?? null ) !== $latest['error_message']
 			|| self::OPERATION_UPSERT !== $latest['operation']
 			|| $data['payload_hash'] !== $latest['payload_hash']
 		) {
@@ -936,7 +953,12 @@ final class Push_Log {
 		self::$write_failure_reported = true;
 
 		global $wpdb;
-		$db_error = $wpdb->last_error;
+		// The database quotes what a statement failed on (a duplicate entry, the
+		// text near a syntax error), which can be the reader's address or
+		// payload. The words around the quotes name the kind of failure, though
+		// not the column or key it hit, so only the quoted part goes. First quote
+		// to last, because an address can itself hold a quote.
+		$db_error = preg_replace( "/'.*'/s", "'…'", $wpdb->last_error );
 
 		// A table that disappears after its version was recorded (a restore, a
 		// manual drop) would stay gone, because the recorded version stops
@@ -947,10 +969,15 @@ final class Push_Log {
 			delete_option( self::TABLE_VERSION_OPTION );
 		}
 
+		// An empty email keeps the report from naming whoever's request hit the
+		// broken table, which during a sync is often the reader being synced.
 		Logger::newspack_log(
 			'newspack_integrations_push_log_write_failed',
 			'Could not write to the integrations push log.',
-			[ 'db_error' => $db_error ],
+			[
+				'db_error'   => $db_error,
+				'user_email' => '',
+			],
 			'error'
 		);
 	}

@@ -90,8 +90,8 @@
 		}
 	}
 
-	&__inputs,
-	&__have-account {
+	.wp-block-newspack-reader-registration &__inputs,
+	.wp-block-newspack-reader-registration &__have-account {
 		.newspack-ui__button {
 			cursor: default;
 			font-family: var(--newspack-ui-font-family) !important;
@@ -118,13 +118,15 @@
 		}
 	}
 
-	&__response {
+	&__response:empty {
 		display: none;
 	}
 
-	button:focus,
-	a:focus {
-		outline: none !important;
+	.wp-block-newspack-reader-registration & {
+		button:focus,
+		a:focus {
+			outline: none !important;
+		}
 	}
 
 	.newspack-ui__box--success {

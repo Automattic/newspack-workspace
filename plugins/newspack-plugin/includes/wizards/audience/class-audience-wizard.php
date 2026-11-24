@@ -30,6 +30,19 @@ class Audience_Wizard extends Wizard {
 	protected $slug = 'newspack-audience';
 
 	/**
+	 * Capability required to open the Audience Management setup screen. Screens
+	 * that link to it read this to decide whether to offer the link.
+	 */
+	const CAPABILITY = 'manage_options';
+
+	/**
+	 * See {@see self::CAPABILITY}.
+	 *
+	 * @var string
+	 */
+	protected $capability = self::CAPABILITY;
+
+	/**
 	 * The parent menu item name.
 	 *
 	 * @var string

@@ -6,6 +6,8 @@
  */
 
 use Newspack\Subscriptions_CSV_Exporter;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
 
 require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
@@ -718,5 +720,181 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( [ 'wc-trash' ], $args['status'] );
+	}
+
+	/**
+	 * Create a reader user for the per-member tests.
+	 *
+	 * @param string $login User login, also the email local part.
+	 * @return int User ID.
+	 */
+	private function create_reader( string $login ): int {
+		return self::factory()->user->create(
+			[
+				'user_login' => $login,
+				'user_email' => $login . '@example.test',
+				'first_name' => ucfirst( $login ),
+				'last_name'  => 'Reader',
+			]
+		);
+	}
+
+	/**
+	 * Run one per-member export page and return the exporter.
+	 *
+	 * @param int $limit Subscriptions per page.
+	 * @param int $page  Page number.
+	 * @return Subscriptions_CSV_Exporter The exporter, after writing the page.
+	 */
+	private function export_per_member_page( int $limit = 50, int $page = 1 ): Subscriptions_CSV_Exporter {
+		$exporter = new Subscriptions_CSV_Exporter();
+		$exporter->set_filename( 'newspack-subscriptions-export-per-member.csv' );
+		$exporter->set_export_config( [ 'per_member' => true ] );
+		$exporter->set_limit( $limit );
+		$exporter->set_page( $page );
+		$exporter->generate_file();
+		return $exporter;
+	}
+
+	/**
+	 * Per-member mode puts the reader columns first and keeps every
+	 * subscription column after them, unchanged and in order.
+	 */
+	public function test_per_member_columns_lead_with_the_reader() {
+		$default_columns = array_keys( ( new Subscriptions_CSV_Exporter() )->get_column_names() );
+
+		$exporter = new Subscriptions_CSV_Exporter();
+		$exporter->set_export_config( [ 'per_member' => true ] );
+
+		$this->assertSame(
+			array_merge(
+				[ 'member_id', 'member_username', 'member_email', 'member_first_name', 'member_last_name', 'access_through', 'group_name' ],
+				$default_columns
+			),
+			array_keys( $exporter->get_column_names() )
+		);
+	}
+
+	/**
+	 * A non-group subscription is one owner row. A group subscription is its
+	 * owner's row followed by one row per member, each naming the group. An
+	 * invite nobody has accepted is not a member, so it gets no row.
+	 */
+	public function test_per_member_rows_expand_groups_into_their_members() {
+		$solo_owner = $this->create_reader( 'solo' );
+		$this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $solo_owner,
+			]
+		);
+
+		$group_owner  = $this->create_reader( 'owner' );
+		$group        = $this->create_full_subscription(
+			[
+				'id'          => 2,
+				'customer_id' => $group_owner,
+			]
+		);
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', 'Metro Desk' );
+		$member_ids = [ $this->create_reader( 'amy' ), $this->create_reader( 'ben' ), $this->create_reader( 'cal' ) ];
+		foreach ( $member_ids as $member_id ) {
+			add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		}
+		$this->assertNotWPError( Group_Subscription_Invite::generate_invite( $group, 'invitee@example.test', false ) );
+		// An owner whose account is gone has no access, so no row.
+		$deleted_owner = $this->create_reader( 'gone' );
+		wp_delete_user( $deleted_owner );
+		$this->create_full_subscription(
+			[
+				'id'          => 3,
+				'customer_id' => $deleted_owner,
+			]
+		);
+
+		$rows = $this->export_per_member_page()->get_prepared_row_data();
+
+		$this->assertSame(
+			[
+				[ $solo_owner, 'owner', '', 1 ],
+				[ $group_owner, 'owner', 'Metro Desk', 2 ],
+				[ $member_ids[0], 'group member', 'Metro Desk', 2 ],
+				[ $member_ids[1], 'group member', 'Metro Desk', 2 ],
+				[ $member_ids[2], 'group member', 'Metro Desk', 2 ],
+			],
+			array_map( fn( $row ) => [ $row['member_id'], $row['access_through'], $row['group_name'], $row['subscription_id'] ], $rows )
+		);
+		$this->assertSame( 'amy@example.test', $rows[2]['member_email'] );
+		$this->assertSame( 'amy', $rows[2]['member_username'] );
+		$this->assertSame( 'Amy', $rows[2]['member_first_name'] );
+		// The subscription's own columns still describe the subscription and its owner.
+		$this->assertSame( 'owner@example.test', $rows[2]['customer_email'] );
+		$this->assertNotContains( 'invitee@example.test', array_column( $rows, 'member_email' ) );
+	}
+
+	/**
+	 * The batch cursor walks subscriptions, not rows: a page whose groups add
+	 * member rows must not count those rows as progress, or the run would
+	 * stop with later subscriptions never exported.
+	 */
+	public function test_per_member_progress_counts_subscriptions_not_rows() {
+		$group = $this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $this->create_reader( 'owner' ),
+			]
+		);
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		foreach ( [ 'amy', 'ben', 'cal' ] as $login ) {
+			add_user_meta( $this->create_reader( $login ), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		}
+		for ( $i = 2; $i <= 3; $i++ ) {
+			$this->create_full_subscription(
+				[
+					'id'          => $i,
+					'customer_id' => $this->create_reader( 'solo' . $i ),
+				]
+			);
+		}
+
+		$page_one = $this->export_per_member_page( 2, 1 );
+		$this->assertCount( 5, $page_one->get_prepared_row_data(), 'The group owner, its three members and one more owner.' );
+		$this->assertSame( 2, $page_one->get_total_exported() );
+		$this->assertSame( 66, $page_one->get_percent_complete() );
+
+		// Drive the run the way both surfaces do: until 100%. Counting rows
+		// would report 100% after page 1 and leave subscription 3 out.
+		$page = 1;
+		do {
+			$exporter = $this->export_per_member_page( 2, $page++ );
+		} while ( $exporter->get_percent_complete() < 100 && $page <= 5 );
+		$subscription_id_column    = array_search( 'subscription_id', array_keys( $exporter->get_column_names() ), true );
+		$exported_subscription_ids = array_map(
+			fn( $line ) => (int) str_getcsv( $line )[ $subscription_id_column ],
+			array_filter( explode( "\n", file_get_contents( $exporter->get_export_file_path() ) ) ) // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+		);
+		$this->assertSame( [ 1, 1, 1, 1, 2, 3 ], $exported_subscription_ids );
+	}
+
+	/**
+	 * A per-member run can match subscriptions that yield no reader at all.
+	 * Its empty file is a correct result, not an unwritable uploads directory,
+	 * which is what an empty file means when rows were expected.
+	 */
+	public function test_per_member_run_with_no_readers_expects_no_rows() {
+		$deleted_owner = $this->create_reader( 'gone' );
+		wp_delete_user( $deleted_owner );
+		$this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $deleted_owner,
+			]
+		);
+
+		$exporter = $this->export_per_member_page();
+
+		$this->assertSame( 100, $exporter->get_percent_complete() );
+		$this->assertFalse( $exporter->expects_written_rows() );
 	}
 }

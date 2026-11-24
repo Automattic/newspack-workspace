@@ -306,25 +306,82 @@ class User_Gate_Access {
 	}
 
 	/**
+	 * Subscriptions the user holds on other network sites that satisfy a
+	 * subscription rule, as supplied by whichever plugin knows the network.
+	 *
+	 * @param int   $user_id User ID.
+	 * @param mixed $value   Rule value.
+	 *
+	 * @return array[] Records with an integer `id`, a `site_name` and an `edit_url`
+	 *                 (empty when the other site has no screen to link to). Anything
+	 *                 without a positive numeric ID or a non-blank site name is
+	 *                 dropped, since it can't be labelled. A malformed rule value
+	 *                 grants nothing, so no records are asked for it.
+	 */
+	private static function get_network_subscription_records( $user_id, $value ) {
+		if ( Access_Rules::is_malformed_options_backed_value( $value ) ) {
+			return [];
+		}
+
+		/**
+		 * Filters the subscription records that satisfy a subscription rule on
+		 * other sites in the user's network.
+		 *
+		 * Not applied when the rule value is malformed.
+		 *
+		 * @param array[] $records     Records, each with `id` (int), `site_url`,
+		 *                             `site_name` and `edit_url` (strings).
+		 * @param int     $user_id     User ID.
+		 * @param array   $product_ids Product IDs from the rule value; empty for a
+		 *                             rule that accepts any subscription.
+		 */
+		$records = apply_filters( 'newspack_access_rules_network_subscription_records', [], $user_id, is_array( $value ) ? $value : [] );
+		if ( ! is_array( $records ) ) {
+			return [];
+		}
+
+		$valid = [];
+		foreach ( $records as $record ) {
+			if ( ! is_array( $record ) || ! isset( $record['id'] ) || ! is_numeric( $record['id'] ) || (int) $record['id'] <= 0 ) {
+				continue;
+			}
+			$site_name = isset( $record['site_name'] ) && is_scalar( $record['site_name'] ) ? trim( (string) $record['site_name'] ) : '';
+			if ( '' === $site_name ) {
+				continue;
+			}
+			$valid[] = [
+				'id'        => (int) $record['id'],
+				'site_name' => $site_name,
+				'edit_url'  => isset( $record['edit_url'] ) && is_string( $record['edit_url'] ) ? $record['edit_url'] : '',
+			];
+		}
+		return $valid;
+	}
+
+	/**
 	 * Links to the specific subscriptions or orders that satisfy a passing rule
 	 * for the user.
 	 *
 	 * Only the two ownership rules map to concrete records a publisher can open;
-	 * every other rule returns nothing. Access granted by a third-party filter
-	 * (e.g. a Newspack Network sibling site) has no local record, so a rule can
-	 * pass with an empty list here. Callers own the capability check: this
-	 * returns admin edit URLs for whichever user it is asked about.
+	 * every other rule returns nothing. A subscription rule also lists records
+	 * held on other network sites, after the local ones, each named with its site
+	 * and linked to that site's edit screen. Another plugin supplies those through
+	 * the `newspack_access_rules_network_subscription_records` filter. Access
+	 * granted by some other filter has no record to name, so a rule can still pass
+	 * with an empty list here. Callers own the capability check: this returns
+	 * admin edit URLs for whichever user it is asked about.
 	 *
 	 * @param string $slug    Rule slug.
 	 * @param mixed  $value   Rule value.
 	 * @param int    $user_id User ID.
 	 * @param array  $context Evaluation context from evaluate_gate_for_user().
 	 *
-	 * @return string[] Escaped items labelled `#<id>` (an `<a>` when the record has an
-	 *                  edit screen, plain text otherwise), safe to print through
-	 *                  wp_kses() with `a[href]` and `span[class|aria-hidden]` allowed.
-	 *                  When more records qualify than GRANTING_ENTITIES_LIMIT, the
-	 *                  last item is a truncation marker.
+	 * @return string[] Escaped items labelled `#<id>`, or `#<id> on <site name>` for a
+	 *                  record from another network site (an `<a>` when the record
+	 *                  has an edit screen, plain text otherwise), safe to print
+	 *                  through wp_kses() with `a[href]` and `span[class|aria-hidden]`
+	 *                  allowed. When more records qualify than GRANTING_ENTITIES_LIMIT,
+	 *                  local and network combined, the last item is a truncation marker.
 	 */
 	public static function get_granting_entity_links( $slug, $value, $user_id, $context = [] ) {
 		$memo_key = $slug . ':' . $user_id . ':' . md5( wp_json_encode( $value ) ) . ':' . md5( wp_json_encode( $context ) );
@@ -349,12 +406,27 @@ class User_Gate_Access {
 			$fetch = 'wc_get_order';
 		}
 
-		$truncated = count( $ids ) > self::GRANTING_ENTITIES_LIMIT;
+		// Subscriptions held on other network sites. Asked even when the user has
+		// local ones, and when WooCommerce Subscriptions is not active here.
+		$network_records = 'subscription' === $slug ? self::get_network_subscription_records( $user_id, $value ) : [];
+
+		$truncated = count( $ids ) + count( $network_records ) > self::GRANTING_ENTITIES_LIMIT;
 		$links     = [];
 		foreach ( array_slice( $ids, 0, self::GRANTING_ENTITIES_LIMIT ) as $id ) {
 			$entity  = call_user_func( $fetch, $id );
 			$url     = $entity && method_exists( $entity, 'get_edit_order_url' ) ? $entity->get_edit_order_url() : '';
 			$links[] = self::link( $url, '#' . $id );
+		}
+		foreach ( array_slice( $network_records, 0, self::GRANTING_ENTITIES_LIMIT - count( $links ) ) as $record ) {
+			$links[] = self::link(
+				$record['edit_url'],
+				sprintf(
+					/* translators: 1: subscription ID, 2: site name. */
+					__( '#%1$d on %2$s', 'newspack-plugin' ),
+					$record['id'],
+					$record['site_name']
+				)
+			);
 		}
 		if ( $truncated ) {
 			$links[] = sprintf(

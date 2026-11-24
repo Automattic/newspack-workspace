@@ -835,16 +835,74 @@ class WC_Product {
 		$this->meta[ $key ] = $value;
 	}
 	/**
+	 * Drop a meta value in memory, as WC_Data::delete_meta_data() does before a save().
+	 *
+	 * @param string $key Meta key.
+	 */
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
+	}
+	/**
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 * Fires the before-save action WC_Data::save() fires, so code that adjusts a
+	 * product as it is saved runs here too.
 	 *
 	 * @return int The product ID.
 	 */
 	public function save() {
+		do_action( 'woocommerce_before_product_object_save', $this, null );
 		global $products_database;
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();
+	}
+	/**
+	 * Setters Donations::update_donation_product() calls on an existing product.
+	 * They store into the same data the getters above read, so a test can run
+	 * that method against mock products and read the results back.
+	 *
+	 * @param string $value Product name.
+	 */
+	public function set_name( $value ) {
+		$this->data['name'] = $value;
+	}
+	public function set_regular_price( $value ) {
+		$this->data['regular_price'] = $value;
+	}
+	public function set_children( $value ) {
+		$this->data['children'] = $value;
+	}
+	public function set_status( $value ) {
+		$this->data['status'] = $value;
+	}
+	public function set_virtual( $value ) {
+		$this->data['virtual'] = $value;
+	}
+	public function set_downloadable( $value ) {
+		$this->data['downloadable'] = $value;
+	}
+	public function set_catalog_visibility( $value ) {
+		$this->data['catalog_visibility'] = $value;
+	}
+	public function set_sold_individually( $value ) {
+		$this->data['sold_individually'] = $value;
+	}
+}
+
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * Minimal stand-in for WooCommerce's wc_format_decimal(): normalizes a numeric
+	 * value to a string without trailing zeros, which is all the donation code needs.
+	 *
+	 * @param mixed $number Number to format.
+	 * @return string
+	 */
+	function wc_format_decimal( $number ) {
+		if ( '' === $number || null === $number ) {
+			return '';
+		}
+		return (string) ( 0 + $number );
 	}
 }
 
@@ -1086,6 +1144,15 @@ class WC_Order {
 	public function save() {
 		$this->save_calls++;
 		return true;
+	}
+	/**
+	 * Counts calls like save(), for code that persists meta alone.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
 	}
 	public function get_billing_email() {
 		return $this->data['billing_email'] ?? '';
@@ -1673,6 +1740,15 @@ class WC_Subscription {
 		];
 		return true;
 	}
+	/**
+	 * Counts calls, matching WC_Order's above.
+	 *
+	 * @var int
+	 */
+	public $save_meta_data_calls = 0;
+	public function save_meta_data() {
+		$this->save_meta_data_calls++;
+	}
 }
 
 class WC_Subscriptions {
@@ -2029,11 +2105,28 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 	if ( ! $order instanceof \WC_Order ) {
 		return [];
 	}
-	$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
-	if ( $subscription_id <= 0 || ! isset( $subscriptions_database[ $subscription_id ] ) ) {
-		return [];
+	// Real WCS returns the union of the relationships `order_type` asks for. A renewal
+	// match is the subscription the order's `_subscription_renewal` meta points at; a
+	// parent match is one whose parent ID is this order. Renewal comes first so callers
+	// reading the first result keep getting it. With no `order_type` the mock answers
+	// renewals only, unlike real WCS, whose default is parent and switch orders.
+	$order_types = (array) ( $args['order_type'] ?? [] );
+	$wants_any   = in_array( 'any', $order_types, true );
+	$matches     = [];
+	if ( empty( $order_types ) || $wants_any || in_array( 'renewal', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
 	}
-	return [ $subscriptions_database[ $subscription_id ] ];
+	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
+		foreach ( (array) $subscriptions_database as $id => $subscription ) {
+			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
+				$matches[ $id ] = $subscription;
+			}
+		}
+	}
+	return array_values( $matches );
 }
 
 /**
@@ -2139,7 +2232,9 @@ function wcs_get_subscriptions( $args = [] ) {
 	// Minimal mock: implements the `customer_id`, `order_id` and `subscription_status` filters
 	// plus `subscriptions_per_page`/`offset` paging — the args the code under test
 	// passes. `subscription_status` accepts a single status or an array; 'any' (or
-	// unset) means no status filter. `meta_query` and `orderby` are still ignored —
+	// unset) means no status filter. `meta_query` clauses comparing with `=` (the
+	// default) or `LIKE` (a substring match, as WP_Meta_Query wraps the value in
+	// wildcards) are honored; other compares and `orderby` are still ignored —
 	// extend here rather than relying on this returning the full set if a test
 	// needs them.
 	//
@@ -2176,6 +2271,17 @@ function wcs_get_subscriptions( $args = [] ) {
 		}
 		if ( null !== $statuses && ! $subscription->has_status( $statuses ) ) {
 			continue;
+		}
+		foreach ( $args['meta_query'] ?? [] as $clause ) {
+			if ( ! is_array( $clause ) || ! isset( $clause['key'], $clause['value'] ) ) {
+				continue;
+			}
+			$meta_value = (string) $subscription->get_meta( $clause['key'], true );
+			$compare    = $clause['compare'] ?? '=';
+			if ( ( '=' === $compare && $meta_value !== (string) $clause['value'] )
+				|| ( 'LIKE' === $compare && ( '' === $meta_value || false === strpos( $meta_value, (string) $clause['value'] ) ) ) ) {
+				continue 2;
+			}
 		}
 		$matches[ $id ] = $subscription;
 	}

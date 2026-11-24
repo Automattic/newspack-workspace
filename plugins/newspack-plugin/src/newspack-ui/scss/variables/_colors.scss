@@ -78,16 +78,19 @@
 	--newspack-ui-color-button-text-hover: var(--newspack-ui-color-neutral-0);
 
 	// Specific assignments - form elements - inputs:
-	--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-40);
+	--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-50);
+	--newspack-ui-color-input-border-hover: var(--newspack-ui-color-neutral-70);
 	--newspack-ui-color-input-border-focus: var(--newspack-ui-color-neutral-90);
-	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-40);
+	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-30);
 	--newspack-ui-color-input-bg: var(--newspack-ui-color-neutral-0);
 	--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-10);
+	--newspack-ui-color-error-text: var(--newspack-ui-color-error-60);
 	--newspack-ui-label-color: var(--newspack-ui-color-neutral-90);
 
 	// Alternatives for when prefers-contrast is set to 'more':
 	@media (prefers-contrast: more) {
 		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60);
+		--newspack-ui-color-input-border-hover: var(--newspack-ui-color-neutral-80);
 		--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-50);
 		--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-30);
 	}

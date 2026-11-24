@@ -42,7 +42,7 @@ final class Newspack_Popups_Criteria {
 	 *
 	 * @var string[]
 	 */
-	const SUPPORTED_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range' ];
+	const SUPPORTED_MATCHING_FUNCTIONS = [ 'default', 'range', 'list__in', 'list__not_in', 'date_range', 'boolean' ];
 
 	/**
 	 * Whether this build can resolve the given matching function.

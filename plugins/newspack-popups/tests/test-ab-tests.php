@@ -365,4 +365,225 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		$plain_metadata = Newspack_Popups_Data_Api::get_popup_metadata( self::$popup_id );
 		self::assertArrayNotHasKey( 'ab_test_id', $plain_metadata );
 	}
+
+	/**
+	 * With the flag off, a stored test has no effect: no config reaches the view
+	 * script, so there is no variant selection and no reader bucket assignment.
+	 * It must not record "no tests" either: a cached '0' would outlive the flag
+	 * and keep every test from running once the flag is turned back on.
+	 */
+	public function test_flag_off_ignores_stored_tests_without_recording_none() {
+		$this->create_test_variant( 'flag-toggle-test', 'a' );
+		$this->create_test_variant( 'flag-toggle-test', 'b' );
+
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertSame( [], Newspack_Popups_AB_Tests::get_tests_config() );
+		self::assertFalse( get_option( Newspack_Popups_AB_Tests::OPTION_HAS_TESTS ) );
+
+		remove_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		self::assertArrayHasKey( 'flag-toggle-test', Newspack_Popups_AB_Tests::get_tests_config() );
+	}
+
+	/**
+	 * With the flag off, test prompts behave like plain prompts: no A/B fields on
+	 * the popup object, no markup attributes, and no A/B params on GA events.
+	 */
+	public function test_flag_off_prompts_carry_no_ab_fields() {
+		$overlay_options = [
+			'frequency' => 'always',
+			'placement' => 'center',
+		];
+		$this->create_test_variant( 'flag-off-fields', 'a', $overlay_options );
+		$challenger_id = $this->create_test_variant( 'flag-off-fields', 'b', $overlay_options );
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+
+		self::assertNull( Newspack_Popups_AB_Tests::get_popup_ab_fields( $challenger_id ) );
+		self::assertArrayNotHasKey( 'ab_test_id', Newspack_Popups_Model::create_popup_object( get_post( $challenger_id ) ) );
+		self::assertArrayNotHasKey( 'ab_test_id', Newspack_Popups_Data_Api::get_popup_metadata( $challenger_id ) );
+
+		$this->renderPost();
+		self::assertSame( 3, $this->getRenderedPopupsAmount(), 'Both test prompts and the plain one should still render.' );
+		self::assertSame( 0, self::$dom_xpath->query( '//*[@data-ab-test-id]' )->length );
+	}
+
+	/**
+	 * Save a prompt through REST the way the block editor does: the stored meta
+	 * object sent back whole, with the changes merged in.
+	 *
+	 * @param int    $prompt_id Prompt post ID.
+	 * @param string $role      Role of the user saving.
+	 * @param array  $changes   Post fields to change; a 'meta' entry merges into the stored meta.
+	 * @return WP_REST_Response
+	 */
+	private function save_prompt_as( $prompt_id, $role, $changes ) {
+		// Meta registered at boot does not survive into later tests in this suite,
+		// and REST silently ignores an unregistered key.
+		Newspack_Popups::register_meta();
+		Newspack_Popups_AB_Tests::register_meta();
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		do_action( 'rest_api_init' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => $role ] ) );
+
+		$route   = '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id;
+		$stored  = rest_do_request( new WP_REST_Request( 'GET', $route ) )->get_data();
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_body_params( array_merge( $changes, [ 'meta' => array_merge( $stored['meta'], $changes['meta'] ?? [] ) ] ) );
+		return rest_do_request( $request );
+	}
+
+	/**
+	 * Narrow test management to administrators, as a site or a later capability
+	 * model might, so the guard's refusal path has someone to refuse.
+	 */
+	private function restrict_tests_to_admins() {
+		add_filter(
+			'newspack_popups_ab_can_manage_tests',
+			function ( $allowed, $user_id ) {
+				return user_can( $user_id, 'manage_options' );
+			},
+			10,
+			2
+		);
+	}
+
+	/**
+	 * By default, anyone who can edit a prompt can change its test, and anyone
+	 * who can't edit it can't.
+	 */
+	public function test_prompt_editors_manage_tests_by_default() {
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test' ] ] );
+		self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+		self::assertSame( 'editor-made-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+
+		$subscriber_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, $prompt_id ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $subscriber_id, 0 ) );
+
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $editor_id, 0 ), 'Anyone who can create prompts can set up a test on a new one.' );
+
+		// A Contributor can edit prompts in general, but not someone else's published one.
+		$contributor_id = self::factory()->user->create( [ 'role' => 'contributor' ] );
+		self::assertTrue( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, 0 ) );
+		self::assertFalse( Newspack_Popups_AB_Tests::can_manage_tests( $contributor_id, $prompt_id ) );
+	}
+
+	/**
+	 * A user who may edit a prompt but not its test can still save its other
+	 * settings: A/B values sent back unchanged never need test permission.
+	 */
+	public function test_restricted_editor_can_save_a_prompt_without_changing_its_test() {
+		$this->restrict_tests_to_admins();
+		$plain_prompt  = $this->createPopup();
+		$tested_prompt = $this->create_test_variant( 'editor-save-test', 'a', null, [], 60 );
+
+		foreach ( [ $plain_prompt, $tested_prompt ] as $prompt_id ) {
+			$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ 'trigger_delay' => 7 ] ] );
+			self::assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
+			self::assertSame( '7', get_post_meta( $prompt_id, 'trigger_delay', true ) );
+		}
+		self::assertSame( 'editor-save-test', get_post_meta( $tested_prompt, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( '60', get_post_meta( $tested_prompt, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
+	}
+
+	/**
+	 * A restricted user's request that changes a test is refused before anything
+	 * saves, so the editor never reports a failure over a half-applied change.
+	 */
+	public function test_restricted_editor_cannot_change_a_test_and_nothing_saves() {
+		$this->restrict_tests_to_admins();
+		$prompt_id     = $this->createPopup();
+		$title_before  = get_the_title( $prompt_id );
+		$delay_before  = get_post_meta( $prompt_id, 'trigger_delay', true );
+
+		$response = $this->save_prompt_as(
+			$prompt_id,
+			'editor',
+			[
+				'title' => 'Edited alongside a test change',
+				'meta'  => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test',
+					'trigger_delay'                        => 7,
+				],
+			]
+		);
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		self::assertSame( $delay_before, get_post_meta( $prompt_id, 'trigger_delay', true ) );
+		self::assertSame( $title_before, get_the_title( $prompt_id ) );
+	}
+
+	/**
+	 * A non-scalar A/B value from a restricted user is refused without being cast
+	 * to a string, which would raise an "Array to string conversion" warning. The
+	 * 403 alone doesn't pin this: a cast array never matches a stored value either.
+	 */
+	public function test_restricted_editor_non_scalar_ab_value_is_refused_without_a_warning() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'editor', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => [ 'x' ] ] ] );
+
+		self::assertSame( 403, $response->get_status() );
+		self::assertSame( '', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * On the autosave route the guard drops a restricted user's A/B keys instead of
+	 * refusing: core's autosave controller ignores a refusal and would record an
+	 * empty autosave in place of the editor's changes. Called directly, because
+	 * the controller defines DOING_AUTOSAVE for the rest of the test run.
+	 */
+	public function test_guard_drops_ab_meta_on_autosaves_instead_of_refusing() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Newspack_Popups::NEWSPACK_POPUPS_CPT . '/' . $prompt_id . '/autosaves' );
+		$request->set_body_params(
+			[
+				'meta' => [
+					Newspack_Popups_AB_Tests::META_TEST_ID => 'editor-made-test',
+					'trigger_delay'                        => 7,
+				],
+			]
+		);
+		$prepared_post = (object) [ 'ID' => $prompt_id ];
+
+		self::assertSame( $prepared_post, Newspack_Popups_AB_Tests::guard_rest_ab_meta( $prepared_post, $request ) );
+		self::assertSame( [ 'trigger_delay' => 7 ], $request->get_param( 'meta' ) );
+	}
+
+	/**
+	 * Administrators can create and change tests through REST, including when
+	 * test management is narrowed to them.
+	 */
+	public function test_administrator_can_write_ab_meta() {
+		$this->restrict_tests_to_admins();
+		$prompt_id = $this->createPopup();
+
+		$response = $this->save_prompt_as( $prompt_id, 'administrator', [ 'meta' => [ Newspack_Popups_AB_Tests::META_TEST_ID => 'admin-made-test' ] ] );
+
+		self::assertSame( 200, $response->get_status() );
+		self::assertSame( 'admin-made-test', get_post_meta( $prompt_id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+	}
+
+	/**
+	 * Pins a decision rather than this change: the flag gates what reads A/B meta,
+	 * never its registration, so REST writes keep their sanitizers and schema
+	 * checks while the feature is off. A gate added where the class hooks in at
+	 * load would not show here, since the suite runs with the flag on.
+	 */
+	public function test_flag_off_keeps_meta_registered() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		unregister_post_meta( Newspack_Popups::NEWSPACK_POPUPS_CPT, Newspack_Popups_AB_Tests::META_VARIANT );
+
+		Newspack_Popups_AB_Tests::register_meta();
+
+		$registered = get_registered_meta_keys( 'post', Newspack_Popups::NEWSPACK_POPUPS_CPT );
+		self::assertArrayHasKey( Newspack_Popups_AB_Tests::META_VARIANT, $registered );
+	}
 }

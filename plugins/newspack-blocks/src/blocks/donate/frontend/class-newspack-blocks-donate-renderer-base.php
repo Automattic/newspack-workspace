@@ -83,7 +83,9 @@ abstract class Newspack_Blocks_Donate_Renderer_Base {
 				$configuration['amounts'] = $attributes['amounts'];
 			}
 
-			if ( isset( $attributes['minimumDonation'] ) ) {
+			// Blocks saved by earlier editors can hold an empty string, which would
+			// remove the floor; only a number replaces the site-wide minimum.
+			if ( isset( $attributes['minimumDonation'] ) && is_numeric( $attributes['minimumDonation'] ) ) {
 				$configuration['minimumDonation'] = $attributes['minimumDonation'];
 			}
 

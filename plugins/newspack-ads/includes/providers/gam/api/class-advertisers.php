@@ -8,10 +8,10 @@
 namespace Newspack_Ads\Providers\GAM\Api;
 
 use Newspack_Ads\Providers\GAM\Api\Api_Object;
-use Google\AdsApi\AdManager\Util\v202511\StatementBuilder;
-use Google\AdsApi\AdManager\v202511\ServiceFactory;
-use Google\AdsApi\AdManager\v202511\Company;
-use Google\AdsApi\AdManager\v202511\CompanyType;
+use Google\AdsApi\AdManager\Util\v202608\StatementBuilder;
+use Google\AdsApi\AdManager\v202608\ServiceFactory;
+use Google\AdsApi\AdManager\v202608\Company;
+use Google\AdsApi\AdManager\v202608\CompanyType;
 
 /**
  * Newspack Ads GAM Advertisers

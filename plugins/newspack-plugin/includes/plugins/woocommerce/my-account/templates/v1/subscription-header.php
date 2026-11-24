@@ -123,7 +123,7 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 			<div class="newspack-ui__dropdown newspack-my-account__subscription--change-subscription-dropdown">
 				<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__dropdown__toggle">
 					<span><?php esc_html_e( 'Change subscription', 'newspack-plugin' ); ?></span>
-					<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
+					<?php Newspack_UI_Icons::print_svg( 'chevronDownSmall' ); ?>
 				</button>
 				<div class="newspack-ui__dropdown__content">
 					<ul>
@@ -205,9 +205,9 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 		<?php // Group owners always get "View group" here, even when WooCommerce has no actions of its own. ?>
 		<?php if ( ! empty( $actions ) || $is_group_owner_subscription ) : ?>
 		<div class="newspack-ui__dropdown newspack-my-account__subscription--actions-dropdown">
-			<button class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small newspack-ui__dropdown__toggle">
-				<span class="screen-reader-text"><?php \esc_html_e( 'More', 'newspack-plugin' ); ?></span>
-				<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
+			<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__button--small newspack-ui__dropdown__toggle">
+				<?php \esc_html_e( 'Manage', 'newspack-plugin' ); ?>
+				<?php Newspack_UI_Icons::print_svg( 'chevronDownSmall' ); ?>
 			</button>
 			<div class="newspack-ui__dropdown__content">
 				<ul>

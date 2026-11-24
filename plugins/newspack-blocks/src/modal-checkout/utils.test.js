@@ -5,7 +5,9 @@
 import {
 	afterDeferredScripts,
 	getCheckoutData,
+	getInitialFocus,
 	hasFrameProcessingScreen,
+	isPaymentChallengeShown,
 	isSameDocumentRedirect,
 	mountFrameProcessingScreen,
 	preventDisabledCloseClicks,
@@ -119,6 +121,75 @@ describe( 'getCheckoutData()', () => {
 		const data = getCheckoutData( form );
 
 		expect( data.quantity ).toBe( 5 );
+	} );
+} );
+
+describe( 'focus in a checkout screen', () => {
+	// jsdom lays nothing out, so an element counts as rendered unless it, or an ancestor, is hidden.
+	beforeAll( () => {
+		jest.spyOn( Element.prototype, 'getClientRects' ).mockImplementation( function () {
+			return this.closest( '[hidden]' ) ? [] : [ {} ];
+		} );
+	} );
+
+	afterAll( () => {
+		jest.restoreAllMocks();
+	} );
+
+	it( 'lands on the first field, past links and buttons before it', () => {
+		document.body.innerHTML = '<a href="#terms">Terms</a><button type="button">Edit</button><input type="hidden" /><input id="name" />';
+
+		expect( getInitialFocus( document.body ).id ).toBe( 'name' );
+	} );
+
+	it( 'lands on the first action when there are no fields', () => {
+		document.body.innerHTML = '<p>Thank you.</p><input type="submit" value="Go" id="go" /><button id="continue">Continue</button>';
+
+		expect( getInitialFocus( document.body ).id ).toBe( 'go' );
+	} );
+
+	it( 'skips fields that are hidden, disabled or out of the tab order', () => {
+		document.body.innerHTML =
+			'<div hidden><input /></div><input disabled /><select tabindex="-1"></select><input readonly /><textarea id="note"></textarea>';
+
+		expect( getInitialFocus( document.body ).id ).toBe( 'note' );
+	} );
+
+	it( 'finds nothing on a screen with nothing to reach', () => {
+		document.body.innerHTML = '<p>Processing.</p>';
+
+		expect( getInitialFocus( document.body ) ).toBeNull();
+	} );
+} );
+
+describe( 'isPaymentChallengeShown()', () => {
+	beforeAll( () => {
+		jest.spyOn( Element.prototype, 'getClientRects' ).mockImplementation( function () {
+			return this.closest( '[hidden]' ) ? [] : [ {} ];
+		} );
+	} );
+
+	afterAll( () => {
+		jest.restoreAllMocks();
+	} );
+
+	it( 'ignores card fields in the form', () => {
+		document.body.innerHTML = '<form><iframe src="https://js.stripe.com/v3/elements-inner-card.html"></iframe></form>';
+
+		expect( isPaymentChallengeShown( document ) ).toBe( false );
+	} );
+
+	it( 'ignores hidden frames fixed over the page', () => {
+		document.body.innerHTML =
+			'<div style="position: fixed; visibility: hidden"><iframe src="https://js.stripe.com/v3/controller.html"></iframe></div>';
+
+		expect( isPaymentChallengeShown( document ) ).toBe( false );
+	} );
+
+	it( 'sees a 3D Secure challenge fixed over the page', () => {
+		document.body.innerHTML = '<div style="position: fixed"><iframe src="https://js.stripe.com/v3/three-ds-2-challenge.html"></iframe></div>';
+
+		expect( isPaymentChallengeShown( document ) ).toBe( true );
 	} );
 } );
 

@@ -362,6 +362,33 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Whether the inbound handler will act on a signed token on this request:
+	 * it is hooked, verification is enabled, and it doesn't skip the current
+	 * user. When it does, a token that verifies is taken out of the URL; one
+	 * that doesn't stays. Other plugins that read the token from the same link
+	 * strip it themselves when this is false, so it doesn't linger in landing
+	 * URLs readers share.
+	 *
+	 * @return bool
+	 */
+	public static function will_consume_inbound_pass() {
+		return false !== has_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ] )
+			&& self::is_verification_enabled()
+			&& ! self::is_skipped_user();
+	}
+
+	/**
+	 * Whether the inbound handlers skip the current user: an account the gate
+	 * never restricts has nothing to bypass and shouldn't burn a signature on
+	 * every click.
+	 *
+	 * @return bool
+	 */
+	private static function is_skipped_user() {
+		return Content_Gate::should_skip_access_checks();
+	}
+
+	/**
 	 * Action callback for the `init` hook. Thin wrapper around
 	 * process_inbound_request() so the action signature doesn't need to
 	 * accommodate WordPress's empty-string arg padding.
@@ -391,9 +418,7 @@ class Newsletters_Access {
 			return [ 'action' => 'disabled' ];
 		}
 
-		// Don't trigger for an account the gate never restricts. It has nothing
-		// to bypass and shouldn't burn a signature on every click.
-		if ( Content_Gate::should_skip_access_checks() ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
@@ -515,7 +540,7 @@ class Newsletters_Access {
 		if ( ! self::is_verification_enabled() ) {
 			return [ 'action' => 'disabled' ];
 		}
-		if ( Content_Gate::should_skip_access_checks() ) {
+		if ( self::is_skipped_user() ) {
 			return [ 'action' => 'skipped' ];
 		}
 

@@ -49,8 +49,8 @@ const titleId = useId();
   either `title` or `actions` is renderable (same falsy rules as `title`).
 - `before` / `after` — content rendered inside the card padding, above and
   below the table: stats rows, notes, footer actions. Slot children stretch to
-  the card's full content width; wrap a lone control in an `HStack` to keep its
-  natural width.
+  the card's full content width; wrap a lone control in a `Stack` from
+  `@wordpress/ui` to keep its natural width.
 - `className` — forwarded to `Card.Root`, the card's outermost element.
 - `children` — the table itself, rendered edge-to-edge via `Card.FullBleed`.
   The card supplies no cell padding: pad the table's first and last columns to

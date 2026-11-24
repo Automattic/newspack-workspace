@@ -2,21 +2,22 @@
 	input[type="checkbox"],
 	input[type="radio"] {
 		appearance: none;
-		background: white;
+		background: var(--newspack-ui-color-input-bg);
 		border: solid 1px var(--newspack-ui-color-input-border);
 		box-shadow: none;
-		color: white;
+		color: var(--newspack-ui-color-neutral-0);
 		cursor: pointer;
 		display: inline-grid;
+		flex-shrink: 0;
 		font: inherit;
-		height: var(--newspack-ui-spacer-4) !important;
+		height: var(--newspack-ui-control-size) !important;
 		margin: 0;
 		place-content: center;
 		transition:
 			background-color 125ms ease-in-out,
 			border-color 125ms ease-in-out,
 			outline 125ms ease-in-out;
-		width: var(--newspack-ui-spacer-4) !important;
+		width: var(--newspack-ui-control-size) !important;
 
 		&::before {
 			content: "";
@@ -30,23 +31,28 @@
 			}
 		}
 
+		&:hover:not(:checked, :disabled) {
+			border-color: var(--newspack-ui-color-input-border-hover);
+		}
+
 		&:focus {
 			outline: unset;
 		}
 
 		&:focus-visible {
-			outline: 2px solid var(--newspack-ui-color-neutral-90);
-			outline-offset: 1px;
-
-			&:not(:checked) {
-				border: 0;
-				outline-offset: -1px;
-			}
+			outline: 2px solid var(--newspack-ui-color-input-border-focus);
+			outline-offset: 2px;
 		}
 
 		&:disabled {
+			background: var(--newspack-ui-color-input-bg-disabled);
+			border-color: var(--newspack-ui-color-input-border-disabled);
 			cursor: not-allowed;
-			opacity: 0.75;
+		}
+
+		&:checked:disabled {
+			background: var(--newspack-ui-color-neutral-60);
+			border-color: var(--newspack-ui-color-neutral-60);
 		}
 	}
 

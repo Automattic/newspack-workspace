@@ -100,10 +100,6 @@
 		.newspack-ui__button {
 			margin-bottom: 0 !important;
 		}
-
-		.newspack-ui__button--loading {
-			display: none !important;
-		}
 	}
 
 	&__header {
@@ -172,22 +168,13 @@
 
 	&--error {
 		.newspack-registration__response {
-			color: var(--newspack-ui-color-error-50);
+			color: var(--newspack-ui-color-error-text);
 			font-size: var(--newspack-ui-font-size-xs);
 			line-height: var(--newspack-ui-line-height-xs);
+			margin-top: var(--newspack-ui-spacer-base);
 
 			p {
-				margin: var(--newspack-ui-spacer-1) 0 0;
-			}
-		}
-
-		.newspack-registration__inputs {
-			input[type="email"] {
-				border-color: var(--newspack-ui-color-error-50);
-
-				&:focus {
-					outline-color: var(--newspack-ui-color-error-50);
-				}
+				margin: 0;
 			}
 		}
 	}
@@ -231,34 +218,6 @@
 		* {
 			pointer-events: none;
 		}
-
-		button[type="submit"] {
-			position: relative;
-
-			span.submit {
-				visibility: hidden;
-			}
-
-			span.spinner {
-				--animation-duration: 900ms;
-				--animation-timing-function: linear;
-				--color-spinner-primary: transparent;
-				--color-spinner-background: currentcolor;
-				--size: 18px;
-				--stroke-width: 1.5px;
-
-				animation: var(--animation-timing-function) var(--animation-duration) infinite spin;
-				border-color: var(--color-spinner-primary) var(--color-spinner-primary) var(--color-spinner-background) var(--color-spinner-background);
-				border-radius: 50%;
-				border-style: solid;
-				border-width: var(--stroke-width);
-				height: var(--size);
-				transform: rotate(0deg);
-				width: var(--size);
-				position: absolute;
-				left: calc(50% - ( var(--size) / 2 ));
-			}
-		}
 	}
 
 	&--hidden,
@@ -296,14 +255,5 @@
 		@media screen and ( min-width: 600px ) {
 			padding-right: 0;
 		}
-	}
-}
-
-@keyframes spin {
-	from {
-		transform: rotate(0deg);
-	}
-	to {
-		transform: rotate(360deg);
 	}
 }

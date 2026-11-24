@@ -44,7 +44,11 @@ class Test_Subscriber_Only_Products_API extends \WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = new \WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		do_action( 'rest_api_init', $wp_rest_server );
-		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		// WooCommerce grants administrators `manage_woocommerce` on install, and the
+		// routes require it; the mocks don't install WooCommerce.
+		$administrator = $this->factory->user->create_and_get( [ 'role' => 'administrator' ] );
+		$administrator->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $administrator->ID );
 	}
 
 	/**

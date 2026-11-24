@@ -1144,9 +1144,27 @@ class Audience_Subscription_Products extends Wizard {
 			'category_ids'          => wp_list_pluck( $categories, 'id' ),
 			'category_label'        => implode( ', ', wp_list_pluck( $categories, 'name' ) ),
 			'active_subscriptions'  => self::get_active_subscription_count( $product ),
+			// Complimentary access: the product, or every one of its variations, is flagged.
+			'is_complimentary'      => self::is_complimentary( $product, $pricing['variations'] ),
 			'edit_url'              => html_entity_decode( (string) get_edit_post_link( $product->get_id(), 'raw' ) ),
 			'policy'                => $policy,
 		];
+	}
+
+	/**
+	 * Whether a product grants only complimentary access: it is flagged itself, or it
+	 * is a variable subscription whose every variation is flagged.
+	 *
+	 * @param \WC_Product $product    The product.
+	 * @param array       $variations The variations get_pricing() read, each with `is_complimentary`.
+	 *
+	 * @return bool
+	 */
+	private static function is_complimentary( $product, $variations ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			return ! empty( $variations ) && ! in_array( false, array_column( $variations, 'is_complimentary' ), true );
+		}
+		return Complimentary_Access::is_complimentary_product( $product );
 	}
 
 	/**
@@ -1374,11 +1392,14 @@ class Audience_Subscription_Products extends Wizard {
 					'active_subscriptions' => count( self::active_subscription_ids_for( (int) $variation_id ) ),
 					// Group-subscription (multi-seat) settings live per variation.
 					'group'                => self::read_group_settings( $variation ),
+					'is_complimentary'     => Complimentary_Access::is_complimentary_product( $variation ),
 				];
 			}
 
 			// Build the range from the actual lowest- and highest-priced variations, each
 			// labeled with its OWN billing period (a tier can span $12/month – $100/year).
+			// A complimentary variation isn't sold, so it stays out of the range while the
+			// product sells anything else.
 			$priced = array_values(
 				array_filter(
 					$pricing['variations'],
@@ -1387,6 +1408,8 @@ class Audience_Subscription_Products extends Wizard {
 					}
 				)
 			);
+			$sold   = array_values( array_filter( $priced, fn( $variation ) => ! $variation['is_complimentary'] ) );
+			$priced = empty( $sold ) ? $priced : $sold;
 			if ( ! empty( $priced ) ) {
 				usort(
 					$priced,

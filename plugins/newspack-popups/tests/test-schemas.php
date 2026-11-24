@@ -57,6 +57,7 @@ class SchemasTest extends WP_UnitTestCase {
 						'overlay_size'                   => 'medium',
 						'no_overlay_background'          => false,
 						'placement'                      => 'center',
+						'manual_only'                    => true,
 						'trigger_type'                   => 'scroll',
 						'trigger_scroll_progress'        => 50,
 						'trigger_delay'                  => 1,

@@ -148,7 +148,7 @@ class My_Account {
 			'newspack-my-account-v1',
 			\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.css',
 			[ 'newspack-ui' ],
-			NEWSPACK_PLUGIN_VERSION
+			\Newspack\Newspack::asset_version( 'my-account-v1' )
 		);
 
 		// Logged-out readers see the inline auth form. Center it like the
@@ -173,7 +173,7 @@ class My_Account {
 			'newspack-ui',
 			\Newspack\Newspack::plugin_url() . '/dist/newspack-ui.js',
 			[ 'wp-util' ],
-			NEWSPACK_PLUGIN_VERSION,
+			\Newspack\Newspack::asset_version( 'newspack-ui' ),
 			true
 		);
 		\wp_add_inline_script(

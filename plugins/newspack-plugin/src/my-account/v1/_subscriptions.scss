@@ -63,6 +63,7 @@
 		&--header {
 			display: flex;
 			flex-direction: column;
+			flex-wrap: wrap;
 			gap: var(--newspack-ui-spacer-2);
 			justify-content: space-between;
 			margin-bottom: var(--newspack-ui-spacer-6);

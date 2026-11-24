@@ -362,7 +362,7 @@
 	}
 
 	.money-input {
-		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-400);
+		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-500);
 		color: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		left: var(--newspack-ui-spacer-5, 24px);
@@ -371,6 +371,10 @@
 		overflow: hidden;
 		right: var(--newspack-ui-spacer-5, 24px);
 		transition: border-color 125ms ease-in-out, outline 125ms ease-in-out;
+
+		&:hover:not(:focus-within) {
+			border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
+		}
 
 		&:focus-within {
 			border-color: var(--newspack-ui-color-input-border-focus, np-colors.$neutral-900);
@@ -410,7 +414,7 @@
 	/* Frequency-based version. */
 	.tab-container .freq-label.wpbnbd__button--active::after {
 		background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
-		border: 1px solid var(--newspack-ui-color-neutral-30, np-colors.$neutral-300);
+		border: 1px solid currentcolor;
 		border-radius: var(--newspack-ui-border-radius-s, 4px);
 	}
 
@@ -488,7 +492,7 @@
 				border: 1px solid transparent;
 				background: transparent;
 				border-radius: var(--newspack-ui-border-radius-s, 4px);
-				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+				color: var(--newspack-ui-color-neutral-70, np-colors.$neutral-700);
 				font-size: var(--newspack-ui-font-size-xs, 14px);
 				line-height: var(--newspack-ui-spacer-5, 24px);
 				padding: calc(var(--newspack-ui-spacer-base, 8px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
@@ -507,12 +511,12 @@
 
 				&:focus-visible {
 					outline: 2px solid var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-					outline-offset: 1px;
+					outline-offset: 2px;
 				}
 
 				&.wpbnbd__button--active {
 					background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
-					border-color: var(--newspack-ui-color-neutral-30, np-colors.$neutral-300);
+					border-color: currentcolor;
 					color: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
 				}
 			}
@@ -544,7 +548,7 @@
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 
 			.tiers {
-				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+				color: var(--newspack-ui-color-neutral-70, np-colors.$neutral-700);
 				position: relative;
 
 				.tier-label {
@@ -580,18 +584,19 @@
 					}
 				}
 
-				input[type="radio"]:focus,
-				input[type="radio"]:checked {
-					+ .tier-label {
-						background: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-						color: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
-						outline: none;
-					}
+				input[type="radio"]:focus + .tier-label {
+					background: var(--newspack-ui-color-neutral-10, np-colors.$neutral-100);
+					outline: none;
+				}
+
+				input[type="radio"]:checked + .tier-label {
+					background: var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
+					color: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
 				}
 
 				input[type="radio"]:focus-visible + .tier-label {
-					outline: 2px solid var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-					outline-offset: 1px;
+					outline: 2px solid var(--newspack-ui-color-input-border-focus, np-colors.$neutral-900);
+					outline-offset: 2px;
 				}
 			}
 
@@ -660,7 +665,7 @@
 
 				.wpbnbd__button {
 					border-radius: var(--newspack-ui-border-radius-s, 4px);
-					color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+					color: var(--newspack-ui-color-neutral-70, np-colors.$neutral-700);
 					font-size: var(--newspack-ui-font-size-xs, 14px);
 					font-weight: 600;
 					line-height: var(--newspack-ui-spacer-5, 24px);
@@ -680,7 +685,7 @@
 
 					&:focus-visible {
 						outline: 2px solid var(--newspack-ui-color-neutral-90, np-colors.$neutral-900);
-						outline-offset: 1px;
+						outline-offset: 2px;
 					}
 				}
 			}

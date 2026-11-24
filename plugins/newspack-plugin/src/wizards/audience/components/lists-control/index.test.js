@@ -22,7 +22,7 @@ describe( 'ListsControl', () => {
 
 	it( 'names saved items through savedInfoPath, so an item missing from the selectable list keeps its name', async () => {
 		apiFetch.mockImplementation( ( { path } ) =>
-			Promise.resolve( 'saved-lookup?include=7' === path ? [ { id: 7, title: 'Legacy Plan [invalid status: Draft]' } ] : [] )
+			Promise.resolve( 'saved-lookup?include=7' === path ? [ { id: 7, title: 'Legacy Plan [draft]' } ] : [] )
 		);
 
 		render(
@@ -36,7 +36,7 @@ describe( 'ListsControl', () => {
 			/>
 		);
 
-		await waitFor( () => expect( screen.getByText( 'Legacy Plan [invalid status: Draft]' ) ).toBeInTheDocument() );
+		await waitFor( () => expect( screen.getByText( 'Legacy Plan [draft]' ) ).toBeInTheDocument() );
 		expect( screen.queryByText( 'Deleted subscription' ) ).not.toBeInTheDocument();
 	} );
 

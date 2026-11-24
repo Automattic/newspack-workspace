@@ -47,6 +47,7 @@ const PremiumNewslettersList = ( { updateGatesData }: { updateGatesData: ( gates
 				{
 					type: 'primary',
 					label: __( 'Add Premium Newsletter', 'newspack-plugin' ),
+					mobileIcon: 'plus',
 					href: '#/edit/new/all',
 				},
 				{

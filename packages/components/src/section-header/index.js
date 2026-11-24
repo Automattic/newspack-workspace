@@ -128,13 +128,16 @@ const SectionHeader = ( {
 				) }
 				{ menu?.length > 0 && (
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
-						{ () =>
+						{ ( { onClose } ) =>
 							menu.map( ( item, index ) => (
 								<MenuItem
 									key={ index }
 									icon={ item.icon }
 									href={ item.href }
-									onClick={ item.action }
+									onClick={ event => {
+										onClose();
+										item.action?.( event );
+									} }
 									disabled={ item.disabled || false }
 									isDestructive={ item.destructive || false }
 								>

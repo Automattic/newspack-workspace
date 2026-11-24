@@ -138,12 +138,15 @@ class Handoff_Banner {
 			return;
 		}
 
-		$handle = 'newspack-handoff-banner-block-editor';
+		$handle     = 'newspack-handoff-banner-block-editor';
+		$asset_path = NEWSPACK_ABSPATH . 'dist/handoff-banner-block-editor.asset.php';
+		$asset      = file_exists( $asset_path ) ? include $asset_path : [];
+		$deps       = is_array( $asset ) && is_array( $asset['dependencies'] ?? null ) ? $asset['dependencies'] : [];
 		wp_register_script(
 			$handle,
-			Newspack::plugin_url() . '/src/wizards/handoff-banner/block-editor.js',
-			[ 'wp-element', 'wp-editor', 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::plugin_url() . '/dist/handoff-banner-block-editor.js',
+			array_values( array_unique( array_merge( [ 'wp-element', 'wp-editor', 'wp-components' ], $deps ) ) ),
+			Newspack::asset_version( 'handoff-banner-block-editor' ),
 			true
 		);
 

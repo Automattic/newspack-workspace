@@ -107,6 +107,47 @@ describe( 'content gate metering', () => {
 		expect( document.querySelector( '.entry-content' ).innerHTML ).toContain( 'Teaser.' );
 	} );
 
+	describe( 'reset', () => {
+		const now = () => Math.floor( Date.now() / 1000 );
+
+		it( "clears the views once the stored reset passes and moves to the server's next reset", () => {
+			const nextReset = now() + 86400;
+			renderMeteredPage( { ...SETTINGS, expiration: nextReset } );
+			const ras = createRAS( { 'metering-news': { content: [ 1, 2 ], expiration: now() - 60 } } );
+
+			loadMeterCallback()( ras );
+
+			expect( ras.store.get( 'metering-news' ) ).toEqual( { content: [ 32 ], expiration: nextReset } );
+		} );
+
+		it( 'keeps the views and adopts an earlier server reset that is still ahead', () => {
+			const earlierReset = now() + 3600;
+			renderMeteredPage( { ...SETTINGS, expiration: earlierReset } );
+			const ras = createRAS( { 'metering-news': { content: [ 1, 2 ], expiration: now() + 86400 } } );
+
+			loadMeterCallback()( ras );
+
+			expect( document.body.classList.contains( 'newspack-content-locked' ) ).toBe( true );
+			expect( ras.store.get( 'metering-news' ).expiration ).toBe( earlierReset );
+		} );
+
+		it( 'resets on a page cached before the reset, using the reset after it', () => {
+			const passedReset = now() - 60;
+			const followingReset = now() + 7 * 86400;
+			renderMeteredPage( { ...SETTINGS, expiration: passedReset, next_expiration: followingReset } );
+			const meter = loadMeterCallback();
+
+			const lastPeriodRAS = createRAS( { 'metering-news': { content: [ 1, 2 ], expiration: passedReset } } );
+			meter( lastPeriodRAS );
+			expect( lastPeriodRAS.store.get( 'metering-news' ) ).toEqual( { content: [ 32 ], expiration: followingReset } );
+
+			// A reader already counting against the new period keeps their views.
+			const thisPeriodRAS = createRAS( { 'metering-news': { content: [ 1 ], expiration: followingReset } } );
+			meter( thisPeriodRAS );
+			expect( thisPeriodRAS.store.get( 'metering-news' ) ).toEqual( { content: [ 1, 32 ], expiration: followingReset } );
+		} );
+	} );
+
 	it( 'leaves an unmetered page alone when no allowance element is present', () => {
 		renderMeteredPage( null );
 		const meter = loadMeterCallback();

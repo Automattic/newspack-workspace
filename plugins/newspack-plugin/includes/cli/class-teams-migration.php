@@ -351,6 +351,11 @@ class Teams_Migration {
 			WP_CLI::error( sprintf( 'Not a published team: %s. Fix the --team-ids input and re-run.', implode( ', ', $unknown_team_ids ) ) );
 		}
 
+		// After the last check that can abort the run: flagging takes the product off sale.
+		if ( $migration_product ) {
+			self::maybe_flag_complimentary_product( $migration_product, $dry_run );
+		}
+
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
 			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
@@ -686,6 +691,16 @@ class Teams_Migration {
 			// gated, and a per-seat one is sized before the adds (below). A reused
 			// subscription that already carries a limit is still gated by it during
 			// adds; any rejected member is surfaced in the errors below.
+			// Keep the team's slug: ESP fields and segments built on Teams already hold it,
+			// so it replaces any slug a reused group already had. A slug another group
+			// already holds is not seeded, since that would merge the two groups' readers
+			// downstream; the group then derives its own.
+			$team_slug = (string) $team->post_name;
+			if ( '' !== $team_slug && Group_Subscription::is_slug_taken( $team_slug, $subscription ? $subscription->get_id() : 0 ) ) {
+				WP_CLI::warning( sprintf( 'Team %d ("%s"): another group subscription already uses the slug "%s", so this group gets its own. Systems keyed on the team slug need updating for it.', $team_id, $team->post_title, $team_slug ) );
+				$team_slug = '';
+			}
+
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
 				$subscription->update_meta_data( '_newspack_group_subscription_name', $team->post_title );
@@ -693,6 +708,9 @@ class Teams_Migration {
 				// find_reusable_group_subscription() for the reuse rules and the dry-run
 				// caveat).
 				$subscription->update_meta_data( self::MIGRATED_TEAM_ID_META_KEY, $team_id );
+				if ( '' !== $team_slug ) {
+					$subscription->update_meta_data( Group_Subscription::SLUG_META_KEY, $team_slug );
+				}
 				$subscription->save();
 			}
 
@@ -1431,6 +1449,9 @@ class Teams_Migration {
 			// plan/member counts.
 			WP_CLI::line( sprintf( 'Reviewed list: %d user id(s).', count( $target_user_ids ) ) );
 		}
+
+		// After the last check that can abort the run: flagging takes the product off sale.
+		self::maybe_flag_complimentary_product( $product, $dry_run );
 
 		WP_CLI::line( sprintf( 'Processing %d plan(s): %s', count( $plan_ids ), implode( ', ', $plan_ids ) ) );
 		WP_CLI::line( '' );
@@ -2516,6 +2537,43 @@ class Teams_Migration {
 	private static function format_subscription_total( $subscription ) {
 		$decimals = function_exists( 'wc_get_price_decimals' ) ? \wc_get_price_decimals() : 2;
 		return trim( sprintf( '%s %s', \number_format( (float) $subscription->get_total(), $decimals ), $subscription->get_currency() ) );
+	}
+
+	/**
+	 * Flag the migration product as complimentary access when it qualifies.
+	 *
+	 * Comps are often migrated onto the reader's former paid product, and some $0
+	 * products are sold on purpose. Neither may be flagged: the flag takes a product off
+	 * sale. So only a $0 product nobody bought is flagged: pre-marking's test, without its
+	 * need for an existing grant, since the operator named this product as the comp target.
+	 *
+	 * @param \WC_Product $product Migration product.
+	 * @param bool        $dry_run Whether this is a dry run.
+	 */
+	private static function maybe_flag_complimentary_product( $product, $dry_run ) {
+		// The product editor shows the flag only while content gates are on, so an
+		// admin couldn't see or clear one set without them.
+		if ( ! \Newspack\WooCommerce_Subscriptions::is_active() || ! \Newspack\Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
+		if ( \Newspack\Complimentary_Access::is_complimentary_product( $product ) ) {
+			WP_CLI::line( sprintf( 'Product %d is flagged as complimentary access.', $product->get_id() ) );
+			return;
+		}
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			WP_CLI::line( sprintf( 'Product %d is not flagged as complimentary access: the flag goes on a variation. Flag the comp variation in the product editor.', $product->get_id() ) );
+			return;
+		}
+		if ( ! \Newspack\Complimentary_Access::qualifies_for_flag( $product, false ) ) {
+			WP_CLI::line( sprintf( 'Product %d is not flagged as complimentary access: it costs money, or readers have bought it.', $product->get_id() ) );
+			return;
+		}
+		if ( $dry_run ) {
+			WP_CLI::line( sprintf( 'Would flag product %d as complimentary access.', $product->get_id() ) );
+			return;
+		}
+		\Newspack\Complimentary_Access::flag_product( $product );
+		WP_CLI::line( sprintf( 'Flagged product %d as complimentary access.', $product->get_id() ) );
 	}
 
 	/**

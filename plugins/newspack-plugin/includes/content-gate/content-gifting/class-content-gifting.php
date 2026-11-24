@@ -550,11 +550,12 @@ class Content_Gifting {
 						)
 					);
 				} else {
+					$gifting_limit = self::get_gifting_limit();
 					echo esc_html(
 						sprintf(
 							// translators: %1$d is the number of gift articles limit, %2$s is the interval label.
-							__( 'You\'ve reached your limit of %1$d gifted articles %2$s.', 'newspack-plugin' ),
-							self::get_gifting_limit(),
+							_n( 'You\'ve reached your limit of %1$d gifted article %2$s.', 'You\'ve reached your limit of %1$d gifted articles %2$s.', $gifting_limit, 'newspack-plugin' ),
+							$gifting_limit,
 							$interval_labels[0]
 						)
 					);
@@ -589,7 +590,7 @@ class Content_Gifting {
 		}
 		?>
 		<div class="newspack-ui">
-			<div id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
+			<dialog id="newspack-content-gifting-modal" class="newspack-ui__modal-container" data-state="closed">
 				<div class="newspack-ui__modal-container__overlay"></div>
 				<div class="newspack-ui__modal newspack-ui__modal--small">
 					<header class="newspack-ui__modal__header">
@@ -614,7 +615,7 @@ class Content_Gifting {
 						<div class="newspack-ui__spinner"><span></span></div>
 					</div>
 				</div>
-			</div>
+			</dialog>
 		</div>
 		<?php
 	}
@@ -758,20 +759,15 @@ class Content_Gifting {
 	/**
 	 * Get the timestamp of the current expiration period for the gifting reset interval.
 	 *
+	 * Gift limits share the content-gate meters' calendar, so a reader's gifts and free
+	 * views reset at the same moment.
+	 *
 	 * @return int
 	 */
 	public static function get_current_expiration_timestamp() {
 		$interval = self::get_gifting_reset_interval();
-		switch ( $interval ) {
-			case 'day':
-				return strtotime( 'tomorrow' );
-			case 'week':
-				return strtotime( 'next monday' );
-			case 'month':
-				return mktime( 0, 0, 0, gmdate( 'n' ) + 1, 1 );
-			default:
-				return 0;
-		}
+		// Metering reads an empty period as "the gate's own period", which gifting has none of.
+		return $interval ? Metering::get_expiration_time( $interval ) : 0;
 	}
 
 	/**

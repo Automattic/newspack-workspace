@@ -10,6 +10,7 @@
 
 namespace Newspack\Reader_Activation\Integrations;
 
+use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Integrations;
 use Newspack\Logger;
 
@@ -162,7 +163,7 @@ class Contact_Pull {
 	 * Pull all active integrations for a user.
 	 *
 	 * @param int $user_id WordPress user ID.
-	 * @return true|\WP_Error True if all succeeded, WP_Error with combined messages.
+	 * @return true|\WP_Error True if all succeeded or had no contact for the reader, WP_Error with combined messages.
 	 */
 	public static function pull_all( $user_id ) {
 		$active_integrations = Integrations::get_active_configured_integrations();
@@ -177,6 +178,10 @@ class Contact_Pull {
 				continue;
 			}
 			$result = self::pull_single_integration( $user_id, $integration, false, $selected_fields );
+			if ( self::is_contact_not_found( $result ) ) {
+				Logger::log( sprintf( 'Integration "%s" has no contact for user %d; nothing to pull.', $integration->get_id(), $user_id ), self::LOGGER_HEADER );
+				continue;
+			}
 			if ( is_wp_error( $result ) ) {
 				if ( self::is_permanent_pull_error( $result ) ) {
 					Logger::log( sprintf( 'Not scheduling pull retries for integration "%s" of user %d — the failure is permanent: %s', $integration->get_id(), $user_id, $result->get_error_message() ), self::LOGGER_HEADER );
@@ -259,7 +264,9 @@ class Contact_Pull {
 
 		$result = self::pull_single_integration( $user_id, $integration );
 
-		if ( is_wp_error( $result ) ) {
+		// No contact is nothing to pull, not a failure: answering one would
+		// queue the reader for a batch pull that finds no contact either.
+		if ( is_wp_error( $result ) && ! self::is_contact_not_found( $result ) ) {
 			wp_send_json_error( $result->get_error_message(), 500 );
 		}
 
@@ -491,7 +498,9 @@ class Contact_Pull {
 	 * provider can recover from. `invalid_pull_payload` — the integration's own
 	 * return type is wrong, which no amount of waiting fixes.
 	 *
-	 * Fetch-side errors (network, provider 5xx/429) stay retryable.
+	 * Fetch-side errors (network, provider 5xx/429) stay retryable. A provider
+	 * with no contact for the reader is not a failure at all; see
+	 * is_contact_not_found().
 	 *
 	 * @var string[]
 	 */
@@ -509,6 +518,19 @@ class Contact_Pull {
 	 */
 	private static function is_permanent_pull_error( $error ) {
 		return $error instanceof \WP_Error && in_array( $error->get_error_code(), self::PERMANENT_PULL_ERRORS, true );
+	}
+
+	/**
+	 * Whether the provider has no contact for the reader.
+	 *
+	 * Nothing to pull, so neither an error nor a reason to retry: a contact
+	 * created later is found by the pull the reader's next visit queues.
+	 *
+	 * @param \WP_Error|mixed $result The pull result.
+	 * @return bool
+	 */
+	private static function is_contact_not_found( $result ) {
+		return $result instanceof \WP_Error && Integration::CONTACT_NOT_FOUND_ERROR_CODE === $result->get_error_code();
 	}
 
 	/**
@@ -637,6 +659,10 @@ class Contact_Pull {
 		Logger::log( sprintf( 'Executing pull retry %d/%d for integration "%s" of user %d.', $retry_count, self::MAX_RETRIES, $integration_id, $user_id ), self::LOGGER_HEADER );
 
 		$result = self::pull_single_integration( $user_id, $integration, false, $selected_fields );
+		if ( self::is_contact_not_found( $result ) ) {
+			Logger::log( sprintf( 'Integration "%s" has no contact for user %d on pull retry %d; ending retry chain.', $integration_id, $user_id, $retry_count ), self::LOGGER_HEADER );
+			return;
+		}
 		if ( is_wp_error( $result ) ) {
 			$error_message = sprintf(
 				'Pull retry %d/%d failed for integration "%s" of user %d: %s',
