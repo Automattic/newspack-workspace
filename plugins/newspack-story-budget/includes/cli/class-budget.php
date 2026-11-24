@@ -171,13 +171,16 @@ class Budget {
 			\WP_CLI::error( 'Please provide a name for the story budget.' );
 		}
 
+		// WP-CLI arguments arrive unslashed, but wp_insert_term() strips a level of slashes.
 		$budget_term = \wp_insert_term(
-			$name,
+			\wp_slash( $name ),
 			Budgets::TAXONOMY,
-			[
-				'description' => $description,
-				'slug'        => $slug,
-			]
+			\wp_slash(
+				[
+					'description' => $description,
+					'slug'        => $slug,
+				]
+			)
 		);
 		if ( is_wp_error( $budget_term ) ) {
 			\WP_CLI::error( $budget_term->get_error_message() );
@@ -320,10 +323,11 @@ class Budget {
 				$update_args['description'] = $description;
 			}
 
+			// WP-CLI arguments arrive unslashed, but wp_update_term() strips a level of slashes.
 			$update_result = \wp_update_term(
 				$budget_term->term_id,
 				Budgets::TAXONOMY,
-				$update_args
+				\wp_slash( $update_args )
 			);
 
 			$archive_result = true;
