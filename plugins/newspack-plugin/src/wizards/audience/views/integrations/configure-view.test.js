@@ -14,10 +14,9 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
-// An empty column is a real element costing a real gap, so the stub keeps it
-// queryable for the tests that assert none is left behind. It also echoes the
-// layout props back: `direction` and `gap` are the only things carrying the
-// column rhythm now that the controls supply no margins of their own.
+// The stub tags each picker list so the tests can count them, including the
+// empty ones that should not render, and echoes `direction` and `gap` back,
+// since those props are all that space a list's items.
 jest.mock( '@wordpress/ui', () => ( {
 	Badge: ( { children } ) => <span data-testid="badge">{ children }</span>,
 	Stack: ( { children, direction, gap } ) => (
@@ -853,8 +852,9 @@ describe( 'ConfigureView per-direction sections', () => {
 		} );
 		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
-		// The section column itself, and not the list it would have wrapped.
+		// The section renders, but an empty picker list does not.
 		expect( screen.queryAllByTestId( 'split-section-content' ) ).toHaveLength( 1 );
+		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 0 );
 	} );
 
 	const outboundIntegration = groupedOptions => ( {

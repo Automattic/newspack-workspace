@@ -5,6 +5,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { createPortal, useEffect, useState } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { Notice, Snackbar, ToggleControl } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -79,18 +80,20 @@ export default function AdvancedSettings( props ) {
 		<AdvancedSettingsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			<WizardsTab isFetching={ inFlight }>
-				{ saveError && (
-					<Notice status="error" isDismissible={ false }>
-						{ saveError.message }
-					</Notice>
-				) }
-				<GroupLabels
-					labels={ values }
-					singularDefault={ settings.label_singular_default }
-					pluralDefault={ settings.label_plural_default }
-					onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
-					disabled={ isLoading || inFlight }
-				/>
+				<Stack direction="column" gap="2xl">
+					{ saveError && (
+						<Notice status="error" isDismissible={ false }>
+							{ saveError.message }
+						</Notice>
+					) }
+					<GroupLabels
+						labels={ values }
+						singularDefault={ settings.label_singular_default }
+						pluralDefault={ settings.label_plural_default }
+						onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
+						disabled={ isLoading || inFlight }
+					/>
+				</Stack>
 				<Divider alignment="full-width" variant="tertiary" />
 				<SplitSection.Root>
 					<SplitSection.Header
