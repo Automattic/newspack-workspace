@@ -26,6 +26,19 @@ What the Newspack-shaped shadcn components do not match, and the values that hav
 - **Chart colors**: from the Insights series palette. The three light oranges (#9a3412, #c2410c, #ea580c) have no `newspack-colors` token. In dark, series 0 to 2 are primary-100 to 300, series 3 to 5 are quaternary-500 to 700, and series 6 and 7 are dark grays.
 - **Dark mode**: the `.dark` block, the dark chart series and the modal and dropdown surface steps come from the dark palette; `dark-palette/generate.mjs` writes `dark-tokens.json`, `dark-scales.json` and `dark.css` to `build/dark-palette/`, and `scripts/dark.mjs` reads them from there. The palette lives in this package, not in newspack-ui, for now. A theme's own brand color is not adapted.
 
+## Brand theme
+
+Tokens the brand adds that newspack-ui has no equivalent for. They exist in `scripts/brand.mjs` and the `brand` section of `dist/mapping.json`, not in newspack-ui.
+
+- **Link**: `--newspack-ui-color-link`. newspack-ui links use the text or brand text color directly. Neutral sets the token to `var(--newspack-ui-color-text)`.
+- **Accents**: `--newspack-ui-color-brand-accent-{emerald,morganite,amber}` with `-ink` and `-subtle`. newspack-ui has no secondary, tertiary or quaternary CSS tokens, so the fills are the newspack-colors values as literals. They are for backgrounds, shapes and charts, never for text or actions.
+- **Inverse set**: the `.newspack-brand-inverse` block, a Cobalt surface with white text, a white focus ring and white buttons. newspack-ui has no inverse surface.
+- **Display font**: `--font-display`, American Grotesk Compressed Black. newspack-ui has no display face.
+- **Brand heading sizes**: `--newspack-ui-brand-h1` to `-h6` size and line-height, from the Figma Brand frame. They do not match the `2xl` to `6xl` scale.
+- **Chart colors**: `--chart-1` to `--chart-5` are literal brand colors.
+
+Not supported on the inverse surface: Success, Warning, Error and Destructive Alerts, and invalid-field styling. Portal-rendered popups render on the normal surface. The surface has no `prefers-contrast` boost. The shadcn variables (`--primary`, `--ring`, `--foreground`, `--background`, `--border`) are not restated there, so only stock shadcn components that read them directly are affected.
+
 ## Values with no token
 
 See `noToken` in `scripts/mapping.mjs`: elevation shapes (compiled from the SCSS mixin), focus edge widths, button press scale, size multipliers, checkbox radius and tick, radio dot, select caret padding, badge letter spacing, alert icon margin, tab indicator width, the 600px sheet breakpoint, dialog open scale and title minimum.

@@ -85,6 +85,36 @@ export const siteKit = [
 		files: [ component( 'site/drawer-nav.tsx' ), component( 'site/skip-link.tsx' ), component( 'site/site-header.tsx' ), stylesheet( 'newspack-ui-site.css' ) ],
 	},
 	{
+		name: 'newspack-logo',
+		type: 'registry:component',
+		title: 'Newspack logo',
+		description: 'The Newspack logo as an inline SVG in four variants (default, reversed, symbol, symbol-reversed). Pass an empty title to render it decorative. Theme hooks: --newspack-logo-{mark,n,wordmark} for the default variants and --newspack-logo-reversed-{mark,n,wordmark} for the reversed ones.',
+		files: [ component( 'brand/newspack-logo.tsx' ) ],
+	},
+	{
+		name: 'deck-section',
+		type: 'registry:component',
+		title: 'Deck section',
+		description: 'Deck, DeckSlide and the keyboard navigation for a full-viewport, scroll-snapping slide deck, plus styles/newspack-deck.css. The brand tone of DeckSlide needs the newspack-brand theme.',
+		files: [ component( 'deck/deck.tsx' ), component( 'deck/deck-navigation.ts' ), stylesheet( 'newspack-deck.css' ) ],
+	},
+	{
+		name: 'deck-nav',
+		type: 'registry:component',
+		title: 'Deck dot navigation',
+		description: 'DeckNav: dot navigation fixed to the right of a Deck, one button per slide, hidden in print.',
+		registryDependencies: [ 'deck-section' ],
+		files: [ component( 'deck/deck-nav.tsx' ) ],
+	},
+	{
+		name: 'deck-layouts',
+		type: 'registry:component',
+		title: 'Deck slide layouts',
+		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text, stats, quote and logos. Examples to copy. The opening and closing slides need the newspack-brand theme.',
+		registryDependencies: [ 'deck-section', 'newspack-logo', 'card', 'button' ],
+		files: [ component( 'deck/layouts.tsx' ) ],
+	},
+	{
 		name: 'site-footer',
 		type: 'registry:component',
 		title: 'Site footer',
@@ -178,5 +208,11 @@ export const siteBundles = [
 		title: 'newspack-ui docs',
 		description: 'Fumadocs docs on top of the site chrome: the Fumadocs theme, docs header and search overlay, drawer and page chrome, with only the components they use (Button, Sheet, Input).',
 		registryDependencies: [ 'newspack-ui-site', 'fumadocs-theme', 'drawer-search', 'docs-header', 'docs-page-chrome', 'docs-drawer' ],
+	},
+	{
+		name: 'newspack-deck',
+		title: 'Newspack deck',
+		description: 'The Newspack brand theme with the logo, the Deck section, the dot navigation and the starter slide layouts.',
+		registryDependencies: [ 'newspack-brand', 'newspack-logo', 'deck-section', 'deck-nav', 'deck-layouts' ],
 	},
 ];
