@@ -16,7 +16,7 @@ const buttonVariants = cva(
     "active:scale-[0.97] active:bg-(--btn-bg-pressed) active:text-(color:--btn-ink-pressed) motion-reduce:active:scale-100",
     "focus-visible:transition-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--btn-focus),0_0_0_var(--newspack-ui-focus-halo-width)_var(--newspack-ui-color-focus-halo)]",
     "disabled:pointer-events-none disabled:cursor-default disabled:scale-100 disabled:bg-(--btn-bg-disabled) disabled:text-(color:--btn-ink-disabled) disabled:shadow-none disabled:[--btn-focus:var(--btn-ink-disabled)]",
-    "[&_svg]:pointer-events-none [&_svg]:size-(--newspack-ui-spacer-5) [&_svg]:shrink-0",
+    "[&_svg]:pointer-events-none [&_svg]:size-(--newspack-ui-spacer-5) [&_svg]:my-[calc((var(--btn-lh)*var(--btn-fs)-var(--newspack-ui-spacer-5))/2)] [&_svg]:shrink-0",
   ],
   {
     variants: {
