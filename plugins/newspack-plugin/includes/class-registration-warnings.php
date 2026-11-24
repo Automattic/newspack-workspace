@@ -124,6 +124,10 @@ final class Registration_Warnings {
 	 * @return array
 	 */
 	public static function add_site_health_tests( $tests ) {
+		// Multisite controls sign-ups with a network setting these checks don't read.
+		if ( is_multisite() ) {
+			return $tests;
+		}
 		if ( ! self::is_reported_by_core( $tests ) ) {
 			$tests['direct']['newspack_open_registration_role'] = [
 				'label' => __( 'New User Default Role with open registration', 'newspack-plugin' ),
@@ -158,20 +162,23 @@ final class Registration_Warnings {
 	 * @return array Site Health test result.
 	 */
 	public static function site_health_role_test() {
-		$result = [
-			'label'       => self::is_open() ? __( "New accounts get a role that can't edit posts", 'newspack-plugin' ) : self::get_closed_label(),
+		$is_open = self::is_open();
+		$result  = [
+			'label'       => $is_open ? __( "New accounts get a role that can't edit posts", 'newspack-plugin' ) : __( 'No one can sign up with the New User Default Role', 'newspack-plugin' ),
 			'status'      => 'good',
 			'badge'       => self::get_site_health_badge(),
-			'description' => '<p>' . esc_html__( "Accounts created through WordPress's registration form can't edit posts.", 'newspack-plugin' ) . '</p>',
+			'description' => $is_open ? '<p>' . esc_html__( "Accounts created through WordPress's registration form can't edit posts.", 'newspack-plugin' ) . '</p>' : self::get_closed_description(),
 			'actions'     => '',
 			'test'        => 'newspack_open_registration_role',
 		];
 		if ( ! self::has_risky_default_role() ) {
 			return $result;
 		}
+		// has_risky_default_role() ran the same check, so the role has a warning.
+		$warning               = self::get_role_warning( (string) get_option( 'default_role' ) );
 		$result['label']       = __( 'Open registration gives new accounts a role that can edit posts', 'newspack-plugin' );
 		$result['status']      = 'critical';
-		$result['description'] = '<p>' . esc_html( self::get_role_sentence( (string) get_option( 'default_role' ) ) . ' ' . __( 'Anyone on the internet can create an account with it.', 'newspack-plugin' ) ) . '</p>';
+		$result['description'] = '<p><strong>' . esc_html( $warning['title'] ) . '</strong></p><p>' . esc_html( $warning['body'] ) . '</p>';
 		$result['actions']     = self::get_site_health_link( admin_url( 'options-general.php' ), __( 'Change the New User Default Role', 'newspack-plugin' ) );
 		return $result;
 	}
@@ -182,11 +189,12 @@ final class Registration_Warnings {
 	 * @return array Site Health test result.
 	 */
 	public static function site_health_bot_protection_test() {
-		$result = [
-			'label'       => self::is_open() ? __( 'Sign-ups are protected by reCAPTCHA', 'newspack-plugin' ) : self::get_closed_label(),
+		$is_open = self::is_open();
+		$result  = [
+			'label'       => $is_open ? __( 'Sign-ups are protected by reCAPTCHA', 'newspack-plugin' ) : __( "Bots can't sign up through the registration form", 'newspack-plugin' ),
 			'status'      => 'good',
 			'badge'       => self::get_site_health_badge(),
-			'description' => '<p>' . esc_html__( "Bots can't create accounts through WordPress's registration form.", 'newspack-plugin' ) . '</p>',
+			'description' => $is_open ? '<p>' . esc_html__( "Bots can't create accounts through WordPress's registration form.", 'newspack-plugin' ) . '</p>' : self::get_closed_description(),
 			'actions'     => '',
 			'test'        => 'newspack_open_registration_bot_protection',
 		];
@@ -196,18 +204,19 @@ final class Registration_Warnings {
 		$result['label']       = __( 'Open registration has no bot protection', 'newspack-plugin' );
 		$result['status']      = 'recommended';
 		$result['description'] = '<p>' . esc_html( self::get_bot_protection_warning()['body'] ) . '</p>';
-		$result['actions']     = self::get_site_health_link( admin_url( 'admin.php?page=newspack-settings' ), __( 'Turn on reCAPTCHA', 'newspack-plugin' ) )
+		$result['actions']     = self::get_site_health_link( admin_url( 'admin.php?page=newspack-settings&scrollTo=newspack-settings-recaptcha' ), __( 'Set up reCAPTCHA', 'newspack-plugin' ) )
 			. self::get_site_health_link( admin_url( 'options-general.php' ), __( 'Go to General Settings', 'newspack-plugin' ) );
 		return $result;
 	}
 
 	/**
-	 * Site Health label for both checks while registration is closed.
+	 * Site Health description for both checks while registration is closed.
 	 *
 	 * @return string
 	 */
-	private static function get_closed_label() {
-		return __( '"Anyone can register" is off', 'newspack-plugin' );
+	private static function get_closed_description() {
+		/* translators: "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+		return '<p>' . esc_html__( '"Anyone can register" is off, so no one can create an account through WordPress\'s registration form.', 'newspack-plugin' ) . '</p>';
 	}
 
 	/**
@@ -317,7 +326,11 @@ final class Registration_Warnings {
 
 		return [
 			'title' => self::get_role_title( $role, $display_name ),
-			'body'  => self::get_role_sentence( $role ) . ' ' . __( 'With "Anyone can register" on, anyone on the internet can create an account with this role. Choose Subscriber unless the people who sign up here need to write.', 'newspack-plugin' ),
+			'body'  => self::get_role_sentence( $role ) . ' ' . sprintf(
+				/* translators: %s: the Subscriber role's name. "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+				__( 'With "Anyone can register" on, anyone on the internet can create an account with this role. Choose %s unless the people who sign up here need to write.', 'newspack-plugin' ),
+				translate_user_role( 'Subscriber' )
+			),
 		];
 	}
 
@@ -329,7 +342,8 @@ final class Registration_Warnings {
 	public static function get_bot_protection_warning() {
 		return [
 			'title' => __( 'Sign-ups have no bot protection', 'newspack-plugin' ),
-			'body'  => __( 'reCAPTCHA is off, so bots can create accounts, and each new account sends an email. A burst of bot sign-ups can get the site blocked from sending email. Turn on reCAPTCHA in Newspack → Settings → Connections, or uncheck "Anyone can register".', 'newspack-plugin' ),
+			/* translators: "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+			'body'  => __( 'reCAPTCHA isn\'t set up, so bots can create accounts, and each new account sends an email. A burst of bot sign-ups can get the site blocked from sending email. Set up reCAPTCHA in Newspack → Settings → Connections, or uncheck "Anyone can register".', 'newspack-plugin' ),
 		];
 	}
 

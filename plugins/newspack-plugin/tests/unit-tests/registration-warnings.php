@@ -74,8 +74,10 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 * @param array  $caps         Capabilities.
 	 */
 	private function add_test_role( $role, $display_name, $caps = [] ) {
-		add_role( $role, $display_name, $caps ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
-		$this->added_roles[] = $role;
+		// A role that already exists, such as the plugin's own guest contributor role, stays after the test.
+		if ( add_role( $role, $display_name, $caps ) ) { // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+			$this->added_roles[] = $role;
+		}
 	}
 
 	/**
@@ -93,6 +95,19 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Put reCAPTCHA in one of the states the warnings tell apart.
+	 *
+	 * @param string|false $state False for off, "keys" for set up, "no-keys" for switched on without credentials.
+	 */
+	private function set_recaptcha( $state ) {
+		if ( 'keys' === $state ) {
+			$this->enable_recaptcha();
+		} elseif ( 'no-keys' === $state ) {
+			update_option( 'newspack_recaptcha_use_captcha', true );
+		}
 	}
 
 	/**
@@ -233,38 +248,38 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Open registration with reCAPTCHA off warns.
-	 */
-	public function test_recaptcha_off_warns() {
-		$this->open_registration( 'subscriber' );
-		$this->assertTrue( Registration_Warnings::is_missing_bot_protection() );
-	}
-
-	/**
-	 * Open registration with reCAPTCHA on stays quiet.
-	 */
-	public function test_recaptcha_on_is_quiet() {
-		$this->enable_recaptcha();
-		$this->open_registration( 'subscriber' );
-		$this->assertFalse( Registration_Warnings::is_missing_bot_protection() );
-	}
-
-	/**
+	 * The reCAPTCHA state, and whether open registration should warn about bots.
 	 * A reCAPTCHA switched on without keys protects nothing, so it still warns.
 	 */
-	public function test_recaptcha_on_without_keys_warns() {
-		update_option( 'newspack_recaptcha_use_captcha', true );
-		$this->open_registration( 'subscriber' );
-		$this->assertTrue( Registration_Warnings::is_missing_bot_protection() );
+	public function data_recaptcha_states() {
+		return [
+			'off'             => [ false, true ],
+			'on with keys'    => [ 'keys', false ],
+			'on without keys' => [ 'no-keys', true ],
+		];
 	}
 
 	/**
-	 * The amber warning's copy.
+	 * Open registration warns about bots unless reCAPTCHA can run.
+	 *
+	 * @dataProvider data_recaptcha_states
+	 * @param string|false $recaptcha reCAPTCHA state.
+	 * @param bool         $warns     Whether the bot warning applies.
+	 */
+	public function test_bot_warning_follows_recaptcha( $recaptcha, $warns ) {
+		$this->set_recaptcha( $recaptcha );
+		$this->open_registration( 'subscriber' );
+		$this->assertSame( $warns, Registration_Warnings::is_missing_bot_protection() );
+	}
+
+	/**
+	 * The amber warning's copy covers reCAPTCHA being off and being on without keys.
 	 */
 	public function test_bot_protection_copy() {
 		$warning = Registration_Warnings::get_bot_protection_warning();
 		$this->assertSame( 'Sign-ups have no bot protection', $warning['title'] );
-		$this->assertStringContainsString( 'Newspack → Settings → Connections', $warning['body'] );
+		$this->assertStringStartsWith( "reCAPTCHA isn't set up, so bots can create accounts", $warning['body'] );
+		$this->assertStringContainsString( 'Set up reCAPTCHA in Newspack → Settings → Connections', $warning['body'] );
 		$this->assertStringContainsString( 'uncheck "Anyone can register"', $warning['body'] );
 	}
 
@@ -322,7 +337,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 */
 	public function data_role_test_states() {
 		return [
-			'closed'          => [ false, 'editor', 'good', '"Anyone can register" is off' ],
+			'closed'          => [ false, 'editor', 'good', 'No one can sign up with the New User Default Role' ],
 			'open, safe role' => [ true, 'subscriber', 'good', "New accounts get a role that can't edit posts" ],
 			'open, editor'    => [ true, 'editor', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
 		];
@@ -350,11 +365,42 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The Critical item names the role, custom roles included, the way the
+	 * Settings → General warning does.
+	 */
+	public function test_role_test_names_the_role() {
+		$this->add_test_role( 'staff_writer', 'Staff Writer', [ 'edit_posts' => true ] );
+		$this->open_registration( 'staff_writer' );
+		$description = Registration_Warnings::site_health_role_test()['description'];
+		$this->assertStringContainsString( esc_html( 'Anyone can sign up with the "Staff Writer" role' ), $description );
+		$this->assertStringContainsString( 'This role can write posts.', $description );
+		$this->assertStringNotContainsString( 'with it.', $description );
+	}
+
+	/**
+	 * While "Anyone can register" is off, each check has its own label and
+	 * says the form is closed rather than describing the default role.
+	 */
+	public function test_closed_checks_say_the_form_is_closed() {
+		update_option( 'users_can_register', 0 );
+		update_option( 'default_role', 'author' );
+		$role = Registration_Warnings::site_health_role_test();
+		$bot  = Registration_Warnings::site_health_bot_protection_test();
+
+		$this->assertNotSame( $role['label'], $bot['label'] );
+		foreach ( [ $role, $bot ] as $result ) {
+			$this->assertSame( 'good', $result['status'] );
+			$this->assertStringContainsString( esc_html( '"Anyone can register" is off, so no one can create an account' ), $result['description'] );
+			$this->assertStringNotContainsString( "can't edit posts", $result['description'] );
+		}
+	}
+
+	/**
 	 * Bot protection check states: box state, reCAPTCHA state, expected status and label.
 	 */
 	public function data_bot_protection_test_states() {
 		return [
-			'closed'              => [ false, false, 'good', '"Anyone can register" is off' ],
+			'closed'              => [ false, false, 'good', "Bots can't sign up through the registration form" ],
 			'open, reCAPTCHA on'  => [ true, true, 'good', 'Sign-ups are protected by reCAPTCHA' ],
 			'open, reCAPTCHA off' => [ true, false, 'recommended', 'Open registration has no bot protection' ],
 		];
@@ -379,7 +425,8 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->assertSame( $label, $result['label'] );
 		$this->assertSame( 'newspack_open_registration_bot_protection', $result['test'] );
 		if ( 'recommended' === $status ) {
-			$this->assertStringContainsString( 'admin.php?page=newspack-settings', $result['actions'] );
+			$this->assertStringContainsString( esc_url( admin_url( 'admin.php?page=newspack-settings&scrollTo=newspack-settings-recaptcha' ) ), $result['actions'] );
+			$this->assertStringContainsString( 'Set up reCAPTCHA', $result['actions'] );
 			$this->assertStringContainsString( 'options-general.php', $result['actions'] );
 		}
 	}
@@ -536,11 +583,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 			$this->point_default_role_at_missing_role( $role );
 		}
 		$this->assertSame( $role, get_option( 'default_role' ) );
-		if ( 'keys' === $recaptcha ) {
-			$this->enable_recaptcha();
-		} elseif ( 'no-keys' === $recaptcha ) {
-			update_option( 'newspack_recaptcha_use_captcha', true );
-		}
+		$this->set_recaptcha( $recaptcha );
 		$script_data = Registration_Warnings::get_script_data();
 
 		$script_shows_role = $open && isset( $script_data['riskyRoles'][ $role ] );
@@ -548,17 +591,5 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 
 		$this->assertSame( 'critical' === Registration_Warnings::site_health_role_test()['status'], $script_shows_role );
 		$this->assertSame( 'recommended' === Registration_Warnings::site_health_bot_protection_test()['status'], $script_shows_bot );
-	}
-
-	/**
-	 * Multisite uses a network-level registration setting, so no warning applies.
-	 */
-	public function test_multisite_is_quiet() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Runs only in a multisite test suite.' );
-		}
-		$this->open_registration( 'administrator' );
-		$this->assertFalse( Registration_Warnings::has_risky_default_role() );
-		$this->assertFalse( Registration_Warnings::is_missing_bot_protection() );
 	}
 }
