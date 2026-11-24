@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { getDeckMotion, useDeckScroller } from './deck';
 import { decodeDeckHash, atDestination } from './deck-navigation';
 import { REDUCED_MOTION_QUERY, parseDuration } from './deck-motion';
-import { CLOSING_LOGO_PAUSE_TOKEN, createClosingLogoFade, slidePlace } from './deck-arrival';
+import { CLOSING_LOGO_PAUSE_TOKEN, createClosingLogoFade, opensVisible, routeClosingLogo, slidePlace } from './deck-arrival';
 
 /**
  * The closing slide's logo, which fades in each time the slide arrives, once it has settled and after
@@ -26,7 +26,6 @@ export function DeckClosingLogo( { children, className }: { children: ReactNode;
 		}
 		const motion = getDeckMotion( scroller );
 		const place = ( offset = 0 ) => slidePlace( atDestination( slide, offset ).getBoundingClientRect(), scroller.getBoundingClientRect() );
-		const opening = decodeDeckHash( window.location.hash ) === slide.id || place() !== 'away';
 		const fade = createClosingLogoFade(
 			{
 				opacity: () => Number( getComputedStyle( logo ).opacity ),
@@ -50,58 +49,22 @@ export function DeckClosingLogo( { children, className }: { children: ReactNode;
 				reducedMotion: () => window.matchMedia( REDUCED_MOTION_QUERY ).matches,
 				pause: () => parseDuration( getComputedStyle( logo ).getPropertyValue( CLOSING_LOGO_PAUSE_TOKEN ) ) ?? 0,
 			},
-			opening
+			opensVisible( decodeDeckHash( window.location.hash ), slide.id, place() )
 		);
 
-		const check = () => {
-			const where = place();
-			if ( where === 'away' ) {
-				fade.reset();
-			} else if ( where === 'current' ) {
-				fade.settle();
-			} else {
-				fade.leave();
-			}
-		};
-		const settles = 'onscrollend' in scroller;
-		const onScroll = () => {
-			if ( motion.animating ) {
-				return;
-			}
-			const where = place();
-			if ( where === 'away' ) {
-				fade.reset();
-			} else if ( where === 'visible' ) {
-				fade.leave();
-			} else if ( ! settles ) {
-				fade.settle();
-			}
-		};
-		const onScrollEnd = () => {
-			if ( ! motion.animating ) {
-				check();
-			}
-		};
-		const unsubscribe = motion.subscribe( event => {
-			if ( event.type === 'start' ) {
-				const arriving = place( event.to - scroller.scrollTop ) === 'current';
-				if ( arriving && place() !== 'current' ) {
-					fade.arrive( event.duration );
-				} else if ( ! arriving ) {
-					fade.leave();
-				}
-			} else if ( event.type === 'end' ) {
-				check();
-			} else {
-				fade.leave();
-			}
+		const route = routeClosingLogo( fade, {
+			place,
+			scrollTop: () => scroller.scrollTop,
+			animating: () => motion.animating,
+			settles: 'onscrollend' in scroller,
 		} );
-		scroller.addEventListener( 'scroll', onScroll, { passive: true } );
-		scroller.addEventListener( 'scrollend', onScrollEnd );
+		const unsubscribe = motion.subscribe( route.motion );
+		scroller.addEventListener( 'scroll', route.scroll, { passive: true } );
+		scroller.addEventListener( 'scrollend', route.scrollEnd );
 		return () => {
 			unsubscribe();
-			scroller.removeEventListener( 'scroll', onScroll );
-			scroller.removeEventListener( 'scrollend', onScrollEnd );
+			scroller.removeEventListener( 'scroll', route.scroll );
+			scroller.removeEventListener( 'scrollend', route.scrollEnd );
 			logo.removeAttribute( 'data-hidden' );
 			logo.style.transitionDelay = '';
 		};

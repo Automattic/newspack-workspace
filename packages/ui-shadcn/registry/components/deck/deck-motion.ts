@@ -133,7 +133,7 @@ export type DeckMotionEnv = {
 
 /**
  * `start` when a navigation begins, with its destination and travel time (0 for a jump), `end` when
- * it arrives, `cancel` when a wheel, touch or key stops it on the way.
+ * it arrives, `cancel` when `cancel()` stops it on the way.
  */
 export type DeckMotionEvent = { type: 'start'; to: number; duration: number } | { type: 'end' } | { type: 'cancel' };
 

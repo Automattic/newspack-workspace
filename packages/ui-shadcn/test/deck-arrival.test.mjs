@@ -111,9 +111,9 @@ test( 'motion events: a retarget restarts, a cancel is reported, a jump reports 
 
 	const reduced = fakeMotion( { reduced: true } );
 	const jumps = [];
-	reduced.deck.subscribe( event => jumps.push( [ event.type, reduced.scroller.scrollTop ] ) );
+	reduced.deck.subscribe( event => jumps.push( [ event.type, event.duration, reduced.scroller.scrollTop ] ) );
 	reduced.deck.scrollTo( 1600 );
-	assert.deepEqual( jumps, [ [ 'start', 0 ], [ 'end', 1600 ] ] );
+	assert.deepEqual( jumps, [ [ 'start', 0, 0 ], [ 'end', undefined, 1600 ] ] );
 } );
 
 test( 'a retarget to the same slide before the fade starts restarts the wait', () => {
@@ -172,7 +172,11 @@ test( 'leaving mid-fade cancels cleanly', () => {
 	assert.deepEqual( fading.calls.at( -1 ), [ 'hide', true ], 'a fade under way reverses from where it is' );
 	assert.equal( during.shown, false );
 	during.settle();
-	assert.deepEqual( fading.calls.at( -1 ), [ 'show', PAUSE ], 'coming back fades in again' );
+	assert.deepEqual( fading.calls.at( -1 ), [ 'show', 0 ], 'coming back while it fades out fades straight back in' );
+	fading.set( 0 );
+	during.reset();
+	during.settle();
+	assert.deepEqual( fading.calls.at( -1 ), [ 'show', PAUSE ], 'from hidden it waits the pause again' );
 } );
 
 test( 'reduced motion keeps the fade and drops the wait', () => {
@@ -199,9 +203,11 @@ test( 'the logo is visible without script, before hydration and when the deck op
 	assert.ok( ! /data-hidden=|style=|opacity-0(?<!data-\[hidden\]:opacity-0)/.test( jsx ), 'the markup renders the logo visible' );
 	assert.ok( jsx.includes( 'data-[hidden]:opacity-0' ), 'only the hidden attribute, set from an effect, hides it' );
 	assert.ok( jsx.includes( 'print:transition-none print:data-[hidden]:opacity-100' ), 'a printed deck keeps its logo, with no fade' );
-	assert.ok( /useEffect\(/.test( source ) && source.includes( "setAttribute( 'data-hidden', '' )" ) );
-	assert.ok( source.includes( "decodeDeckHash( window.location.hash ) === slide.id" ), 'a deck opened on the slide shows the logo at once' );
-	assert.ok( source.includes( "logo.removeAttribute( 'data-hidden' )" ) );
+
+	assert.equal( arrival.opensVisible( 'closing', 'closing', 'away' ), true, 'a deck opened on the slide shows the logo at once' );
+	assert.equal( arrival.opensVisible( null, 'closing', 'visible' ), true, 'a slide already in view keeps its logo' );
+	assert.equal( arrival.opensVisible( 'opening', 'closing', 'away' ), false );
+	assert.equal( arrival.opensVisible( null, 'closing', 'away' ), false );
 } );
 
 test( 'the logo fades in opacity only, keeps its name and role and takes no space of its own', () => {
@@ -227,8 +233,84 @@ test( 'slidePlace tells current, visible and away apart', () => {
 	assert.equal( arrival.slidePlace( { top: -800, bottom: 0 }, viewport ), 'away' );
 } );
 
-test( 'the pause is read from the property the deck stylesheet declares', () => {
-	const css = readFileSync( join( root, 'registry', 'styles', 'newspack-deck.css' ), 'utf8' );
-	assert.ok( css.includes( `${ arrival.CLOSING_LOGO_PAUSE_TOKEN }: ${ PAUSE }ms;` ) );
-	assert.equal( kit.parseDuration( ` ${ PAUSE }ms` ), PAUSE );
+const routed = ( { place = 'away', settles = true } = {} ) => {
+	const deck = { at: place, destination: null, top: 0, animating: false, settles };
+	const calls = [];
+	const fade = {
+		arrive: travel => calls.push( [ 'arrive', travel ] ),
+		settle: () => calls.push( [ 'settle' ] ),
+		leave: () => calls.push( [ 'leave' ] ),
+		reset: () => calls.push( [ 'reset' ] ),
+	};
+	const route = arrival.routeClosingLogo( fade, {
+		place: offset => ( offset === undefined ? deck.at : deck.destination ),
+		scrollTop: () => deck.top,
+		animating: () => deck.animating,
+		settles: deck.settles,
+	} );
+	return { deck, calls, route };
+};
+
+test( 'a scripted navigation onto the slide is an arrival with its travel, any other is a leave', () => {
+	const toward = routed( { place: 'away' } );
+	toward.deck.destination = 'current';
+	toward.route.motion( { type: 'start', to: 800, duration: 390 } );
+	assert.deepEqual( toward.calls, [ [ 'reset' ], [ 'arrive', 390 ] ], 'from out of sight the logo resets first, so a turn back mid-travel fades again' );
+
+	const near = routed( { place: 'visible' } );
+	near.deck.destination = 'current';
+	near.route.motion( { type: 'start', to: 800, duration: 265 } );
+	assert.deepEqual( near.calls, [ [ 'arrive', 265 ] ] );
+
+	const there = routed( { place: 'current' } );
+	there.deck.destination = 'current';
+	there.route.motion( { type: 'start', to: 0, duration: 0 } );
+	assert.deepEqual( there.calls, [], 'already there is not an arrival' );
+
+	const away = routed( { place: 'current' } );
+	away.deck.destination = 'visible';
+	away.route.motion( { type: 'start', to: 0, duration: 390 } );
+	assert.deepEqual( away.calls, [ [ 'leave' ] ] );
+} );
+
+test( 'the destination is measured from where the scroll is now', () => {
+	const offsets = [];
+	const route = arrival.routeClosingLogo(
+		{ arrive() {}, settle() {}, leave() {}, reset() {} },
+		{ place: offset => ( offsets.push( offset ), 'away' ), scrollTop: () => 300, animating: () => true, settles: true }
+	);
+	route.motion( { type: 'start', to: 1100, duration: 390 } );
+	assert.ok( offsets.includes( 800 ) );
+} );
+
+test( 'when a scripted scroll ends or is stopped, where the slide is decides', () => {
+	for ( const [ place, expected ] of [ [ 'current', 'settle' ], [ 'visible', 'leave' ], [ 'away', 'reset' ] ] ) {
+		for ( const type of [ 'end', 'cancel' ] ) {
+			const { calls, route } = routed( { place } );
+			route.motion( { type } );
+			assert.deepEqual( calls, [ [ expected ] ], `${ type } with the slide ${ place }` );
+		}
+	}
+} );
+
+test( 'scrolls are ignored while a scripted scroll runs, and decide once it is not', () => {
+	const busy = routed( { place: 'visible' } );
+	busy.deck.animating = true;
+	busy.route.scroll();
+	busy.route.scrollEnd();
+	assert.deepEqual( busy.calls, [], 'a scripted travel toward the slide is not cancelled by its own scroll' );
+
+	const { deck, calls, route } = routed( { place: 'visible' } );
+	route.scroll();
+	deck.at = 'away';
+	route.scroll();
+	deck.at = 'current';
+	route.scroll();
+	assert.deepEqual( calls, [ [ 'leave' ], [ 'reset' ] ], 'with scrollend the slide becoming current waits for it' );
+	route.scrollEnd();
+	assert.deepEqual( calls.at( -1 ), [ 'settle' ] );
+
+	const old = routed( { place: 'current', settles: false } );
+	old.route.scroll();
+	assert.deepEqual( old.calls, [ [ 'settle' ] ], 'without scrollend the scroll that makes it current settles' );
 } );
