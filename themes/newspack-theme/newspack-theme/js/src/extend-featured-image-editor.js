@@ -6,6 +6,7 @@ import { withDispatch, withSelect, select } from '@wordpress/data';
 import { Component, Fragment } from '@wordpress/element';
 import { compose } from '@wordpress/compose';
 import { store as coreStore } from '@wordpress/core-data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
 
 class RadioCustom extends Component {
@@ -103,12 +104,21 @@ const CaptionControl = compose( [
 		// The record resolves async and re-renders this component when the fetch lands.
 		const media = featuredMediaId ? _select( coreStore ).getEntityRecord( 'postType', 'attachment', featuredMediaId, { context: 'view' } ) : null;
 
+		const meta = {
+			...getCurrentPostAttribute( 'meta' ),
+			...getEditedPostAttribute( 'meta' ),
+		};
+
+		// The caption's sanitize_callback (wp_kses_post) stores & and < as entities, so the saved
+		// value reads "Smith &amp; Jones". Decode only the saved value for display; text the user is
+		// typing is shown untouched, so a literal "&amp;" they type isn't collapsed mid-edit.
+		const savedCaption = getCurrentPostAttribute( 'meta' )?.newspack_post_featured_image_caption || '';
+		const caption = meta.newspack_post_featured_image_caption || '';
+
 		return {
 			featuredMediaId,
-			meta: {
-				...getCurrentPostAttribute( 'meta' ),
-				...getEditedPostAttribute( 'meta' ),
-			},
+			meta,
+			caption: caption === savedCaption ? decodeEntities( caption ) : caption,
 			// null while loading, or when the record can't be read (e.g. the attachment's parent is a draft the user can't see).
 			defaultCaption: media ? htmlToText( media.caption?.rendered ?? '' ) : null,
 		};
@@ -130,14 +140,14 @@ const CaptionControl = compose( [
 			} );
 		},
 	} ) ),
-] )( ( { featuredMediaId, meta, defaultCaption, updateCaption, updateCaptionEnabled, updateIncludeCredit } ) => {
+] )( ( { featuredMediaId, meta, caption, defaultCaption, updateCaption, updateCaptionEnabled, updateIncludeCredit } ) => {
 	// Only show these controls once a featured image has been selected.
 	if ( ! featuredMediaId ) {
 		return null;
 	}
 
 	const isEnabled = !! meta.newspack_post_featured_image_caption_enabled;
-	const value = meta.newspack_post_featured_image_caption || '';
+	const value = caption;
 	const hasOverride = value.trim().length > 0;
 	const includeCredit = !! meta.newspack_post_featured_image_caption_include_credit;
 

@@ -599,6 +599,7 @@ function newspack_enqueue_scripts() {
 				'wp-data',
 				'wp-element',
 				'wp-hooks',
+				'wp-html-entities',
 				'wp-i18n',
 			),
 			'version'      => $theme_version,
