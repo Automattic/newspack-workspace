@@ -425,7 +425,10 @@ function attachAuthCookiesListener() {
 function checkNewsletterSubscription() {
 	const apiNonce = getApiNonce();
 	const apiUrl = window.newspack_reader_data?.api_url;
-	if ( ! window.newspack_ras_config?.is_logged_in || ! apiUrl || ! apiNonce ) {
+	// The localized flag is fixed at page load; the store also knows about a
+	// sign-in that happened on this page.
+	const isLoggedIn = window.newspack_ras_config?.is_logged_in || getReader()?.authenticated;
+	if ( ! isLoggedIn || ! apiUrl || ! apiNonce ) {
 		return;
 	}
 	fetch( `${ apiUrl }/newsletter-check`, {

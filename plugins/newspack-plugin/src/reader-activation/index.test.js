@@ -783,4 +783,12 @@ describe( 'newsletter form listener', () => {
 		expectRecentSignupHint();
 		expect( requests ).toEqual( [] );
 	} );
+	it( 'checks the server after a sign-in on the same page', () => {
+		window.newspack_ras_config = { is_logged_in: false };
+		setReaderEmail( 'reader@example.test' );
+		setAuthenticated( true );
+		const form = addForm( '<form class="newspack-subscribe-form"></form>' );
+		submit( form );
+		expect( requests ).toHaveLength( 1 );
+	} );
 } );
