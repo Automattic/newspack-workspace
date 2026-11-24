@@ -49,9 +49,15 @@ class Cover extends Package_Cover {
 	 *
 	 * @param array             $attrs             Block attributes.
 	 * @param Rendering_Context $rendering_context Rendering context.
-	 * @return string Hex color, or '' when it can't be resolved to hex.
+	 * @return string Hex color, or '' for no overlay (a gradient overlay, or a color that
+	 *                isn't hex).
 	 */
 	private static function overlay_color( array $attrs, Rendering_Context $rendering_context ): string {
+		// A gradient overlay can't be drawn as a single tint; leave the image as the
+		// package renders it rather than tint it with the default color.
+		if ( ! empty( $attrs['gradient'] ) || ! empty( $attrs['customGradient'] ) ) {
+			return '';
+		}
 		$color = '';
 		if ( ! empty( $attrs['customOverlayColor'] ) && is_string( $attrs['customOverlayColor'] ) ) {
 			$color = $attrs['customOverlayColor'];
@@ -92,7 +98,7 @@ class Cover extends Package_Cover {
 			return $html;
 		}
 		$style = (string) $processor->get_attribute( 'style' );
-		if ( ! preg_match( '/background-image:\s*(url\([^)]*\))/i', $style, $matches ) ) {
+		if ( ! preg_match( '/background-image:\s*(url\(\s*([\'"]).*?\2\s*\))/i', $style, $matches ) ) {
 			return $html;
 		}
 		$rgba    = self::to_rgba( $color, min( 100, $ratio ) / 100 );
