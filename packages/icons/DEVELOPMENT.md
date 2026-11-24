@@ -36,8 +36,8 @@ Follow this step-by-step process when selecting an icon:
 All icons in this package are designed on a **24×24 grid/viewbox**. This ensures consistency and scalability:
 
 - **Design grid:** All icons use `viewBox="0 0 24 24"`
-- **Stroke:** Icons are stroke-based, matching `@wordpress/icons`. The root `<SVG>` sets `style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5"`, and coordinates sit on the .25/.75 grid so the 1.5 stroke lands on whole pixels. Small solid details use `fill="currentColor"` on the child element.
-- **Color:** Icons follow the CSS `color` of their context. Recolor them with `color`, never `fill`: the inline `fill: none` ignores ordinary `fill` rules, and an `!important` `fill` would fill the outlines solid.
+- **Stroke:** Icons are stroke-based, matching `@wordpress/icons`. The root `<SVG>` sets `style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5"`, and outlines sit on the .25/.75 grid where they can, so the 1.5 stroke lands on whole pixels. Small solid details use `fill="currentColor" stroke="none"` on the child element. The `newspack` brand mark stays filled.
+- **Color:** Icons follow the CSS `color` of their context. Recolor them with `color`, never `fill`: a `fill` rule on the `svg` loses to the inline `fill: none`, while one with `!important`, or one aimed at the children (`svg path`, `svg *`), fills the outlines solid.
 - **Display flexibility:** Icons can be displayed at different sizes (e.g., 48×48, 40×40) depending on context
 - **Scalability:** SVG format allows crisp rendering at any size
 - **Consistency:** Uniform grid system ensures visual harmony across the icon set
@@ -151,7 +151,7 @@ public static $ui_icons = array(
 );
 ```
 
-**Important:** Extract the SVG markup from the React component in `packages/icons/src/` and convert it to a plain SVG string with proper attributes (`aria-hidden="true"`, `focusable="false"`, and a CSS class).
+**Important:** `Newspack_UI_Icons` icons are filled, not stroked. Don't copy the stroke markup from `packages/icons/src/`: `sanitize_svgs()` strips `stroke`, `stroke-width` and `style`, and frontend `svg { fill: currentcolor }` rules override the root `fill="none"`, so the outlines would render solid. Draw a filled `<path>` on the same 24×24 grid, with `aria-hidden="true"`, `focusable="false"` and a CSS class. If a block previews the icon in the editor, give that preview the same filled markup so the editor matches the front end.
 
 #### Step 2: Use Icon in PHP Templates
 
