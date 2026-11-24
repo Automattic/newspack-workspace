@@ -516,6 +516,21 @@ jobs:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
+  release-wporg-botcreds-agent-access:
+    name: WP.org / botcreds-agent-access
+    if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'
+    needs: release
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: botcreds-agent-access
+      plugin-path: plugins/botcreds-agent-access
+      ref: ${{ needs.release.outputs.released-sha }}
+      released-tags: ${{ needs.release.outputs.released-tags }}
+      require-release: true
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
+
   release-wporg-scaip:
     name: WP.org / super-cool-ad-inserter
     if: github.ref == 'refs/heads/release' && needs.release.outputs.release_needed == 'true'

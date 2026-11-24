@@ -40,6 +40,7 @@ Each plugin/theme directory is standalone and can be zipped and installed on its
 | `newspack-story-budget` | Newsroom editorial planning |
 | `republication-tracker-tool` | Tracks republished content |
 | `super-cool-ad-inserter` | Programmatic ad insertion |
+| `botcreds-agent-access` | Scoped application passwords and REST access controls for AI agents |
 
 **Not in this monorepo** (separate repos): `newspack-manager-admin` (hub UI on newspack.com) and `newspack-manager` (companion plugin on each managed site).
 

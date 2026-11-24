@@ -1,0 +1,304 @@
+/**
+ * Agent Access Admin Styles — Profile Page
+ * Matches native wp-admin profile section styling.
+ */
+
+/* Keep profile credential creation in the managed Agent Access flow.
+ * Presentation only: existing Application Passwords and REST auth are unchanged.
+ */
+body.profile-php #application-passwords-section,
+body.user-edit-php #application-passwords-section {
+	display: none;
+}
+
+/* Section wrapper */
+.agent-access-profile-section {
+	margin-top: 2em;
+}
+
+.agent-access-title {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+}
+
+
+/* Warning box */
+.agent-access-warning-box {
+	background: #fef8ee;
+	border-left: 4px solid #dba617;
+	padding: 0.8em 1em;
+	margin: 1em 0;
+	font-size: 0.9em;
+	max-width: 600px;
+}
+
+/* JSON block */
+.agent-access-json-block {
+	max-width: 600px;
+	margin: 1em 0;
+}
+
+.agent-access-json {
+	background: #1d2327;
+	color: #9ec89e;
+	padding: 1em;
+	border-radius: 4px;
+	font-family: Menlo, Monaco, Consolas, monospace;
+	font-size: 13px;
+	overflow-x: auto;
+	white-space: pre;
+	margin: 0 0 0.8em;
+}
+
+.agent-access-copy-btn {
+	min-width: 80px;
+}
+
+.agent-access-copy-btn--copied {
+	color: #00a32a !important;
+	border-color: #00a32a !important;
+}
+
+/* Notice boxes */
+.agent-access-notice-row {
+	display: flex;
+	gap: 0.8em;
+	margin: 1em 0;
+	max-width: 600px;
+}
+
+.agent-access-notice-box {
+	padding: 0.6em 1em;
+	border-radius: 3px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.agent-access-notice-box--green {
+	background: #edfaef;
+	color: #00a32a;
+	border: 1px solid #00a32a;
+}
+
+.agent-access-notice-box--red {
+	background: #fef2f0;
+	color: #cc1818;
+	border: 1px solid #cc1818;
+}
+
+/* Status table — matches WP native tables */
+.agent-access-status-table {
+	max-width: 600px;
+	margin: 1em 0;
+	border-collapse: collapse;
+}
+
+.agent-access-status-table th,
+.agent-access-status-table td {
+	padding: 0.5em 0.5em 0.5em 0;
+	text-align: left;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.agent-access-status-table th {
+	width: 100px;
+	color: #50575e;
+	font-weight: 600;
+}
+
+/* Badge */
+.agent-access-badge {
+	display: inline-block;
+	padding: 0.15em 0.6em;
+	border-radius: 3px;
+	font-size: 0.85em;
+	font-weight: 600;
+}
+
+.agent-access-badge--active {
+	background: #edfaef;
+	color: #00a32a;
+}
+
+/* Recent posts table */
+.agent-access-recent-table {
+	max-width: 600px;
+	margin: 0.5em 0 1em;
+}
+
+.agent-access-badge--draft {
+	background: #f0f0f1;
+	color: #50575e;
+}
+
+.agent-access-badge--publish,
+.agent-access-badge--published {
+	background: #edfaef;
+	color: #00a32a;
+}
+
+.agent-access-badge--pending {
+	background: #fef8ee;
+	color: #996800;
+}
+
+/* Tooltip hint on role badges */
+.agent-access-badge--has-tooltip {
+	cursor: help;
+	border-bottom: 1px dotted currentColor;
+}
+
+.agent-access-badge--administrator {
+	background: #fef2f0;
+	color: #cc1818;
+}
+
+.agent-access-badge--editor {
+	background: #e7f3fe;
+	color: #0073aa;
+}
+
+.agent-access-badge--author {
+	background: #edfaef;
+	color: #00a32a;
+}
+
+.agent-access-badge--contributor,
+.agent-access-badge--subscriber {
+	background: #f0f0f1;
+	color: #50575e;
+}
+
+.agent-access-badge--agent {
+	background: #f5f3ff;
+	color: #6d28d9;
+	border: 1px solid #ddd6fe;
+}
+
+/* Connect button */
+.agent-access-create-btn {
+	background: #E74C3C !important;
+	border-color: #c0392b !important;
+	color: #fff !important;
+	font-size: 14px !important;
+	padding: 6px 24px !important;
+	height: auto !important;
+}
+
+.agent-access-create-btn:hover {
+	background: #c0392b !important;
+}
+
+.agent-access-create-hint,
+.agent-access-next-step {
+	color: #646970;
+	font-size: 13px;
+}
+
+/* Revoke */
+.agent-access-revoke-section {
+	margin-top: 1em;
+	display: flex;
+	align-items: center;
+	gap: 1em;
+}
+
+.agent-access-revoke-hint {
+	color: #646970;
+	font-size: 13px;
+}
+
+/* Success icon — inline, smaller */
+.agent-access-success-icon {
+	display: inline-block;
+	color: #fff;
+	background: #00a32a;
+	width: 1.4em;
+	height: 1.4em;
+	line-height: 1.4em;
+	text-align: center;
+	border-radius: 50%;
+	font-size: 1.2em;
+	vertical-align: middle;
+	margin-right: 0.4em;
+}
+
+/* Admin badge on profile sections */
+.agent-access-admin-badge {
+	display: inline-block;
+	background: #2271b1;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 7px;
+	border-radius: 3px;
+	vertical-align: middle;
+	margin-left: 8px;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
+/* Profile — agent-created content table */
+.agent-access-profile-content {
+	margin-top: 1.5em;
+	border-top: 1px solid #dcdcde;
+	padding-top: 1em;
+}
+
+.agent-access-content-heading {
+	display: flex;
+	align-items: center;
+	gap: 1em;
+	margin: 0 0 0.75em;
+}
+
+.agent-access-view-all {
+	font-size: 13px;
+	font-weight: normal;
+	text-decoration: none;
+}
+
+/* Contextual help: full explanations are available without dominating settings. */
+.agent-access-help { display: inline-flex; vertical-align: middle; margin-inline-start: 4px; }
+.agent-access-help-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 2px; border: 0; border-radius: 3px; background: transparent; color: #646970; cursor: help; }
+.agent-access-help-toggle:hover { color: #135e96; background: #f0f0f1; }
+.agent-access-help-toggle:focus-visible { outline: 2px solid #2271b1; outline-offset: 2px; }
+.agent-access-help-toggle .dashicons { width: 18px; height: 18px; font-size: 18px; }
+.agent-access-help-content { position: fixed; z-index: 200000; box-sizing: border-box; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 12px 14px; border: 1px solid #8c8f94; border-radius: 4px; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.15); color: #1d2327; font-size: 13px; font-weight: 400; line-height: 1.6; text-align: start; white-space: normal; }
+.agent-access-help-content[hidden] { display: none; }
+
+/* Native settings, with enough room for human-readable permission labels. */
+.agent-access-settings-table { width: 100%; max-width: 800px; }
+.agent-access-settings-table th { width: 160px; }
+.agent-access-control-row { display: flex; align-items: flex-start; gap: 4px; }
+.agent-access-control-row > label { flex: 1 1 auto; padding-top: 4px; }
+.agent-access-control-row .agent-access-help { flex: 0 0 auto; }
+.agent-access-brief { margin: 4px 0 12px; color: #646970; font-size: 12px; line-height: 1.5; }
+.agent-access-scope-heading { display: flex; align-items: center; font-weight: 600; margin: 8px 0; }
+.agent-access-mode-options { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.agent-access-scope-summary { margin: 4px 0 14px; font-size: 12px; color: #50575e; }
+.agent-access-scoped-options, .agent-access-custom-options { min-width: 0; }
+.agent-access-integration-count { margin: 8px 0 6px; color: #646970; font-size: 12px; }
+.agent-access-integration-list { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px; border: 1px solid #c3c4c7; border-radius: 3px; background: #fff; scrollbar-gutter: stable; }
+.agent-access-integration-list label { display: block; padding: 2px 0; overflow-wrap: anywhere; }
+.agent-access-route-hint { display: block; margin-inline-start: 24px; color: #646970; overflow-wrap: anywhere; font-size: 11px; }
+.agent-access-advanced-routes { margin: 12px 0; }
+.agent-access-advanced-routes summary { cursor: pointer; color: #2271b1; }
+.agent-access-scope-custom-routes { width: 100%; max-width: 100%; box-sizing: border-box; }
+.agent-access-admin-update-status { display: inline-block; margin-inline-start: 10px; font-size: 13px; }
+.agent-access-admin-update-status[data-state="saved"] { color: #1a7a1a; }
+.agent-access-admin-update-status[data-state="dirty"] { color: #646970; }
+.agent-access-admin-update-status[data-state="error"] { color: #b32d2e; }
+.agent-access-integration-list.is-inactive { background: #f6f7f7; }
+@media screen and (max-width: 782px) {
+ .agent-access-settings-table th { width: auto; }
+ .agent-access-control-row > label { min-width: 0; }
+ .agent-access-mode-options { display: block; }
+ .agent-access-admin-update-status { margin-inline-start: 0; margin-top: 8px; display: block; }
+}
+
+.agent-access-additional-permissions { margin: 16px 0 8px; border-top: 1px solid #dcdcde; padding-top: 12px; }
+.agent-access-additional-permissions > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.agent-access-additional-permissions > summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 2px; }
+.agent-access-additional-permissions > .agent-access-control-row { margin-top: 10px; }

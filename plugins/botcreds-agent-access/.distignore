@@ -1,0 +1,15 @@
+# Files that should not ship in the WordPress.org distribution.
+.distignore
+.gitignore
+.DS_Store
+build.sh
+composer.json
+composer.lock
+docs
+node_modules
+package.json
+release
+release.config.js
+spikes
+tests
+vendor

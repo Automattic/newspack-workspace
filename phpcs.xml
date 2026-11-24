@@ -148,4 +148,9 @@
 	     suppressions asserting "this is a test double" against no real fix. -->
 	<exclude-pattern>*/plugins/newspack-blocks/tests/*</exclude-pattern>
 	<exclude-pattern>*/themes/newspack-theme/tests/*</exclude-pattern>
+
+	<!-- botcreds-agent-access ships its QA as wp eval-file scripts and one-off
+	     spikes that run against disposable sites, so they are not linted. -->
+	<exclude-pattern>*/plugins/botcreds-agent-access/tests/*</exclude-pattern>
+	<exclude-pattern>*/plugins/botcreds-agent-access/spikes/*</exclude-pattern>
 </ruleset>
