@@ -102,10 +102,16 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 			'post_date_gmt' => $started . ' 00:00:00',
 			'post_date'     => $started . ' 00:00:00',
 		];
-		return [
+		$ids  = [
 			'a' => $this->create_test_variant( $test_id, 'a', $dates ),
 			'b' => $this->create_test_variant( $test_id, 'b', $dates ),
 		];
+		// Recorded with the flag on only; backdated to the day the test stands for.
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		if ( $term ) {
+			update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, $started . 'T00:00:00Z' );
+		}
+		return $ids;
 	}
 
 	/**
@@ -210,6 +216,45 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->create_running_test( 'footer-test' );
 		$this->assertSame( 404, $this->stats_request( 'footer_test' )->get_status() );
 		$this->assertSame( 200, $this->stats_request( 'footer-test' )->get_status() );
+	}
+
+	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[] $prompt_ids Prompt IDs.
+	 */
+	private function store_percent_encoded_id( $prompt_ids ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets reaches the stats route in
+	 * both forms the page's encoded request arrives in: undecoded through
+	 * /wp-json/, decoded once through ?rest_route=. It isn't decoded further,
+	 * into the separate test its transliteration names.
+	 */
+	public function test_stats_route_finds_a_percent_encoded_legacy_test_id() {
+		$this->as_admin();
+		$this->store_percent_encoded_id( $this->create_running_test( 'legacy-cafe' ) );
+		$this->create_running_test( 'cafe' );
+		foreach ( [ 'caf%25c3%25a9', 'caf%c3%a9' ] as $route_id ) {
+			$response = $this->stats_request( $route_id );
+			$this->assertSame( 200, $response->get_status(), $route_id );
+			$this->assertSame( 'caf%c3%a9', $response->get_data()['test_id'], $route_id );
+		}
 	}
 
 	/**
@@ -595,6 +640,64 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertTrue( $data['provider']['available'] );
 		$this->assertSame( 'stub', $data['provider']['slug'] );
 		$this->assertNull( $data['provider']['reason'] );
+	}
+
+	/**
+	 * The list reads what the stats route cached, and never asks the provider.
+	 */
+	public function test_list_carries_cached_stats_without_asking_the_provider() {
+		$this->as_admin();
+		$this->create_running_test();
+		$stub    = $this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$fetched = $this->stats_request( 't' )->get_data();
+		$data    = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertCount( 1, $stub->calls );
+		$cached = $data['tests'][0]['cached_stats'];
+		$this->assertSame( [ 'variants', 'comparisons', 'flags' ], array_keys( $cached ) );
+		$this->assertSame( $fetched['variants'], $cached['variants'] );
+		$this->assertSame( $fetched['comparisons'], $cached['comparisons'] );
+		$this->assertSame( 'reliable', $cached['comparisons']['b']['label'] );
+		$this->assertSame( $fetched['flags'], $cached['flags'] );
+	}
+
+	/**
+	 * Nothing cached yet: no stats, and still no request to the provider.
+	 */
+	public function test_list_has_no_cached_stats_before_the_stats_route_runs() {
+		$this->create_running_test();
+		$stub = $this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
+		$this->assertCount( 0, $stub->calls );
+	}
+
+	/**
+	 * A provider that can't answer now gets no cached stats in the list.
+	 */
+	public function test_list_has_no_cached_stats_when_the_provider_is_unavailable() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$this->stats_request( 't' );
+		remove_all_filters( 'newspack_popups_ab_stats_provider' );
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ), new WP_Error( 'down', 'Down.' ) );
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
+	}
+
+	/**
+	 * An ended test sorts last whatever its results, so the list skips its cache.
+	 */
+	public function test_list_has_no_cached_stats_for_an_ended_test() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 5000, 100, 5000, 200 ) );
+		$this->stats_request( 't' );
+		$this->assertNotWPError( Newspack_Popups_AB_Tests::end_test( 't', 'b' ) );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		$data = Newspack_Popups_AB_Dashboard::get_list_data();
+		$this->assertSame( 'ended', $data['tests'][0]['status'] );
+		$this->assertNull( $data['tests'][0]['cached_stats'] );
 	}
 
 	/**

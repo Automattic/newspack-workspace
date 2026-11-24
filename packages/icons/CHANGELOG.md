@@ -1,3 +1,10 @@
+# newspack-icons [1.4.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.3.0...newspack-icons@1.4.0) (2026-11-23)
+
+
+### Features
+
+* **icons:** add a live-streaming icon (DSGNEWS-250) ([#1341](https://github.com/Automattic/newspack-workspace/issues/1341)) ([d046874](https://github.com/Automattic/newspack-workspace/commit/d046874fe50af6ef401ac8181532e472e3eecea9))
+
 # newspack-icons [1.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-icons@1.2.0...newspack-icons@1.3.0) (2026-10-26)
 
 

@@ -57,7 +57,8 @@ function RepublishButtonEdit( { attributes, setAttributes } ) {
 					/>
 				</PanelBody>
 			</InspectorControls>
-			<div className="wp-block-buttons is-layout-flex">
+			{ /* `wp-block` on the buttons container and license lets the editor center and size them like other blocks. */ }
+			<div className="wp-block wp-block-buttons is-layout-flex">
 				<div className="wp-block-button">
 					<div { ...blockProps }>
 						<RichText
@@ -72,7 +73,7 @@ function RepublishButtonEdit( { attributes, setAttributes } ) {
 				</div>
 			</div>
 			{ showLicense && (
-				<div className="wp-block-republication-tracker-tool-republish-button__license">
+				<div className="wp-block wp-block-republication-tracker-tool-republish-button__license">
 					{ licenseData ? (
 						<img alt={ licenseData.description } src={ licenseData.badge } style={ { borderWidth: 0 } } />
 					) : (

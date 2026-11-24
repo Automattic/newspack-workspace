@@ -17,7 +17,14 @@ import { Stack, Text } from '@wordpress/ui';
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
-import { CollapsibleGroup, Divider, Grid, SectionHeader, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import {
+	CollapsibleGroup,
+	Divider,
+	SectionHeader,
+	SplitSection,
+	useConfirmDialog,
+	useUnsavedChangesDialog,
+} from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { formatSiteDateTime } from '../../../../../../packages/components/src/dataviews/format-date';
 import type { SaveNotice, Tool, ToolField } from './types';
@@ -464,19 +471,10 @@ export default function ConfigureView( {
 							{ section.content }
 						</Stack>
 					) : (
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader
-								noMargin
-								fullWidthText
-								heading={ 2 }
-								backNav={ section.backNav }
-								title={ section.title }
-								description={ section.description }
-							/>
-							<Stack direction="column" gap="xl">
-								{ section.content }
-							</Stack>
-						</Grid>
+						<SplitSection.Root>
+							<SplitSection.Header backNav={ section.backNav } title={ section.title } description={ section.description } />
+							<SplitSection.Content>{ section.content }</SplitSection.Content>
+						</SplitSection.Root>
 					) }
 				</Fragment>
 			) ) }

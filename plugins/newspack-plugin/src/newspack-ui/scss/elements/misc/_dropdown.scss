@@ -27,7 +27,7 @@
 				background: var(--newspack-ui-color-surface);
 				border: 1px solid var(--newspack-ui-color-border);
 				border-radius: var(--newspack-ui-radius-control);
-				@include mixins.newspack-ui-elevation( 1 );
+				@include mixins.newspack-ui-elevation( 2 );
 
 				font-size: var(--newspack-ui-font-size-body);
 				left: 0;
@@ -75,6 +75,8 @@
 							--newspack-ui-button-bg-pressed: var(--newspack-ui-color-neutral-fill-hover);
 							--newspack-ui-button-ink: var(--newspack-ui-color-text);
 							--newspack-ui-button-border: transparent;
+							--newspack-ui-button-letter-spacing: normal;
+							--newspack-ui-button-text-transform: none;
 
 							border-radius: calc(var(--newspack-ui-radius-control) * 0.5);
 							display: flex;

@@ -30,6 +30,19 @@ class Audience_Wizard extends Wizard {
 	protected $slug = 'newspack-audience';
 
 	/**
+	 * Capability required to open the Audience Management setup screen. Screens
+	 * that link to it read this to decide whether to offer the link.
+	 */
+	const CAPABILITY = 'manage_options';
+
+	/**
+	 * See {@see self::CAPABILITY}.
+	 *
+	 * @var string
+	 */
+	protected $capability = self::CAPABILITY;
+
+	/**
 	 * The parent menu item name.
 	 *
 	 * @var string
@@ -735,6 +748,15 @@ class Audience_Wizard extends Wizard {
 			}
 			if ( isset( $args['content_gifting']['button_color'] ) ) {
 				Content_Gifting_CTA::set_button_color( $args['content_gifting']['button_color'] );
+			}
+			if ( isset( $args['content_gifting']['text_color'] ) ) {
+				Content_Gifting_CTA::set_text_color( $args['content_gifting']['text_color'] );
+			}
+			if ( isset( $args['content_gifting']['button_text_color'] ) ) {
+				Content_Gifting_CTA::set_button_text_color( $args['content_gifting']['button_text_color'] );
+			}
+			if ( isset( $args['content_gifting']['shadow'] ) ) {
+				Content_Gifting_CTA::set_shadow( $args['content_gifting']['shadow'] );
 			}
 		}
 		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {

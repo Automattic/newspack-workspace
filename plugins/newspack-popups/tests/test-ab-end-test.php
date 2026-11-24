@@ -63,6 +63,11 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		}
 		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_GOAL, 'donation' );
 		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_CONTROL_SHARE, 60 );
+		// Recorded with the flag on only; backdated to the day the test stands for.
+		$term = get_term_by( 'slug', $test_id, Newspack_Popups_AB_Tests::TAXONOMY );
+		if ( $term ) {
+			update_term_meta( $term->term_id, Newspack_Popups_AB_Tests::TERM_META_STARTED, '2026-10-01T00:00:00Z' );
+		}
 		return $ids;
 	}
 
@@ -103,6 +108,41 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 				],
 			],
 		];
+	}
+
+	/**
+	 * Point prompts at a legacy Test ID with percent-encoded octets, as
+	 * sanitize_title() stored one it couldn't transliterate.
+	 *
+	 * @param int[] $prompt_ids Prompt IDs.
+	 */
+	private function store_percent_encoded_id( $prompt_ids ) {
+		global $wpdb;
+		foreach ( $prompt_ids as $prompt_id ) {
+			// The current sanitizer can't write this value, so write it as a legacy save left it.
+			$wpdb->update( // phpcs:ignore WordPress.DB
+				$wpdb->postmeta,
+				[ 'meta_value' => 'caf%c3%a9' ], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				[
+					'post_id'  => $prompt_id,
+					'meta_key' => Newspack_Popups_AB_Tests::META_TEST_ID, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				]
+			);
+			wp_cache_delete( $prompt_id, 'post_meta' );
+		}
+	}
+
+	/**
+	 * A legacy Test ID with percent-encoded octets can be ended through the
+	 * encoded form the page sends.
+	 */
+	public function test_percent_encoded_legacy_test_can_be_ended() {
+		$this->sign_in();
+		$ids = $this->create_running_test( 'legacy-cafe' );
+		$this->store_percent_encoded_id( $ids );
+
+		$this->assertSame( 200, $this->end_request( 'caf%25c3%25a9', 'b' )->get_status() );
+		$this->assertSame( 'draft', get_post_status( $ids['a'] ) );
 	}
 
 	/**
@@ -264,16 +304,71 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * A test still being set up can't be ended.
+	 * A test still being set up can end without publishing B: A keeps its
+	 * status and both prompts leave the test.
 	 */
-	public function test_draft_test_cannot_be_ended() {
+	public function test_draft_test_ends_keeping_a() {
 		$this->sign_in();
-		$this->create_test_variant( 't', 'a' );
+		$a = $this->create_test_variant( 't', 'a' );
 		$b = $this->create_test_variant( 't', 'b', [ 'post_status' => 'draft' ] );
-		$response = $this->end_request( 't', 'a' );
-		$this->assertSame( 409, $response->get_status() );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( 'publish', get_post_status( $a ) );
 		$this->assertSame( 'draft', get_post_status( $b ) );
-		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		foreach ( [ $a, $b ] as $id ) {
+			$this->assertSame( '', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ), "test ID on prompt $id" );
+		}
+		$this->assertSame( 'ended', $this->rows( 't' )[0]['status'] );
+		$this->assertNull( $this->rows( 't' )[0]['started_at'] );
+	}
+
+	/**
+	 * A test that ran and was then paused keeps its start when it ends, so its
+	 * results still have a window to count from.
+	 */
+	public function test_paused_test_keeps_its_start_when_it_ends() {
+		$this->sign_in();
+		$ids = $this->create_running_test();
+		wp_update_post(
+			[
+				'ID'          => $ids['b'],
+				'post_status' => 'draft',
+			]
+		);
+		$this->assertNull( $this->rows( 't' )[0]['started_at'], 'a paused test lists no start' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$row = $this->rows( 't' )[0];
+		$this->assertSame( 'ended', $row['status'] );
+		$this->assertSame( '2026-10-01T00:00:00Z', $row['started_at'] );
+	}
+
+	/**
+	 * Keeping a draft B never publishes it; A goes to draft with the rest.
+	 */
+	public function test_draft_test_ends_keeping_b_without_publishing_it() {
+		$this->sign_in();
+		$a = $this->create_test_variant( 't', 'a' );
+		$b = $this->create_test_variant( 't', 'b', [ 'post_status' => 'draft' ] );
+
+		$this->assertSame( 200, $this->end_request( 't', 'b' )->get_status() );
+		$this->assertSame( 'draft', get_post_status( $a ) );
+		$this->assertSame( 'draft', get_post_status( $b ) );
+		$this->assertSame( 'b', $this->rows( 't' )[0]['kept'] );
+	}
+
+	/**
+	 * A test with only version A, before B is made or after it is deleted,
+	 * can end too, and A leaves it as it is.
+	 */
+	public function test_test_with_only_version_a_ends() {
+		$this->sign_in();
+		$a = $this->create_test_variant( 't', 'a' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( 'publish', get_post_status( $a ) );
+		$this->assertSame( '', get_post_meta( $a, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
+		$this->assertSame( 'ended', $this->rows( 't' )[0]['status'] );
 	}
 
 	/**
@@ -572,11 +667,12 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 
 	/**
 	 * A draft that fails puts back what was drafted and leaves the test running,
-	 * so it can be ended again.
+	 * so it can be ended again, and its readers keep their buckets.
 	 */
 	public function test_a_failed_draft_leaves_the_test_running() {
 		$this->sign_in();
-		$ids = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$ids    = $this->create_running_test( 't', [ 'a', 'b', 'c' ] );
+		$reader = $this->bucket_reader( 't', 'b' );
 		// A backslash in a title: the record must still match to be removed.
 		wp_update_post(
 			[
@@ -596,12 +692,14 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$response = $this->end_request( 't', 'a' );
 		remove_filter( 'wp_insert_post_empty_content', $fail, 10 );
 
+		$this->assertSame( 2, $attempts, 'The end reached the second draft.' );
 		$this->assertGreaterThanOrEqual( 400, $response->get_status() );
 		foreach ( $ids as $id ) {
 			$this->assertSame( 'publish', get_post_status( $id ) );
 			$this->assertSame( 't', get_post_meta( $id, Newspack_Popups_AB_Tests::META_TEST_ID, true ) );
 		}
 		$this->assertSame( 'active', $this->rows( 't' )[0]['status'] );
+		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ) );
 		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
 	}
 
@@ -712,6 +810,153 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( '2026-10-20', $stub->calls[0]['end'] );
 		$this->assertSame( '2026-10-20', $stats['window']['end'] );
 		$this->assertSame( 19, $stats['flags']['days_running'] );
+	}
+
+	/**
+	 * Give a reader a stored bucket in a test.
+	 *
+	 * @param string $test_id Test ID.
+	 * @param string $bucket  Variant letter.
+	 * @return int Reader ID.
+	 */
+	private function bucket_reader( $test_id, $bucket = 'a' ) {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		update_user_meta( $reader_id, Newspack_Popups_AB_Tests::bucket_meta_key( $test_id ), $bucket );
+		return $reader_id;
+	}
+
+	/**
+	 * A reader's stored bucket, read through the meta cache, so a test that
+	 * reads it before the drop also catches a stale cache.
+	 *
+	 * @param int    $reader_id Reader ID.
+	 * @param string $test_id   Test ID.
+	 * @return string Stored bucket, or '' when none.
+	 */
+	private function stored_bucket( $reader_id, $test_id ) {
+		return (string) get_user_meta( $reader_id, Newspack_Popups_AB_Tests::bucket_meta_key( $test_id ), true );
+	}
+
+	/**
+	 * Ending a test drops every reader's bucket in it, and only in it.
+	 */
+	public function test_ending_drops_the_test_buckets_for_every_reader() {
+		$this->sign_in();
+		$this->create_running_test();
+		$this->create_running_test( 'other' );
+		$first  = $this->bucket_reader( 't', 'a' );
+		$second = $this->bucket_reader( 't', 'b' );
+		$other  = $this->bucket_reader( 'other', 'b' );
+
+		$this->assertSame( 200, $this->end_request( 't', 'a' )->get_status() );
+		$this->assertSame( '', $this->stored_bucket( $first, 't' ) );
+		$this->assertSame( '', $this->stored_bucket( $second, 't' ) );
+		$this->assertSame( 'b', $this->stored_bucket( $other, 'other' ) );
+	}
+
+	/**
+	 * Deleting the last prompt that carries a test's ID drops its buckets.
+	 */
+	public function test_deleting_every_prompt_drops_the_buckets() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'b' );
+
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( 'b', $this->stored_bucket( $reader, 't' ), 'A still carries the test.' );
+
+		wp_delete_post( $ids['a'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * A trashed prompt still holds the test's ID, so trashing keeps the buckets
+	 * until the trash is emptied.
+	 */
+	public function test_trashing_keeps_the_buckets_until_the_trash_is_emptied() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+
+		wp_trash_post( $ids['a'] );
+		wp_trash_post( $ids['b'] );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ) );
+
+		wp_delete_post( $ids['a'], true );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ), 'B, in the trash, still carries the test.' );
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Clearing the Test ID on the last prompt drops the buckets, like deleting it.
+	 */
+	public function test_clearing_the_last_test_id_drops_the_buckets() {
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+
+		delete_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ), 'A still carries the test.' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, '' );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Moving the last prompt to another Test ID drops the old test's buckets
+	 * and leaves the new one's alone.
+	 */
+	public function test_changing_the_last_test_id_drops_the_old_buckets() {
+		$ids   = $this->create_running_test();
+		$old   = $this->bucket_reader( 't', 'a' );
+		$other = $this->bucket_reader( 'u', 'b' );
+
+		update_post_meta( $ids['a'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		update_post_meta( $ids['b'], Newspack_Popups_AB_Tests::META_TEST_ID, 'u' );
+		$this->assertSame( '', $this->stored_bucket( $old, 't' ) );
+		$this->assertSame( 'b', $this->stored_bucket( $other, 'u' ) );
+	}
+
+	/**
+	 * With the flag off nothing reads the buckets, and deleting the last
+	 * prompt still drops them.
+	 */
+	public function test_deleting_every_prompt_drops_the_buckets_with_the_flag_off() {
+		add_filter( 'newspack_popups_ab_testing_enabled', '__return_false' );
+		$ids    = $this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'b' );
+		wp_delete_post( $ids['a'], true );
+		wp_delete_post( $ids['b'], true );
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Deleting a prompt outside any test leaves every bucket alone.
+	 */
+	public function test_deleting_an_untested_prompt_keeps_the_buckets() {
+		$this->create_running_test();
+		$reader = $this->bucket_reader( 't', 'a' );
+		wp_delete_post( $this->createPopup(), true );
+		$this->assertSame( 'a', $this->stored_bucket( $reader, 't' ) );
+	}
+
+	/**
+	 * Emptying a test drops only this site's buckets: another site in the network
+	 * using the same Test ID, and the unprefixed key every site used to share,
+	 * keep their rows.
+	 */
+	public function test_emptying_a_test_keeps_another_sites_buckets() {
+		global $wpdb;
+		$ids        = $this->create_running_test();
+		$reader     = $this->bucket_reader( 't', 'a' );
+		$other_site = $wpdb->base_prefix . '99_' . Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 't';
+		$unprefixed = Newspack_Popups_AB_Tests::USER_META_BUCKET_PREFIX . 't';
+		update_user_meta( $reader, $other_site, 'b' );
+		update_user_meta( $reader, $unprefixed, 'b' );
+		foreach ( $ids as $id ) {
+			wp_delete_post( $id, true );
+		}
+		$this->assertSame( '', $this->stored_bucket( $reader, 't' ) );
+		$this->assertSame( 'b', get_user_meta( $reader, $other_site, true ) );
+		$this->assertSame( 'b', get_user_meta( $reader, $unprefixed, true ) );
 	}
 
 	/**

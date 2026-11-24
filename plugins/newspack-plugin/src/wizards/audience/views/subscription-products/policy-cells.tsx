@@ -107,17 +107,17 @@ export function EffectivePrice( { policy, currency }: { policy: SubscriptionPoli
 
 	// Flat, unchanged price across all cycles — nothing to expand.
 	if ( ! changed && ! hasSchedule ) {
-		return <strong>{ baseLabel }</strong>;
+		return <span>{ baseLabel }</span>;
 	}
 
 	const value = changed ? (
 		<span className="newspack-subscription-products__effective-price">
 			<span className="newspack-subscription-products__base-price">{ baseLabel }</span>
 			<span aria-hidden="true"> → </span>
-			<strong className="newspack-subscription-products__effective-price-value">{ effectiveLabel }</strong>
+			<span className="newspack-subscription-products__effective-price-value">{ effectiveLabel }</span>
 		</span>
 	) : (
-		<strong>{ effectiveLabel }</strong>
+		<span>{ effectiveLabel }</span>
 	);
 
 	// A single-segment change has no trajectory to reveal.

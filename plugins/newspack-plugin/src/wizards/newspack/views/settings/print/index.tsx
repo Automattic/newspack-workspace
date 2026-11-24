@@ -9,15 +9,14 @@ import { __ } from '@wordpress/i18n';
 import { CheckboxControl, Notice, SelectControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
-import { Button, Divider, Grid, SectionHeader, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { Button, Divider, SplitSection, Waiting, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { print } from '../../../../../../packages/icons';
 
@@ -182,24 +181,26 @@ function Print() {
 			>
 				{ navBlockDialog }
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ print }
-						title={ __( 'Export articles to Adobe InDesign', 'newspack-plugin' ) }
-						description={ __( 'Let editors export article content in Adobe InDesign Tagged Text format.', 'newspack-plugin' ) }
-					/>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isFetching }
-							disabled={ isFetching }
-							onClick={ () => setModuleEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ print } />
+						<EmptyState.Title>{ __( 'InDesign export is off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Editors can export article content in Adobe InDesign Tagged Text format once it’s on.', 'newspack-plugin' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isFetching }
+								disabled={ isFetching }
+								onClick={ () => setModuleEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</WizardsTab>
 		);
 	}
@@ -215,17 +216,15 @@ function Print() {
 			{ navBlockDialog }
 			{ disableDialog }
 			{ errorNotice }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					noMargin
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Header Platform', 'newspack-plugin' ) }
 					description={ __(
 						'Exports declare their format on the first line and end every line to match. Windows places correctly in most InDesign installs; if placed files show tags as literal text, switch to Mac.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					<SelectControl
 						__nextHasNoMarginBottom
 						label={ __( 'Platform', 'newspack-plugin' ) }
@@ -234,20 +233,18 @@ function Print() {
 						options={ PLATFORM_OPTIONS }
 						onChange={ ( value: IndesignPlatform ) => setSettings( current => ( { ...current, indesign_platform: value } ) ) }
 					/>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					noMargin
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Available Post Types', 'newspack-plugin' ) }
 					description={ __(
 						'Choose which post types show the "Export as Adobe InDesign" bulk and row actions on their admin list screens.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					<Stack direction="column" gap="xs">
 						{ apiData.available_post_types.map( option => (
 							<CheckboxControl
@@ -268,20 +265,18 @@ function Print() {
 							) }
 						</Notice>
 					) }
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					noMargin
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Photo Captions and Credits', 'newspack-plugin' ) }
 					description={ __(
 						'Photo captions and credits are appended to the end of each export. Enable this to leave them out.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					<CheckboxControl
 						__nextHasNoMarginBottom
 						label={ __( 'Exclude photo captions and credits', 'newspack-plugin' ) }
@@ -289,8 +284,8 @@ function Print() {
 						disabled={ isFetching }
 						onChange={ ( checked: boolean ) => setSettings( current => ( { ...current, indesign_exclude_captions: checked } ) ) }
 					/>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</WizardsTab>
 	);
 }

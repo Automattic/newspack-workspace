@@ -50,44 +50,47 @@ do_action( 'newspack_collections_archive_start' );
 			endif;
 			?>
 
-			<!-- Filter controls -->
-			<form class="collections-filter" method="get">
-				<?php
-				$selected_category = isset( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) ? sanitize_text_field( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) : '';
-				$available_years   = Query_Helper::get_available_years( $selected_category );
+			<?php
+			$selected_category = isset( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) ? sanitize_text_field( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) : '';
+			$available_years   = Query_Helper::get_available_years( $selected_category );
+			$categories        = Query_Helper::get_collection_categories();
+			$show_year_filter  = count( $available_years ) > 1;
+			$show_category     = count( $categories ) > 1;
+
+			if ( $show_year_filter || $show_category ) :
 				?>
+				<!-- Filter controls -->
+				<form class="collections-filter" method="get">
+					<?php if ( $show_year_filter ) : ?>
+						<div class="collections-filter__select">
+							<label for="year"><?php esc_html_e( 'Year:', 'newspack-plugin' ); ?></label>
+							<select name="year" id="year">
+								<option value="" <?php selected( $selected_year, '' ); ?>><?php esc_html_e( 'All', 'newspack-plugin' ); ?></option>
+								<?php foreach ( $available_years as $available_year ) : ?>
+									<option value="<?php echo esc_attr( $available_year ); ?>" <?php selected( $selected_year, $available_year ); ?>><?php echo esc_html( $available_year ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					<?php endif; ?>
 
-				<div class="collections-filter__select">
-					<label for="year"><?php esc_html_e( 'Year:', 'newspack-plugin' ); ?></label>
-					<select name="year" id="year">
-						<option value="" <?php selected( $selected_year, '' ); ?>><?php esc_html_e( 'All', 'newspack-plugin' ); ?></option>
-						<?php foreach ( $available_years as $available_year ) : ?>
-							<option value="<?php echo esc_attr( $available_year ); ?>" <?php selected( $selected_year, $available_year ); ?>><?php echo esc_html( $available_year ); ?></option>
-						<?php endforeach; ?>
-					</select>
-				</div>
-
-				<?php
-				$categories = Query_Helper::get_collection_categories();
-
-				if ( count( $categories ) > 1 ) :
-					?>
-					<div class="collections-filter__select">
-						<label for="category"><?php echo esc_html( Settings::get_setting( 'category_filter_label', _x( 'Publication:', 'collections category filter label', 'newspack-plugin' ) ) ); ?></label>
-						<select name="category" id="category">
-							<option value="" <?php selected( $selected_category, '' ); ?>><?php esc_html_e( 'All', 'newspack-plugin' ); ?></option>
-							<?php foreach ( $categories as $category ) : ?>
-								<option value="<?php echo esc_attr( $category->slug ); ?>" <?php selected( $selected_category, $category->slug ); ?>><?php echo esc_html( $category->name ); ?></option>
-							<?php endforeach; ?>
-							?>
-						</select>
-					</div>
-				<?php endif; ?>
-
-			</form> <!-- .collections-filter -->
+					<?php if ( $show_category ) : ?>
+						<div class="collections-filter__select">
+							<label for="category"><?php echo esc_html( Settings::get_setting( 'category_filter_label', _x( 'Publication:', 'collections category filter label', 'newspack-plugin' ) ) ); ?></label>
+							<select name="category" id="category">
+								<option value="" <?php selected( $selected_category, '' ); ?>><?php esc_html_e( 'All', 'newspack-plugin' ); ?></option>
+								<?php foreach ( $categories as $category ) : ?>
+									<option value="<?php echo esc_attr( $category->slug ); ?>" <?php selected( $selected_category, $category->slug ); ?>><?php echo esc_html( $category->name ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</div>
+					<?php endif; ?>
+				</form> <!-- .collections-filter -->
+			<?php endif; ?>
 
 			<?php
-			echo wp_kses_post( Template_Helper::render_separator() );
+			if ( $show_year_filter || $show_category || ! $highlight_latest ) {
+				echo wp_kses_post( Template_Helper::render_separator() );
+			}
 
 			/**
 			 * Fires after the filter controls in the archive template.

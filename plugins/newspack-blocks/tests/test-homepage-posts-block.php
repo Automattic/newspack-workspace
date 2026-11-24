@@ -814,6 +814,21 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * `display_tag_labels()` passes a label with no `link` through, and it renders
+	 * as an unlinked span. This suite loads the test stub rather than the plugin,
+	 * so this checks the blocks caller against the stub's copy of the NPPM-3051
+	 * logic; the plugin's own suite pins the fix itself.
+	 */
+	public function test_display_tag_labels_renders_flag_only_label_as_span() {
+		ob_start();
+		Newspack_Blocks::display_tag_labels( [ [ 'flag' => 'Opinion' ] ] );
+		$html = ob_get_clean();
+
+		self::assertStringContainsString( '<span class="newspack-tag-label tag-label flag">Opinion</span>', $html );
+		self::assertStringNotContainsString( '<a ', $html, 'A label without a link must not render an anchor.' );
+	}
+
+	/**
 	 * A non-viewable post type explicitly opted in via the
 	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
 	 * without loosening the gate for other non-viewable types.

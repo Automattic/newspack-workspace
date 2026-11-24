@@ -115,8 +115,11 @@ class AudienceCampaigns extends Component {
 			.catch( error => setError( error ) );
 	};
 
+	// Rejects on a refused save rather than reporting it here: the settings
+	// drawer, its only caller, stays open and shows the error itself, since the
+	// wizard's own notice sits behind the drawer where nobody can see it.
 	updatePopup = ( { id, ...promptConfig } ) => {
-		const { setError, wizardApiFetch } = this.props;
+		const { wizardApiFetch } = this.props;
 		this.setState( { inFlight: true } );
 		return wizardApiFetch( {
 			path: `${ newspackAudienceCampaigns.api }/${ id }`,
@@ -127,7 +130,7 @@ class AudienceCampaigns extends Component {
 			.then( this.updateAfterAPI )
 			.catch( error => {
 				this.setState( { inFlight: false } );
-				setError( error );
+				throw error;
 			} );
 	};
 

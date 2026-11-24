@@ -25,10 +25,15 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( { WIZA
 
 // Only the header count is under test, so DataViews renders nothing; the count
 // itself comes from filterSortAndPaginate, which stays real.
+let lastDataViewsProps = null;
+
 jest.mock( '../../../../../packages/components/src', () => {
 	const history = { push: jest.fn() };
 	return {
-		DataViews: () => null,
+		DataViews: props => {
+			lastDataViewsProps = props;
+			return null;
+		},
 		WizardBanner: ( { children } ) => <>{ children }</>,
 		Router: { useHistory: () => history },
 	};
@@ -167,5 +172,31 @@ describe( 'AVAILABILITY_ICON', () => {
 		// thing telling them apart: nothing here is tinted.
 		const icons = Object.values( AVAILABILITY_ICON );
 		expect( new Set( icons ).size ).toBe( icons.length );
+	} );
+} );
+
+describe( 'the Plan bundles columns', () => {
+	beforeEach( () => {
+		lastDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	it( 'shows Bundled plans and no Price column in the groups scope', async () => {
+		apiFetch.mockResolvedValue( { products: [ { ...product( 1 ), type: 'grouped' } ] } );
+		await renderList( 'groups' );
+
+		const labels = lastDataViewsProps.fields.map( field => field.label );
+		expect( labels ).toContain( 'Bundled plans' );
+		expect( labels ).not.toContain( 'Price' );
+		expect( lastDataViewsProps.view.fields ).toContain( 'bundled' );
+		expect( lastDataViewsProps.view.fields ).not.toContain( 'price' );
+	} );
+
+	it( 'keeps the Price column in the subscriptions scope', async () => {
+		apiFetch.mockResolvedValue( { products: [ product( 1 ) ] } );
+		await renderList( 'subscriptions' );
+
+		expect( lastDataViewsProps.fields.map( field => field.label ) ).toContain( 'Price' );
+		expect( lastDataViewsProps.view.fields ).toContain( 'price' );
 	} );
 } );

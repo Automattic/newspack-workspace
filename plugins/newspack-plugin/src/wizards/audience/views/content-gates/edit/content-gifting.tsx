@@ -15,15 +15,14 @@ import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import { Button, Divider, Grid, SectionHeader, SelectControl, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
+import { Button, Divider, SelectControl, SplitSection, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
 import { gift } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -153,31 +152,31 @@ const ContentGiftingSettings = () => {
 		return (
 			<>
 				{ confirmDialog }
-				<EmptyState.Root>
-					<Stack direction="column" align="center" gap="lg">
-						<EmptyState.Header
-							icon={ gift }
-							title={ __( 'Get started with content gifting', 'newspack-plugin' ) }
-							description={ __( 'Enable it to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
-						/>
-						{ giftingErrors.length > 0 && (
-							<Notice status="error" politeness="polite" isDismissible={ false }>
-								{ giftingErrors.join( ', ' ) }
-							</Notice>
-						) }
-					</Stack>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isFetching }
-							disabled={ isFetching || giftingErrors.length > 0 }
-							onClick={ () => setEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				{ giftingErrors.length > 0 && (
+					<Notice className="newspack-content-gifting__prerequisites" status="error" politeness="polite" isDismissible={ false }>
+						{ giftingErrors.join( ', ' ) }
+					</Notice>
+				) }
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ gift } />
+						<EmptyState.Title>{ __( 'Content gifting is off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Turn it on to let members share gated articles with non-subscribers.', 'newspack-plugin' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isFetching }
+								disabled={ isFetching || giftingErrors.length > 0 }
+								onClick={ () => setEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</>
 		);
 	}
@@ -190,9 +189,9 @@ const ContentGiftingSettings = () => {
 					{ giftingErrors.join( ', ' ) }
 				</Notice>
 			) }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader heading={ 2 } title={ __( 'General Settings', 'newspack-plugin' ) } />
-				<Stack direction="column" gap="xl">
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'General Settings', 'newspack-plugin' ) } />
+				<SplitSection.Content>
 					<RangeControl
 						label={ __( 'Gifting limit', 'newspack-plugin' ) }
 						help={ __( 'Maximum number of articles that can be gifted per user for the configured interval.', 'newspack-plugin' ) }
@@ -238,13 +237,13 @@ const ContentGiftingSettings = () => {
 						] }
 						__next40pxDefaultSize
 					/>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
 			<Stack direction="column" gap="xl">
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader heading={ 2 } title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
-					<Stack direction="column" gap="xl">
+				<SplitSection.Root>
+					<SplitSection.Header title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
+					<SplitSection.Content>
 						<TextControl
 							label={ __( 'Message', 'newspack-plugin' ) }
 							help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
@@ -310,8 +309,8 @@ const ContentGiftingSettings = () => {
 							settings={ config?.content_gifting || {} }
 							onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, ...value } } ) }
 						/>
-					</Stack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 				<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 					<div className="newspack-content-gifting__cta-preview" inert="true">
 						<div className="newspack-ui">

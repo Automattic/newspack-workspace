@@ -1,0 +1,40 @@
+:root {
+	--site-header-height: var(--newspack-ui-spacer-10);
+	--site-wide-width: calc(var(--newspack-ui-width-l) + var(--newspack-ui-width-sidebar));
+	--site-nav-underline: calc(var(--newspack-ui-spacer-half) / 2);
+}
+
+html {
+	scroll-padding-top: calc(var(--site-header-height) + var(--newspack-ui-spacer-3));
+}
+
+@layer base {
+	:where(a, summary):focus-visible {
+		outline: 2px solid var(--newspack-ui-color-focus);
+		outline-offset: 2px;
+		border-radius: var(--newspack-ui-border-radius-xs);
+		box-shadow: 0 0 0 calc(2px + var(--newspack-ui-focus-halo-width)) var(--newspack-ui-color-focus-halo);
+	}
+}
+
+.site-skip-link:not(:focus) {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.site-skip-link:focus {
+	position: fixed;
+	inset-block-start: var(--newspack-ui-spacer-1);
+	inset-inline-start: var(--newspack-ui-spacer-1);
+	z-index: 60;
+	padding: var(--newspack-ui-spacer-1) var(--newspack-ui-spacer-2);
+	border-radius: var(--newspack-ui-radius-control);
+	background: var(--newspack-ui-color-btn);
+	color: var(--newspack-ui-color-btn-ink);
+	font-weight: var(--newspack-ui-font-weight-strong);
+	text-decoration: none;
+}

@@ -51,6 +51,21 @@ class Test_Query_Helper extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_available_years returns an array when a filter returns a non-array.
+	 *
+	 * @covers \Newspack\Collections\Query_Helper::get_available_years
+	 */
+	public function test_get_available_years_non_array_filter() {
+		add_filter( 'newspack_collections_available_years', '__return_false' );
+
+		$years = Query_Helper::get_available_years();
+
+		remove_filter( 'newspack_collections_available_years', '__return_false' );
+
+		$this->assertSame( [], $years, 'A non-array filtered value should fall back to an empty array.' );
+	}
+
+	/**
 	 * Test get_available_years with collections but no categories.
 	 *
 	 * @covers \Newspack\Collections\Query_Helper::get_available_years
