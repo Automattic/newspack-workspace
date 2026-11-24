@@ -36,7 +36,8 @@ Follow this step-by-step process when selecting an icon:
 All icons in this package are designed on a **24×24 grid/viewbox**. This ensures consistency and scalability:
 
 - **Design grid:** All icons use `viewBox="0 0 24 24"`
-- **Color:** Single-color icons set `fill="currentColor"` on the root `<SVG>`, so they follow the CSS `color` of their context
+- **Stroke:** Icons are stroke-based, matching `@wordpress/icons`. The root `<SVG>` sets `style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5"`, and coordinates sit on the .25/.75 grid so the 1.5 stroke lands on whole pixels. Small solid details use `fill="currentColor"` on the child element.
+- **Color:** Icons follow the CSS `color` of their context. Recolor them with `color`, never `fill`: the inline `fill: none` ignores ordinary `fill` rules, and an `!important` `fill` would fill the outlines solid.
 - **Display flexibility:** Icons can be displayed at different sizes (e.g., 48×48, 40×40) depending on context
 - **Scalability:** SVG format allows crisp rendering at any size
 - **Consistency:** Uniform grid system ensures visual harmony across the icon set

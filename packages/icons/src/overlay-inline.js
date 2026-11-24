@@ -4,8 +4,8 @@
 import { SVG, Path } from '@wordpress/primitives';
 
 const overlayInline = (
-	<SVG xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
-		<Path d="M4 10.5h16V9H4v1.5ZM4 15h9v-1.5H4V15Z" />
+	<SVG xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5">
+		<Path d="M4 9.75H20M4 14.25H13" />
 	</SVG>
 );
 
