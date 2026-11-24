@@ -3,6 +3,7 @@ import { NewspackLogo } from '@/components/brand/newspack-logo';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { DeckSlide } from './deck';
+import { DeckClosingLogo } from './deck-closing-logo';
 
 type Image = { src: string; alt: string };
 
@@ -39,14 +40,14 @@ export function OpeningSlide( { id, title, heading, subtitle }: { id: string; ti
 }
 
 /**
- * Fixed last slide of every deck: Cobalt with the reversed logo, large and centered, and nothing else. Clearspace equals the rendered logo height, so the logo and its padding share one clamp(): 160px at full size, smaller on narrow windows. `title` is only the slide's accessible name.
+ * Fixed last slide of every deck: Cobalt with the reversed logo, large and centered, and nothing else. Clearspace equals the rendered logo height, so the logo and its padding share one clamp(): 160px at full size, smaller on narrow windows. The logo fades in each time the slide arrives, once it has settled (`DeckClosingLogo`). `title` is only the slide's accessible name.
  */
 export function ClosingSlide( { id, title = 'Newspack' }: { id: string; title?: string } ) {
 	return (
 		<DeckSlide id={ id } title={ title } tone="brand" className="flex items-center justify-center p-4 sm:p-16">
-			<div className="p-[clamp(4rem,10vw,10rem)]">
+			<DeckClosingLogo className="p-[clamp(4rem,10vw,10rem)]">
 				<NewspackLogo variant="reversed" title="" className="h-[clamp(4rem,10vw,10rem)] w-auto max-w-full" />
-			</div>
+			</DeckClosingLogo>
 		</DeckSlide>
 	);
 }

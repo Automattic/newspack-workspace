@@ -224,11 +224,19 @@ test( 'the deck no longer relies on native smooth scrolling and its dot fades on
 	assert.ok( ! /\btransition-colors\b/.test( nav ) );
 } );
 
+const COMPONENT_VALUES = [ { file: 'newspack-deck.css', declaration: '--newspack-deck-closing-logo-pause: 300ms;' } ];
+
 const TOKEN_DURATION = /^var\(--newspack-ui-duration-[a-z]+\)$/;
 const TOKEN_EASE = /^var\(--newspack-ui-ease-[a-z]+\)$/;
 
-function motionProblems( source ) {
+function motionProblems( text, file = '' ) {
 	const problems = [];
+	let source = text;
+	for ( const { file: home, declaration } of COMPONENT_VALUES ) {
+		if ( file.endsWith( `/${ home }` ) && source.split( declaration ).length === 2 ) {
+			source = source.replace( declaration, '' );
+		}
+	}
 	const classes = source.match( /[^\s"'`{}]+/g ) ?? [];
 	for ( const raw of classes ) {
 		const utility = raw.replace( /^(?:[a-z-]+(?:-\[[^\]]*\])?:)+/, '' );
@@ -273,6 +281,21 @@ test( 'the motion check catches untokenized motion', () => {
 	assert.deepEqual( motionProblems( 'className="transition-[scale] duration-(--newspack-ui-duration-press) ease-(--newspack-ui-ease-out) motion-reduce:transition-none [transition:scale_var(--newspack-ui-duration-press)_var(--newspack-ui-ease-out)]"' ), [] );
 } );
 
+test( 'the closing logo pause is the one documented component value the motion check accepts', () => {
+	const file = join( root, 'registry', 'styles', 'newspack-deck.css' );
+	const css = readFileSync( file, 'utf8' );
+	const [ { declaration } ] = COMPONENT_VALUES;
+	assert.equal( css.split( declaration ).length, 2, 'declared once, in the deck stylesheet' );
+	assert.deepEqual( motionProblems( css, file ), [] );
+	assert.ok( motionProblems( css ).length, 'the same declaration outside its file is a literal duration' );
+	assert.ok( motionProblems( `${ css }\n${ declaration }`, file ).length, 'declared twice, it is no longer the documented value' );
+	assert.ok( motionProblems( css.replace( '300ms', '250ms' ), file ).length, 'another value is not the documented one' );
+	assert.ok( motionProblems( `${ css }\n.newspack-deck { transition-delay: 300ms; }`, file ).length, 'other literals in the file still fail' );
+	for ( const doc of [ 'README.md', 'DECISIONS.md' ] ) {
+		assert.ok( readFileSync( join( root, doc ), 'utf8' ).includes( '`--newspack-deck-closing-logo-pause`' ), `${ doc } documents it` );
+	}
+} );
+
 test( 'every transition in the deck and brand files uses named properties and newspack-motion tokens', () => {
 	const deck = join( root, 'registry', 'components', 'deck' );
 	const files = [
@@ -281,7 +304,7 @@ test( 'every transition in the deck and brand files uses named properties and ne
 		join( root, 'registry', 'styles', 'newspack-deck.css' ),
 	];
 	for ( const file of files ) {
-		assert.deepEqual( motionProblems( readFileSync( file, 'utf8' ) ), [], file );
+		assert.deepEqual( motionProblems( readFileSync( file, 'utf8' ), file ), [], file );
 	}
 	const brand = JSON.parse( readFileSync( join( root, 'dist', 'registry', 'newspack-brand.json' ), 'utf8' ) );
 	const declarations = [];

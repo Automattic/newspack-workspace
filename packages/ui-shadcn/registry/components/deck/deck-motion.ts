@@ -131,8 +131,15 @@ export type DeckMotionEnv = {
 	tokens(): DeckMotionTokens;
 };
 
+/**
+ * `start` when a navigation begins, with its destination and travel time (0 for a jump), `end` when
+ * it arrives, `cancel` when `cancel()` stops it on the way.
+ */
+export type DeckMotionEvent = { type: 'start'; to: number; duration: number } | { type: 'end' } | { type: 'cancel' };
+
 export type DeckMotion = {
 	scrollTo( top: number, index?: number | null ): void;
+	subscribe( listener: ( event: DeckMotionEvent ) => void ): () => void;
 	cancel(): void;
 	destination(): number;
 	readonly pending: number | null;
@@ -162,6 +169,8 @@ export function createDeckMotion( scroller: DeckMotionScroller, env: DeckMotionE
 	let duration = 0;
 	let easing: Easing = progress => progress;
 	let pending: number | null = null;
+	const listeners = new Set< ( event: DeckMotionEvent ) => void >();
+	const emit = ( event: DeckMotionEvent ) => listeners.forEach( listener => listener( event ) );
 
 	const jump = ( top: number ) => scroller.scrollTo( { top, behavior: 'instant' } );
 	const stop = () => {
@@ -180,6 +189,7 @@ export function createDeckMotion( scroller: DeckMotionScroller, env: DeckMotionE
 		if ( frame === null ) {
 			pending = null;
 			scroller.style.scrollSnapType = '';
+			emit( { type: 'end' } );
 		}
 	};
 
@@ -191,13 +201,26 @@ export function createDeckMotion( scroller: DeckMotionScroller, env: DeckMotionE
 			return frame !== null;
 		},
 		destination: () => ( frame !== null ? to : scroller.scrollTop ),
-		cancel: stop,
+		subscribe( listener ) {
+			listeners.add( listener );
+			return () => {
+				listeners.delete( listener );
+			};
+		},
+		cancel() {
+			if ( frame !== null ) {
+				stop();
+				emit( { type: 'cancel' } );
+			}
+		},
 		scrollTo( top, index = null ) {
 			const target = Math.max( 0, Math.min( scroller.scrollHeight - scroller.clientHeight, top ) );
 			const distance = Math.abs( target - scroller.scrollTop );
 			if ( env.reducedMotion() || distance < 1 ) {
 				stop();
+				emit( { type: 'start', to: target, duration: 0 } );
 				jump( target );
+				emit( { type: 'end' } );
 				return;
 			}
 			const tokens = env.tokens();
@@ -211,6 +234,7 @@ export function createDeckMotion( scroller: DeckMotionScroller, env: DeckMotionE
 			if ( frame === null ) {
 				frame = env.requestFrame( tick );
 			}
+			emit( { type: 'start', to: target, duration } );
 		},
 	};
 }

@@ -1,3 +1,7 @@
+.newspack-deck {
+	--newspack-deck-closing-logo-pause: 300ms;
+}
+
 @media print {
 	.newspack-deck-nav {
 		display: none;
