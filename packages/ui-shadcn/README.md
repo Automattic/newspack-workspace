@@ -64,7 +64,7 @@ American Grotesk is licensed for Automattic domains only. The files are never co
 
 For a deck, import `styles/newspack-deck.css`, which `deck-section` ships.
 
-A deck moves between slides with a scripted scroll that follows the newspack-motion travel rule: `--newspack-ui-duration-modal` up to 240px, then 1ms more for every 4px, up to 450ms, on `--newspack-ui-ease-drawer`. Under reduced motion it jumps. A wheel, a touch or a scrolling key the deck does not handle stops it. A `scroll-behavior` set on the deck has no effect on slide changes. The dot fill fades on `--newspack-ui-duration-color` and `--newspack-ui-ease-color`.
+A deck moves between slides with a scripted scroll that follows the newspack-motion travel rule: `--newspack-ui-duration-modal` up to 240px, then 1ms more for every 4px, up to 450ms, on `--newspack-ui-ease-drawer`. Under reduced motion it jumps. A wheel, a touch, a press on the deck's scrollbar or a scrolling key the deck does not handle stops it. A `scroll-behavior` set on the deck has no effect on slide changes. The dot fill fades on `--newspack-ui-duration-color` and `--newspack-ui-ease-color`.
 
 `brand.css` must be imported after `@import "tailwindcss"`, otherwise preflight's heading reset wins over the brand heading styles.
 
