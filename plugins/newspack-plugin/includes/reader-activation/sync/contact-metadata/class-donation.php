@@ -194,7 +194,6 @@ class Donation extends Subscription {
 		return $this->one_time_donation_order_cache;
 	}
 
-
 	/**
 	 * Get the donor status label.
 	 *

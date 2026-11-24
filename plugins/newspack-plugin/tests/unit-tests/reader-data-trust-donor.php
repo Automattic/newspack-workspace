@@ -53,8 +53,7 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$orders_database        = [];
 		$subscriptions_database = [];
 		$this->user_id             = $this->factory()->user->create();
-		$this->donation_product_id = $this->factory()->post->create( [ 'post_type' => 'product' ] );
-		update_post_meta( $this->donation_product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		$this->donation_product_id = $this->create_flagged_product( 'simple' );
 		// The teams tests leave this override set, and it makes the renewal mock
 		// ignore the `_subscription_renewal` meta these fixtures rely on.
 		unset( $GLOBALS['teams_mock_is_renewal'] );
@@ -150,6 +149,26 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Create a donation-flagged product the product mock can load.
+	 *
+	 * @param string $type Product type.
+	 *
+	 * @return int Product ID.
+	 */
+	private function create_flagged_product( $type ) {
+		global $products_database;
+		$product_id = $this->factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $product_id, WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		$products_database[ $product_id ] = new WC_Product(
+			[
+				'id'   => $product_id,
+				'type' => $type,
+			]
+		);
+		return $product_id;
+	}
+
+	/**
 	 * A one-time donation order makes the user a donor.
 	 */
 	public function test_one_time_donor_recomputed_true() {
@@ -157,6 +176,18 @@ class Newspack_Test_Reader_Data_Trust_Donor extends WP_UnitTestCase {
 		$this->create_donation_order();
 
 		$this->assertTrue( Donations::compute_is_donor( $this->user_id ) );
+	}
+
+	/**
+	 * An order holding only a recurring donation product that no subscription
+	 * links any more is not a one-time gift.
+	 */
+	public function test_unlinked_recurring_donation_order_is_not_a_donor() {
+		$this->set_tracking( true );
+		$this->donation_product_id = $this->create_flagged_product( 'subscription' );
+		$this->create_donation_order();
+
+		$this->assertFalse( Donations::compute_is_donor( $this->user_id ) );
 	}
 
 	/**

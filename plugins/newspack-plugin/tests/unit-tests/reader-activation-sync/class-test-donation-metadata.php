@@ -609,9 +609,16 @@ class Test_Donation_Metadata extends WP_UnitTestCase {
 		$this->assertSame( '', $metadata['Donor_Status'] );
 	}
 
-	public function test_any_flagged_donation_product_makes_a_one_time_donor() {
+	public function test_any_flagged_one_time_product_makes_a_one_time_donor() {
+		global $products_database;
 		$flagged_product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
 		update_post_meta( $flagged_product_id, \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		$products_database[ $flagged_product_id ] = new WC_Product(
+			[
+				'id'   => $flagged_product_id,
+				'type' => 'simple',
+			]
+		);
 		Donations::reset_flagged_donation_product_ids_cache();
 		$this->create_donation_order_with_status( 'completed', $flagged_product_id );
 

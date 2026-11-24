@@ -1082,7 +1082,7 @@ class Donations {
 				}
 				$seen_ids[ $order->get_id() ] = true;
 				$seen_any_new                 = true;
-				if ( ! self::is_donation_order( $order ) || ! self::holds_one_time_donation_product( $order ) ) {
+				if ( ! self::holds_one_time_donation_product( $order ) ) {
 					continue;
 				}
 				if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
@@ -1100,9 +1100,9 @@ class Donations {
 	/**
 	 * Whether the order holds a donation product that is not a subscription product.
 	 *
-	 * Renewal, switch and other subscription orders carry the recurring donation
-	 * product. Leaving them out keeps a donation edit, whose switch order often
-	 * totals 0.00, from passing as the reader's latest one-time gift.
+	 * Orders still linked to a subscription are left out by the caller. This
+	 * covers the ones nothing links any more, such as those of a deleted
+	 * subscription, which would otherwise pass as one-time gifts.
 	 *
 	 * @param \WC_Order $order Order object.
 	 *
@@ -1110,14 +1110,14 @@ class Donations {
 	 */
 	private static function holds_one_time_donation_product( $order ) {
 		if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
-			return true;
+			return self::is_donation_order( $order );
 		}
 		foreach ( $order->get_items() as $item ) {
 			$product_id = $item->get_product_id();
 			if ( ! self::is_donation_product( $product_id ) ) {
 				continue;
 			}
-			// A product that no longer loads can't be told apart, so it counts.
+			// Defensive: a product that doesn't load can't be told apart, so it counts.
 			$product = \wc_get_product( $product_id );
 			if ( ! $product || ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
 				return true;
