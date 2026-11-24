@@ -103,7 +103,7 @@
 	}
 
 	& &__helper-text--success > svg {
-		fill: var(--newspack-ui-color-success);
+		color: var(--newspack-ui-color-success);
 	}
 
 	& &__inline-error {

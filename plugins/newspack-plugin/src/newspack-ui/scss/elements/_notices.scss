@@ -1,7 +1,7 @@
 @use "../mixins";
 
 %newspack-ui-notice-icon {
-	fill: var(--newspack-ui-notice-icon-color);
+	color: var(--newspack-ui-notice-icon-color);
 	flex: none;
 	height: var(--newspack-ui-spacer-5);
 	margin-inline: calc(var(--newspack-ui-spacer-half) / -2);
@@ -265,7 +265,7 @@
 
 				svg {
 					display: block;
-					fill: var(--newspack-ui-color-inverse-ink);
+					color: var(--newspack-ui-color-inverse-ink);
 					height: var(--newspack-ui-spacer-5);
 					width: var(--newspack-ui-spacer-5);
 				}

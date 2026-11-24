@@ -137,7 +137,7 @@ body.toplevel_page_newspack-story-budget {
 			justify-content: center;
 			gap: 4px;
 			svg {
-				fill: var(--wp-admin-color-alert-red);
+				color: var(--wp-admin-color-alert-red);
 			}
 		}
 		&__popover .components-popover__content {
@@ -169,7 +169,6 @@ body.toplevel_page_newspack-story-budget {
 		}
 		.newspack-story-budget__table-row-field-error {
 			color: wp-colors.$alert-red;
-			fill: wp-colors.$alert-red;
 		}
 		.newspack-story-budget__field--date {
 			.newspack-story-budget__field__button,
