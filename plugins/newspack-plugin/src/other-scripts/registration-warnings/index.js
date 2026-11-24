@@ -7,9 +7,8 @@
  * and shows or hides them as the checkbox and the role dropdown change.
  *
  * It reads out changes through the `wp.a11y` global instead of importing
- * `@wordpress/a11y`: an import is bundled as a module shared with other
- * entries, which webpack moves into Newspack's commons chunk, and that chunk
- * isn't loaded on this core screen, so the script would never run.
+ * `@wordpress/a11y`: with the import, the built script waited on Newspack's
+ * commons chunk, which isn't loaded on this core screen, so it never ran.
  */
 
 function init() {
@@ -27,6 +26,18 @@ function init() {
 
 	const roleTitle = roleNotice.querySelector( 'strong' );
 	const roleBody = roleNotice.querySelectorAll( 'p' )[ 1 ];
+	const riskyRoles = data.riskyRoles || {};
+
+	/**
+	 * The warning for a role, looked up only among the roles PHP listed, so a
+	 * slug such as "constructor" can't match a built-in object property.
+	 *
+	 * @param {string} role Role slug.
+	 * @return {Object|undefined} The role's title and body, if it can edit posts.
+	 */
+	function getRoleWarning( role ) {
+		return Object.prototype.hasOwnProperty.call( riskyRoles, role ) ? riskyRoles[ role ] : undefined;
+	}
 
 	/**
 	 * Show or hide a warning, and return what to read out: the warning's text
@@ -43,7 +54,10 @@ function init() {
 		if ( ! visible || ! ( appeared || changed ) ) {
 			return '';
 		}
-		return Array.from( notice.querySelectorAll( 'p' ), paragraph => paragraph.textContent.trim() ).join( ' ' );
+		// The title has no closing punctuation; a period keeps it a sentence when read aloud.
+		return Array.from( notice.querySelectorAll( 'p' ), paragraph => paragraph.textContent.trim() )
+			.map( text => ( /[.!?]$/.test( text ) ? text : `${ text }.` ) )
+			.join( ' ' );
 	}
 
 	/**
@@ -57,7 +71,7 @@ function init() {
 		const isOpen = checkbox.checked;
 		const botMessage = setVisible( botNotice, isOpen && ! data.hasBotProtection, false );
 
-		const roleWarning = isOpen ? data.riskyRoles?.[ roleSelect.value ] : undefined;
+		const roleWarning = isOpen ? getRoleWarning( roleSelect.value ) : undefined;
 		let changed = false;
 		if ( roleWarning && roleTitle && roleBody && roleTitle.textContent !== roleWarning.title ) {
 			roleTitle.textContent = roleWarning.title;
