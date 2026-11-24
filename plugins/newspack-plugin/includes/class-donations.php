@@ -1046,7 +1046,8 @@ class Donations {
 	 * when it is paid (`processing` or `completed`) and holds a donation product,
 	 * and, while WooCommerce Subscriptions is active, is not a subscription's
 	 * parent, renewal, switch or resubscribe order: those count only through an
-	 * active subscription.
+	 * active subscription. An order whose only donation products are recurring
+	 * ones does not count either, even when nothing links it to a subscription.
 	 *
 	 * @param int $user_id User ID.
 	 *
@@ -1081,7 +1082,7 @@ class Donations {
 				}
 				$seen_ids[ $order->get_id() ] = true;
 				$seen_any_new                 = true;
-				if ( ! self::is_donation_order( $order ) ) {
+				if ( ! self::is_donation_order( $order ) || ! self::holds_one_time_donation_product( $order ) ) {
 					continue;
 				}
 				if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
@@ -1094,6 +1095,35 @@ class Donations {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether the order holds a donation product that is not a subscription product.
+	 *
+	 * Renewal, switch and other subscription orders carry the recurring donation
+	 * product. Leaving them out keeps a donation edit, whose switch order often
+	 * totals 0.00, from passing as the reader's latest one-time gift.
+	 *
+	 * @param \WC_Order $order Order object.
+	 *
+	 * @return bool
+	 */
+	private static function holds_one_time_donation_product( $order ) {
+		if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+			return true;
+		}
+		foreach ( $order->get_items() as $item ) {
+			$product_id = $item->get_product_id();
+			if ( ! self::is_donation_product( $product_id ) ) {
+				continue;
+			}
+			// A product that no longer loads can't be told apart, so it counts.
+			$product = \wc_get_product( $product_id );
+			if ( ! $product || ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
