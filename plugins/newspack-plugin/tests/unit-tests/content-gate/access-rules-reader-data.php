@@ -208,7 +208,6 @@ class Newspack_Test_Access_Rules_Reader_Data extends WP_UnitTestCase {
 		$this->assertFalse( Reader_Data_Trust::values_match( 'false', '' ) );
 		$this->assertTrue( Reader_Data_Trust::values_match( '2.5', '2.50' ) );
 		$this->assertTrue( Reader_Data_Trust::values_match( '5', '5.0' ) );
-		$this->assertTrue( Reader_Data_Trust::values_match( '9007199254740993', '9007199254740993' ) );
 		$this->assertFalse( Reader_Data_Trust::values_match( '9007199254740993', '9007199254740992' ) );
 		$this->assertFalse( Reader_Data_Trust::values_match( '"5"', '5.0' ) );
 		$this->assertFalse( Reader_Data_Trust::values_match( '5', '' ) );

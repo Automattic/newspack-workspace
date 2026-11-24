@@ -335,7 +335,7 @@ final class Reader_Data_Trust {
 			return ( $decoded ? 'true' : 'false' ) === $rule_value;
 		}
 		if ( is_int( $decoded ) || is_float( $decoded ) ) {
-			// Floats lose integer precision above 2^53, so whole numbers compare exactly.
+			// Floats lose integer precision above 2^53, so plain whole numbers compare exactly.
 			$rule_int = filter_var( $rule_value, FILTER_VALIDATE_INT );
 			if ( is_int( $decoded ) && false !== $rule_int ) {
 				return $decoded === $rule_int;
