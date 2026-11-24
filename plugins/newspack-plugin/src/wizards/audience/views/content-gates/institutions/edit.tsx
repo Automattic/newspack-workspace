@@ -458,79 +458,81 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 					) }
 				/>
 				<SplitSection.Content>
-					<CardSettingsGroup
-						title={ __( 'Email Domain', 'newspack-plugin' ) }
-						description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
-						icon={ envelope }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_email_domain }
-						onEnable={ () => toggleRule( 'np_institution_email_domain' ) }
-					>
-						<CardBody size="small">
-							<TextControl
-								label={ __( 'Domains (comma-separated)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ emailDomain }
-								onChange={ ( val: string ) => updateMeta( 'np_institution_email_domain', val ) }
-								placeholder="university.edu, school.org"
-							/>
-						</CardBody>
-					</CardSettingsGroup>
+					<Stack direction="column" gap="lg">
+						<CardSettingsGroup
+							title={ __( 'Email Domain', 'newspack-plugin' ) }
+							description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
+							icon={ envelope }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_email_domain }
+							onEnable={ () => toggleRule( 'np_institution_email_domain' ) }
+						>
+							<CardBody size="small">
+								<TextControl
+									label={ __( 'Domains (comma-separated)', 'newspack-plugin' ) }
+									withMargin={ false }
+									value={ emailDomain }
+									onChange={ ( val: string ) => updateMeta( 'np_institution_email_domain', val ) }
+									placeholder="university.edu, school.org"
+								/>
+							</CardBody>
+						</CardSettingsGroup>
 
-					<CardSettingsGroup
-						title={ __( 'IP Range', 'newspack-plugin' ) }
-						description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
-						icon={ globe }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_ip_range }
-						onEnable={ () => toggleRule( 'np_institution_ip_range' ) }
-					>
-						<CardBody size="small">
-							<TextControl
-								label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ ipRange }
-								onChange={ updateIpRange }
-								onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
-									setIpRangeAnalysis( analyzeIpRangeEntries( event.target.value ) )
-								}
-								placeholder="198.51.100.0/24, 203.0.113.0-203.0.113.255, 203.0.113.5"
-								aria-describedby={ IP_RANGE_MESSAGES_ID }
-								aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
-							/>
-							{ /* Always rendered so it is an established live region by the time a warning appears. */ }
-							<Stack
-								id={ IP_RANGE_MESSAGES_ID }
-								role="status"
-								direction="column"
-								gap="sm"
-								className="newspack-content-gates__stack newspack-content-gates__rule-messages"
-							>
-								{ ipRangeWarnings.map( warning => (
-									<Notice key={ warning } isWarning noticeText={ warning } />
-								) ) }
-							</Stack>
-						</CardBody>
-					</CardSettingsGroup>
+						<CardSettingsGroup
+							title={ __( 'IP Range', 'newspack-plugin' ) }
+							description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
+							icon={ globe }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_ip_range }
+							onEnable={ () => toggleRule( 'np_institution_ip_range' ) }
+						>
+							<CardBody size="small">
+								<TextControl
+									label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
+									withMargin={ false }
+									value={ ipRange }
+									onChange={ updateIpRange }
+									onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
+										setIpRangeAnalysis( analyzeIpRangeEntries( event.target.value ) )
+									}
+									placeholder="198.51.100.0/24, 203.0.113.0-203.0.113.255, 203.0.113.5"
+									aria-describedby={ IP_RANGE_MESSAGES_ID }
+									aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
+								/>
+								{ /* Always rendered so it is an established live region by the time a warning appears. */ }
+								<Stack
+									id={ IP_RANGE_MESSAGES_ID }
+									role="status"
+									direction="column"
+									gap="sm"
+									className="newspack-content-gates__stack newspack-content-gates__rule-messages"
+								>
+									{ ipRangeWarnings.map( warning => (
+										<Notice key={ warning } isWarning noticeText={ warning } />
+									) ) }
+								</Stack>
+							</CardBody>
+						</CardSettingsGroup>
 
-					<CardSettingsGroup
-						title={ __( 'Reader Data', 'newspack-plugin' ) }
-						description={ __( 'Match readers by custom metadata', 'newspack-plugin' ) }
-						icon={ customPostType }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_reader_data }
-						onEnable={ () => toggleRule( 'np_institution_reader_data' ) }
-					>
-						<CardBody size="small">
-							<TextControl
-								label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ readerData }
-								onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
-								placeholder="org=university;role=staff"
-							/>
-						</CardBody>
-					</CardSettingsGroup>
+						<CardSettingsGroup
+							title={ __( 'Reader Data', 'newspack-plugin' ) }
+							description={ __( 'Match readers by custom metadata', 'newspack-plugin' ) }
+							icon={ customPostType }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_reader_data }
+							onEnable={ () => toggleRule( 'np_institution_reader_data' ) }
+						>
+							<CardBody size="small">
+								<TextControl
+									label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+									withMargin={ false }
+									value={ readerData }
+									onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
+									placeholder="org=university;role=staff"
+								/>
+							</CardBody>
+						</CardSettingsGroup>
+					</Stack>
 				</SplitSection.Content>
 			</SplitSection.Root>
 		</div>
