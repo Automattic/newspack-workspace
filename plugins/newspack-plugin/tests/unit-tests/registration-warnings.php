@@ -219,7 +219,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 
 		$warning = Registration_Warnings::get_role_warning( 'staff_writer' );
 		$this->assertSame( 'Anyone can register with the "Staff Writer" role', $warning['title'] );
-		$this->assertSame( 'This role can write posts. Anyone who registers will have this ability, including spammers. Choose Subscriber unless the users who sign up here need to write posts.', $warning['body'] );
+		$this->assertSame( 'This role can write posts. With "Anyone can register" checked, anyone who registers will have this ability, including spammers. Uncheck "Anyone can register", or choose Subscriber unless the users who sign up here need to write posts.', $warning['body'] );
 	}
 
 	/**
@@ -242,7 +242,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$this->add_test_role( 'staff_publisher', 'Staff Publisher', $caps );
 		$warning = Registration_Warnings::get_role_warning( 'staff_publisher' );
 		$this->assertSame( 'Anyone can register with the "Staff Publisher" role', $warning['title'] );
-		$this->assertSame( 'This role can publish posts or upload files. Anyone who registers will have these abilities, including spammers. Choose Subscriber unless the users who sign up here need to publish posts.', $warning['body'] );
+		$this->assertSame( 'This role can publish posts or upload files. With "Anyone can register" checked, anyone who registers will have these abilities, including spammers. Uncheck "Anyone can register", or choose Subscriber unless the users who sign up here need to publish posts.', $warning['body'] );
 	}
 
 	/**
@@ -253,22 +253,22 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 			'contributor'   => [
 				'contributor',
 				'Anyone can register as a Contributor',
-				'Contributors can write posts for review. Anyone who registers will have this ability, including spammers. Choose Subscriber unless the users who sign up here need to write posts.',
+				'Contributors can write posts for review. With "Anyone can register" checked, anyone who registers will have this ability, including spammers. Uncheck "Anyone can register", or choose Subscriber unless the users who sign up here need to write posts.',
 			],
 			'author'        => [
 				'author',
 				'Anyone can register as an Author',
-				'Authors can publish posts without approval and upload files. Anyone who registers will have these abilities, including spammers. Choose Subscriber unless the users who sign up here need to publish posts.',
+				'Authors can publish posts without approval and upload files. With "Anyone can register" checked, anyone who registers will have these abilities, including spammers. Uncheck "Anyone can register", or choose Subscriber unless the users who sign up here need to publish posts.',
 			],
 			'editor'        => [
 				'editor',
 				'Anyone can register as an Editor',
-				'Editors can publish and change any post. Anyone who registers will have these abilities, including spammers. Choose Subscriber.',
+				'Editors can publish and change any post. With "Anyone can register" checked, anyone who registers will have these abilities, including spammers. Uncheck "Anyone can register", or choose Subscriber.',
 			],
 			'administrator' => [
 				'administrator',
 				'Anyone can register as an Administrator',
-				'Administrators can change any setting, add users and install plugins. Anyone who registers will have these abilities, including spammers. Choose Subscriber.',
+				'Administrators can change any setting, add users and install plugins. With "Anyone can register" checked, anyone who registers will have these abilities, including spammers. Uncheck "Anyone can register", or choose Subscriber.',
 			],
 		];
 	}

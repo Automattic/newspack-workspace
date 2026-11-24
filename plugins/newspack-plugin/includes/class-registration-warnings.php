@@ -359,8 +359,10 @@ final class Registration_Warnings {
 		$display_name = isset( $role_names[ $role ] ) ? translate_user_role( $role_names[ $role ] ) : $role;
 		$severity     = self::get_role_severity( $role );
 		$reach        = 'warning' === $severity
-			? __( 'Anyone who registers will have this ability, including spammers.', 'newspack-plugin' )
-			: __( 'Anyone who registers will have these abilities, including spammers.', 'newspack-plugin' );
+			/* translators: "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+			? __( 'With "Anyone can register" checked, anyone who registers will have this ability, including spammers.', 'newspack-plugin' )
+			/* translators: "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+			: __( 'With "Anyone can register" checked, anyone who registers will have these abilities, including spammers.', 'newspack-plugin' );
 
 		return [
 			'title'    => self::get_role_title( $role, $display_name ),
@@ -464,8 +466,9 @@ final class Registration_Warnings {
 	}
 
 	/**
-	 * Which role to choose instead. Editor and Administrator get no exception,
-	 * since no site means to give the public either role.
+	 * The two ways out: close registration, or choose a safer role. Editor and
+	 * Administrator get no exception, since no site means to give the public
+	 * either role.
 	 *
 	 * @param string $role     Role slug.
 	 * @param string $severity The role's severity.
@@ -474,15 +477,15 @@ final class Registration_Warnings {
 	private static function get_role_advice( $role, $severity ) {
 		$subscriber = translate_user_role( 'Subscriber' );
 		if ( in_array( $role, [ 'editor', 'administrator' ], true ) ) {
-			/* translators: %s: the Subscriber role's name. */
-			return sprintf( __( 'Choose %s.', 'newspack-plugin' ), $subscriber );
+			/* translators: %s: the Subscriber role's name. "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+			return sprintf( __( 'Uncheck "Anyone can register", or choose %s.', 'newspack-plugin' ), $subscriber );
 		}
 		if ( 'warning' === $severity ) {
-			/* translators: %s: the Subscriber role's name. */
-			return sprintf( __( 'Choose %s unless the users who sign up here need to write posts.', 'newspack-plugin' ), $subscriber );
+			/* translators: %s: the Subscriber role's name. "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+			return sprintf( __( 'Uncheck "Anyone can register", or choose %s unless the users who sign up here need to write posts.', 'newspack-plugin' ), $subscriber );
 		}
-		/* translators: %s: the Subscriber role's name. */
-		return sprintf( __( 'Choose %s unless the users who sign up here need to publish posts.', 'newspack-plugin' ), $subscriber );
+		/* translators: %s: the Subscriber role's name. "Anyone can register" is WordPress's label for the Membership checkbox; use WordPress's translation of it. */
+		return sprintf( __( 'Uncheck "Anyone can register", or choose %s unless the users who sign up here need to publish posts.', 'newspack-plugin' ), $subscriber );
 	}
 }
 Registration_Warnings::init();
