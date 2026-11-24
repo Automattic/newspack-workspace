@@ -351,6 +351,25 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A donation subscription the reader switched away from counts toward no kind,
+	 * as on the donor badge, so it doesn't outrank the cancelled replacement: the
+	 * reader is a former donor, and their original gift order doesn't make them a
+	 * donor again.
+	 */
+	public function test_a_switched_subscription_does_not_outrank_an_ended_one() {
+		$reader_id = $this->create_reader();
+		$this->create_subscription( $reader_id, 'switched' );
+		$this->create_subscription( $reader_id, 'cancelled' );
+		$this->create_order( $reader_id );
+
+		$message = $this->run_backfill();
+
+		$this->assertTrue( Reader_Data::get_bool( $reader_id, 'is_former_donor' ) );
+		$this->assertFalse( Reader_Data::get_bool( $reader_id, 'is_donor' ) );
+		$this->assertSame( 'Flagged 0 donor(s) and 1 former donor(s). 0 already flagged; 0 guest order(s) skipped.', $message );
+	}
+
+	/**
 	 * A reader who already has a flag keeps it, even with a donation order that
 	 * would otherwise flag them the other way.
 	 */

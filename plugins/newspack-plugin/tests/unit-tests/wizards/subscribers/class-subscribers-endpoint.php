@@ -2777,6 +2777,45 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A donation subscription the reader switched away from (WooCommerce
+	 * Subscriptions status `switched`) counts toward no kind, on the row and in the
+	 * filter, as in the ESP sync's donor status. Its mapped status is on hold, which
+	 * would otherwise read as a live donation. The other subscriptions decide.
+	 *
+	 * @dataProvider data_switched_donation_histories
+	 *
+	 * @param string[] $statuses The raw statuses of the reader's donation subscriptions.
+	 * @param string   $kind     The kind the reader's row reads.
+	 */
+	public function test_a_switched_donation_subscription_counts_toward_no_kind( array $statuses, string $kind ) {
+		$this->login_admin();
+		$product_id = $this->create_donation_product();
+		$reader_id  = $this->create_reader( 'Switched Donor' );
+		foreach ( $statuses as $status ) {
+			$this->create_individual_subscription( $reader_id, $status, $product_id );
+		}
+
+		$this->assertSame( $kind, $this->list_row( $reader_id )['donor']['kind'] );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'donor' => [ '' === $kind ? 'none' : $kind ] ] ), 'The filter lists the reader under the kind the row reads.' );
+		if ( Subscribers_Donors::KIND_RECURRING !== $kind ) {
+			$this->assertSame( [], $this->filtered_ids( [ 'donor' => [ Subscribers_Donors::KIND_RECURRING ] ] ), 'The switched subscription is not a live donation.' );
+		}
+	}
+
+	/**
+	 * Donation histories with a switched subscription, and the kind each reads.
+	 *
+	 * @return array[]
+	 */
+	public function data_switched_donation_histories() {
+		return [
+			'switched only'                   => [ [ 'switched' ], '' ],
+			'switched, replacement cancelled' => [ [ 'switched', 'cancelled' ], Subscribers_Donors::KIND_FORMER ],
+			'switched, replacement active'    => [ [ 'switched', 'active' ], Subscribers_Donors::KIND_RECURRING ],
+		];
+	}
+
+	/**
 	 * The donor scan reads live donation subscriptions first, so pending and ended
 	 * ones, however many and however old, can't use up the budget before a live one
 	 * is read. Whatever budget the live ones leave goes to the ended ones, so past

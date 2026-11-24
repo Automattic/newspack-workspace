@@ -91,7 +91,7 @@ class Subscribers_Donors {
 	 * `Donor_Status` field uses, so the dashboard and the publisher's ESP agree):
 	 *
 	 *   1. Recurring: holds a donation subscription whose mapped status is
-	 *      `active` or `on-hold`.
+	 *      `active` or `on-hold`, other than a `switched` one.
 	 *   2. Former: holds a donation subscription whose mapped status is
 	 *      `cancelled` (WooCommerce `cancelled` or `expired`), or has the
 	 *      `is_former_donor` flag.
@@ -99,11 +99,14 @@ class Subscribers_Donors {
 	 *      subscription.
 	 *   4. None: everyone else.
 	 *
-	 * A `pending` donation subscription never took its first payment, so it counts
-	 * toward no kind, and it doesn't stop a real one-time donor reading as
-	 * One-time. Former wins over One-time: a reader who gave once and later
-	 * cancelled a recurring donation stays Former even if a later one-time gift set
-	 * `is_donor` again.
+	 * Two donation subscriptions count toward no kind. A `pending` one never took
+	 * its first payment. A `switched` one is the subscription a reader switched
+	 * away from: the ESP sync counts it neither active nor former, and the
+	 * replacement subscription carries the donation on. Its mapped status is
+	 * `on-hold`, so the rule reads the raw status to leave it out. Neither stops a
+	 * real one-time donor reading as One-time. Former wins over One-time: a reader
+	 * who gave once and later cancelled a recurring donation stays Former even if
+	 * a later one-time gift set `is_donor` again.
 	 *
 	 * Two edges are deliberate. An unpaid, cancelled donation subscription (an
 	 * abandoned recurring checkout) reads as Former, as it does in the ESP, because
@@ -125,8 +128,9 @@ class Subscribers_Donors {
 	 *   - Newspack\CLI\Donors::backfill() — the support command that flags donors
 	 *     from before the flag existed, so they land in the kind this returns.
 	 *
-	 * The live/ended split in rules 1 and 2 is written once, in bucket(), which
-	 * holders() and scanned_statuses() share.
+	 * The live/ended split in rules 1 and 2, and the statuses that count toward no
+	 * kind, are written once, in bucket(), which holders() and scanned_statuses()
+	 * share.
 	 *
 	 * The client reads `donor.kind` and never re-derives it, but it has to know
 	 * the kinds: src/wizards/subscribers/donor.js holds the labels, the badge
@@ -140,9 +144,9 @@ class Subscribers_Donors {
 	 * check is_enabled() first.
 	 *
 	 * @param int      $user_id           The reader's user ID.
-	 * @param string[] $donation_statuses The mapped statuses
-	 *                                    (Subscribers_Wizard::map_subscription_status())
-	 *                                    of the donation subscriptions the reader holds.
+	 * @param string[] $donation_statuses The raw WooCommerce Subscriptions statuses,
+	 *                                    without the `wc-` prefix, of the donation
+	 *                                    subscriptions the reader holds.
 	 *
 	 * @return string One of the KIND_* constants, or '' for a reader who isn't a donor.
 	 */
@@ -161,15 +165,23 @@ class Subscribers_Donors {
 	}
 
 	/**
-	 * Whether a donation subscription with this mapped status is live or ended.
+	 * Whether a donation subscription in this status is live or ended.
 	 *
-	 * @param string $mapped_status A status from Subscribers_Wizard::map_subscription_status().
+	 * A `switched` subscription counts toward no kind (see kind()), so it is left
+	 * out before the status is mapped. Every other status is placed by its mapped
+	 * status (Subscribers_Wizard::map_subscription_status()), as the row shows it.
 	 *
-	 * @return string `live` for `active` and `on-hold`, `ended` for `cancelled`, or
-	 *                '' for a status that counts toward no kind, such as `pending`.
+	 * @param string $status A raw WooCommerce Subscriptions status, without the `wc-` prefix.
+	 *
+	 * @return string `live` for a mapped `active` or `on-hold`, `ended` for a mapped
+	 *                `cancelled`, or '' for a status that counts toward no kind:
+	 *                `pending` and `switched`.
 	 */
-	private static function bucket( string $mapped_status ): string {
-		return match ( $mapped_status ) {
+	private static function bucket( string $status ): string {
+		if ( 'switched' === $status ) {
+			return '';
+		}
+		return match ( Subscribers_Wizard::map_subscription_status( $status ) ) {
 			'active', 'on-hold' => 'live',
 			'cancelled'         => 'ended',
 			default             => '',
@@ -255,14 +267,14 @@ class Subscribers_Donors {
 	/**
 	 * The subscription statuses the donor scan reads, as live and ended.
 	 *
-	 * Each status WooCommerce Subscriptions registers is placed by its mapped
-	 * status through bucket(), as kind() reads it: `active` and `on-hold` are live,
-	 * `cancelled` is ended, and `pending` is neither. Placing by the mapped status,
-	 * not a fixed list of raw ones, keeps a status another plugin registers where
-	 * the row puts it: on hold, so live. Statuses WooCommerce Subscriptions doesn't
-	 * register, such as the trash, are never read. The row never sees a trashed
-	 * subscription either, because WooCommerce Subscriptions leaves it out of a
-	 * reader's list.
+	 * Each status WooCommerce Subscriptions registers is placed through bucket(),
+	 * as kind() reads it: `active` and `on-hold` are live, `cancelled` is ended,
+	 * and `pending` and `switched` are neither, so they are never read. Placing by
+	 * the mapped status, not a fixed list of raw ones, keeps a status another
+	 * plugin registers where the row puts it: on hold, so live. Statuses
+	 * WooCommerce Subscriptions doesn't register, such as the trash, are never
+	 * read. The row never sees a trashed subscription either, because WooCommerce
+	 * Subscriptions leaves it out of a reader's list.
 	 *
 	 * @return array{live:string[],ended:string[]} Statuses without the `wc-` prefix.
 	 */
@@ -273,7 +285,7 @@ class Subscribers_Donors {
 		];
 		foreach ( array_keys( \wcs_get_subscription_statuses() ) as $key ) {
 			$status = str_starts_with( $key, 'wc-' ) ? substr( $key, 3 ) : $key;
-			$bucket = self::bucket( Subscribers_Wizard::map_subscription_status( $status ) );
+			$bucket = self::bucket( $status );
 			if ( '' !== $bucket ) {
 				$statuses[ $bucket ][] = $status;
 			}
@@ -289,8 +301,8 @@ class Subscribers_Donors {
 	 * subscription counts for its holder, so a gift counts for its recipient, and a
 	 * group subscription counts for no one, because the row shows it with the
 	 * reader's groups. Only the statuses scanned_statuses() lists are read, so a
-	 * pending subscription, or one in the trash, counts for no one. Each
-	 * subscription read is still placed by its own mapped status through bucket(),
+	 * pending or switched subscription, or one in the trash, counts for no one.
+	 * Each subscription read is still placed by its own status through bucket(),
 	 * as kind() reads it, in case it changed after the query found it.
 	 *
 	 * Subscriptions managed on other network sites carry no product data, so they
@@ -340,7 +352,7 @@ class Subscribers_Donors {
 				$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
 				Subscribers_Wizard::prime_gift_recipients( $subscriptions );
 				foreach ( $subscriptions as $subscription ) {
-					$bucket = self::bucket( Subscribers_Wizard::map_subscription_status( $subscription->get_status() ) );
+					$bucket = self::bucket( $subscription->get_status() );
 					if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
 						continue;
 					}

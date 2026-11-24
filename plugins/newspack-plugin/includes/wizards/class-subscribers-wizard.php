@@ -1682,11 +1682,25 @@ class Subscribers_Wizard extends Wizard {
 		// Off WooCommerce the key is absent, not empty, so a site that can't tell
 		// donors apart never shows a half-answer.
 		if ( Subscribers_Donors::is_enabled() ) {
-			// The rules read the mapped status of each donation subscription the reader
-			// holds. Network entries are never marked as donations, so they don't count.
-			$donations = array_filter( $subscriptions, fn( $subscription ) => ! empty( $subscription['isDonation'] ) );
+			// The rules read the raw status of each donation subscription the reader
+			// holds: an entry carries only the mapped one, which files a `switched`
+			// subscription under on hold. So each donation entry is matched back to the
+			// subscription it came from by ID. Network entries are never marked as
+			// donations, so they don't count.
+			$raw_statuses = [];
+			foreach ( $owned_subscriptions as $subscription ) {
+				if ( $subscription instanceof \WC_Subscription ) {
+					$raw_statuses[ (int) $subscription->get_id() ] = $subscription->get_status();
+				}
+			}
+			$donation_statuses = [];
+			foreach ( $subscriptions as $entry ) {
+				if ( ! empty( $entry['isDonation'] ) && isset( $raw_statuses[ $entry['id'] ] ) ) {
+					$donation_statuses[] = $raw_statuses[ $entry['id'] ];
+				}
+			}
 
-			$donor_kind = Subscribers_Donors::kind( $user_id, array_column( $donations, 'status' ) );
+			$donor_kind = Subscribers_Donors::kind( $user_id, $donation_statuses );
 
 			// Only a One-time donor has a single gift worth linking. The other kinds
 			// already show their donation subscription, and an order lookup for them
@@ -2921,9 +2935,9 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * Each input is bounded. At most FILTER_INCLUDE_CAP donation subscriptions are
 	 * scanned in total, across every donation product, live ones first and ended
-	 * ones with whatever budget is left; pending and trashed ones are never read
-	 * (see Subscribers_Donors::holders()). Up to the cap the live set is exact.
-	 * Past it, ended holders go missing first: a reader whose only ended
+	 * ones with whatever budget is left; pending, switched and trashed ones are
+	 * never read (see Subscribers_Donors::holders()). Up to the cap the live set is
+	 * exact. Past it, ended holders go missing first: a reader whose only ended
 	 * subscription wasn't scanned drops out of Former, or reads One-time if they
 	 * also carry the `is_donor` flag. Only once live donation subscriptions alone
 	 * pass the cap is a Recurring donor missing from Recurring, and because Former,
