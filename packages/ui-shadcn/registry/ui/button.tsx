@@ -16,7 +16,7 @@ const buttonVariants = cva(
     "active:scale-[0.97] active:bg-(--btn-bg-pressed) active:text-(color:--btn-ink-pressed) motion-reduce:active:scale-100",
     "focus-visible:transition-none focus-visible:[box-shadow:inset_0_0_0_2px_var(--btn-focus),0_0_0_var(--newspack-ui-focus-halo-width)_var(--newspack-ui-color-focus-halo)]",
     "disabled:pointer-events-none disabled:cursor-default disabled:scale-100 disabled:bg-(--btn-bg-disabled) disabled:text-(color:--btn-ink-disabled) disabled:shadow-none disabled:[--btn-focus:var(--btn-ink-disabled)]",
-    "[&_svg]:pointer-events-none [&_svg]:size-(--newspack-ui-spacer-5) [&_svg]:shrink-0",
+    "[&_svg]:pointer-events-none [&_svg]:size-(--newspack-ui-spacer-5) [&_svg]:my-[calc((var(--btn-lh)*var(--btn-fs)-var(--newspack-ui-spacer-5))/2)] [&_svg]:shrink-0",
   ],
   {
     variants: {
@@ -35,7 +35,7 @@ const buttonVariants = cva(
           "[--btn-bg:transparent] [--btn-bg-hover:var(--newspack-ui-color-neutral-fill)] [--btn-bg-pressed:var(--newspack-ui-color-neutral-fill-hover)] [--btn-bg-disabled:transparent] [--btn-ink:var(--newspack-ui-color-text)]",
         destructive:
           "[--btn-bg:var(--newspack-ui-color-destructive-fill)] [--btn-bg-hover:var(--newspack-ui-color-destructive-fill-hover)] [--btn-bg-pressed:var(--newspack-ui-color-destructive-fill-pressed)] [--btn-ink:var(--newspack-ui-color-destructive-ink)] [--btn-border:var(--newspack-ui-color-destructive-edge)] [--btn-focus:var(--newspack-ui-color-destructive-ink)]",
-        link: "min-h-0 rounded-[calc(var(--newspack-ui-radius-control)*0.5)] p-0 text-(length:--newspack-ui-font-size-small) leading-(--newspack-ui-line-height-small) font-(weight:--newspack-ui-font-weight-medium) text-(color:--newspack-ui-color-text) underline decoration-[color-mix(in_oklab,var(--newspack-ui-color-text)_50%,var(--newspack-ui-color-surface))] underline-offset-[3px] shadow-none hover:bg-transparent hover:decoration-(color:--newspack-ui-color-text) active:scale-100",
+        link: "min-h-0 rounded-[calc(var(--newspack-ui-radius-control)*0.5)] p-0 [--btn-fs:var(--newspack-ui-font-size-small)] [--btn-lh:var(--newspack-ui-line-height-small)] font-(weight:--newspack-ui-font-weight-medium) text-(color:--newspack-ui-color-text) underline decoration-[color-mix(in_oklab,var(--newspack-ui-color-text)_50%,var(--newspack-ui-color-surface))] underline-offset-[3px] shadow-none hover:bg-transparent hover:decoration-(color:--newspack-ui-color-text) active:scale-100",
       },
       size: {
         default: "",

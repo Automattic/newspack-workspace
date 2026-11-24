@@ -15,6 +15,9 @@ import { ThemeToggle, type ThemeToggleHandler } from './theme-toggle';
 const NAV_LINK =
 	'inline-flex min-h-(--newspack-ui-spacer-7) items-center rounded-(--newspack-ui-radius-control) px-(--newspack-ui-spacer-1) text-(length:--newspack-ui-font-size-small) font-(weight:--newspack-ui-font-weight-medium) text-(color:--newspack-ui-color-text-muted) no-underline transition-colors duration-(--newspack-ui-duration-color) ease-(--newspack-ui-ease-color) hover:bg-(color:--newspack-ui-color-neutral-fill) hover:text-(color:--newspack-ui-color-text) aria-[current=page]:text-(color:--newspack-ui-color-text) aria-[current=page]:underline aria-[current=page]:decoration-(color:--newspack-ui-color-accent) aria-[current=page]:decoration-(length:--site-nav-underline) aria-[current=page]:underline-offset-(--newspack-ui-spacer-1)';
 
+const WORDMARK =
+	'inline-flex min-w-0 items-center gap-(--newspack-ui-spacer-1) text-(length:--newspack-ui-font-size-body) font-(weight:--newspack-ui-font-weight-strong) tracking-(--newspack-ui-letter-spacing-title-m) whitespace-nowrap text-(color:--newspack-ui-color-text)';
+
 export function MenuIcon() {
 	return (
 		<>
@@ -96,6 +99,10 @@ function SiteMenu( { pathname, drawerSearch }: { pathname: string; drawerSearch?
  *   It sits in a centered flex row with a spacer-1 gap, so a mark and a name can be passed side
  *   by side. Text passed as a string ends in an ellipsis when it is too long; give a text element
  *   of your own `min-w-0 truncate` for the same.
+ * - `wordmarkLink`: `true` by default, so the wordmark is the link home. With `false` it is a
+ *   plain row with no link, and the wordmark brings its own, so it can hold an interactive island
+ *   (a link inside a link is invalid, and the home link's name would hide it from screen readers).
+ *   Without a `wordmark` the site name keeps its home link whatever this is set to.
  * - `search`: a search trigger shown from `md` up, such as the docs search button.
  * - `drawerSearch`: rendered at the top of the Sheet; call `close` when a result is followed.
  * - `menuButton`: replaces the Sheet and its button, such as the Fumadocs docs drawer button.
@@ -107,6 +114,7 @@ function SiteMenu( { pathname, drawerSearch }: { pathname: string; drawerSearch?
 export function SiteHeader( {
 	pathname,
 	wordmark,
+	wordmarkLink = true,
 	search,
 	drawerSearch,
 	menuButton,
@@ -116,6 +124,7 @@ export function SiteHeader( {
 }: {
 	pathname: string;
 	wordmark?: ReactNode;
+	wordmarkLink?: boolean;
 	search?: ReactNode;
 	drawerSearch?: ( close: () => void ) => ReactNode;
 	menuButton?: ReactNode;
@@ -125,6 +134,13 @@ export function SiteHeader( {
 } ) {
 	const mobile = useMobileMenu();
 	const current = currentLink( pathname );
+	const wordmarkRow = (
+		<span className="flex min-w-0 items-center gap-(--newspack-ui-spacer-1)">
+			{ Children.map( wordmark || SITE_NAME, ( child ) =>
+				typeof child === 'string' || typeof child === 'number' ? <span className="min-w-0 truncate">{ child }</span> : child
+			) }
+		</span>
+	);
 	return (
 		<>
 			{ skipTo !== false && <SkipLink href={ skipTo } /> }
@@ -135,17 +151,13 @@ export function SiteHeader( {
 				) }
 			>
 				<div className="mx-auto box-content flex h-full max-w-(--site-wide-width) items-center justify-between gap-(--newspack-ui-spacer-2) px-(--newspack-ui-spacer-3) min-[782px]:px-(--newspack-ui-spacer-6)">
-					<a
-						href="/"
-						aria-label={ wordmark ? SITE_NAME : undefined }
-						className="inline-flex min-w-0 items-center gap-(--newspack-ui-spacer-1) rounded-(--newspack-ui-radius-control) text-(length:--newspack-ui-font-size-body) font-(weight:--newspack-ui-font-weight-strong) tracking-(--newspack-ui-letter-spacing-title-m) whitespace-nowrap text-(color:--newspack-ui-color-text) no-underline"
-					>
-						<span className="flex min-w-0 items-center gap-(--newspack-ui-spacer-1)">
-							{ Children.map( wordmark ?? SITE_NAME, ( child ) =>
-								typeof child === 'string' || typeof child === 'number' ? <span className="min-w-0 truncate">{ child }</span> : child
-							) }
-						</span>
-					</a>
+					{ wordmarkLink || ! wordmark ? (
+						<a href="/" aria-label={ wordmark ? SITE_NAME : undefined } className={ cn( WORDMARK, 'rounded-(--newspack-ui-radius-control) no-underline' ) }>
+							{ wordmarkRow }
+						</a>
+					) : (
+						<div className={ WORDMARK }>{ wordmarkRow }</div>
+					) }
 					<div className="flex shrink-0 items-center gap-(--newspack-ui-spacer-half)">
 						<nav aria-label="Main" className="me-(--newspack-ui-spacer-1) max-md:hidden">
 							<ul className="m-0 flex list-none gap-(--newspack-ui-spacer-half) p-0">

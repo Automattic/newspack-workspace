@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Dialog as SheetPrimitive } from "radix-ui"
@@ -35,7 +37,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-(--newspack-ui-color-overlay-50) duration-(--newspack-ui-duration-sheet) ease-(--newspack-ui-ease-drawer) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-(--newspack-ui-color-overlay-50) duration-(--newspack-ui-duration-sheet) ease-(--newspack-ui-ease-drawer) motion-reduce:duration-(--newspack-ui-duration-modal) motion-reduce:ease-(--newspack-ui-ease-color) data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -62,7 +64,7 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col overflow-auto overscroll-contain bg-(--newspack-ui-color-surface) font-(family-name:--newspack-ui-font-family-body) text-(length:--newspack-ui-font-size-body) leading-(--newspack-ui-line-height-body) text-(color:--newspack-ui-color-text) duration-(--newspack-ui-duration-sheet) outline-none [box-shadow:var(--nui-elevation-4)] ease-(--newspack-ui-ease-drawer) data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:data-[state=closed]:fade-out-0 motion-reduce:data-[state=open]:fade-in-0",
+          "fixed z-50 flex flex-col overflow-auto overscroll-contain bg-(--newspack-ui-color-surface) font-(family-name:--newspack-ui-font-family-body) text-(length:--newspack-ui-font-size-body) leading-(--newspack-ui-line-height-body) text-(color:--newspack-ui-color-text) duration-(--newspack-ui-duration-sheet) motion-reduce:duration-(--newspack-ui-duration-modal) motion-reduce:ease-(--newspack-ui-ease-color) outline-none [box-shadow:var(--nui-elevation-4)] ease-(--newspack-ui-ease-drawer) data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:data-[state=closed]:fade-out-0 motion-reduce:data-[state=open]:fade-in-0",
           side === "right" &&
             "inset-y-0 right-0 h-full w-[min(var(--newspack-ui-width-s),calc(100vw-var(--newspack-ui-spacer-6)))] motion-safe:data-[state=closed]:slide-out-to-right motion-safe:data-[state=open]:slide-in-from-right",
           side === "left" &&
