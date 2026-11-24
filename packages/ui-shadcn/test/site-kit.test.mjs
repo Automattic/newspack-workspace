@@ -43,9 +43,9 @@ test( 'deck items ship the section, the nav and a comment-free stylesheet', () =
 test( 'deck-layouts ships the seven starter slides, with brand opening and closing', () => {
 	assert.ok( existsSync( join( dist, 'site-kit', 'deck-layouts.json' ) ), 'deck-layouts.json exists' );
 	const item = readItem( 'deck-layouts' );
-	assert.deepEqual( item.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ).sort(), [ 'card', 'deck-section', 'newspack-logo' ] );
+	assert.deepEqual( item.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ).sort(), [ 'card', 'deck-section', 'newspack-logo', 'utils' ] );
 	const source = item.files.find( f => f.path.endsWith( 'layouts.tsx' ) ).content;
-	for ( const name of [ 'OpeningSlide', 'ClosingSlide', 'StatementSlide', 'ImageTextSlide', 'StatsSlide', 'QuoteSlide', 'LogosSlide' ] ) {
+	for ( const name of [ 'OpeningSlide', 'ClosingSlide', 'ContentSlide', 'StatementSlide', 'ImageTextSlide', 'StatsSlide', 'QuoteSlide', 'LogosSlide' ] ) {
 		assert.match( source, new RegExp( `export function ${ name }\\(` ) );
 	}
 	for ( const name of [ 'OpeningSlide', 'ClosingSlide' ] ) {
@@ -57,6 +57,48 @@ test( 'deck-layouts ships the seven starter slides, with brand opening and closi
 	assert.ok( source.includes( "@/components/brand/newspack-logo" ), 'logo import keeps the brand/ path' );
 	assert.ok( ! source.includes( 'size="lg"' ), 'no size the Button lacks' );
 	assert.ok( ! /<h2 [^>]*className="[^"]*\bfont-/.test( source ), 'slide titles set no font utility, so they take the brand h2 face' );
+} );
+
+const layoutsSource = () => readItem( 'deck-layouts' ).files.find( f => f.path.endsWith( 'layouts.tsx' ) ).content;
+const layoutBody = ( source, name ) => source.slice( source.indexOf( `export function ${ name }(` ) ).split( /\nexport function /, 2 )[ 0 ];
+
+test( 'the opening slide takes a heading, keeps title as its name and uses the brand h1 size', () => {
+	const body = layoutBody( layoutsSource(), 'OpeningSlide' );
+	assert.match( body, /heading\?: ReactNode/ );
+	assert.ok( body.includes( '{ heading ?? title }' ) );
+	assert.ok( body.includes( 'title={ title }' ) );
+	const h1 = body.match( /<h1 className="([^"]*)"/ )[ 1 ];
+	assert.ok( ! /\btext-\d?xl\b|\bfont-display\b|\bleading-/.test( h1 ), 'the h1 takes the brand h1 rule, not a fixed size' );
+	assert.ok( h1.includes( 'text-balance' ) );
+	assert.ok( ! /className="[^"]*(?<![a-z]:)\bp-16\b/.test( body ), 'the heavy padding is for larger screens only' );
+} );
+
+test( 'content layouts take tone and className, and SLIDE is exported for custom slides', () => {
+	const source = layoutsSource();
+	assert.match( source, /export const SLIDE_PADDING = 'py-16 ps-\[8vw\] pe-\[max\(8vw,3\.5rem\)\]';/ );
+	assert.match( source, /export const SLIDE = `flex flex-col justify-center gap-8 \$\{ SLIDE_PADDING \}`;/ );
+	assert.ok( source.includes( "import { cn } from '@/lib/utils';" ) );
+	for ( const name of [ 'ContentSlide', 'StatementSlide', 'ImageTextSlide', 'StatsSlide', 'QuoteSlide', 'LogosSlide' ] ) {
+		const body = layoutBody( source, name );
+		assert.ok( /\btone,/.test( body ) && body.includes( 'tone={ tone }' ), `${ name } passes tone` );
+		assert.match( body, /className=\{ cn\([^)]*className \) \}/, `${ name } merges className last` );
+	}
+	for ( const name of [ 'ImageTextSlide', 'StatsSlide', 'LogosSlide' ] ) {
+		assert.match( layoutBody( source, name ), /<h2 className="text-balance">/, `${ name } balances its title` );
+	}
+} );
+
+test( 'StatsSlide fits two to four stats on a phone and ImageTextSlide has an image-led layout', () => {
+	const source = layoutsSource();
+	const stats = layoutBody( source, 'StatsSlide' );
+	assert.ok( stats.includes( 'grid grid-cols-2' ), 'two columns on phones' );
+	assert.ok( stats.includes( 'lg:grid-flow-col' ), 'one row from lg' );
+	assert.ok( stats.includes( '@container' ) && stats.includes( 'cqi' ), 'values scale with their card' );
+	const image = layoutBody( source, 'ImageTextSlide' );
+	assert.match( image, /layout\?: 'split' \| 'image-led'/ );
+	assert.ok( image.includes( "layout = 'split'" ) );
+	assert.ok( image.includes( 'lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]' ) && image.includes( 'lg:grid-cols-[minmax(0,3fr)_minmax(0,5fr)]' ) );
+	assert.ok( image.includes( 'h-auto w-auto max-w-full' ), 'an image-led image is never cropped' );
 } );
 
 test( 'every item that imports @/lib/utils declares the shadcn utils item', () => {

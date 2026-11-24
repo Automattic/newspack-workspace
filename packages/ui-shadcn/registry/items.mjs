@@ -110,7 +110,7 @@ export const siteKit = [
 		name: 'deck-layouts',
 		type: 'registry:component',
 		title: 'Deck slide layouts',
-		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text, stats, quote and logos. Examples to copy. They need the newspack-brand theme: the opening and closing slides use its Cobalt surface, and every slide title takes the brand h2 face and size.',
+		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text (split or image-led), stats, quote, logos and a blank ContentSlide, plus SLIDE and SLIDE_PADDING for custom slides. Every content layout takes tone="brand" for a blue slide and a className. Examples to copy. They need the newspack-brand theme: the opening and closing slides use its Cobalt surface, the opening title takes the brand h1 size and every slide title the brand h2 face and size.',
 		registryDependencies: [ 'deck-section', 'newspack-logo', 'card' ],
 		files: [ component( 'deck/layouts.tsx' ) ],
 	},
