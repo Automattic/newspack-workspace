@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { items } from '../registry/items.mjs';
 
 const root = resolve( dirname( fileURLToPath( import.meta.url ) ), '..' );
-const target = resolve( root, process.argv[ 2 ] ?? '' );
+if ( ! process.argv[ 2 ] ) {
+	console.error( 'Usage: node scripts/install.mjs <target-dir>' );
+	process.exit( 1 );
+}
+const target = resolve( root, process.argv[ 2 ] );
 const targets = { ui: 'components/ui', lib: 'lib' };
 
 for ( const item of items ) {
