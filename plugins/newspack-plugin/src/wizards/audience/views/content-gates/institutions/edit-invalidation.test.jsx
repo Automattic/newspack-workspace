@@ -51,6 +51,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		ImageUpload: () => null,
 		Router: { useHistory: () => ( { push: jest.fn() } ) },
 		SectionHeader: () => null,
+		SplitSection: { Root: Passthrough, Header: () => null, Content: Passthrough },
 		TextControl: () => null,
 		// Confirm immediately: the dialog is not what is under test.
 		useConfirmDialog: () => ( { confirmDialog: null, requestConfirm: callback => callback() } ),

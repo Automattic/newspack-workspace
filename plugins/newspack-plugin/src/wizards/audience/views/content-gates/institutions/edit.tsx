@@ -19,11 +19,10 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	CardSettingsGroup,
 	Divider,
-	Grid,
 	ImageUpload,
 	Notice,
 	Router,
-	SectionHeader,
+	SplitSection,
 	TextControl,
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
@@ -410,15 +409,15 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 			{ deleteDialog }
 
 			{ /* Section 1: Name and description */ }
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Name and Description', 'newspack-plugin' ) }
 					description={ __(
 						'Identify this institution. The name and image are shown on the access verification page.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
+				<SplitSection.Content className="newspack-content-gates__stack">
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ name }
@@ -444,21 +443,21 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 							} }
 						/>
 					) }
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
 			{ /* Section 2: Access Rules */ }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Access Rules', 'newspack-plugin' ) }
 					description={ __(
 						'Define how readers from this institution are identified. Rules use OR logic — matching any rule grants access.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="lg">
+				<SplitSection.Content>
 					<CardSettingsGroup
 						title={ __( 'Email Domain', 'newspack-plugin' ) }
 						description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
@@ -532,8 +531,8 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 							/>
 						</CardBody>
 					</CardSettingsGroup>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</div>
 	);
 }

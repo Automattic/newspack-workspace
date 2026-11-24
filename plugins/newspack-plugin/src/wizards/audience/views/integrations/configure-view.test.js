@@ -80,6 +80,15 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	),
 	Grid: ( { children } ) => children,
 	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
+	SplitSection: {
+		Root: ( { children } ) => children,
+		Header: ( { title } ) => <h2>{ title }</h2>,
+		Content: ( { children } ) => (
+			<div data-testid="stack" data-direction="column" data-gap="xl">
+				{ children }
+			</div>
+		),
+	},
 	// Mirrors the real control: the Newspack wrapper renders its div whatever
 	// happens, and core's select inside it renders nothing without options.
 	SelectControl: ( { label, value, onChange, options, disabled } ) => (

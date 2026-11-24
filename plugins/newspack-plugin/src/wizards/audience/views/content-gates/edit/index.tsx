@@ -7,7 +7,6 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { CardDivider } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { bell, commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
@@ -20,9 +19,8 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from '../consts';
 import {
 	CardSettingsGroup,
 	Divider,
-	Grid,
 	Router,
-	SectionHeader,
+	SplitSection,
 	TextControl,
 	useConfirmDialog,
 	useUnsavedChangesDialog,
@@ -620,9 +618,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			) }
 			{ ( isNew || isRenaming ) && (
 				<>
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader
-							heading={ 2 }
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ sprintf(
 								// translators: %s is the type of content to restrict.
 								__( 'What should we call this %s?', 'newspack-plugin' ),
@@ -634,29 +631,30 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 								isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
 							) }
 						/>
-						<TextControl
-							label={ sprintf(
-								// translators: %s is the type of content to restrict.
-								__( '%s name', 'newspack-plugin' ),
-								isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
-							) }
-							placeholder={ sprintf(
-								// translators: %s is the type of content to restrict.
-								__( 'e.g. %s', 'newspack-plugin' ),
-								isNewsletter ? __( 'Premium Lists', 'newspack-plugin' ) : __( 'Premium Articles', 'newspack-plugin' )
-							) }
-							value={ title }
-							onChange={ setTitle }
-							hideLabelFromVision
-							__next40pxDefaultSize
-						/>
-					</Grid>
+						<SplitSection.Content>
+							<TextControl
+								label={ sprintf(
+									// translators: %s is the type of content to restrict.
+									__( '%s name', 'newspack-plugin' ),
+									isNewsletter ? __( 'premium newsletter', 'newspack-plugin' ) : __( 'gate', 'newspack-plugin' )
+								) }
+								placeholder={ sprintf(
+									// translators: %s is the type of content to restrict.
+									__( 'e.g. %s', 'newspack-plugin' ),
+									isNewsletter ? __( 'Premium Lists', 'newspack-plugin' ) : __( 'Premium Articles', 'newspack-plugin' )
+								) }
+								value={ title }
+								onChange={ setTitle }
+								hideLabelFromVision
+								__next40pxDefaultSize
+							/>
+						</SplitSection.Content>
+					</SplitSection.Root>
 					<Divider alignment="full-width" variant="tertiary" />
 				</>
 			) }
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'What would you like to restrict?', 'newspack-plugin' ) }
 					description={ sprintf(
 						// translators: 1: the type of content to restrict, 2: content or "lists".
@@ -665,7 +663,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
 					) }
 				/>
-				<Stack direction="column" gap="lg">
+				<SplitSection.Content>
 					<CardSettingsGroup
 						title={ sprintf(
 							// translators: %s is the type of content to restrict.
@@ -706,12 +704,11 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							onChange={ setContentRulesMatch }
 						/>
 					</CardSettingsGroup>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ sprintf(
 						// translators: %s is the type of content to restrict.
 						__( 'What’s required to access this %s?', 'newspack-plugin' ),
@@ -729,7 +726,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							  )
 					) }
 				/>
-				<Stack direction="column" gap="lg">
+				<SplitSection.Content>
 					{ ! isNewsletter && (
 						<CardSettingsGroup
 							actionType="toggle"
@@ -791,21 +788,20 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 							governsSignedOut={ ! registration.active }
 						/>
 					</CardSettingsGroup>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			{ isNewsletter && customAccess?.active && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ __( 'How should readers join these lists?', 'newspack-plugin' ) }
 							description={ __(
 								'Choose whether readers are added automatically when they gain access, and whether they can see these lists.',
 								'newspack-plugin'
 							) }
 						/>
-						<Stack direction="column" gap="lg">
+						<SplitSection.Content>
 							<CardSettingsGroup
 								title={ __( 'Sign-up and visibility', 'newspack-plugin' ) }
 								description={ __( 'How readers are added to these lists, and where the lists appear.', 'newspack-plugin' ) }
@@ -826,8 +822,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 									} }
 								/>
 							</CardSettingsGroup>
-						</Stack>
-					</Grid>
+						</SplitSection.Content>
+					</SplitSection.Root>
 				</>
 			) }
 		</div>
