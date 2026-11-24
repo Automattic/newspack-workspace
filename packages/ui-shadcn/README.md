@@ -16,7 +16,7 @@ The build runs three steps in order:
 2. `dark-palette/generate.mjs` derives the dark values from those tokens with APCA and writes them to `build/dark-palette/`, with `report.md` listing every pair it checked and `preview.html` showing the result.
 3. `scripts/build.mjs` writes the shadcn theme, the registry items and the site kit to `dist/`.
 
-newspack-ui is read from this checkout, so a change to its tokens reaches the theme on the next build. The build is left out of the root `build:packages`, so it never runs on `pnpm install`: a renamed newspack-ui token fails this build, not the install.
+newspack-ui is read from this checkout, so a change to its tokens reaches the theme on the next build. The build is left out of the root `build:packages`, so it never runs on `pnpm install`: a renamed newspack-ui token fails this build, not the install. CI builds the package only when its own files change, so build it after changing newspack-ui's tokens or `packages/colors`.
 
 `REGISTRY_BASE` sets the URL the registry items point at. It defaults to the product site.
 
