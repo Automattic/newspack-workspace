@@ -5,12 +5,11 @@ import { __, sprintf } from '@wordpress/i18n';
 import { createPortal, useEffect, useState } from '@wordpress/element';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { Notice, Snackbar, ToggleControl } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { Button, SplitSection, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Button, Divider, SplitSection, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
@@ -80,48 +79,47 @@ export default function AdvancedSettings( props ) {
 		<AdvancedSettingsScreen { ...props } headerActions={ headerActions }>
 			{ confirmDialog }
 			<WizardsTab isFetching={ inFlight }>
-				<Stack direction="column" gap="2xl">
-					{ saveError && (
-						<Notice status="error" isDismissible={ false }>
-							{ saveError.message }
-						</Notice>
-					) }
-					<GroupLabels
-						labels={ values }
-						singularDefault={ settings.label_singular_default }
-						pluralDefault={ settings.label_plural_default }
-						onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
-						disabled={ isLoading || inFlight }
+				{ saveError && (
+					<Notice status="error" isDismissible={ false }>
+						{ saveError.message }
+					</Notice>
+				) }
+				<GroupLabels
+					labels={ values }
+					singularDefault={ settings.label_singular_default }
+					pluralDefault={ settings.label_plural_default }
+					onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
+					disabled={ isLoading || inFlight }
+				/>
+				<Divider alignment="full-width" variant="tertiary" />
+				<SplitSection.Root>
+					<SplitSection.Header
+						title={ __( 'Group Names', 'newspack-plugin' ) }
+						description={ __( 'Choose how a group bought at checkout is named.', 'newspack-plugin' ) }
 					/>
-					<SplitSection.Root>
-						<SplitSection.Header
-							title={ __( 'Group Names', 'newspack-plugin' ) }
-							description={ __( 'Choose how a group bought at checkout is named.', 'newspack-plugin' ) }
+					<SplitSection.Content>
+						<ToggleControl
+							__nextHasNoMarginBottom
+							label={ __( "Name new groups after the buyer's company or name", 'newspack-plugin' ) }
+							help={ sprintf(
+								/* translators: %s: example group name built from a buyer's name and the singular label, e.g. "Jane Doe's Group". */
+								__(
+									'Uses the billing company, or a name like "%s" when there is none. Groups that already have a name keep it. When off, new groups show the product name.',
+									'newspack-plugin'
+								),
+								sprintf(
+									/* translators: 1: buyer's full name, 2: group label, e.g. "Group". */
+									__( "%1$s's %2$s", 'newspack-plugin' ),
+									'Jane Doe',
+									values.label_singular.trim() || settings.label_singular_default || __( 'Group', 'newspack-plugin' )
+								)
+							) }
+							checked={ values.name_from_billing }
+							onChange={ value => setValues( current => ( { ...current, name_from_billing: value } ) ) }
+							disabled={ isLoading || inFlight }
 						/>
-						<SplitSection.Content>
-							<ToggleControl
-								__nextHasNoMarginBottom
-								label={ __( "Name new groups after the buyer's company or name", 'newspack-plugin' ) }
-								help={ sprintf(
-									/* translators: %s: example group name built from a buyer's name and the singular label, e.g. "Jane Doe's Group". */
-									__(
-										'Uses the billing company, or a name like "%s" when there is none. Groups that already have a name keep it. When off, new groups show the product name.',
-										'newspack-plugin'
-									),
-									sprintf(
-										/* translators: 1: buyer's full name, 2: group label, e.g. "Group". */
-										__( "%1$s's %2$s", 'newspack-plugin' ),
-										'Jane Doe',
-										values.label_singular.trim() || settings.label_singular_default || __( 'Group', 'newspack-plugin' )
-									)
-								) }
-								checked={ values.name_from_billing }
-								onChange={ value => setValues( current => ( { ...current, name_from_billing: value } ) ) }
-								disabled={ isLoading || inFlight }
-							/>
-						</SplitSection.Content>
-					</SplitSection.Root>
-				</Stack>
+					</SplitSection.Content>
+				</SplitSection.Root>
 			</WizardsTab>
 			{ savedCount > 0 &&
 				createPortal(
