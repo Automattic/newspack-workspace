@@ -102,6 +102,7 @@ function SiteMenu( { pathname, drawerSearch }: { pathname: string; drawerSearch?
  * - `wordmarkLink`: `true` by default, so the wordmark is the link home. With `false` it is a
  *   plain row with no link, and the wordmark brings its own, so it can hold an interactive island
  *   (a link inside a link is invalid, and the home link's name would hide it from screen readers).
+ *   Without a `wordmark` the site name keeps its home link whatever this is set to.
  * - `search`: a search trigger shown from `md` up, such as the docs search button.
  * - `drawerSearch`: rendered at the top of the Sheet; call `close` when a result is followed.
  * - `menuButton`: replaces the Sheet and its button, such as the Fumadocs docs drawer button.
@@ -150,7 +151,7 @@ export function SiteHeader( {
 				) }
 			>
 				<div className="mx-auto box-content flex h-full max-w-(--site-wide-width) items-center justify-between gap-(--newspack-ui-spacer-2) px-(--newspack-ui-spacer-3) min-[782px]:px-(--newspack-ui-spacer-6)">
-					{ wordmarkLink ? (
+					{ wordmarkLink || ! wordmark ? (
 						<a href="/" aria-label={ wordmark ? SITE_NAME : undefined } className={ cn( WORDMARK, 'rounded-(--newspack-ui-radius-control) no-underline' ) }>
 							{ wordmarkRow }
 						</a>
