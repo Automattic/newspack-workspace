@@ -136,7 +136,7 @@ export function SiteHeader( {
 	const current = currentLink( pathname );
 	const wordmarkRow = (
 		<span className="flex min-w-0 items-center gap-(--newspack-ui-spacer-1)">
-			{ Children.map( wordmark ?? SITE_NAME, ( child ) =>
+			{ Children.map( wordmark || SITE_NAME, ( child ) =>
 				typeof child === 'string' || typeof child === 'number' ? <span className="min-w-0 truncate">{ child }</span> : child
 			) }
 		</span>
