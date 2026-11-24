@@ -34,27 +34,28 @@ class Nested_Blocks {
 	 * `email_attrs` keys the package's spacing preprocessor uses to distribute the
 	 * email's root and container padding to top-level blocks.
 	 */
-	/**
-	 * The email theme's variable values for the current render, or null before first use.
-	 *
-	 * @var array<string, string>|null
-	 */
-	private static ?array $variables_map = null;
-
-	/**
-	 * Forget the cached theme variables. Called at the start of each render, since the
-	 * email theme is per newsletter.
-	 */
-	public static function reset_cache(): void {
-		self::$variables_map = null;
-	}
-
 	const PADDING_ATTRS = [
 		'root-padding-left',
 		'root-padding-right',
 		'container-padding-left',
 		'container-padding-right',
 	];
+
+	/**
+	 * The email theme's variable values, per newsletter being rendered. Keyed by post so
+	 * a render nested inside another doesn't leave its newsletter's values to the outer one.
+	 *
+	 * @var array<int, array<string, string>>
+	 */
+	private static array $variables_maps = [];
+
+	/**
+	 * Forget the cached theme variables. Called at the start of each render, so a change
+	 * to a newsletter's theme is picked up.
+	 */
+	public static function reset_cache(): void {
+		self::$variables_maps = [];
+	}
 
 	/**
 	 * Render nested block markup to email HTML.
@@ -136,18 +137,21 @@ class Nested_Blocks {
 	 * @return array<string, string>
 	 */
 	private static function variables_map(): array {
-		if ( null !== self::$variables_map ) {
-			return self::$variables_map;
+		$post = Renderer_Controller::get_rendering_post();
+		$key  = $post instanceof \WP_Post ? $post->ID : 0;
+		if ( isset( self::$variables_maps[ $key ] ) ) {
+			return self::$variables_maps[ $key ];
 		}
-		self::$variables_map = [];
+		$map = [];
 		if ( class_exists( Email_Editor_Container::class ) ) {
 			try {
-				self::$variables_map = Email_Editor_Container::container()->get( Theme_Controller::class )->get_variables_values_map();
+				$map = Email_Editor_Container::container()->get( Theme_Controller::class )->get_variables_values_map();
 			} catch ( \Throwable $e ) {
-				self::$variables_map = [];
+				$map = [];
 			}
 		}
-		return self::$variables_map;
+		self::$variables_maps[ $key ] = $map;
+		return $map;
 	}
 
 	/**
