@@ -62,13 +62,15 @@ describe( 'SplitSection', () => {
 	it( 'keeps its layout when a caller passes layout props', () => {
 		render(
 			<SplitSection.Root data-testid="root" columns={ 1 } gutter={ 16 }>
-				<SplitSection.Header title="Title" />
+				<SplitSection.Header title="Title" data-testid="header" gap="sm" direction="row" />
 				<SplitSection.Content data-testid="content" gap="sm" direction="row" />
 			</SplitSection.Root>
 		);
 		expect( screen.getByTestId( 'root' ) ).toHaveClass( 'newspack-grid__columns-2', 'newspack-grid__gutter-32' );
 		expect( screen.getByTestId( 'content' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
 		expect( screen.getByTestId( 'content' ).style.flexDirection ).toBe( 'column' );
+		expect( screen.getByTestId( 'header' ).style.gap ).toContain( '--wpds-dimension-gap-xl' );
+		expect( screen.getByTestId( 'header' ).style.flexDirection ).toBe( 'column' );
 	} );
 
 	it( 'shows a back link before the title when given one', () => {
