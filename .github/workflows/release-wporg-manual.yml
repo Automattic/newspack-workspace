@@ -32,6 +32,7 @@ on:
         options:
           - newspack-newsletters
           - super-cool-ad-inserter
+          - botcreds-agent-access
           - republication-tracker-tool
       ref:
         description: 'Branch or commit SHA to publish. Leave as `release` unless you know otherwise.'
