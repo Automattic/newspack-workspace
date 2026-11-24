@@ -2,7 +2,6 @@
 
 %newspack-ui-notice-icon {
 	color: var(--newspack-ui-notice-icon-color);
-	fill: currentcolor;
 	flex: none;
 	height: var(--newspack-ui-spacer-5);
 	margin-inline: calc(var(--newspack-ui-spacer-half) / -2);
@@ -267,7 +266,6 @@
 				svg {
 					color: var(--newspack-ui-color-inverse-ink);
 					display: block;
-					fill: currentcolor;
 					height: var(--newspack-ui-spacer-5);
 					width: var(--newspack-ui-spacer-5);
 				}

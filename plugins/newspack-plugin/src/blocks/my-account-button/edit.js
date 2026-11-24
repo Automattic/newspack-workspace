@@ -26,7 +26,7 @@ import { ToolbarButton, ToolbarGroup } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import icon from './icon';
+import { account as icon } from '../../../packages/icons';
 
 function MyAccountButtonEdit( { attributes, setAttributes } ) {
 	const { signedInLabel, signedOutLabel, style, className: blockClassName } = attributes;
