@@ -14,7 +14,12 @@ use function Newspack_Newsletters\Blocks\Subscribe\process_form;
  * The membership gate on newsletter lists checks the contact being written, and
  * the subscribe form subscribes an address to nothing when no list is open to it.
  *
+ * Each test runs in a separate process, because the mock that activates
+ * Memberships can't be undeclared for later tests.
+ *
  * @group subscribe-block
+ * @runTestsInSeparateProcesses
+ * @preserveGlobalState disabled
  */
 class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 	private $member_id;
@@ -24,11 +29,12 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
+		require_once dirname( __DIR__ ) . '/mocks/wc-memberships-active-mock.php';
 		$this->member_id     = self::factory()->user->create( [ 'user_email' => 'member@example.test' ] );
 		$this->non_member_id = self::factory()->user->create( [ 'user_email' => 'reader@example.test' ] );
 		$this->open_list       = $this->create_list( 'Open' );
 		$this->restricted_list = $this->create_list( 'Members only' );
-		WC_Memberships_Gate_Fixture::$restricted = [ $this->restricted_list => [ $this->member_id ] ];
+		$this->restrict_to_member( 101 );
 		self::clear_user_in_scope();
 	}
 
@@ -41,8 +47,32 @@ class Woocommerce_Memberships_Contact_Gate_Test extends WP_UnitTestCase {
 		$scope->setValue( null, null );
 	}
 
+	/**
+	 * Register a plan that restricts the members-only list, and give it to the member.
+	 *
+	 * @param int $plan_id Plan ID.
+	 */
+	private function restrict_to_member( $plan_id ) {
+		global $test_wc_memberships, $test_wc_memberships_members;
+		$plan = new WC_Memberships_Membership_Plan( $plan_id, 'Members' );
+		$plan->set_content_restriction_rules(
+			[
+				new WC_Memberships_Membership_Plan_Rule(
+					[
+						'content_type_name' => Subscription_Lists::CPT,
+						'object_id_rules'   => [ $this->restricted_list ],
+					]
+				),
+			]
+		);
+		$test_wc_memberships         = [ $plan ];
+		$test_wc_memberships_members = [ $this->member_id => [ $plan_id ] ];
+	}
+
 	public function tear_down() {
-		WC_Memberships_Gate_Fixture::$restricted = [];
+		global $test_wc_memberships, $test_wc_memberships_members;
+		$test_wc_memberships         = [];
+		$test_wc_memberships_members = [];
 		self::clear_user_in_scope();
 		wp_set_current_user( 0 );
 		unset( $_REQUEST[ \Newspack_Newsletters\Blocks\Subscribe\FORM_ACTION ], $_REQUEST['npe'], $_REQUEST['lists'] );
