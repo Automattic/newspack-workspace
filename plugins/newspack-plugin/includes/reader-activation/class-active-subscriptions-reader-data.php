@@ -44,15 +44,17 @@ final class Active_Subscriptions_Reader_Data {
 	public static function init() {
 		add_filter( 'newspack_reader_data_max_items', [ __CLASS__, 'exempt_from_item_cap' ], 10, 3 );
 
-		// Joining or leaving a group fires no Data Event naming the member.
+		// Joining or leaving a group fires no Data Event naming the member. The meta
+		// listeners catch every membership write. The announcement also covers a
+		// change of owner, which can leave either owner's membership untouched. For
+		// an ordinary join or leave it marks the reader a second time, which only
+		// repeats a meta delete.
 		add_action( 'added_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
+		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'handle_memberships_changed' ] );
 
-		// Nor does handing a gift to someone else, or turning a group on or off on
-		// its subscription. Turning group subscriptions on or off for a whole
-		// product fires no `newspack_group_subscription_settings_updated`, so
-		// members of groups that inherit the product's setting are put right at
-		// their next login or within a day.
+		// No Data Event fires for handing a gift to someone else, or for turning a
+		// group on or off, either.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
 
@@ -201,6 +203,18 @@ final class Active_Subscriptions_Reader_Data {
 	}
 
 	/**
+	 * Mark a reader stale when Group_Subscription announces they joined or left a
+	 * group. A change of owner announces both owners, even when it left one or
+	 * both owners' membership meta untouched: the new owner had no membership to
+	 * remove, and a previous owner who can't take a member's seat gets none.
+	 *
+	 * @param int $user_id The reader.
+	 */
+	public static function handle_memberships_changed( $user_id ): void {
+		self::mark_stale( (int) $user_id );
+	}
+
+	/**
 	 * Mark stale the readers whose list changes when a gift's recipient does: the
 	 * new recipient gains the product, and whoever held it before loses it. That
 	 * is the earlier recipient. With none, the buyer is marked in case they held
@@ -220,7 +234,7 @@ final class Active_Subscriptions_Reader_Data {
 		self::mark_stale( (int) $recipient_id );
 		$previous_holder_id = (int) $previous_recipient_id;
 		if ( $previous_holder_id <= 0 ) {
-			$previous_holder_id = WooCommerce_Subscriptions::get_subscription_readers( $subscription )['purchaser'];
+			$previous_holder_id = $subscription instanceof \WC_Subscription ? (int) $subscription->get_customer_id() : 0;
 		}
 		self::mark_stale( $previous_holder_id );
 	}

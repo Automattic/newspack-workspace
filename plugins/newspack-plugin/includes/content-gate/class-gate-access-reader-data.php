@@ -58,9 +58,14 @@ final class Gate_Access_Reader_Data {
 		add_filter( 'newspack_popups_default_criteria', [ __CLASS__, 'register_criteria' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
 
-		// Joining or leaving a group fires no Data Event naming the member.
+		// Joining or leaving a group fires no Data Event naming the member. The meta
+		// listeners catch every membership write. The announcement also covers a
+		// change of owner, which can leave either owner's membership untouched. For
+		// an ordinary join or leave it marks the reader a second time, which only
+		// repeats a meta delete.
 		add_action( 'added_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
+		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'handle_memberships_changed' ] );
 
 		// Any write to a gate can change who passes it.
 		add_action( 'save_post_' . Content_Gate::GATE_CPT, [ __CLASS__, 'bump_gates_version' ] );
@@ -376,6 +381,18 @@ final class Gate_Access_Reader_Data {
 		if ( Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY === $meta_key ) {
 			self::mark_stale( (int) $user_id );
 		}
+	}
+
+	/**
+	 * Mark a reader stale when Group_Subscription announces they joined or left a
+	 * group. A change of owner announces both owners, even when it left one or
+	 * both owners' membership meta untouched: the new owner had no membership to
+	 * remove, and a previous owner who can't take a member's seat gets none.
+	 *
+	 * @param int $user_id The reader.
+	 */
+	public static function handle_memberships_changed( $user_id ): void {
+		self::mark_stale( (int) $user_id );
 	}
 
 	/**

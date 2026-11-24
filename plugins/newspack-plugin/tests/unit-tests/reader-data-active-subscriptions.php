@@ -999,4 +999,40 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		$this->assertSame( PHP_INT_MAX, $cap_for( Active_Subscriptions_Reader_Data::STORE_KEY ) );
 		$this->assertSame( Reader_Data::MAX_ITEMS, $cap_for( 'some_other_key' ) );
 	}
+
+	/**
+	 * Changing a group's owner hands the subscription to someone else without a
+	 * status change, so no subscription event names either reader. An outsider
+	 * who becomes owner has no membership to remove, and a previous owner who
+	 * can't take a member's seat gets none, so no membership write marks them
+	 * either. Group_Subscription's announcement does.
+	 */
+	public function test_owner_change_marks_both_owners_stale() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$group             = $this->create_group_subscription( $previous_owner_id, $this->create_reader() );
+		$ineligible        = function ( $eligible, $user_id ) use ( $previous_owner_id ) {
+			return $user_id === $previous_owner_id ? false : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10, 2 );
+		Active_Subscriptions_Reader_Data::refresh( $previous_owner_id );
+		Active_Subscriptions_Reader_Data::refresh( $new_owner_id );
+		$this->assertSame( [ 101 ], $this->stored_products( $previous_owner_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $previous_owner_id ) );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $new_owner_id ) );
+
+		$changed = Group_Subscription::change_owner( $group, $new_owner_id );
+		remove_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10 );
+
+		$this->assertTrue( $changed );
+		$this->assertNotContains( $previous_owner_id, array_map( 'intval', Group_Subscription::get_members( $group ) ), 'The previous owner took no seat.' );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $previous_owner_id ), 'The previous owner no longer holds the group.' );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $new_owner_id ), 'The new owner holds it now.' );
+
+		Group_Subscription::reset_cache();
+		Active_Subscriptions_Reader_Data::refresh( $previous_owner_id );
+		Active_Subscriptions_Reader_Data::refresh( $new_owner_id );
+		$this->assertSame( [], $this->stored_products( $previous_owner_id ) );
+		$this->assertSame( [ 101 ], $this->stored_products( $new_owner_id ) );
+	}
 }
