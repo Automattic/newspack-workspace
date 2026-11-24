@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { getDeckSlides, goToDeckSlide, useDeckScroller } from './deck';
 import { currentDeckIndex, dotTones } from './deck-navigation';
+import { ALWAYS_VISIBLE_QUERY, createNavReveal } from './deck-nav-reveal';
 
 /**
- * Dot navigation fixed to the right of the viewport, one button per `DeckSlide`. Render it inside `Deck`. Each target is 32px, smaller when the column would not fit the viewport height.
+ * Dot navigation fixed to the right of the viewport, one button per `DeckSlide`. Render it inside `Deck`. Each target is 32px, smaller when the column would not fit the viewport height. With a mouse it shows on load, then hides until the pointer nears the right edge or keyboard focus enters it; on touch it always shows.
  */
 export function DeckNav() {
 	const scrollerRef = useDeckScroller();
 	const navRef = useRef< HTMLElement >( null );
 	const [ slides, setSlides ] = useState< { id: string; title: string }[] >( [] );
 	const [ current, setCurrent ] = useState( 0 );
+	const [ visible, setVisible ] = useState( true );
 
 	useEffect( () => {
 		const scroller = scrollerRef?.current ?? null;
@@ -55,12 +57,75 @@ export function DeckNav() {
 		};
 	}, [ scrollerRef, slides.length ] );
 
+	useEffect( () => {
+		const nav = navRef.current;
+		if ( ! nav ) {
+			return;
+		}
+		const query = window.matchMedia( ALWAYS_VISIBLE_QUERY );
+		const reveal = createNavReveal( setVisible, {
+			setTimeout: ( callback, ms ) => window.setTimeout( callback, ms ),
+			clearTimeout: id => window.clearTimeout( id as number ),
+		} );
+		const onPointerMove = ( event: PointerEvent ) => {
+			if ( ! query.matches ) {
+				reveal.pointer( event.clientX, window.innerWidth, event.target instanceof Node && nav.contains( event.target ) );
+			}
+		};
+		const onPointerOut = ( event: PointerEvent ) => {
+			if ( ! event.relatedTarget ) {
+				reveal.leave();
+			}
+		};
+		const onFocusIn = ( event: FocusEvent ) => {
+			if ( event.target instanceof Element && event.target.matches( ':focus-visible' ) ) {
+				reveal.pin();
+			}
+		};
+		const onFocusOut = ( event: FocusEvent ) => {
+			if ( ! ( event.relatedTarget instanceof Node && nav.contains( event.relatedTarget ) ) && ! query.matches ) {
+				reveal.unpin();
+			}
+		};
+		const onQueryChange = () => {
+			if ( query.matches ) {
+				reveal.pin();
+			} else {
+				reveal.unpin();
+			}
+		};
+		if ( query.matches ) {
+			reveal.pin();
+		} else {
+			reveal.start();
+		}
+		query.addEventListener( 'change', onQueryChange );
+		document.addEventListener( 'pointermove', onPointerMove, { passive: true } );
+		document.addEventListener( 'pointerout', onPointerOut, { passive: true } );
+		nav.addEventListener( 'focusin', onFocusIn );
+		nav.addEventListener( 'focusout', onFocusOut );
+		return () => {
+			reveal.destroy();
+			query.removeEventListener( 'change', onQueryChange );
+			document.removeEventListener( 'pointermove', onPointerMove );
+			document.removeEventListener( 'pointerout', onPointerOut );
+			nav.removeEventListener( 'focusin', onFocusIn );
+			nav.removeEventListener( 'focusout', onFocusOut );
+		};
+	}, [ slides.length ] );
+
 	if ( slides.length < 1 ) {
 		return null;
 	}
 
 	return (
-		<nav ref={ navRef } aria-label="Slides" className={ `newspack-deck-nav fixed top-1/2 right-4 z-40 flex -translate-y-1/2 flex-col` } style={ { '--deck-dot-count': slides.length } as CSSProperties }>
+		<nav
+			ref={ navRef }
+			aria-label="Slides"
+			data-hidden={ visible ? undefined : '' }
+			className={ `newspack-deck-nav fixed top-1/2 right-4 z-40 flex -translate-y-1/2 flex-col [transition:opacity_var(--newspack-ui-duration-reveal)_var(--newspack-ui-ease-out),translate_var(--newspack-ui-duration-reveal)_var(--newspack-ui-ease-out)] data-[hidden]:pointer-events-none data-[hidden]:opacity-0 motion-safe:data-[hidden]:translate-x-1` }
+			style={ { '--deck-dot-count': slides.length } as CSSProperties }
+		>
 			{ slides.map( ( slide, index ) => (
 				<button
 					key={ slide.id }

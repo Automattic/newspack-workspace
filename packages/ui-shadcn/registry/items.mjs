@@ -104,7 +104,7 @@ export const siteKit = [
 		title: 'Deck dot navigation',
 		description: 'DeckNav: dot navigation fixed to the right of a Deck, one button per slide, hidden in print.',
 		registryDependencies: [ 'deck-section' ],
-		files: [ component( 'deck/deck-nav.tsx' ) ],
+		files: [ component( 'deck/deck-nav.tsx' ), component( 'deck/deck-nav-reveal.ts' ) ],
 	},
 	{
 		name: 'deck-layouts',

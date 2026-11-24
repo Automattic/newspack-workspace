@@ -255,3 +255,103 @@ test( 'each dot takes its tone from the slide behind it, not from the current sl
 	assert.ok( button.includes( 'bg-transparent' ), 'the blue base rule never paints the button' );
 	assert.ok( [ 'scroll', 'resize' ].every( event => nav.includes( `'${ event }', update` ) ) );
 } );
+
+const reveal = await import( '../registry/components/deck/deck-nav-reveal.ts' );
+
+function fakeTimers() {
+	let now = 0;
+	let next = 1;
+	const pending = new Map();
+	return {
+		setTimeout: ( callback, ms ) => {
+			pending.set( next, { at: now + ms, callback } );
+			return next++;
+		},
+		clearTimeout: id => pending.delete( id ),
+		advance( ms ) {
+			now += ms;
+			for ( const [ id, timer ] of [ ...pending ] ) {
+				if ( timer.at <= now ) {
+					pending.delete( id );
+					timer.callback();
+				}
+			}
+		},
+		get pending() {
+			return pending.size;
+		},
+	};
+}
+
+function setupReveal() {
+	const timers = fakeTimers();
+	const calls = [];
+	const controller = reveal.createNavReveal( visible => calls.push( visible ), timers );
+	return { timers, calls, controller };
+}
+
+test( 'the dot nav reveals near the right edge and hides a second after the pointer leaves', () => {
+	assert.equal( reveal.REVEAL_EDGE, 80 );
+	assert.equal( reveal.HIDE_DELAY, 1000 );
+	assert.equal( reveal.nearEdge( 1200, 1280 ), true );
+	assert.equal( reveal.nearEdge( 1199, 1280 ), false );
+	const { timers, calls, controller } = setupReveal();
+	controller.start();
+	timers.advance( 999 );
+	assert.deepEqual( calls, [], 'shown on load until the delay ends' );
+	timers.advance( 1 );
+	assert.deepEqual( calls, [ false ], 'then tucked away' );
+	controller.pointer( 600, 1280, false );
+	assert.deepEqual( calls, [ false ], 'far from the edge it stays hidden' );
+	controller.pointer( 1210, 1280, false );
+	assert.deepEqual( calls, [ false, true ] );
+	controller.pointer( 600, 1280, false );
+	timers.advance( 500 );
+	controller.pointer( 1250, 1280, false );
+	timers.advance( 1000 );
+	assert.deepEqual( calls, [ false, true ], 'coming back within the delay cancels the hide, with no flicker' );
+	controller.pointer( 600, 1280, false );
+	controller.pointer( 620, 1280, false );
+	assert.equal( timers.pending, 1, 'moving away again schedules one hide, not one per move' );
+	timers.advance( 1000 );
+	assert.deepEqual( calls, [ false, true, false ] );
+	controller.pointer( 10, 1280, true );
+	assert.deepEqual( calls, [ false, true, false, true ], 'over the nav counts as near' );
+	controller.leave();
+	timers.advance( 1000 );
+	assert.deepEqual( calls, [ false, true, false, true, false ], 'leaving the window hides it after the delay' );
+} );
+
+test( 'keyboard focus and no-hover devices keep the dot nav visible', () => {
+	assert.equal( reveal.ALWAYS_VISIBLE_QUERY, '(hover: none), (pointer: coarse)' );
+	const { timers, calls, controller } = setupReveal();
+	controller.start();
+	timers.advance( 1000 );
+	controller.pin();
+	controller.pointer( 10, 1280, false );
+	timers.advance( 5000 );
+	assert.deepEqual( calls, [ false, true ], 'pinned by focus, the pointer leaving does not hide it' );
+	controller.unpin();
+	timers.advance( 1000 );
+	assert.deepEqual( calls, [ false, true, false ] );
+	const touch = setupReveal();
+	touch.controller.pin();
+	touch.timers.advance( 5000 );
+	assert.deepEqual( touch.calls, [], 'a no-hover device pins it from the start and never hides it' );
+	const nav = readItem( 'deck-nav' ).files.find( f => f.path.endsWith( 'deck-nav.tsx' ) ).content;
+	assert.ok( nav.includes( "matches( ':focus-visible' )" ), 'only keyboard focus pins it' );
+	assert.ok( /if \( query\.matches \) \{\n\t\t\treveal\.pin\(\);\n\t\t\} else \{\n\t\t\treveal\.start\(\);/.test( nav ), 'touch pins, a mouse gets the load reveal' );
+	assert.deepEqual( readItem( 'deck-nav' ).files.map( f => f.path.split( '/' ).pop() ), [ 'deck-nav.tsx', 'deck-nav-reveal.ts' ] );
+} );
+
+test( 'the hidden dot nav fades and slides on the reveal tokens and lets clicks through', () => {
+	const nav = readItem( 'deck-nav' ).files.find( f => f.path.endsWith( 'deck-nav.tsx' ) ).content;
+	const classes = nav.match( /className=\{ `newspack-deck-nav ([^`]*)` \}/ )[ 1 ].split( ' ' );
+	assert.ok( classes.includes( '[transition:opacity_var(--newspack-ui-duration-reveal)_var(--newspack-ui-ease-out),translate_var(--newspack-ui-duration-reveal)_var(--newspack-ui-ease-out)]' ) );
+	assert.ok( classes.includes( 'data-[hidden]:opacity-0' ) );
+	assert.ok( classes.includes( 'data-[hidden]:pointer-events-none' ) );
+	assert.ok( classes.includes( 'motion-safe:data-[hidden]:translate-x-1' ), 'under reduced motion it only fades' );
+	assert.ok( ! classes.some( name => /^(?!motion-safe:)[^ ]*translate-x/.test( name ) ) );
+	assert.ok( nav.includes( "data-hidden={ visible ? undefined : '' }" ) );
+	assert.ok( ! nav.includes( 'aria-hidden' ) && ! /tabIndex|inert/.test( nav ), 'hidden dots stay in the accessibility tree and the tab order' );
+} );
