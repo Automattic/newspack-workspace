@@ -2944,9 +2944,19 @@ class Subscribers_Wizard extends Wizard {
 	 * also carry the `is_donor` flag. Only once live donation subscriptions alone
 	 * pass the cap is a Recurring donor missing from Recurring, and because Former,
 	 * One-time and "Not a donor" are all worked out against the live set, they can
-	 * then be listed under one of those while their row reads Recurring. Each flag
-	 * query returns at most FILTER_INCLUDE_CAP readers, so past that One-time and
-	 * Former under-count, as the other filters do (see resolve_filter_include()).
+	 * then be listed under one of those while their row reads Recurring.
+	 *
+	 * Each flag query returns at most FILTER_INCLUDE_CAP readers, and the cap is
+	 * applied before live and ended holders are subtracted. Recurring donors carry
+	 * `is_donor` too, so they take up room in the `is_donor` query that the
+	 * subtraction then frees for no one. Once One-time and Recurring donors
+	 * together (with any Former donor who still has the flag) pass
+	 * FILTER_INCLUDE_CAP, One-time starts dropping readers, and so does its share
+	 * of the "Not a donor" exclude set (see resolve_donor_exclude()): a One-time
+	 * donor dropped there shows under "Not a donor" while their row reads One-time.
+	 * Former drops readers the same way once the readers with the
+	 * `is_former_donor` flag pass the cap. Both under-count, as the other filters
+	 * do past the cap (see resolve_filter_include()).
 	 *
 	 * @param string $kind One of the Subscribers_Donors::KIND_* values.
 	 *
