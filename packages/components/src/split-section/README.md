@@ -71,9 +71,10 @@ The left column: a `SectionHeader` with `noMargin`, then any children.
   view. An item editor under a tabbed `Wizard` links back through its page
   `breadcrumbs` instead.
 - `className` and any other `div` attribute: added to the column.
-- `children`: shown 16px below the description, such as a notice that applies
-  to the whole section. Children stretch to the column width, so wrap a lone
-  button in a `Stack` from `@wordpress/ui` to keep its natural width.
+- `children`: shown 24px below the title and description, and 24px apart from
+  each other, such as a notice that applies to the whole section. Children
+  stretch to the column width, so wrap a lone button in a `Stack` from
+  `@wordpress/ui` to keep its natural width.
 
 ### `SplitSection.Content`
 
@@ -83,6 +84,11 @@ takes `withMargin={ false }` with `__nextHasNoMarginBottom` and
 `__next40pxDefaultSize`; core `SelectControl` and `ToggleGroupControl` take both
 `__next*` props; `ToggleControl` and `CheckboxControl` take
 `__nextHasNoMarginBottom`.
+
+A group of cards, such as `CardSettingsGroup` options, sits 16px apart: wrap the
+cards in their own `<Stack direction="column" gap="lg">` inside `Content`, so
+the 24px gap still separates the group from the fields around it. A single card
+needs no wrapper.
 
 Takes `className` and any `div` attribute. Its direction and gap are fixed.
 
