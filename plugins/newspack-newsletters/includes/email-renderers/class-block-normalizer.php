@@ -220,7 +220,7 @@ class Block_Normalizer {
 	 * @param mixed $value CSS length.
 	 * @return bool
 	 */
-	private static function is_zero( $value ): bool {
+	private static function is_zero( mixed $value ): bool {
 		return is_string( $value ) || is_numeric( $value )
 			? (bool) preg_match( '/^\s*0+(?:\.0+)?[a-z%]*\s*$/i', (string) $value )
 			: false;
