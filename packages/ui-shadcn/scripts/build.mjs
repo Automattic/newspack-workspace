@@ -2,8 +2,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { converter, formatHex, interpolate, parse } from 'culori';
+import { formatHex, interpolate, parse } from 'culori';
 import { chartOrder, chartSeries, chartSource, fontStack, gaps, noToken, radiusScale, sources } from './mapping.mjs';
+import { formatOklch } from './oklch.mjs';
 import { darkCss, darkRule, darkTokens } from './dark.mjs';
 import { items, siteBundles, siteKit } from '../registry/items.mjs';
 
@@ -15,8 +16,6 @@ const tokens = tokenFile.properties;
 const elevation = JSON.parse( readFileSync( join( root, 'build', 'newspack-ui', 'elevation.json' ), 'utf8' ) );
 const newspackColors = JSON.parse( readFileSync( join( root, 'build', 'newspack-ui', 'colors.json' ), 'utf8' ) );
 const registryBase = ( process.env.REGISTRY_BASE || 'https://newspack-ui-theme.space.fast' ).replace( /\/+$/, '' ).replace( /\/r$/, '' );
-
-const toOklch = converter( 'oklch' );
 
 function resolveColor( name, source = tokens ) {
 	const token = source[ name ];
@@ -34,15 +33,6 @@ function resolveColor( name, source = tokens ) {
 		throw new Error( `Cannot parse ${ name }: ${ value }` );
 	}
 	return color;
-}
-
-function formatOklch( color ) {
-	const { l, c, h, alpha } = toOklch( color );
-	const round = ( n, d ) => Number( n.toFixed( d ) );
-	const chroma = round( c ?? 0, 4 );
-	const hue = chroma ? round( h ?? 0, 2 ) : 0;
-	const a = alpha === undefined || alpha >= 1 ? '' : ` / ${ round( alpha, 3 ) }`;
-	return `oklch(${ round( l, 4 ) } ${ chroma } ${ hue }${ a })`;
 }
 
 function resolveLength( name, add = 0 ) {
@@ -153,6 +143,7 @@ const brandLight = {
 	'newspack-ui-color-btn-brand-on': [ 'var(--newspack-ui-color-neutral-0)', 'Text on the brand button: white in light, the dark page ink in dark.' ],
 	'newspack-ui-color-brand-text': [ 'var(--newspack-ui-color-primary-60)', 'Brand blue for text, marks and accents: newspack-colors primary-600 (#003da5) in light, the dark primary-30 step (#95bdff) in dark.' ],
 	'newspack-ui-color-btn-brand-text': [ 'var(--newspack-ui-color-brand-text)', 'Text of the brand-outline variant: the brand text blue.' ],
+	'newspack-ui-color-link': [ 'var(--newspack-ui-color-text)', 'Links: the text color in Neutral, so a theme can recolor links without touching text.' ],
 };
 const brandDark = {
 	'newspack-ui-color-btn-brand': [ 'var(--newspack-ui-color-primary-30)', 'Dark fill: the dark primary-30 step (#95bdff), the APCA mirror of the light brand and the blue the brand text uses in dark. The #1e1e1e text on it is Lc 65 at rest.' ],
@@ -161,6 +152,7 @@ const brandDark = {
 	'newspack-ui-color-btn-brand-on': [ 'var(--newspack-ui-color-neutral-0)', 'Dark text on the brand fill: the dark page ink, #1e1e1e.' ],
 	'newspack-ui-color-brand-text': [ 'var(--newspack-ui-color-primary-30)', 'Dark brand text blue: the dark primary-30 step (#95bdff), the same blue as the brand button fill.' ],
 	'newspack-ui-color-btn-brand-text': [ colorStep( 'primary-050' ), 'Dark brand-outline text: newspack-colors primary-050 (#bfcfe9). The brand text blue (#95bdff) is Lc 64, 62 and 59 on the surface and the hover and pressed fills, so it misses Lc 60 on pressed; #bfcfe9 is 75, 73 and 70.' ],
+	'newspack-ui-color-link': [ 'var(--newspack-ui-color-text)', 'Links: the text color in Neutral, so a theme can recolor links without touching text.' ],
 };
 const brandPick = vars => Object.fromEntries( Object.entries( vars ).map( ( [ name, [ value ] ] ) => [ name, value ] ) );
 for ( const [ name, [ value, note ] ] of Object.entries( brandLight ) ) {
@@ -261,6 +253,8 @@ const write = ( name, data ) => writeFileSync( join( dist, 'registry', `${ name 
 write( 'newspack-ui-neutral', themeItem );
 
 const url = name => `${ registryBase }/r/${ name }.json`;
+const usesUtils = files => files.some( file => file.content.includes( '@/lib/utils' ) );
+const dependencyUrls = ( names = [], files = [] ) => [ ...( usesUtils( files ) ? [ 'utils' ] : [] ), ...names.map( url ) ];
 const indexItems = [ { name: 'newspack-ui-neutral', type: themeItem.type, title: themeItem.title, description: themeItem.description } ];
 const lineCounts = {};
 const fileLines = {};
@@ -280,7 +274,7 @@ for ( const item of items ) {
 		...( item.dependencies?.length ? { dependencies: item.dependencies } : {} ),
 		...( item.css ? { css: item.css } : {} ),
 		...( item.docs ? { docs: item.docs } : {} ),
-		registryDependencies: ( item.registryDependencies ?? [] ).map( url ),
+		registryDependencies: dependencyUrls( item.registryDependencies, files ),
 		files,
 	};
 	if ( ! entry.registryDependencies.length ) {
@@ -324,7 +318,7 @@ for ( const item of siteKit ) {
 		title: item.title,
 		description: item.description,
 		...( item.dependencies?.length ? { dependencies: item.dependencies } : {} ),
-		...( item.registryDependencies?.length ? { registryDependencies: item.registryDependencies.map( url ) } : {} ),
+		...( dependencyUrls( item.registryDependencies, files ).length ? { registryDependencies: dependencyUrls( item.registryDependencies, files ) } : {} ),
 		...( item.cssVars ? { cssVars: item.cssVars } : {} ),
 		...( files.length ? { files } : {} ),
 	};
