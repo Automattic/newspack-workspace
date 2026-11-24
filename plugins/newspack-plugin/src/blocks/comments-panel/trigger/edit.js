@@ -23,7 +23,7 @@ import { useSelect } from '@wordpress/data';
  */
 import PanelPreviewToggle from '../panel-preview-toggle';
 import { panelToggles, subscribeToPanel } from '../preview-refs';
-import commentsIcon from './icon';
+import { comments as commentsIcon } from '../../../../packages/icons';
 
 /**
  * Edit component for the Comments Panel Trigger block.

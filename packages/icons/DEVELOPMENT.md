@@ -145,13 +145,15 @@ Edit `includes/class-newspack-ui-icons.php` and add your icon to the `$ui_icons`
 public static $ui_icons = array(
 	// ... existing icons ...
 	'myNewIcon' =>
-		'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--my-new-icon">
+		'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--my-new-icon">
 			<path d="..." />
 		</svg>',
 );
 ```
 
-**Important:** `Newspack_UI_Icons` icons are filled, not stroked. Don't copy the stroke markup from `packages/icons/src/`: `sanitize_svgs()` strips `stroke`, `stroke-width` and `style`, and frontend `svg { fill: currentcolor }` rules override the root `fill="none"`, so the outlines would render solid. Draw a filled `<path>` on the same 24×24 grid, with `aria-hidden="true"`, `focusable="false"` and a CSS class. If a block previews the icon in the editor, give that preview the same filled markup so the editor matches the front end.
+**Important:** `Newspack_UI_Icons` icons are stroked, like the React icons in `packages/icons/src/` and `@wordpress/icons`. Draw each line on its centerline on the 24×24 grid, and give the root `<svg>` `style="fill:none" stroke="currentColor" stroke-width="1.5"`, `aria-hidden="true"`, `focusable="false"` and a CSS class. The `fill:none` goes in `style` rather than a `fill` attribute because frontend `svg { fill: currentcolor }` rules outrank an attribute but not an inline style. Solid parts of a drawing are child elements with `fill="currentColor" stroke="none"`. Recolor icons with `color`; a `fill` rule aimed at the children (`svg path`, `svg *`) fills the outlines solid. `sanitize_svgs()` lists the elements and attributes `wp_kses()` keeps, so add any new one there.
+
+The icons registered as admin menu icons through `base64_encode( get_svg() )` (`ad`, `collections`, `curatedList`, `email`, `globe` and `people`) stay filled, along with the multicolor `google` logo and the `newspack` mark. WordPress repaints menu icons by rewriting every `fill` and `style` attribute in the SVG, which would fill a stroked outline solid.
 
 #### Step 2: Use Icon in PHP Templates
 

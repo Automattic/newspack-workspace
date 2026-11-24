@@ -18,4 +18,33 @@ class Newspack_Test_UI_Icons extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<svg', $svg );
 		$this->assertStringContainsString( 'newspack-ui__svg-icon--comments', $svg );
 	}
+
+	/**
+	 * Stroked icons keep their stroke and fill attributes through the sanitizer.
+	 */
+	public function test_stroked_icons_survive_kses() {
+		$stroked = 0;
+		foreach ( array_keys( \Newspack\Newspack_UI_Icons::$ui_icons ) as $name ) {
+			$raw = \Newspack\Newspack_UI_Icons::get_svg( $name );
+			if ( false === strpos( $raw, 'stroke="currentColor"' ) ) {
+				continue;
+			}
+			$stroked++;
+			$clean = wp_kses( $raw, \Newspack\Newspack_UI_Icons::sanitize_svgs() );
+
+			$this->assertStringContainsString( 'style="fill:none"', $clean, "$name keeps its unfilled root" );
+			$this->assertStringContainsString( 'stroke="currentColor"', $clean, "$name keeps its stroke color" );
+			$this->assertStringContainsString( 'stroke-width="1.5"', $clean, "$name keeps its stroke width" );
+
+			foreach ( [ 'd', 'fill', 'stroke', 'stroke-linejoin', 'stroke-linecap', 'cx', 'cy', 'r' ] as $attribute ) {
+				$this->assertSame(
+					preg_match_all( '/\s' . $attribute . '="[^"]*"/', $raw ),
+					preg_match_all( '/\s' . $attribute . '="[^"]*"/', $clean ),
+					"$name keeps every $attribute attribute"
+				);
+			}
+			$this->assertSame( substr_count( $raw, '<circle' ), substr_count( $clean, '<circle' ), "$name keeps its circles" );
+		}
+		$this->assertGreaterThan( 0, $stroked );
+	}
 }
