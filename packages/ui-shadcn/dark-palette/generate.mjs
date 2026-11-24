@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse, converter, formatHex, displayable } from 'culori';
 import postcss from 'postcss';
+import { apcaLc as apca, composite, rgba255, hex255 } from '../scripts/apca.mjs';
 
 const HERE = path.dirname( fileURLToPath( import.meta.url ) );
 const BUILD = path.join( HERE, '../build' );
@@ -67,51 +68,9 @@ const OVERRIDES = [
 
 const toOklch = converter( 'oklch' );
 const toOklab = converter( 'oklab' );
-const toRgb = converter( 'rgb' );
 
 const round = ( n, d = 1 ) => Math.round( n * 10 ** d ) / 10 ** d;
 const fmt = n => ( Object.is( round( n ), -0 ) ? '0.0' : round( n ).toFixed( 1 ) );
-
-function rgba255( color ) {
-	const c = toRgb( typeof color === 'string' ? parse( color ) : color );
-	const ch = v => Math.round( Math.min( 1, Math.max( 0, v ?? 0 ) ) * 255 );
-	return [ ch( c.r ), ch( c.g ), ch( c.b ), c.alpha ?? 1 ];
-}
-
-function hex255( [ r, g, b ] ) {
-	return '#' + [ r, g, b ].map( v => v.toString( 16 ).padStart( 2, '0' ) ).join( '' );
-}
-
-function composite( fg, bg ) {
-	const f = rgba255( fg );
-	const b = rgba255( bg );
-	const a = f[ 3 ];
-	return hex255( [ 0, 1, 2 ].map( i => Math.round( f[ i ] * a + b[ i ] * ( 1 - a ) ) ) );
-}
-
-function apcaLuminance( hex ) {
-	const [ r, g, b ] = hex.replace( '#', '' ).match( /.{2}/g ).map( x => parseInt( x, 16 ) / 255 );
-	const y = 0.2126729 * Math.pow( r, 2.4 ) + 0.7151522 * Math.pow( g, 2.4 ) + 0.072175 * Math.pow( b, 2.4 );
-	return y > 0.022 ? y : y + Math.pow( 0.022 - y, 1.414 );
-}
-
-function apcaContrast( textY, backgroundY ) {
-	if ( Math.abs( backgroundY - textY ) < 0.0005 ) {
-		return 0;
-	}
-	if ( backgroundY > textY ) {
-		const sapc = ( Math.pow( backgroundY, 0.56 ) - Math.pow( textY, 0.57 ) ) * 1.14;
-		return sapc < 0.1 ? 0 : ( sapc - 0.027 ) * 100;
-	}
-	const sapc = ( Math.pow( backgroundY, 0.65 ) - Math.pow( textY, 0.62 ) ) * 1.14;
-	return sapc > -0.1 ? 0 : ( sapc + 0.027 ) * 100;
-}
-
-function apca( fg, bg, page = bg ) {
-	const bgHex = composite( bg, page );
-	const fgHex = composite( fg, bgHex );
-	return apcaContrast( apcaLuminance( fgHex ), apcaLuminance( bgHex ) );
-}
 
 function matchParen( str, open ) {
 	let depth = 0;
