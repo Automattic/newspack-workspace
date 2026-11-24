@@ -208,14 +208,24 @@ class Renderer_Controller {
 		if ( false === stripos( $html, 'text-decoration: underline' ) && false === stripos( $html, 'text-decoration:underline' ) ) {
 			return $html;
 		}
-		// First pass: find the links whose next tag (closers included) is an image. A link
-		// followed by an image after it closes (`<a>…</a><img>`) is a text link and keeps
-		// its underline.
+		// First pass: find the links whose content starts with an image. A link closed
+		// before the image (`<a>…</a><img>`), or with text ahead of it (`<a>Read <img></a>`),
+		// is a text link and keeps its underline.
 		$image_links = [];
 		$scan        = new \WP_HTML_Tag_Processor( $html );
 		$link_index  = -1;
 		$candidate   = null;
-		while ( $scan->next_tag( [ 'tag_closers' => 'visit' ] ) ) {
+		while ( $scan->next_token() ) {
+			$type = $scan->get_token_type();
+			if ( '#text' === $type ) {
+				if ( null !== $candidate && preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
+					$candidate = null;
+				}
+				continue;
+			}
+			if ( '#tag' !== $type ) {
+				continue;
+			}
 			$is_opener = ! $scan->is_tag_closer();
 			if ( null !== $candidate ) {
 				if ( $is_opener && 'IMG' === $scan->get_tag() ) {
