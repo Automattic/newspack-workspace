@@ -14,9 +14,6 @@
 
 	.comments-panel__trigger {
 		justify-content: center;
-		svg {
-			fill: currentcolor;
-		}
 	}
 
 	.wp-block-buttons > .wp-block-button.has-custom-width {
@@ -70,7 +67,6 @@
 		display: block;
 		width: var(--wp--preset--spacing--40, 1.5rem);
 		height: var(--wp--preset--spacing--40, 1.5rem);
-		fill: currentcolor;
 	}
 }
 

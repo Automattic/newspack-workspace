@@ -164,6 +164,15 @@ it( 'saves only the settings that changed, then confirms', async () => {
 	expect( notices() ).toContain( 'Settings saved.' );
 } );
 
+it( 'saves the web app display mode', async () => {
+	await renderView();
+
+	fireEvent.change( screen.getByLabelText( 'Web app display mode' ), { target: { value: 'standalone' } } );
+	await save();
+
+	expect( ( posts()[ 0 ].data as { theme_mods: AdvancedSettings } ).theme_mods.pwa_display_mode ).toBe( 'standalone' );
+} );
+
 it( 'saves the related posts age and primary category through their own endpoints', async () => {
 	await renderView();
 
