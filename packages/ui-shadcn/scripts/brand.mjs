@@ -34,8 +34,9 @@ export const accentTokens = {
 	'newspack-ui-color-brand-accent-amber-subtle': [ '#ffdec7', 'Amber tint, newspack-colors quaternary-100, for section backgrounds.' ],
 };
 
-export const inverseTokens = {
-	'newspack-ui-color-surface': [ 'var(--newspack-ui-color-primary-60)', 'Surface on an inverse section: Cobalt.' ],
+export const blueTokens = {
+	'color-scheme': [ 'dark', 'Native controls and scrollbars on Cobalt use their dark form.' ],
+	'newspack-ui-color-surface': [ 'var(--newspack-ui-color-primary-60)', 'Surface of a blue section: Cobalt.' ],
 	'newspack-ui-color-text': [ 'var(--newspack-ui-color-neutral-0)', 'Text on Cobalt: white, Lc 95.' ],
 	'newspack-ui-color-text-muted': [ 'var(--newspack-ui-color-primary-5)', 'Muted text on Cobalt: newspack-colors primary-050.' ],
 	'newspack-ui-color-focus': [ 'var(--newspack-ui-color-neutral-0)', 'Focus ring on Cobalt: white.' ],
@@ -45,6 +46,7 @@ export const inverseTokens = {
 	'newspack-ui-color-btn-pressed': [ 'color-mix(in oklab, var(--newspack-ui-color-btn) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-surface))', 'Button pressed on Cobalt: restated so it resolves against the white fill and the Cobalt surface.' ],
 	'newspack-ui-color-focus-halo': [ 'color-mix(in oklab, var(--newspack-ui-color-focus) var(--newspack-ui-focus-halo-mix), transparent)', 'Focus halo on Cobalt: restated so it mixes from the white ring.' ],
 	'newspack-ui-color-link': [ 'var(--newspack-ui-color-text)', 'Links on Cobalt: the inverse text color, since Cobalt link text would vanish into the Cobalt surface.' ],
+	'newspack-ui-color-accent': [ 'var(--newspack-ui-color-text)', 'Current-page underline in the site header on Cobalt: white.' ],
 	'newspack-ui-color-button-text-hover': [ 'var(--newspack-ui-color-btn-ink)', 'Button text on hover: the Cobalt ink, since the white Neutral value would vanish on the light hover fill.' ],
 	'newspack-ui-color-focus-on-brand': [ 'var(--newspack-ui-color-primary-60)', 'Focus ring on the white button: Cobalt.' ],
 	'newspack-ui-color-brand-text': [ 'var(--newspack-ui-color-text)', 'Brand text on Cobalt: white.' ],
@@ -76,23 +78,63 @@ export const inverseTokens = {
 	'newspack-ui-color-surface-sunken': [ 'color-mix(in oklab, var(--newspack-ui-color-text) 7%, var(--newspack-ui-color-surface))', 'Muted Badge fill on Cobalt: white at 7% into Cobalt, the Neutral recipe.' ],
 	'newspack-ui-color-disabled-ink': [ 'color-mix(in oklab, var(--newspack-ui-color-text) 55%, var(--newspack-ui-color-surface))', 'Disabled text on Cobalt: white at 55% into Cobalt.' ],
 	'newspack-ui-color-border': [ 'color-mix(in oklab, var(--newspack-ui-color-neutral-0) 30%, transparent)', 'Border on Cobalt: white at 30%, in oklab.' ],
+	'newspack-ui-color-success': [ 'var(--newspack-ui-color-success-5)', 'Success Alert icon on Cobalt: newspack-colors success-050.' ],
+	'newspack-ui-color-success-text': [ 'var(--newspack-ui-color-success-0)', 'Success Badge text on Cobalt: newspack-colors success-000.' ],
+	'newspack-ui-color-success-tint': [ 'var(--newspack-ui-color-success-60)', 'Success Alert and Badge fill on Cobalt: newspack-colors success-600, dark enough for white text.' ],
+	'newspack-ui-color-success-border': [ 'color-mix(in oklab, var(--newspack-ui-color-success) 50%, transparent)', 'Success Alert border on Cobalt: the icon green at 50%.' ],
+	'newspack-ui-color-warning': [ 'var(--newspack-ui-color-warning-5)', 'Warning color on Cobalt: newspack-colors warning-050.' ],
+	'newspack-ui-color-warning-dot': [ 'var(--newspack-ui-color-warning)', 'Warning Alert icon on Cobalt: newspack-colors warning-050.' ],
+	'newspack-ui-color-warning-text': [ 'var(--newspack-ui-color-warning-0)', 'Warning Badge text on Cobalt: newspack-colors warning-000.' ],
+	'newspack-ui-color-warning-tint': [ 'var(--newspack-ui-color-warning-60)', 'Warning Alert and Badge fill on Cobalt: newspack-colors warning-600, dark enough for white text.' ],
+	'newspack-ui-color-warning-border': [ 'color-mix(in oklab, var(--newspack-ui-color-warning) 50%, transparent)', 'Warning Alert border on Cobalt: the icon yellow at 50%.' ],
+	'newspack-ui-color-error': [ 'var(--newspack-ui-color-error-5)', 'Error Alert icon and the invalid edge and ring on Cobalt: newspack-colors error-050. The error red scores Lc 17.8 on Cobalt.' ],
+	'newspack-ui-color-error-text': [ 'var(--newspack-ui-color-error-0)', 'Error Badge text and field error messages on Cobalt: newspack-colors error-000.' ],
+	'newspack-ui-color-error-tint': [ 'var(--newspack-ui-color-error-70)', 'Error and Destructive Alert fill and the error Badge fill on Cobalt: newspack-colors error-700, dark enough for white text.' ],
+	'newspack-ui-color-error-border': [ 'color-mix(in oklab, var(--newspack-ui-color-error) 50%, transparent)', 'Error Alert border on Cobalt: the icon red at 50%.' ],
+	'newspack-ui-color-destructive-text': [ 'var(--newspack-ui-color-error)', 'Destructive text on Cobalt: the error-050 icon color.' ],
+	'newspack-ui-color-brand-accent-emerald-subtle': [ 'color-mix(in oklab, var(--newspack-ui-color-brand-accent-emerald) 25%, var(--newspack-ui-color-surface))', 'Emerald section background on Cobalt: Emerald at 25% into Cobalt, so white body text reads on it.' ],
+	'newspack-ui-color-brand-accent-morganite-subtle': [ 'color-mix(in oklab, var(--newspack-ui-color-brand-accent-morganite) 25%, var(--newspack-ui-color-surface))', 'Morganite section background on Cobalt: Morganite at 25% into Cobalt, so white body text reads on it.' ],
+	'newspack-ui-color-brand-accent-amber-subtle': [ 'color-mix(in oklab, var(--newspack-ui-color-brand-accent-amber) 25%, var(--newspack-ui-color-surface))', 'Amber section background on Cobalt: Amber at 25% into Cobalt, so white body text reads on it.' ],
 };
 
-export const inverseUnsupported = [
-	'Success, Warning, Error and Destructive Alerts: the Alert text is the inverse white and the status fills stay light, so the text is unreadable. Use the default or Info Alert on the inverse surface.',
-	'Invalid field styling: the error red edges, ring and label text stay Neutral and do not read on Cobalt.',
+export const blueShadcn = {
+	primary: [ 'var(--newspack-ui-color-btn)', 'The white Button fill on Cobalt.' ],
+	'primary-foreground': [ 'var(--newspack-ui-color-btn-ink)', 'The Cobalt Button ink.' ],
+	'sidebar-primary': [ 'var(--newspack-ui-color-btn)', 'Mirrors primary.' ],
+	'sidebar-primary-foreground': [ 'var(--newspack-ui-color-btn-ink)', 'Mirrors primary-foreground.' ],
+};
+
+export const blueChart = [
+	[ 'var(--newspack-ui-color-primary-0)', 'newspack-colors primary-000, in place of Cobalt, which scores Lc 0 on Cobalt.' ],
+	[ 'var(--newspack-ui-color-brand-accent-emerald)', 'Emerald, as in light.' ],
+	[ 'var(--newspack-ui-color-brand-accent-morganite)', 'Morganite, as in light.' ],
+	[ 'var(--newspack-ui-color-brand-accent-amber)', 'Amber, as in light.' ],
+	[ 'var(--newspack-ui-color-primary-20)', 'newspack-colors primary-200, in place of the primary-300 tint, which scores Lc 25 on Cobalt.' ],
+];
+
+export const blueContrast = {
+	'newspack-ui-color-input-border': [ 'var(--newspack-ui-color-primary-0)', 'Input border under prefers-contrast: more on Cobalt: newspack-colors primary-000.' ],
+	'newspack-ui-color-input-border-hover': [ 'var(--newspack-ui-color-text)', 'Input hover border under prefers-contrast: more on Cobalt: white.' ],
+	'newspack-ui-color-input-border-disabled': [ 'var(--newspack-ui-color-border-control)', 'Disabled input border under prefers-contrast: more on Cobalt: the control border.' ],
+	'newspack-ui-color-input-bg-disabled': [ 'var(--newspack-ui-color-neutral-fill-hover)', 'Disabled field fill under prefers-contrast: more on Cobalt: the hover neutral fill, a step past the enabled field. The pressed fill Neutral dark uses puts the placeholder at Lc 58.1.' ],
+};
+
+export const blueUnsupported = [
+	'Portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under body, outside the blue section, so a popup opened from a blue section renders on the light surface.',
+	'Tokens no kit component reads keep their light values in a blue section: --newspack-ui-chart-0 to -7 (use --chart-1 to --chart-5), --newspack-ui-color-error-tint-hover and -pressed, --newspack-ui-color-primary and --newspack-ui-color-against-primary.',
+	'Stock shadcn components that use --destructive as text or a border (text-destructive, aria-invalid:border-destructive) get the destructive red, Lc 17.8 on Cobalt. Kit components use the error tokens, which a blue section restates.',
 ];
 
 const interFallback = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif';
 
 export const brandFonts = {
-	'font-heading': [ `"American Grotesk", ${ interFallback }`, 'Subheads h2 to h5: American Grotesk, then Inter 500 where the fonts item is not installed.' ],
-	'font-display': [ `"American Grotesk Compressed", ${ interFallback }`, 'h1 and hero or slide headlines: American Grotesk Compressed Black, then Inter 900 where the fonts item is not installed.' ],
+	'font-heading': [ `"American Grotesk", ${ interFallback }`, 'Subheads h3 to h5: American Grotesk, then Inter 500 where the fonts item is not installed.' ],
+	'font-display': [ `"American Grotesk Compressed", ${ interFallback }`, 'h1, h2 and hero or slide headlines: American Grotesk Compressed Black, then Inter 900 where the fonts item is not installed.' ],
 };
 
 export const brandType = {
 	h1: { size: 'clamp(2.25rem, -3.639rem + 12.048vw, 6rem)', lineHeight: '1', note: 'Figma Brand H1: 36px to 96px, line height 96px (1), Compressed Black 900.' },
-	h2: { size: 'clamp(2rem, -1.141rem + 6.426vw, 4rem)', lineHeight: '1.125', note: 'Figma Brand H2: 32px to 64px, line height 72px at the top (1.125), Medium 500.' },
+	h2: { size: 'clamp(2rem, -1.141rem + 6.426vw, 4rem)', lineHeight: '1.125', note: 'Figma Brand H2 size: 32px to 64px, line height 72px at the top (1.125). Set in Compressed Black 900, sentence case.' },
 	h3: { size: 'clamp(1.75rem, -0.213rem + 4.016vw, 3rem)', lineHeight: '1.25', note: 'Figma Brand H3: 28px to 48px, line height 60px at the top (1.25), Medium 500.' },
 	h4: { size: 'clamp(1.625rem, 0.055rem + 3.213vw, 2.625rem)', lineHeight: '1.3333', note: 'Figma Brand H4: 26px to 42px, line height 56px at the top (1.3333), Medium 500.' },
 	h5: { size: 'clamp(1.375rem, 0.394rem + 2.008vw, 2rem)', lineHeight: '1.375', note: 'Figma Brand H5: 22px to 32px, line height 44px at the top (1.375), Medium 500.' },
@@ -113,20 +155,27 @@ export const brandBase = {
 		'text-transform': 'uppercase',
 		color: 'var(--newspack-ui-color-brand-text)',
 	},
-	'h2, h3, h4, h5': {
+	h2: {
+		'font-family': 'var(--font-display)',
+		'font-weight': '900',
+		'font-size': 'var(--newspack-ui-brand-h2-size)',
+		'line-height': 'var(--newspack-ui-brand-h2-line-height)',
+		color: 'var(--newspack-ui-color-text)',
+	},
+	'h3, h4, h5': {
 		'font-family': 'var(--font-heading)',
 		'font-weight': '500',
 		color: 'var(--newspack-ui-color-text)',
 	},
-	...Object.fromEntries( [ 2, 3, 4, 5 ].map( level => [ `h${ level }`, {
+	...Object.fromEntries( [ 3, 4, 5 ].map( level => [ `h${ level }`, {
 		'font-size': `var(--newspack-ui-brand-h${ level }-size)`,
 		'line-height': `var(--newspack-ui-brand-h${ level }-line-height)`,
 	} ] ) ),
-	'.newspack-brand-inverse': {
+	'.dark, .newspack-brand-inverse': {
 		'background-color': 'var(--newspack-ui-color-surface)',
 		color: 'var(--newspack-ui-color-text)',
 	},
-	'.newspack-brand-inverse h1, .newspack-brand-inverse .font-display': {
+	'.dark h1, .dark .font-display, .newspack-brand-inverse h1, .newspack-brand-inverse .font-display': {
 		color: 'var(--newspack-ui-color-text)',
 	},
 	'.font-display': {

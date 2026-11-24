@@ -56,6 +56,7 @@ test( 'deck-layouts ships the seven starter slides, with brand opening and closi
 	assert.ok( ! /\b(?:text|bg|border)-(?:white|black|[a-z]+-\d{2,3})\b|rgba?\(|#[0-9a-f]{3,8}\b/i.test( source ), 'no literal colors' );
 	assert.ok( source.includes( "@/components/brand/newspack-logo" ), 'logo import keeps the brand/ path' );
 	assert.ok( ! source.includes( 'size="lg"' ), 'no size the Button lacks' );
+	assert.ok( ! /<h2 [^>]*className="[^"]*\bfont-/.test( source ), 'slide titles set no font utility, so they take the brand h2 face' );
 } );
 
 test( 'deck dot navigation uses the kit tokens, the brand surface and renders for one slide', () => {

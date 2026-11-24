@@ -29,16 +29,27 @@ test( 'h1 is Cobalt Compressed Black uppercase', () => {
 	assert.equal( base.h1.color, 'var(--newspack-ui-color-brand-text)' );
 	assert.equal( base.h1[ 'font-size' ], 'var(--newspack-ui-brand-h1-size)' );
 	assert.equal( base.h1[ 'line-height' ], 'var(--newspack-ui-brand-h1-line-height)' );
-	assert.equal( base[ '.newspack-brand-inverse h1, .newspack-brand-inverse .font-display' ].color, 'var(--newspack-ui-color-text)' );
+	assert.equal( base[ '.dark h1, .dark .font-display, .newspack-brand-inverse h1, .newspack-brand-inverse .font-display' ].color, 'var(--newspack-ui-color-text)' );
 } );
 
-test( 'h2 to h5 are Medium sentence case in the text color', () => {
-	const rule = base[ 'h2, h3, h4, h5' ];
+test( 'h2 is Compressed Black sentence case in the text color', () => {
+	assert.equal( base.h2[ 'font-family' ], 'var(--font-display)' );
+	assert.equal( base.h2[ 'font-weight' ], '900' );
+	assert.equal( base.h2[ 'text-transform' ], undefined );
+	assert.equal( base.h2.color, 'var(--newspack-ui-color-text)' );
+	assert.equal( base.h2[ 'font-size' ], 'var(--newspack-ui-brand-h2-size)' );
+	assert.equal( base.h2[ 'line-height' ], 'var(--newspack-ui-brand-h2-line-height)' );
+	assert.ok( Object.keys( base ).every( selector => ! /\bh2\b/.test( selector ) || selector === 'h2' ), 'no other base rule sets h2' );
+	assert.match( brand.docs, /h2 is Compressed Black in sentence case and the text color/ );
+} );
+
+test( 'h3 to h5 are Medium sentence case in the text color', () => {
+	const rule = base[ 'h3, h4, h5' ];
 	assert.equal( rule[ 'font-family' ], 'var(--font-heading)' );
 	assert.equal( rule[ 'font-weight' ], '500' );
 	assert.equal( rule[ 'text-transform' ], undefined );
 	assert.equal( rule.color, 'var(--newspack-ui-color-text)' );
-	for ( const level of [ 2, 3, 4, 5 ] ) {
+	for ( const level of [ 3, 4, 5 ] ) {
 		assert.equal( base[ `h${ level }` ][ 'font-size' ], `var(--newspack-ui-brand-h${ level }-size)` );
 		assert.equal( base[ `h${ level }` ][ 'line-height' ], `var(--newspack-ui-brand-h${ level }-line-height)` );
 	}
@@ -62,7 +73,7 @@ test( 'the anchor rule keeps the type selector so it beats preflight by order', 
 } );
 
 test( 'the inverse surface paints in the base layer so utilities can override it', () => {
-	assert.deepEqual( base[ '.newspack-brand-inverse' ], { 'background-color': 'var(--newspack-ui-color-surface)', color: 'var(--newspack-ui-color-text)' } );
+	assert.deepEqual( base[ '.dark, .newspack-brand-inverse' ], { 'background-color': 'var(--newspack-ui-color-surface)', color: 'var(--newspack-ui-color-text)' } );
 	assert.ok( ! ( 'background-color' in brand.css[ '.newspack-brand-inverse' ] ) );
 	assert.ok( ! ( 'color' in brand.css[ '.newspack-brand-inverse' ] ) );
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
@@ -88,7 +99,8 @@ test( 'brand.css carries the type rules', () => {
 	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
 	assert.match( css, /@layer base \{/ );
 	assert.match( css, /--font-display: "American Grotesk Compressed"/ );
-	assert.match( css, /\.newspack-brand-inverse h1, \.newspack-brand-inverse \.font-display \{/ );
+	assert.match( css, /\.dark h1, \.dark \.font-display, \.newspack-brand-inverse h1, \.newspack-brand-inverse \.font-display \{/ );
+	assert.match( css, /\n\th2 \{\n\t\tfont-family: var\(--font-display\);\n\t\tfont-weight: 900;/ );
 } );
 
 test( 'the fonts item ships one stylesheet file with five @font-face rules', () => {

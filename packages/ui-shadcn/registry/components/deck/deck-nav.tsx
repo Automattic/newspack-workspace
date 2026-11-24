@@ -29,7 +29,7 @@ export function DeckNav() {
 		return null;
 	}
 
-	const inverse = getDeckSlides( scrollerRef?.current ?? null )[ current ]?.classList.contains( 'newspack-brand-inverse' );
+	const inverse = getDeckSlides( scrollerRef?.current ?? null )[ current ]?.matches( '.dark, .newspack-brand-inverse' );
 
 	return (
 		<nav aria-label="Slides" className={ `newspack-deck-nav${ inverse ? ' newspack-brand-inverse' : '' } bg-transparent fixed top-1/2 right-4 z-40 flex -translate-y-1/2 flex-col gap-1` }>

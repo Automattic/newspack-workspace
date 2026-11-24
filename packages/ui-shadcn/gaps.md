@@ -32,12 +32,12 @@ Tokens the brand adds that newspack-ui has no equivalent for. They exist in `scr
 
 - **Link**: `--newspack-ui-color-link`. newspack-ui links use the text or brand text color directly. Neutral sets the token to `var(--newspack-ui-color-text)`.
 - **Accents**: `--newspack-ui-color-brand-accent-{emerald,morganite,amber}` with `-ink` and `-subtle`. newspack-ui has no secondary, tertiary or quaternary CSS tokens, so the fills are the newspack-colors values as literals. They are for backgrounds, shapes and charts, never for text or actions.
-- **Inverse set**: the `.newspack-brand-inverse` block, a Cobalt surface with white text, a white focus ring and white buttons. newspack-ui has no inverse surface.
+- **Blue sections**: the `.dark` and `.newspack-brand-inverse` blocks, one set of values for a Cobalt section with white text, a white focus ring and white buttons. newspack-ui has no Cobalt surface, and Neutral's dark palette is not used.
 - **Display font**: `--font-display`, American Grotesk Compressed Black. newspack-ui has no display face.
 - **Brand heading sizes**: `--newspack-ui-brand-h1` to `-h6` size and line-height, from the Figma Brand frame. They do not match the `2xl` to `6xl` scale.
-- **Chart colors**: `--chart-1` to `--chart-5` are literal brand colors.
+- **Chart colors**: `--chart-1` to `--chart-5` are literal brand colors in light, and palette tokens in a blue section. Neutral's `--newspack-ui-chart-0` to `-7` keep their light values in both modes.
 
-Not supported on the inverse surface: Success, Warning, Error and Destructive Alerts, and invalid-field styling. Portal-rendered popups render on the normal surface. The surface has no `prefers-contrast` boost. The shadcn variables (`--primary`, `--ring`, `--foreground`, `--background`, `--border`) are not restated there, so only stock shadcn components that read them directly are affected.
+Not covered in a blue section: portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under `body`, outside the section, so one opened from a blue section renders on the light surface. Tokens no kit component reads keep their light values (`--newspack-ui-chart-0` to `-7`, `--newspack-ui-color-error-tint-hover` and `-pressed`, `--newspack-ui-color-primary` and `--newspack-ui-color-against-primary`). Stock shadcn components that use `--destructive` as text or a border get the destructive red, Lc 17.8 on Cobalt; kit components read the error tokens.
 
 ## Values with no token
 
