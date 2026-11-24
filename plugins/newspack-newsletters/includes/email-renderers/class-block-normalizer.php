@@ -30,12 +30,23 @@ class Block_Normalizer {
 	 *
 	 * @var bool
 	 */
-	private static $in_block_hooks_pass = false;
+	private static bool $in_block_hooks_pass = false;
+
+	/**
+	 * Number of renders currently holding the hooks. `render_wc()` can nest, and the
+	 * callbacks are shared, so only the outermost render adds and removes them.
+	 *
+	 * @var int
+	 */
+	private static int $depth = 0;
 
 	/**
 	 * Register the render-scoped hooks. Called by Renderer_Controller::render_wc().
 	 */
 	public static function add_hooks(): void {
+		if ( self::$depth++ > 0 ) {
+			return;
+		}
 		add_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'normalize' ], self::PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		add_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
@@ -46,6 +57,9 @@ class Block_Normalizer {
 	 * Remove the render-scoped hooks.
 	 */
 	public static function remove_hooks(): void {
+		if ( self::$depth > 0 && --self::$depth > 0 ) {
+			return;
+		}
 		remove_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'normalize' ], self::PRIORITY );
 		remove_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		remove_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
@@ -64,10 +78,10 @@ class Block_Normalizer {
 	 * in a post-content block), they override the correct ones. Core's plain parser is
 	 * used for that pass instead.
 	 *
-	 * @param string $content Content.
-	 * @return string Unchanged content.
+	 * @param mixed $content Content.
+	 * @return mixed Unchanged content.
 	 */
-	public static function start_block_hooks_pass( $content ) {
+	public static function start_block_hooks_pass( mixed $content ): mixed {
 		self::$in_block_hooks_pass = true;
 		return $content;
 	}
@@ -76,10 +90,10 @@ class Block_Normalizer {
 	 * Mark the end of core's block-hooks pass. Registered at priority 8 after core's
 	 * callback, so it runs once that pass is done and before `do_blocks()` (priority 9).
 	 *
-	 * @param string $content Content.
-	 * @return string Unchanged content.
+	 * @param mixed $content Content.
+	 * @return mixed Unchanged content.
 	 */
-	public static function end_block_hooks_pass( $content ) {
+	public static function end_block_hooks_pass( mixed $content ): mixed {
 		self::$in_block_hooks_pass = false;
 		return $content;
 	}
@@ -87,20 +101,20 @@ class Block_Normalizer {
 	/**
 	 * Use core's block parser during the block-hooks pass.
 	 *
-	 * @param string $parser_class Block parser class.
-	 * @return string
+	 * @param mixed $parser_class Block parser class.
+	 * @return mixed
 	 */
-	public static function block_parser_class( $parser_class ) {
+	public static function block_parser_class( mixed $parser_class ): mixed {
 		return self::$in_block_hooks_pass ? \WP_Block_Parser::class : $parser_class;
 	}
 
 	/**
 	 * Normalize a list of parsed blocks.
 	 *
-	 * @param array $blocks Parsed blocks.
-	 * @return array Normalized blocks.
+	 * @param mixed $blocks Parsed blocks.
+	 * @return mixed Normalized blocks.
 	 */
-	public static function normalize( $blocks ) {
+	public static function normalize( mixed $blocks ): mixed {
 		if ( ! is_array( $blocks ) ) {
 			return $blocks;
 		}
