@@ -67,7 +67,9 @@ The left column: a `SectionHeader` with `noMargin`, then any children.
 - `id`: placed on the section header, so a link with `?scrollTo=<id>` scrolls
   to it.
 - `backNav`: a URL. Shows a back arrow before the title, for the first section
-  of a sub-screen that links back to the screen above it.
+  of a sub-screen with no breadcrumb, such as an experimental tool's configure
+  view. An item editor under a tabbed `Wizard` links back through its page
+  `breadcrumbs` instead.
 - `className` and any other `div` attribute: added to the column.
 - `children`: shown 16px below the description, such as a notice that applies
   to the whole section. Children stretch to the column width, so wrap a lone
