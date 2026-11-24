@@ -33,6 +33,8 @@ const astroNavigate: Navigate = ( url ) => {
  * - `navigate`: how Fumadocs opens a URL, such as `navigate` from `astro:transitions/client`
  *   passed by a React wrapper. Without it, the island uses Astro's router when the page has
  *   `<ClientRouter />` and a page load otherwise, so a page in an `.astro` file needs nothing.
+ * - `wordmarkLink`: `false` renders the wordmark without the home link, as on `SiteHeader`, so an
+ *   Astro island can sit in the `wordmark` slot.
  * - `onThemeToggle`: runs in place of the theme toggle's own switch, as on `SiteHeader`. A
  *   function cannot be passed from an `.astro` file, so pass it from a React wrapper.
  */
@@ -42,6 +44,7 @@ export function AstroDocs( {
 	params,
 	page,
 	wordmark,
+	wordmarkLink,
 	navigate = astroNavigate,
 	onThemeToggle,
 	children,
@@ -51,13 +54,14 @@ export function AstroDocs( {
 	params: AstroProviderProps[ 'params' ];
 	page?: DocsPageProps;
 	wordmark?: ReactNode;
+	wordmarkLink?: boolean;
 	navigate?: Navigate;
 	onThemeToggle?: ThemeToggleHandler;
 	children: ReactNode;
 } ) {
 	return (
 		<RootProvider pathname={ pathname } params={ params } navigate={ navigate } theme={ THEME } search={ SEARCH }>
-			<DocsShell tree={ tree } pathname={ pathname } page={ page } wordmark={ wordmark } onThemeToggle={ onThemeToggle }>
+			<DocsShell tree={ tree } pathname={ pathname } page={ page } wordmark={ wordmark } wordmarkLink={ wordmarkLink } onThemeToggle={ onThemeToggle }>
 				{ children }
 			</DocsShell>
 		</RootProvider>
@@ -67,12 +71,13 @@ export function AstroDocs( {
 /**
  * The header island for an Astro page outside the docs on a site with docs, so the Search
  * button, Ctrl or Cmd+K and the inline drawer search work there too. `navigate` and
- * `onThemeToggle` work as on `AstroDocs`; `skipTo` as on `SiteHeader`.
+ * `onThemeToggle` work as on `AstroDocs`; `wordmarkLink` and `skipTo` as on `SiteHeader`.
  */
 export function AstroDocsSiteHeader( {
 	pathname,
 	params = NO_PARAMS,
 	wordmark,
+	wordmarkLink,
 	navigate = astroNavigate,
 	onThemeToggle,
 	skipTo,
@@ -80,13 +85,14 @@ export function AstroDocsSiteHeader( {
 	pathname: string;
 	params?: AstroProviderProps[ 'params' ];
 	wordmark?: ReactNode;
+	wordmarkLink?: boolean;
 	navigate?: Navigate;
 	onThemeToggle?: ThemeToggleHandler;
 	skipTo?: string | false;
 } ) {
 	return (
 		<RootProvider pathname={ pathname } params={ params } navigate={ navigate } theme={ THEME } search={ SEARCH }>
-			<DocsSiteHeader pathname={ pathname } wordmark={ wordmark } onThemeToggle={ onThemeToggle } skipTo={ skipTo } />
+			<DocsSiteHeader pathname={ pathname } wordmark={ wordmark } wordmarkLink={ wordmarkLink } onThemeToggle={ onThemeToggle } skipTo={ skipTo } />
 		</RootProvider>
 	);
 }

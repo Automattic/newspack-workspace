@@ -39,14 +39,15 @@ function SidebarBanner( { className, children, ...props }: ComponentProps< 'div'
 /**
  * The Fumadocs notebook layout with the site header, the right-hand docs drawer (site links,
  * docs tree, inline search) and the page chrome. Render it inside a Fumadocs `RootProvider`
- * whose `search` option is `{ SearchDialog }` from `./search-dialog`. `onThemeToggle` works as on
- * `SiteHeader`.
+ * whose `search` option is `{ SearchDialog }` from `./search-dialog`. `wordmarkLink` and
+ * `onThemeToggle` work as on `SiteHeader`.
  */
 export function DocsShell( {
 	tree,
 	pathname,
 	page,
 	wordmark,
+	wordmarkLink,
 	onThemeToggle,
 	children,
 }: {
@@ -54,6 +55,7 @@ export function DocsShell( {
 	pathname: string;
 	page?: DocsPageProps;
 	wordmark?: ReactNode;
+	wordmarkLink?: boolean;
 	onThemeToggle?: ThemeToggleHandler;
 	children: ReactNode;
 } ) {
@@ -65,7 +67,7 @@ export function DocsShell( {
 				tree={ tree }
 				themeSwitch={ { enabled: false } }
 				slots={ { sidebar: DRAWER_SIDEBAR_SLOT } }
-				nav={ { component: <DocsSiteHeader docs pathname={ pathname } wordmark={ wordmark } onThemeToggle={ onThemeToggle } />, mode: 'top' } }
+				nav={ { component: <DocsSiteHeader docs pathname={ pathname } wordmark={ wordmark } wordmarkLink={ wordmarkLink } onThemeToggle={ onThemeToggle } />, mode: 'top' } }
 				sidebar={ { collapsible: false, 'aria-label': 'Documentation', banner: SidebarBanner } }
 				containerProps={ { style: { '--fd-header-height': 'var(--site-header-height)' } as CSSProperties } }
 			>

@@ -47,18 +47,20 @@ function DocsMenuButton() {
  * and the mobile Sheet searches inline. With `docs`, the menu button opens the Fumadocs docs
  * drawer instead of the Sheet, and the header leaves the skip link to the docs layout. Render it
  * inside a Fumadocs `RootProvider`, and with `docs` inside the notebook `DocsLayout`.
- * `onThemeToggle` and `skipTo` work as on `SiteHeader`.
+ * `wordmarkLink`, `onThemeToggle` and `skipTo` work as on `SiteHeader`.
  */
 export function DocsSiteHeader( {
 	pathname,
 	docs = false,
 	wordmark,
+	wordmarkLink,
 	onThemeToggle,
 	skipTo,
 }: {
 	pathname: string;
 	docs?: boolean;
 	wordmark?: ReactNode;
+	wordmarkLink?: boolean;
 	onThemeToggle?: ThemeToggleHandler;
 	skipTo?: string | false;
 } ) {
@@ -66,6 +68,7 @@ export function DocsSiteHeader( {
 		<SiteHeader
 			pathname={ pathname }
 			wordmark={ wordmark }
+			wordmarkLink={ wordmarkLink }
 			onThemeToggle={ onThemeToggle }
 			skipTo={ docs ? false : skipTo }
 			search={ <SearchButton /> }
