@@ -221,7 +221,7 @@ export function DrawerSearch( {
 					<button
 						type="button"
 						aria-label="Clear search"
-						className="absolute end-(--newspack-ui-spacer-1) top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1.5 text-(color:--newspack-ui-color-text-muted) transition-colors duration-100 hover:bg-(color:--newspack-ui-color-neutral-fill) hover:text-(color:--newspack-ui-color-text) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(color:--newspack-ui-color-focus) [&_svg]:size-4.5"
+						className="absolute end-(--newspack-ui-spacer-1) top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1.5 text-(color:--newspack-ui-color-text-muted) transition-colors duration-100 hover:bg-(color:--newspack-ui-color-neutral-fill) hover:text-(color:--newspack-ui-color-text) focus-visible:outline-2 focus-visible:outline-transparent focus-visible:[box-shadow:inset_0_0_0_2px_var(--newspack-ui-color-focus),0_0_0_var(--newspack-ui-focus-halo-width)_var(--newspack-ui-color-focus-halo)] [&_svg]:size-4.5"
 						onClick={ () => {
 							onSearchChange( '' );
 							field.current?.focus();

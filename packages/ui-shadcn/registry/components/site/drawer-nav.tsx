@@ -14,7 +14,7 @@ export const DRAWER_ITEM_HOVER =
 	'transition-colors hover:bg-(color:--newspack-ui-color-neutral-fill)/50 hover:text-(color:--newspack-ui-color-text)/80 hover:transition-none';
 export const DRAWER_ITEM = `${ DRAWER_ITEM_BASE } ${ DRAWER_ITEM_HOVER } data-[active=true]:bg-(color:--newspack-ui-color-accent)/10 data-[active=true]:text-(color:--newspack-ui-color-accent) data-[active=true]:hover:transition-colors`;
 export const DRAWER_CLOSE =
-	'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(color:--newspack-ui-color-focus) hover:bg-(color:--newspack-ui-color-neutral-fill) hover:text-(color:--newspack-ui-color-text) p-1.5 [&_svg]:size-4.5 ms-auto text-(color:--newspack-ui-color-text-muted)';
+	'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-transparent focus-visible:[box-shadow:inset_0_0_0_2px_var(--newspack-ui-color-focus),0_0_0_var(--newspack-ui-focus-halo-width)_var(--newspack-ui-color-focus-halo)] hover:bg-(color:--newspack-ui-color-neutral-fill) hover:text-(color:--newspack-ui-color-text) p-1.5 [&_svg]:size-4.5 ms-auto text-(color:--newspack-ui-color-text-muted)';
 
 /** Fumadocs' inline-start offset for an item at a folder depth. */
 export function drawerOffset( depth: number ): CSSProperties {
