@@ -11,6 +11,7 @@ import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { bell, commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
 import apiFetch from '@wordpress/api-fetch';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
@@ -666,46 +667,48 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					) }
 				/>
 				<SplitSection.Content>
-					<CardSettingsGroup
-						title={ sprintf(
-							// translators: %s is the type of content to restrict.
-							__( 'Restrict all %s', 'newspack-plugin' ),
-							isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'posts', 'newspack-plugin' )
-						) }
-						description={ sprintf(
-							// translators: %s is the type of content to restrict.
-							__( 'All %s on your site will require access.', 'newspack-plugin' ),
-							isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'posts', 'newspack-plugin' )
-						) }
-						icon={ isNewsletter ? envelope : postList }
-						isActive={ contentType === 'all' }
-						onEnable={ () => setContentType( 'all' ) }
-						onHeaderClick={ () => setContentType( 'all' ) }
-					/>
-					<CardSettingsGroup
-						title={ sprintf(
-							// translators: %s is the type of content to restrict.
-							__( 'Choose specific %s', 'newspack-plugin' ),
-							isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
-						) }
-						description={ sprintf(
-							// translators: %s is the type of content to restrict.
-							__( 'Select which %s to restrict using custom rules.', 'newspack-plugin' ),
-							isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
-						) }
-						icon={ settings }
-						isActive={ contentType === 'custom' }
-						onEnable={ () => setContentType( 'custom' ) }
-						onHeaderClick={ () => setContentType( 'custom' ) }
-					>
-						<ContentRules rules={ contentRules } onChange={ setContentRules } isNewsletter={ isNewsletter } />
-						<CardDivider />
-						<MatchLogicToggle
-							value={ contentRulesMatch }
-							ruleCount={ contentRules.filter( r => r.slug !== 'specific_posts' ).length }
-							onChange={ setContentRulesMatch }
+					<Stack direction="column" gap="lg">
+						<CardSettingsGroup
+							title={ sprintf(
+								// translators: %s is the type of content to restrict.
+								__( 'Restrict all %s', 'newspack-plugin' ),
+								isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'posts', 'newspack-plugin' )
+							) }
+							description={ sprintf(
+								// translators: %s is the type of content to restrict.
+								__( 'All %s on your site will require access.', 'newspack-plugin' ),
+								isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'posts', 'newspack-plugin' )
+							) }
+							icon={ isNewsletter ? envelope : postList }
+							isActive={ contentType === 'all' }
+							onEnable={ () => setContentType( 'all' ) }
+							onHeaderClick={ () => setContentType( 'all' ) }
 						/>
-					</CardSettingsGroup>
+						<CardSettingsGroup
+							title={ sprintf(
+								// translators: %s is the type of content to restrict.
+								__( 'Choose specific %s', 'newspack-plugin' ),
+								isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
+							) }
+							description={ sprintf(
+								// translators: %s is the type of content to restrict.
+								__( 'Select which %s to restrict using custom rules.', 'newspack-plugin' ),
+								isNewsletter ? __( 'lists', 'newspack-plugin' ) : __( 'content', 'newspack-plugin' )
+							) }
+							icon={ settings }
+							isActive={ contentType === 'custom' }
+							onEnable={ () => setContentType( 'custom' ) }
+							onHeaderClick={ () => setContentType( 'custom' ) }
+						>
+							<ContentRules rules={ contentRules } onChange={ setContentRules } isNewsletter={ isNewsletter } />
+							<CardDivider />
+							<MatchLogicToggle
+								value={ contentRulesMatch }
+								ruleCount={ contentRules.filter( r => r.slug !== 'specific_posts' ).length }
+								onChange={ setContentRulesMatch }
+							/>
+						</CardSettingsGroup>
+					</Stack>
 				</SplitSection.Content>
 			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
@@ -729,67 +732,69 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					) }
 				/>
 				<SplitSection.Content>
-					{ ! isNewsletter && (
+					<Stack direction="column" gap="lg">
+						{ ! isNewsletter && (
+							<CardSettingsGroup
+								actionType="toggle"
+								title={ __( 'Registered Access', 'newspack-plugin' ) }
+								description={ sprintf(
+									// translators: %s is the type of content to restrict.
+									__( 'Readers must log in to view %s.', 'newspack-plugin' ),
+									isNewsletter ? __( 'these lists', 'newspack-plugin' ) : __( 'this content', 'newspack-plugin' )
+								) }
+								headerAction={
+									registration?.active
+										? {
+												label: __( 'Edit layout', 'newspack-plugin' ),
+												href: ! isNew ? getEditGateLayoutUrl( gate.id, 'registration' ) : undefined,
+												onClick: isNew ? () => handleCreate( 'registration' ) : undefined,
+												// On a new gate this saves first, so it waits for a usable age rule like Save does.
+												disabled: isNew && hasUnusableAgeRule,
+												icon: pencil,
+										  }
+										: undefined
+								}
+								icon={ commentAuthorAvatar }
+								isActive={ registration?.active }
+								onEnable={ () => setRegistration( { ...registration, active: ! registration.active } ) }
+							>
+								<Registration
+									registration={ registration }
+									onChange={ setRegistration }
+									isNewsletter={ isNewsletter }
+									siteMeter={ siteMeter }
+								/>
+							</CardSettingsGroup>
+						) }
 						<CardSettingsGroup
 							actionType="toggle"
-							title={ __( 'Registered Access', 'newspack-plugin' ) }
-							description={ sprintf(
-								// translators: %s is the type of content to restrict.
-								__( 'Readers must log in to view %s.', 'newspack-plugin' ),
-								isNewsletter ? __( 'these lists', 'newspack-plugin' ) : __( 'this content', 'newspack-plugin' )
-							) }
+							title={ __( 'Paid Access', 'newspack-plugin' ) }
+							description={ __( 'Readers must meet at least one condition to gain access.', 'newspack-plugin' ) }
 							headerAction={
-								registration?.active
+								customAccess?.active && ! isNewsletter
 									? {
 											label: __( 'Edit layout', 'newspack-plugin' ),
-											href: ! isNew ? getEditGateLayoutUrl( gate.id, 'registration' ) : undefined,
-											onClick: isNew ? () => handleCreate( 'registration' ) : undefined,
+											href: ! isNew ? getEditGateLayoutUrl( gate.id, 'custom_access' ) : undefined,
+											onClick: isNew ? () => handleCreate( 'custom_access' ) : undefined,
 											// On a new gate this saves first, so it waits for a usable age rule like Save does.
 											disabled: isNew && hasUnusableAgeRule,
 											icon: pencil,
 									  }
 									: undefined
 							}
-							icon={ commentAuthorAvatar }
-							isActive={ registration?.active }
-							onEnable={ () => setRegistration( { ...registration, active: ! registration.active } ) }
+							icon={ currencyDollar }
+							isActive={ customAccess?.active }
+							onEnable={ () => setCustomAccess( { ...customAccess, active: ! customAccess.active } ) }
 						>
-							<Registration
-								registration={ registration }
-								onChange={ setRegistration }
+							<CustomAccess
+								customAccess={ customAccess }
+								onChange={ setCustomAccess }
 								isNewsletter={ isNewsletter }
 								siteMeter={ siteMeter }
+								governsSignedOut={ ! registration.active }
 							/>
 						</CardSettingsGroup>
-					) }
-					<CardSettingsGroup
-						actionType="toggle"
-						title={ __( 'Paid Access', 'newspack-plugin' ) }
-						description={ __( 'Readers must meet at least one condition to gain access.', 'newspack-plugin' ) }
-						headerAction={
-							customAccess?.active && ! isNewsletter
-								? {
-										label: __( 'Edit layout', 'newspack-plugin' ),
-										href: ! isNew ? getEditGateLayoutUrl( gate.id, 'custom_access' ) : undefined,
-										onClick: isNew ? () => handleCreate( 'custom_access' ) : undefined,
-										// On a new gate this saves first, so it waits for a usable age rule like Save does.
-										disabled: isNew && hasUnusableAgeRule,
-										icon: pencil,
-								  }
-								: undefined
-						}
-						icon={ currencyDollar }
-						isActive={ customAccess?.active }
-						onEnable={ () => setCustomAccess( { ...customAccess, active: ! customAccess.active } ) }
-					>
-						<CustomAccess
-							customAccess={ customAccess }
-							onChange={ setCustomAccess }
-							isNewsletter={ isNewsletter }
-							siteMeter={ siteMeter }
-							governsSignedOut={ ! registration.active }
-						/>
-					</CardSettingsGroup>
+					</Stack>
 				</SplitSection.Content>
 			</SplitSection.Root>
 			{ isNewsletter && customAccess?.active && (
