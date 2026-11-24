@@ -352,10 +352,10 @@ export const Settings = ( {
 						) ) }
 					</Grid>
 					{ selectedProviderValue && (
-						<VStack spacing={ 4 } className="newspack-newsletters-settings-stack">
+						<>
 							{ selectedProviderValue === 'constant_contact' && renderAuthorizeBlock() }
 							{ espSettings.filter( s => s.provider === selectedProviderValue ).map( renderSettingControl ) }
-						</VStack>
+						</>
 					) }
 				</>
 			) }
