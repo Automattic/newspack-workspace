@@ -71,6 +71,13 @@ for ( const [ variable, [ token, note ] ] of Object.entries( sources ) ) {
 	} );
 }
 
+const colorStep = name => {
+	if ( ! newspackColors[ name ] ) {
+		throw new Error( `Missing newspack-colors value ${ name }` );
+	}
+	return newspackColors[ name ];
+};
+
 const series = chartSeries.map( ( [ source, note ], index ) => {
 	const fromColors = ! source.startsWith( '#' );
 	const hex = fromColors ? newspackColors[ source ] : source;
@@ -106,7 +113,11 @@ for ( const [ step, [ token, note ] ] of Object.entries( radiusScale ) ) {
 	entries.push( { variable: `--radius-${ step }`, value: resolved, token: token.startsWith( '--' ) ? token : null, tokenValue: resolved, note } );
 }
 
-const fontSans = tokens[ '--newspack-ui-font-family-body' ].resolved.replace( '"Inter", system-ui, sans-serif', fontStack );
+const interStack = '"Inter", system-ui, sans-serif';
+if ( ! tokens[ '--newspack-ui-font-family-body' ].resolved.includes( interStack ) ) {
+	throw new Error( `--newspack-ui-font-family-body no longer contains ${ interStack }` );
+}
+const fontSans = tokens[ '--newspack-ui-font-family-body' ].resolved.replace( interStack, fontStack );
 const fontMono = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 entries.push(
 	{
@@ -128,7 +139,7 @@ entries.push(
 const prefix = vars => Object.fromEntries( Object.entries( vars ).map( ( [ k, v ] ) => [ `--${ k }`, v ] ) );
 const css = ( vars ) => Object.entries( vars ).map( ( [ k, v ] ) => `\t--${ k }: ${ v };` ).join( '\n' );
 
-const tokenVars = Object.fromEntries( Object.entries( tokens ).map( ( [ name, token ] ) => [ name.slice( 2 ), token.resolved.replace( '"Inter", system-ui, sans-serif', fontStack ) ] ) );
+const tokenVars = Object.fromEntries( Object.entries( tokens ).map( ( [ name, token ] ) => [ name.slice( 2 ), token.resolved.replace( interStack, fontStack ) ] ) );
 const elevationVars = Object.fromEntries( Object.entries( elevation ).map( ( [ level, value ] ) => [ `nui-elevation-${ level }`, value ] ) );
 const mediaBlocks = Object.entries( tokenFile.media ?? {} ).map( ( [ query, props ] ) => [
 	query,
@@ -149,7 +160,7 @@ const brandDark = {
 	'newspack-ui-color-btn-brand-pressed': [ 'color-mix(in oklab, var(--newspack-ui-color-btn-brand) var(--newspack-ui-color-mix-pressed), var(--newspack-ui-color-surface))', 'Dark pressed: the fill mixed 75% toward the dark surface, the light recipe. The #1e1e1e text is Lc 42.6 on it, below 60 by decision.' ],
 	'newspack-ui-color-btn-brand-on': [ 'var(--newspack-ui-color-neutral-0)', 'Dark text on the brand fill: the dark page ink, #1e1e1e.' ],
 	'newspack-ui-color-brand-text': [ 'var(--newspack-ui-color-primary-30)', 'Dark brand text blue: the dark primary-30 step (#95bdff), the same blue as the brand button fill.' ],
-	'newspack-ui-color-btn-brand-text': [ newspackColors[ 'primary-050' ], 'Dark brand-outline text: newspack-colors primary-050 (#bfcfe9). The brand text blue (#95bdff) is Lc 64, 62 and 59 on the surface and the hover and pressed fills, so it misses Lc 60 on pressed; #bfcfe9 is 75, 73 and 70.' ],
+	'newspack-ui-color-btn-brand-text': [ colorStep( 'primary-050' ), 'Dark brand-outline text: newspack-colors primary-050 (#bfcfe9). The brand text blue (#95bdff) is Lc 64, 62 and 59 on the surface and the hover and pressed fills, so it misses Lc 60 on pressed; #bfcfe9 is 75, 73 and 70.' ],
 };
 const brandPick = vars => Object.fromEntries( Object.entries( vars ).map( ( [ name, [ value ] ] ) => [ name, value ] ) );
 for ( const [ name, [ value, note ] ] of Object.entries( brandLight ) ) {
