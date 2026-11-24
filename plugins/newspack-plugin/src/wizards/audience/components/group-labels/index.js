@@ -2,29 +2,26 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Grid, SectionHeader, TextControl } from '../../../../../packages/components/src';
+import { SplitSection, TextControl } from '../../../../../packages/components/src';
 
 export default function GroupLabels( { labels, singularDefault: singular, pluralDefault: plural, onChange, disabled } ) {
 	const singularDefault = singular || __( 'Group', 'newspack-plugin' );
 	const pluralDefault = plural || __( 'Groups', 'newspack-plugin' );
 
 	return (
-		<Grid columns={ 2 } gutter={ 32 } noMargin>
-			<SectionHeader
-				heading={ 2 }
+		<SplitSection.Root>
+			<SplitSection.Header
 				title={ __( 'Reader-Facing Labels', 'newspack-plugin' ) }
 				description={ __(
 					'Customize the term shown to readers in My Account when they manage a group subscription. Leave blank to use the default.',
 					'newspack-plugin'
 				) }
-				noMargin
 			/>
-			<Stack direction="column" gap="lg">
+			<SplitSection.Content>
 				<TextControl
 					label={ __( 'Singular label', 'newspack-plugin' ) }
 					placeholder={ singularDefault }
@@ -51,7 +48,7 @@ export default function GroupLabels( { labels, singularDefault: singular, plural
 					disabled={ disabled }
 					withMargin={ false }
 				/>
-			</Stack>
-		</Grid>
+			</SplitSection.Content>
+		</SplitSection.Root>
 	);
 }

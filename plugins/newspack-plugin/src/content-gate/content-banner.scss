@@ -52,7 +52,7 @@ body .sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-arti
 	margin-top: 1px;
 }
 
-.jetpack-sharing-button__button.share-newspack-gift-article svg {
+.jetpack-sharing-button__button.share-newspack-gift-article svg:not([stroke]) {
 	fill: currentcolor;
 
 	path {

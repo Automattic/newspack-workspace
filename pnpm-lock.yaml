@@ -470,6 +470,18 @@ importers:
         specifier: ^17.7.2
         version: 17.7.2
 
+  packages/ui-shadcn:
+    devDependencies:
+      culori:
+        specifier: ^4.0.2
+        version: 4.0.2
+      postcss:
+        specifier: ^8.5.15
+        version: 8.5.15
+      sass:
+        specifier: ^1.100.0
+        version: 1.100.0
+
   plugins/newspack-ads:
     dependencies:
       '@10up/component-tabs':
@@ -6453,6 +6465,10 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==, tarball: https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz}
+
+  culori@4.0.2:
+    resolution: {integrity: sha512-1+BhOB8ahCn4O0cep0Sh2l9KCOfOdY+BXJnKMHFFzDEouSr/el18QwXEMRlOj9UY5nCeA8UN3a/82rUWRBeyBw==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   cwd@0.10.0:
     resolution: {integrity: sha512-YGZxdTTL9lmLkCUTpg4j0zQ7IhRB5ZmqNBbGCl3Tg6MP/d5/6sY7L5mmTjzbc6JKgVZYiqTQTNhPFsbXNGlRaA==}
@@ -21439,6 +21455,8 @@ snapshots:
       cssom: 0.3.8
 
   csstype@3.2.3: {}
+
+  culori@4.0.2: {}
 
   cwd@0.10.0:
     dependencies:
