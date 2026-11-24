@@ -34,6 +34,21 @@ class Nested_Blocks {
 	 * `email_attrs` keys the package's spacing preprocessor uses to distribute the
 	 * email's root and container padding to top-level blocks.
 	 */
+	/**
+	 * The email theme's variable values for the current render, or null before first use.
+	 *
+	 * @var array<string, string>|null
+	 */
+	private static ?array $variables_map = null;
+
+	/**
+	 * Forget the cached theme variables. Called at the start of each render, since the
+	 * email theme is per newsletter.
+	 */
+	public static function reset_cache(): void {
+		self::$variables_map = null;
+	}
+
 	const PADDING_ATTRS = [
 		'root-padding-left',
 		'root-padding-right',
@@ -80,7 +95,7 @@ class Nested_Blocks {
 		return array_values(
 			array_filter(
 				$blocks,
-				static fn( $block ) => null !== $block['blockName'] || '' !== trim( $block['innerHTML'] ?? '' )
+				static fn( array $block ): bool => null !== $block['blockName'] || '' !== trim( $block['innerHTML'] ?? '' )
 			)
 		);
 	}
@@ -121,14 +136,18 @@ class Nested_Blocks {
 	 * @return array<string, string>
 	 */
 	private static function variables_map(): array {
-		if ( ! class_exists( Email_Editor_Container::class ) ) {
-			return [];
+		if ( null !== self::$variables_map ) {
+			return self::$variables_map;
 		}
-		try {
-			return Email_Editor_Container::container()->get( Theme_Controller::class )->get_variables_values_map();
-		} catch ( \Throwable $e ) {
-			return [];
+		self::$variables_map = [];
+		if ( class_exists( Email_Editor_Container::class ) ) {
+			try {
+				self::$variables_map = Email_Editor_Container::container()->get( Theme_Controller::class )->get_variables_values_map();
+			} catch ( \Throwable $e ) {
+				self::$variables_map = [];
+			}
 		}
+		return self::$variables_map;
 	}
 
 	/**
