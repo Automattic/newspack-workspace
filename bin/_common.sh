@@ -148,3 +148,58 @@ warn_if_manage_host_stale() {
 }
 
 log_error() { echo -e "${NP_RED}[ERROR]${NP_NC} ${1}"; }
+
+# Print the name of the isolated env that serves <path>, or return 1 when none
+# does. `n` routes commands with this and `n env which` reports with it, so the
+# two can never disagree about which env a worktree belongs to.
+#
+# It reads each compose file's mount lines and picks the LONGEST absolute path
+# that <path> sits under. An earlier 2-segment prefix match collapsed branches
+# with slashes (`jl/news-2239-pr1b-frontend` -> `jl`) and matched the wrong env
+# when several mounted `jl/*` worktrees.
+env_for_path() {
+    local path="$1"
+    [[ "$path" == "$NABSPATH/worktrees/"* || "$path" == "$NABSPATH/worktrees-repos/"* ]] || return 1
+    local best_match="" best_env="" f mount
+    for f in "$NABSPATH"/docker-compose.env-*.yml; do
+        [[ -f "$f" ]] || continue
+        while IFS= read -r mount; do
+            # Mounts can take three shapes — pre-monorepo per-plugin worktrees
+            # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>), monorepo
+            # workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
+            # or .../themes/<name>:/newspack-themes/<name>), and standalone
+            # repos/ worktrees (./worktrees-repos/<name>/<safe_branch>:/newspack-repos/<kind>/<name>).
+            # For the monorepo shape, the env mounts a per-plugin subdir but a
+            # path elsewhere in the worktree (its root, bin/, packages/, sibling
+            # plugins) still belongs to it, so match the enclosing worktree root
+            # as well. Regex extraction tolerates tabs/multi-space and cuts
+            # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
+            # trailing comments don't corrupt the captured paths.
+            [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
+            local rel="worktrees${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+            local container_type="${BASH_REMATCH[3]}"
+            local abs="$NABSPATH/$rel"
+            local worktree_root="$abs"
+            case "$container_type" in
+                plugins|themes)
+                    worktree_root="${abs%/plugins/*}"
+                    worktree_root="${worktree_root%/themes/*}"
+                    ;;
+            esac
+            # Prefer the deeper mounted-subpath match (more specific) so a path
+            # inside a mounted plugin/theme resolves to that env even when a
+            # sibling env mounts a different plugin from the same worktree.
+            # Fall back to the worktree root for shared dirs (bin/, packages/,
+            # the worktree root itself).
+            if [[ "$path" == "$abs" || "$path" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
+                best_match="$abs"
+                best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
+            elif [[ "$path" == "$worktree_root" || "$path" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
+                best_match="$worktree_root"
+                best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
+            fi
+        done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
+    done
+    [[ -n "$best_env" ]] || return 1
+    echo "$best_env"
+}

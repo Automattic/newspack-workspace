@@ -140,7 +140,8 @@ class Show_Page_On_Front {
 	 * @return string
 	 */
 	public static function template_include( $template ) {
-		if ( is_page() && self::is_filtered() ) {
+		// Classic theme uses the front-page.php template for brand front pages; block theme does not.
+		if ( is_page() && self::is_filtered() && ! wp_is_block_theme() ) {
 			$template = get_front_page_template();
 		}
 

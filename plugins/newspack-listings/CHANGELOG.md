@@ -1,3 +1,24 @@
+## newspack-listings [3.7.13](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.12...newspack-listings@3.7.13) (2026-11-23)
+
+
+### Bug Fixes
+
+* **listings:** tie customer editing access to the listing's edit screen ([#1300](https://github.com/Automattic/newspack-workspace/issues/1300)) ([b3ca2c8](https://github.com/Automattic/newspack-workspace/commit/b3ca2c80d9a556bd0e2971143448b6b428a536f2))
+* **listings:** validate the load-more fetch target ([#1285](https://github.com/Automattic/newspack-workspace/issues/1285)) ([bf8d816](https://github.com/Automattic/newspack-workspace/commit/bf8d8160aeac8a8942fa98ac9badc794f919bab8))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.13.0
+
+## newspack-listings [3.7.12](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.11...newspack-listings@3.7.12) (2026-11-19)
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.12.2
+
 ## newspack-listings [3.7.11](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.10...newspack-listings@3.7.11) (2026-11-10)
 
 

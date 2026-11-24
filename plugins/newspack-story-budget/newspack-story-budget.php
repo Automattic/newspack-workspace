@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Story Budget
  * Description: Story budgeting by Newspack.
- * Version: 1.3.9
+ * Version: 1.4.0
  * Requires PHP: 8.1
  * Author: Automattic
  * Author URI: https://newspack.com/
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.3.9' );
+define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.4.0' );
 
 // Define NEWSPACK_STORY_BUDGET_PLUGIN_DIR.
 if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR' ) ) { // phpcs:ignore phpcsSniffs.Constants.ConstantDocblock.Missing -- Internal path constant, defined immediately below.

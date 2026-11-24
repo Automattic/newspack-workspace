@@ -12,15 +12,15 @@ import { speak } from '@wordpress/a11y';
 import { Button, Notice } from '@wordpress/components';
 import { DataViews as BaseDataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import { chartBar } from '@wordpress/icons';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
-import { DataViews, EmptyState, Waiting, withWizardScreen } from '../../../../../../packages/components/src';
+import { DataViews, Waiting, withWizardScreen } from '../../../../../../packages/components/src';
 import StartTestModal from './start-test-modal';
 import TestCard from './test-card';
-import { REST_BASE, STATUS_ORDER, getPickerPrompts, getStatusLabel, getTestStatus, openVersionB, sortTests } from './utils';
+import { REST_BASE, STATUS_ORDER, createRequestQueue, getPickerPrompts, getStatusLabel, getTestStatus, openVersionB, sortTests } from './utils';
 import './style.scss';
 
 // The wizard's header, breadcrumbs and tabs come from withWizardScreen.
@@ -93,6 +93,7 @@ const ABTests = props => {
 	const [ isStarting, setIsStarting ] = useState( false );
 	const [ view, setView ] = useState( DEFAULT_VIEW );
 	const [ justEnded, setJustEnded ] = useState( null );
+	const statsQueue = useMemo( createRequestQueue, [] );
 	// "View A/B Test" in a prompt's menu links here with the test to show.
 	const targetTestId = new URLSearchParams( props.location?.search || '' ).get( 'test' );
 
@@ -156,17 +157,19 @@ const ABTests = props => {
 		content = <Waiting isCenter />;
 	} else if ( ( data.tests || [] ).length === 0 ) {
 		content = (
-			<EmptyState.Root>
-				<EmptyState.Header
-					icon={ chartBar }
-					title={ __( 'Find out which prompt works best', 'newspack-plugin' ) }
-					description={ __(
-						'Run two versions of a prompt side by side. Newspack splits readers between them and shows you which one gets more of them to act.',
-						'newspack-plugin'
-					) }
-				/>
-				<EmptyState.Actions>{ startButton }</EmptyState.Actions>
-			</EmptyState.Root>
+			<Stack direction="column" align="center">
+				<EmptyState.Root>
+					<EmptyState.Icon icon={ chartBar } />
+					<EmptyState.Title>{ __( 'Find out which prompt works best', 'newspack-plugin' ) }</EmptyState.Title>
+					<EmptyState.Description>
+						{ __(
+							'Run two versions of a prompt side by side. Newspack splits readers between them and shows you which one gets more of them to act.',
+							'newspack-plugin'
+						) }
+					</EmptyState.Description>
+					<EmptyState.Actions>{ startButton }</EmptyState.Actions>
+				</EmptyState.Root>
+			</Stack>
 		);
 	} else {
 		content = (
@@ -200,6 +203,7 @@ const ABTests = props => {
 							onRenamed={ renameTest }
 							onEnded={ endTest }
 							isTarget={ test.test_id === ( justEnded || targetTestId ) }
+							enqueue={ statsQueue }
 						/>
 					) )
 				) }

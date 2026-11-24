@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies.
  */
-import { createPortal, useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -29,6 +29,7 @@ import { Button, CellList, DataViews, Router, StatusBadge, Waiting } from '../..
 import { formatCount } from '../../../../packages/components/src/breadcrumbs/format-count';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
+import RefreshOverlay, { useAnnounceRefresh } from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
@@ -540,8 +541,26 @@ export default function SubscriberList() {
 	// is a refetch — unmounting DataViews for those would take the search box's
 	// focus with it and flash the applied filter chips away mid-interaction. Once a
 	// response has settled, a refetch keeps DataViews mounted and shows its loading
-	// state in place (see isRefreshing below), for the same reason avatars fill in
+	// state in place, for the same reason avatars fill in
 	// progressively rather than holding the table back.
+	//
+	// A refetch with rows showing covers the screen with a spinner and blocks clicks
+	// until it settles: DataViews' own one renders below the table, out of sight on
+	// a long page. Keys still reach the controls underneath on purpose, so a reader
+	// can keep typing in the search box. With no rows to cover, DataViews' spinner
+	// stands in for the empty state, so it keeps that case. A failed read lands on
+	// the error notice below, which never renders the overlay, so a failure can't
+	// leave it stuck. Each refetch that settles announces the new count.
+	const isRefreshing = subscribersLoading && items.length > 0;
+	useAnnounceRefresh(
+		isRefreshing,
+		sprintf(
+			/* translators: %s: number of subscribers matching the current view. */
+			_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+			formatCount( total )
+		)
+	);
+
 	if ( subscribersLoading && ! settled ) {
 		return (
 			<div className="newspack-subscribers__loading">
@@ -569,15 +588,6 @@ export default function SubscriberList() {
 			/>
 		);
 	}
-
-	// A refetch with rows showing covers the screen with a spinner and blocks clicks
-	// until it settles: DataViews' own one renders below the table, out of sight on
-	// a long page. Keys still reach the controls underneath on purpose, so a reader
-	// can keep typing in the search box. With no rows to cover, DataViews' spinner
-	// stands in for the empty state, so it keeps that case. A failed read lands on
-	// the error notice above, which never renders the overlay, so a failure can't
-	// leave it stuck.
-	const isRefreshing = subscribersLoading && items.length > 0;
 
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
@@ -618,18 +628,7 @@ export default function SubscriberList() {
 				search
 				inlineFilters
 			/>
-			{ /* In the document body, so no ancestor of the list can pin the fixed
-			     overlay to itself or stack popovers above it. Cancelling the press
-			     keeps focus where it was: moving it would close an open filter
-			     popover and pull focus out of the search box. */ }
-			{ isRefreshing &&
-				createPortal(
-					// eslint-disable-next-line jsx-a11y/no-static-element-interactions
-					<div className="newspack-subscribers__loading-overlay" onMouseDown={ event => event.preventDefault() }>
-						<Waiting />
-					</div>,
-					document.body
-				) }
+			{ isRefreshing && <RefreshOverlay /> }
 		</div>
 	);
 }

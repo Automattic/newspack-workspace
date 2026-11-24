@@ -23,6 +23,7 @@ import EndTestModal from './end-test-modal';
 import {
 	REST_BASE,
 	canEndTest,
+	canEndTestFromMenu,
 	formatDay,
 	formatList,
 	getStatusIntent,
@@ -55,8 +56,9 @@ const getMissingVersionHint = variants =>
  * @param {Function} props.onRenamed Called with the test ID and its new name.
  * @param {Function} props.onEnded   Called with the ended test the end route returns.
  * @param {boolean}  props.isTarget  Whether the page was opened, or the test just ended, to show this test.
+ * @param {Function} props.enqueue   Runs the card's first results request in the tab's queue.
  */
-const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
+const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue = run => run() } ) => {
 	const [ stats, setStats ] = useState( null );
 	const [ loading, setLoading ] = useState( false );
 	const [ error, setError ] = useState( null );
@@ -147,27 +149,58 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 		headingRef.current?.focus( { preventScroll: true } );
 	}, [ isTarget ] );
 
-	const load = refresh => {
+	// The card's first load waits in the tab's queue. A refresh, or the reload
+	// once the test ends, is one request the user just caused, so it goes
+	// straight out. Only the card's latest load writes: one whose card has gone,
+	// or that a later load replaced, writes nothing, whether its turn hasn't
+	// come or its request is already out.
+	const latestLoad = useRef( 0 );
+	const load = ( refresh, isGone = () => false, queued = false ) => {
+		const loadId = ++latestLoad.current;
+		const isCancelled = () => isGone() || loadId !== latestLoad.current;
 		setLoading( true );
 		setError( null );
 		setWasRefresh( refresh );
-		apiFetch( { path: `${ REST_BASE }/${ encodeURIComponent( test.test_id ) }/stats${ refresh ? '?refresh=1' : '' }` } )
-			.then( response => {
-				setStats( response );
-				if ( refresh ) {
-					speak( __( 'Results loaded.', 'newspack-plugin' ) );
-				}
-			} )
-			.catch( err => setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) ) )
-			.finally( () => setLoading( false ) );
+		const request = () => {
+			if ( isCancelled() ) {
+				return Promise.resolve();
+			}
+			return apiFetch( { path: `${ REST_BASE }/${ encodeURIComponent( test.test_id ) }/stats${ refresh ? '?refresh=1' : '' }` } )
+				.then( response => {
+					if ( isCancelled() ) {
+						return;
+					}
+					setStats( response );
+					if ( refresh ) {
+						speak( __( 'Results loaded.', 'newspack-plugin' ) );
+					}
+				} )
+				.catch( err => {
+					if ( ! isCancelled() ) {
+						setError( err.message || __( 'The results could not be loaded.', 'newspack-plugin' ) );
+					}
+				} )
+				.finally( () => {
+					if ( ! isCancelled() ) {
+						setLoading( false );
+					}
+				} );
+		};
+		return queued ? enqueue( request ) : request();
 	};
 
 	// Again once the test ends: its results now stop at the day it ended, not
 	// today, so the counts already on the card no longer match.
+	const endedAtMount = useRef( isEnded );
 	useEffect( () => {
-		if ( canLoadStats ) {
-			load( false );
+		if ( ! canLoadStats ) {
+			return;
 		}
+		let cancelled = false;
+		load( false, () => cancelled, isEnded === endedAtMount.current );
+		return () => {
+			cancelled = true;
+		};
 	}, [ isEnded ] );
 
 	let mainAction = null;
@@ -253,6 +286,21 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false } ) => {
 							) }
 						</MenuItem>
 					) ) }
+					{ canEndTestFromMenu( test ) && (
+						<MenuItem
+							aria-label={ sprintf(
+								// Translators: %s is the test name.
+								__( 'End Test: %s', 'newspack-plugin' ),
+								name
+							) }
+							onClick={ () => {
+								onClose();
+								setModal( 'end' );
+							} }
+						>
+							{ __( 'End Test', 'newspack-plugin' ) }
+						</MenuItem>
+					) }
 					<MenuItem
 						aria-label={ sprintf(
 							// Translators: %s is the test name.

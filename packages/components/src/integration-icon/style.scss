@@ -45,10 +45,8 @@
 		background: wp-colors.$gray-800;
 		color: wp-colors.$white;
 
-		// Set the fill on the path directly so the card's active/hover state
-		// (which recolours header svgs) can't override the white manual mark.
 		svg path {
-			fill: currentcolor;
+			stroke: wp-colors.$white;
 		}
 	}
 

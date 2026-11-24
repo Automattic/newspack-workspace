@@ -12,16 +12,18 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 import { people } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { __experimentalHStack as HStack, CheckboxControl } from '@wordpress/components';
+import { __experimentalHStack as HStack, CheckboxControl, Notice as CoreNotice, SelectControl } from '@wordpress/components';
+import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
+import { decodeEntities } from '@wordpress/html-entities';
 
 /**
  * Internal dependencies.
  */
 import { Button, CellList, DataViews, formatSiteDate, Modal, Notice, StatusBadge, Waiting } from '../../../../../../../packages/components/src';
-import EmptyState from '../../../../../../../packages/components/src/empty-state';
 import type { Action, Field, View } from '../../../../../../../packages/components/src/dataviews';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import Router from '../../../../../../../packages/components/src/proxied-imports/router';
@@ -30,9 +32,9 @@ import { registerTab } from '../registry';
 import { ALL_SUBSCRIPTIONS_FILTER_VALUE, allSubscriptionsLabel } from '../../constants';
 import { useRestrictions } from './use-restrictions';
 import ScopeSummary from '../../../../components/scope-summary';
-import { scopeLabel } from './labels';
+import { restrictionTypeLabel, scopeLabel } from './labels';
 import RestrictionEditor from './restriction-editor';
-import type { Restriction, RestrictionSettings } from './types';
+import type { ProductPageMode, Restriction, RestrictionSettings } from './types';
 import './style.scss';
 
 const FIT_COLUMNS = [ 'status' ];
@@ -43,7 +45,7 @@ const DEFAULT_VIEW = {
 	perPage: 20,
 	sort: { field: 'created_at', direction: 'desc' as const },
 	search: '',
-	fields: [ 'status', 'availableTo', 'created_at' ],
+	fields: [ 'restriction_type', 'status', 'availableTo', 'created_at' ],
 	filters: [],
 	layout: {},
 	titleField: 'products',
@@ -143,6 +145,18 @@ function SubscriberOnlyProducts() {
 					'all' === item.subscription_targeting
 						? allSubscriptionsLabel()
 						: ( item.subscription_product_ids || [] ).map( id => subscriptionNames[ id ] || '' ).join( ', ' ),
+			},
+			{
+				id: 'restriction_type',
+				label: __( 'Restrict', 'newspack-plugin' ),
+				elements: [
+					{ value: 'purchase', label: restrictionTypeLabel( 'purchase' ) },
+					{ value: 'view', label: restrictionTypeLabel( 'view' ) },
+				],
+				filterBy: { operators: [ 'isAny' as const ] },
+				enableSorting: false,
+				getValue: ( { item }: { item: Restriction } ) => item.restriction_type,
+				render: ( { item }: { item: Restriction } ) => <span>{ restrictionTypeLabel( item.restriction_type ) }</span>,
 			},
 			{
 				id: 'status',
@@ -284,21 +298,23 @@ function SubscriberOnlyProducts() {
 			) }
 			{ ! loading && ! hasRestrictions && (
 				<div className="newspack-subscriber-only__empty">
-					<EmptyState.Root>
-						<EmptyState.Header
-							icon={ people }
-							title={ __( 'Get started with subscriber-only products', 'newspack-plugin' ) }
-							description={ __(
-								'Make selected products purchasable only by subscribers. Readers still see the product and its price — only the purchase is blocked.',
-								'newspack-plugin'
-							) }
-						/>
-						<EmptyState.Actions>
-							<Button variant="primary" onClick={ () => setEditing( {} ) }>
-								{ __( 'Add Restriction', 'newspack-plugin' ) }
-							</Button>
-						</EmptyState.Actions>
-					</EmptyState.Root>
+					<Stack direction="column" align="center">
+						<EmptyState.Root>
+							<EmptyState.Icon icon={ people } />
+							<EmptyState.Title>{ __( 'No restrictions yet', 'newspack-plugin' ) }</EmptyState.Title>
+							<EmptyState.Description>
+								{ __(
+									'Limit selected products to subscribers: block only their purchase, or hide them from everyone else too.',
+									'newspack-plugin'
+								) }
+							</EmptyState.Description>
+							<EmptyState.Actions>
+								<Button variant="primary" onClick={ () => setEditing( {} ) }>
+									{ __( 'Add Restriction', 'newspack-plugin' ) }
+								</Button>
+							</EmptyState.Actions>
+						</EmptyState.Root>
+					</Stack>
 				</div>
 			) }
 
@@ -324,7 +340,13 @@ function SubscriberOnlyProducts() {
 			) }
 
 			{ settingsOpen && (
-				<SettingsModal settings={ settings } saving={ saving } onSave={ saveSettings } onClose={ () => setSettingsOpen( false ) } />
+				<SettingsModal
+					settings={ settings }
+					saving={ saving }
+					error={ error }
+					onSave={ saveSettings }
+					onClose={ () => setSettingsOpen( false ) }
+				/>
 			) }
 		</div>
 	);
@@ -333,45 +355,188 @@ function SubscriberOnlyProducts() {
 interface SettingsModalProps {
 	settings: RestrictionSettings;
 	saving: boolean;
+	/** The latest request error, shown when a save from this modal fails. */
+	error: string;
 	onSave: ( settings: RestrictionSettings ) => Promise< boolean >;
 	onClose: () => void;
 }
 
-function SettingsModal( { settings, saving, onSave, onClose }: SettingsModalProps ) {
+function SettingsModal( { settings, saving, error, onSave, onClose }: SettingsModalProps ) {
 	const [ hide, setHide ] = useState( settings.hide_from_product_lists );
+	const [ productPage, setProductPage ] = useState< ProductPageMode >( settings.product_page );
+	const [ redirectPageId, setRedirectPageId ] = useState( settings.redirect_page_id );
+	// The page-level notice sits under this modal, so a failed save shows here.
+	const [ saveFailed, setSaveFailed ] = useState( false );
+	const { pages, failed, retry } = usePublishedPages( 'redirect' === productPage );
+
+	// "Hide completely" leaves nothing to link to, so it hides from lists too.
+	const hidesFromLists = hide || 'hide' === productPage;
+	// A redirect needs a published page to go to.
+	const hasRedirectPage = Boolean( pages?.some( page => page.id === redirectPageId ) );
+	const isComplete = 'redirect' !== productPage || hasRedirectPage;
+
+	let redirectHelp: string = __( 'Choose the page readers go to.', 'newspack-plugin' );
+	if ( pages && ! pages.length ) {
+		redirectHelp = __( 'No published pages yet. Publish a page to redirect readers to.', 'newspack-plugin' );
+	} else if ( pages && redirectPageId > 0 && ! hasRedirectPage ) {
+		redirectHelp = __( 'The saved page is no longer published. Choose another page.', 'newspack-plugin' );
+	}
 
 	return (
 		<Modal title={ __( 'Restriction settings', 'newspack-plugin' ) } onRequestClose={ onClose }>
-			<CheckboxControl
-				label={ __( 'Hide from product lists', 'newspack-plugin' ) }
-				help={ __(
-					'Keep subscriber-only products out of product lists for readers who cannot purchase them. Direct links still work.',
-					'newspack-plugin'
+			<Stack direction="column" gap="lg">
+				{ saveFailed && error && (
+					<CoreNotice status="error" isDismissible={ false }>
+						{ error }
+					</CoreNotice>
 				) }
-				checked={ hide }
-				onChange={ setHide }
-				__nextHasNoMarginBottom
-			/>
-			<HStack justify="flex-end" spacing={ 2 }>
-				<Button variant="secondary" onClick={ onClose } disabled={ saving }>
-					{ __( 'Cancel', 'newspack-plugin' ) }
-				</Button>
-				<Button
-					variant="primary"
+				{ 'redirect' === productPage && failed && (
+					<CoreNotice
+						status="error"
+						isDismissible={ false }
+						politeness="polite"
+						actions={ [ { label: __( 'Retry', 'newspack-plugin' ), onClick: retry } ] }
+					>
+						{ __( "Pages couldn't be loaded.", 'newspack-plugin' ) }
+					</CoreNotice>
+				) }
+				<CheckboxControl
+					label={ __( 'Hide from product lists', 'newspack-plugin' ) }
+					help={
+						'hide' === productPage
+							? __( '"Hide completely" also hides the products from product lists.', 'newspack-plugin' )
+							: __(
+									'Keep products restricted for "Purchase and visibility" out of product lists for readers who can\'t see them.',
+									'newspack-plugin'
+							  )
+					}
+					checked={ hidesFromLists }
+					onChange={ setHide }
+					disabled={ saving || 'hide' === productPage }
+					__nextHasNoMarginBottom
+				/>
+				<SelectControl
+					label={ __( 'Product page for hidden products', 'newspack-plugin' ) }
+					help={ __(
+						'What a reader who can\'t see the product gets on its page. "Hide content only" keeps the page but replaces its details with the subscriber-only notice.',
+						'newspack-plugin'
+					) }
+					value={ productPage }
+					options={ [
+						{ value: 'hide_content', label: __( 'Hide content only', 'newspack-plugin' ) },
+						{ value: 'hide', label: __( 'Hide completely (404)', 'newspack-plugin' ) },
+						{ value: 'redirect', label: __( 'Redirect to a page', 'newspack-plugin' ) },
+					] }
+					onChange={ ( next: string ) => setProductPage( next as ProductPageMode ) }
 					disabled={ saving }
-					onClick={ () => {
-						onSave( { hide_from_product_lists: hide } ).then( ( ok: boolean ) => {
-							if ( ok ) {
-								onClose();
-							}
-						} );
-					} }
-				>
-					{ __( 'Save', 'newspack-plugin' ) }
-				</Button>
-			</HStack>
+					__next40pxDefaultSize
+					__nextHasNoMarginBottom
+				/>
+				{ 'redirect' === productPage && (
+					<SelectControl
+						label={ __( 'Redirect to', 'newspack-plugin' ) }
+						help={ redirectHelp }
+						value={ hasRedirectPage ? String( redirectPageId ) : '0' }
+						options={ [
+							{
+								value: '0',
+								label: pages || failed ? __( 'Select a page', 'newspack-plugin' ) : __( 'Loading pages…', 'newspack-plugin' ),
+								disabled: true,
+							},
+							...( pages || [] ).map( page => ( { value: String( page.id ), label: page.title } ) ),
+						] }
+						onChange={ ( next: string ) => setRedirectPageId( Number( next ) ) }
+						disabled={ saving || ! pages?.length }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				) }
+				<Stack direction="row" gap="sm" justify="end">
+					<Button variant="secondary" onClick={ onClose } disabled={ saving }>
+						{ __( 'Cancel', 'newspack-plugin' ) }
+					</Button>
+					<Button
+						variant="primary"
+						disabled={ saving || ! isComplete }
+						accessibleWhenDisabled
+						onClick={ () => {
+							// Cleared first, so a repeated failure mounts the notice again and is announced.
+							setSaveFailed( false );
+							onSave( {
+								hide_from_product_lists: hide,
+								product_page: productPage,
+								redirect_page_id: 'redirect' === productPage ? redirectPageId : 0,
+							} ).then( ( ok: boolean ) => {
+								setSaveFailed( ! ok );
+								if ( ok ) {
+									onClose();
+								}
+							} );
+						} }
+					>
+						{ __( 'Save', 'newspack-plugin' ) }
+					</Button>
+				</Stack>
+			</Stack>
 		</Modal>
 	);
+}
+
+interface PageOption {
+	id: number;
+	title: string;
+}
+
+/**
+ * Every published page, by title, for the redirect picker, loaded the first
+ * time it is needed. `pages` is null until then and while loading; `failed`
+ * is set when the list can't be loaded, and `retry` loads it again.
+ *
+ * @param needed Whether the picker is showing.
+ */
+function usePublishedPages( needed: boolean ) {
+	const [ pages, setPages ] = useState< PageOption[] | null >( null );
+	const [ failed, setFailed ] = useState( false );
+	const [ requested, setRequested ] = useState( false );
+	const retry = () => {
+		setFailed( false );
+		setRequested( false );
+	};
+
+	useEffect( () => {
+		if ( ! needed || requested ) {
+			return;
+		}
+		setRequested( true );
+		type PageResponse = { id: number; title: { rendered: string } };
+		const toOption = ( page: PageResponse ) => ( {
+			id: page.id,
+			title:
+				decodeEntities( page.title.rendered ) ||
+				sprintf( /* translators: %d: page ID. */ __( '(no title) #%d', 'newspack-plugin' ), page.id ),
+		} );
+		const fetchFrom = async ( pageNumber: number ): Promise< PageOption[] > => {
+			const response = ( await apiFetch( {
+				path: addQueryArgs( '/wp/v2/pages', {
+					status: 'publish',
+					_fields: 'id,title',
+					orderby: 'title',
+					order: 'asc',
+					per_page: 100,
+					page: pageNumber,
+				} ),
+				parse: false,
+			} ) ) as Response;
+			const options = ( ( await response.json() ) as PageResponse[] ).map( toOption );
+			const totalPages = Number( response.headers.get( 'X-WP-TotalPages' ) ) || 1;
+			return pageNumber < totalPages ? [ ...options, ...( await fetchFrom( pageNumber + 1 ) ) ] : options;
+		};
+		fetchFrom( 1 )
+			.then( setPages )
+			.catch( () => setFailed( true ) );
+	}, [ needed, requested ] );
+
+	return { pages, failed, retry };
 }
 
 registerTab( 'subscriber-only', { render: () => <SubscriberOnlyProducts />, fullWidth: true, rendersLeafCrumb: true } );
