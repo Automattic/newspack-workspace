@@ -7,7 +7,9 @@
 
 namespace Newspack\Newsletters\Email_Renderers;
 
+use Automattic\WooCommerce\EmailEditor\Email_Editor_Container;
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Preprocessors\Blocks_Width_Preprocessor;
+use Automattic\WooCommerce\EmailEditor\Engine\Theme_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -50,13 +52,83 @@ class Nested_Blocks {
 	public static function render( string $markup, ?string $width = null ): string {
 		$blocks = self::strip_root_padding( parse_blocks( $markup ) );
 		if ( null !== $width && '' !== $width && class_exists( Blocks_Width_Preprocessor::class ) ) {
-			$blocks = ( new Blocks_Width_Preprocessor() )->preprocess( $blocks, [ 'contentSize' => $width ], [] );
+			$blocks = self::clear_computed_column_widths( $blocks, self::parse_as_saved( $markup ) );
+			$blocks = ( new Blocks_Width_Preprocessor() )->preprocess(
+				$blocks,
+				[ 'contentSize' => $width ],
+				[ '__variables_map' => self::variables_map() ]
+			);
 		}
 		$html = '';
 		foreach ( $blocks as $block ) {
 			$html .= render_block( $block );
 		}
 		return $html;
+	}
+
+	/**
+	 * Parse markup with core's parser, as saved, without the engine's preprocessing.
+	 *
+	 * Drops the empty top-level blocks the engine's cleanup step drops, so the result
+	 * lines up block for block with what `parse_blocks()` returns during a render.
+	 *
+	 * @param string $markup Block markup.
+	 * @return array Parsed blocks.
+	 */
+	private static function parse_as_saved( string $markup ): array {
+		$blocks = ( new \WP_Block_Parser() )->parse( $markup );
+		return array_values(
+			array_filter(
+				$blocks,
+				static fn( $block ) => null !== $block['blockName'] || '' !== trim( $block['innerHTML'] ?? '' )
+			)
+		);
+	}
+
+	/**
+	 * Remove the column widths the engine computed on its first pass.
+	 *
+	 * The engine's parser writes a px width into every column saved without one, sized
+	 * to the full email. The width preprocessor then treats it as a width the author set,
+	 * so it has to go before widths are recomputed for the host block. Columns whose
+	 * saved markup has a width keep it.
+	 *
+	 * @param array $blocks Blocks parsed during the render.
+	 * @param array $saved  The same blocks as saved (see parse_as_saved()).
+	 * @return array
+	 */
+	private static function clear_computed_column_widths( array $blocks, array $saved ): array {
+		foreach ( $blocks as $key => $block ) {
+			$original = $saved[ $key ] ?? null;
+			if ( ! is_array( $block ) || ! is_array( $original ) || ( $block['blockName'] ?? null ) !== ( $original['blockName'] ?? null ) ) {
+				// The trees no longer line up; leave the rest as parsed.
+				return $blocks;
+			}
+			if ( 'core/column' === $block['blockName'] && empty( $original['attrs']['width'] ) ) {
+				unset( $blocks[ $key ]['attrs']['width'] );
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$blocks[ $key ]['innerBlocks'] = self::clear_computed_column_widths( $block['innerBlocks'], $original['innerBlocks'] ?? [] );
+			}
+		}
+		return $blocks;
+	}
+
+	/**
+	 * The email theme's CSS variable values, so preset spacing (`var:preset|spacing|*`)
+	 * resolves to px when widths are recomputed instead of counting as zero.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function variables_map(): array {
+		if ( ! class_exists( Email_Editor_Container::class ) ) {
+			return [];
+		}
+		try {
+			return Email_Editor_Container::container()->get( Theme_Controller::class )->get_variables_values_map();
+		} catch ( \Throwable $e ) {
+			return [];
+		}
 	}
 
 	/**
