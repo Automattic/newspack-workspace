@@ -37,7 +37,7 @@ Tokens the brand adds that newspack-ui has no equivalent for. They exist in `scr
 - **Brand heading sizes**: `--newspack-ui-brand-h1` to `-h6` size and line-height, from the Figma Brand frame. They do not match the `2xl` to `6xl` scale.
 - **Chart colors**: `--chart-1` to `--chart-5` are literal brand colors in light, and palette tokens in a blue section. Neutral's `--newspack-ui-chart-0` to `-7` keep their light values in both modes.
 
-Not covered in a blue section: portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under `body`, outside the section, so one opened from a blue section renders on the light surface. Tokens no kit component reads keep their light values (`--newspack-ui-chart-0` to `-7`, `--newspack-ui-color-error-tint-hover` and `-pressed`, `--newspack-ui-color-primary` and `--newspack-ui-color-against-primary`).
+Not covered in a blue section: portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under `body`, outside the section, so one opened from a blue section renders on the light surface. Tokens no kit component reads keep their light values (`--newspack-ui-chart-0` to `-7`, `--newspack-ui-color-error-tint-hover` and `-pressed`, `--newspack-ui-color-primary` and `--newspack-ui-color-against-primary`). Stock shadcn components that use `--destructive` as text or a border get the destructive red, Lc 17.8 on Cobalt; kit components read the error tokens.
 
 ## Values with no token
 

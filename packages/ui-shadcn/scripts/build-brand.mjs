@@ -67,7 +67,7 @@ const contrastQuery = '@media (prefers-contrast: more)';
 const blueSelectors = [ '.dark', '.newspack-brand-inverse' ];
 
 brand.description = 'Newspack brand theme, light, with blue sections. For sites on Automattic domains.';
-brand.docs = `The page is always light. A section with the .newspack-brand-inverse or .dark class is blue: a Cobalt surface with white text, white buttons and a white focus ring; the two classes are equivalent, and dark: utilities apply inside a .dark section. Not covered: ${ blueUnsupported.join( ' ' ) }`;
+brand.docs = `The page is always light: set DARK_MODE = false in site.ts, or the theme script puts .dark on html and the whole page turns blue. A section with the .newspack-brand-inverse or .dark class is blue: a Cobalt surface with white text, white buttons and a white focus ring; the two classes are equivalent, and dark: utilities apply inside a .dark section. Not covered: ${ blueUnsupported.join( ' ' ) }`;
 
 const fontsCss = brandFontFiles.map( ( [ family, weight, style, file ] ) => `@font-face {\n\tfont-family: "${ family }";\n\tfont-style: ${ style };\n\tfont-weight: ${ weight };\n\tfont-display: swap;\n\tsrc: url("/fonts/american-grotesk/${ file }") format("woff2");\n}\n` ).join( '\n' );
 const fonts = {

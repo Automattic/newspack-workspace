@@ -122,6 +122,7 @@ export const blueContrast = {
 export const blueUnsupported = [
 	'Portal-rendered popups (Select list, Dialog, Sheet, toasts) mount under body, outside the blue section, so a popup opened from a blue section renders on the light surface.',
 	'Tokens no kit component reads keep their light values in a blue section: --newspack-ui-chart-0 to -7 (use --chart-1 to --chart-5), --newspack-ui-color-error-tint-hover and -pressed, --newspack-ui-color-primary and --newspack-ui-color-against-primary.',
+	'Stock shadcn components that use --destructive as text or a border (text-destructive, aria-invalid:border-destructive) get the destructive red, Lc 17.8 on Cobalt. Kit components use the error tokens, which a blue section restates.',
 ];
 
 const interFallback = '"Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif';
