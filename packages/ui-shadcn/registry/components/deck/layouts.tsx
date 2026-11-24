@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { NewspackLogo } from '@/components/brand/newspack-logo';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DeckSlide } from './deck';
 
@@ -26,28 +25,14 @@ export function OpeningSlide( { id, title, subtitle }: { id: string; title: stri
 }
 
 /**
- * Fixed last slide of every deck: Cobalt, the reversed logo centered at 96px, then an optional line and a contact link. Clearspace equals the rendered logo height, so the logo and its padding share one clamp(): 96px at full size, smaller on narrow windows.
+ * Fixed last slide of every deck: Cobalt with the reversed logo, large and centered, and nothing else. Clearspace equals the rendered logo height, so the logo and its padding share one clamp(): 160px at full size, smaller on narrow windows. `title` is only the slide's accessible name.
  */
-export function ClosingSlide( {
-	id,
-	title = 'Thank you',
-	contact,
-}: {
-	id: string;
-	title?: string;
-	contact?: { label: string; href: string };
-} ) {
+export function ClosingSlide( { id, title = 'Newspack' }: { id: string; title?: string } ) {
 	return (
-		<DeckSlide id={ id } title={ title } tone="brand" className="flex flex-col items-center justify-center p-16 text-center">
-			<div className="p-[clamp(3rem,7.5vw,6rem)]">
-				<NewspackLogo variant="reversed" className="h-[clamp(3rem,7.5vw,6rem)] w-auto max-w-full" />
+		<DeckSlide id={ id } title={ title } tone="brand" className="flex items-center justify-center p-16">
+			<div className="p-[clamp(4rem,10vw,10rem)]">
+				<NewspackLogo variant="reversed" title="" className="h-[clamp(4rem,10vw,10rem)] w-auto max-w-full" />
 			</div>
-			<p className="font-heading text-2xl">{ title }</p>
-			{ contact && (
-				<Button asChild className="mt-8">
-					<a href={ contact.href }>{ contact.label }</a>
-				</Button>
-			) }
 		</DeckSlide>
 	);
 }

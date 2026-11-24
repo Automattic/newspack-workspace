@@ -111,7 +111,7 @@ export const siteKit = [
 		type: 'registry:component',
 		title: 'Deck slide layouts',
 		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text, stats, quote and logos. Examples to copy. The opening and closing slides need the newspack-brand theme.',
-		registryDependencies: [ 'deck-section', 'newspack-logo', 'card', 'button' ],
+		registryDependencies: [ 'deck-section', 'newspack-logo', 'card' ],
 		files: [ component( 'deck/layouts.tsx' ) ],
 	},
 	{

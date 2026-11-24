@@ -43,7 +43,7 @@ test( 'deck items ship the section, the nav and a comment-free stylesheet', () =
 test( 'deck-layouts ships the seven starter slides, with brand opening and closing', () => {
 	assert.ok( existsSync( join( dist, 'site-kit', 'deck-layouts.json' ) ), 'deck-layouts.json exists' );
 	const item = readItem( 'deck-layouts' );
-	assert.deepEqual( item.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ).sort(), [ 'button', 'card', 'deck-section', 'newspack-logo' ] );
+	assert.deepEqual( item.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ).sort(), [ 'card', 'deck-section', 'newspack-logo' ] );
 	const source = item.files.find( f => f.path.endsWith( 'layouts.tsx' ) ).content;
 	for ( const name of [ 'OpeningSlide', 'ClosingSlide', 'StatementSlide', 'ImageTextSlide', 'StatsSlide', 'QuoteSlide', 'LogosSlide' ] ) {
 		assert.match( source, new RegExp( `export function ${ name }\\(` ) );
