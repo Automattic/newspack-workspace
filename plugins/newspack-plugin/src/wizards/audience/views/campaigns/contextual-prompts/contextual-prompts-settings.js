@@ -34,7 +34,7 @@ import { EmptyState, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Button, Divider, Grid, Modal, SectionHeader } from '../../../../../../packages/components/src';
+import { Button, Divider, Modal, SplitSection } from '../../../../../../packages/components/src';
 import WizardsTab from '../../../../wizards-tab';
 
 const DISCLOSURE = __(
@@ -429,41 +429,35 @@ const ContextualPromptsSettings = ( { status, values, error, inFlight, onSetValu
 	return (
 		<WizardsTab>
 			{ errorNotice }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Publisher Profile', 'newspack-plugin' ) }
 					description={ __( 'Details used to tailor AI-generated Contextual Prompt copy to your newsroom.', 'newspack-plugin' ) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>{ renderFields( 'profile' ) }</VStack>
-			</Grid>
+				<SplitSection.Content>{ renderFields( 'profile' ) }</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Site-Wide Override', 'newspack-plugin' ) }
 					description={ __( 'Temporarily replace every Contextual Prompt with a single call to action.', 'newspack-plugin' ) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>{ renderFields( 'override' ) }</VStack>
-			</Grid>
+				<SplitSection.Content>{ renderFields( 'override' ) }</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Control Test', 'newspack-plugin' ) }
 					description={ __(
 						'Show a generic control ask on every Nth story to compare it against story-aware copy. The call to action stays the same. If the site-wide override is on, it takes precedence and the test pauses.',
 						'newspack-plugin'
 					) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>
+				<SplitSection.Content>
 					{ renderFields( 'control' ) }
 					<ControlPreview enabled={ controlEnabled } interval={ Number( values[ CONTROL_INTERVAL_KEY ] ) || 3 } />
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</WizardsTab>
 	);
 };

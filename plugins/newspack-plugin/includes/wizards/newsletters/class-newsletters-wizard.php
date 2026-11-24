@@ -465,7 +465,7 @@ class Newsletters_Wizard extends Wizard {
 	 * @return bool Is current wizard page or not.
 	 */
 	public function is_wizard_page() {
-		return isset( $this->admin_screens[ $this->get_screen_slug() ] );
+		return isset( $this->admin_screens[ $this->get_screen_slug() ] ) || parent::is_wizard_page();
 	}
 
 	/**

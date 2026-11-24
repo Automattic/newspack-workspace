@@ -10,7 +10,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Button, Grid, SectionHeader, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { Button, Divider, SplitSection, withWizardScreen, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
@@ -93,13 +93,14 @@ export default function AdvancedSettings( props ) {
 						onChange={ ( key, value ) => setValues( current => ( { ...current, [ key ]: value } ) ) }
 						disabled={ isLoading || inFlight }
 					/>
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
-							title={ __( 'Group Names', 'newspack-plugin' ) }
-							description={ __( 'Choose how a group bought at checkout is named.', 'newspack-plugin' ) }
-							noMargin
-						/>
+				</Stack>
+				<Divider alignment="full-width" variant="tertiary" />
+				<SplitSection.Root>
+					<SplitSection.Header
+						title={ __( 'Group Names', 'newspack-plugin' ) }
+						description={ __( 'Choose how a group bought at checkout is named.', 'newspack-plugin' ) }
+					/>
+					<SplitSection.Content>
 						<ToggleControl
 							__nextHasNoMarginBottom
 							label={ __( "Name new groups after the buyer's company or name", 'newspack-plugin' ) }
@@ -120,8 +121,8 @@ export default function AdvancedSettings( props ) {
 							onChange={ value => setValues( current => ( { ...current, name_from_billing: value } ) ) }
 							disabled={ isLoading || inFlight }
 						/>
-					</Grid>
-				</Stack>
+					</SplitSection.Content>
+				</SplitSection.Root>
 			</WizardsTab>
 			{ savedCount > 0 &&
 				createPortal(

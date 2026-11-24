@@ -9,7 +9,6 @@ import { __ } from '@wordpress/i18n';
 import { Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { Notice } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -21,7 +20,7 @@ import mergeWith from 'lodash/mergeWith';
  */
 import { ADVANCED_SETTINGS_DEFAULTS } from '../constants';
 import WizardsTab from '../../../../wizards-tab';
-import { Divider, Grid, SectionHeader, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { Divider, SplitSection, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import Recirculation from './recirculation';
@@ -387,12 +386,10 @@ export default function AdvancedSettings() {
 						{ 'element' in section ? (
 							section.element
 						) : (
-							<Grid columns={ 2 } gutter={ 32 } noMargin>
-								<SectionHeader noMargin heading={ 2 } title={ section.title } description={ section.description } />
-								<Stack direction="column" gap="xl">
-									{ section.content }
-								</Stack>
-							</Grid>
+							<SplitSection.Root>
+								<SplitSection.Header title={ section.title } description={ section.description } />
+								<SplitSection.Content>{ section.content }</SplitSection.Content>
+							</SplitSection.Root>
 						) }
 					</Fragment>
 				) ) }
