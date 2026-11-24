@@ -27,8 +27,7 @@ import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-togg
 import {
 	Button,
 	Divider,
-	Grid,
-	SectionHeader,
+	SplitSection,
 	TextControl,
 	Waiting,
 	useConfirmDialog,
@@ -478,12 +477,10 @@ function Collections() {
 			{ sections.map( ( section, index ) => (
 				<Fragment key={ section.key }>
 					{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader noMargin heading={ 2 } title={ section.title } description={ section.description } />
-						<Stack direction="column" gap="xl">
-							{ section.content }
-						</Stack>
-					</Grid>
+					<SplitSection.Root>
+						<SplitSection.Header title={ section.title } description={ section.description } />
+						<SplitSection.Content>{ section.content }</SplitSection.Content>
+					</SplitSection.Root>
 				</Fragment>
 			) ) }
 		</WizardsTab>
