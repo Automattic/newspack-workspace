@@ -1,0 +1,204 @@
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+:root {
+	--color-fd-background: var(--newspack-ui-color-surface);
+	--color-fd-foreground: var(--newspack-ui-color-text);
+	--color-fd-muted: var(--newspack-ui-color-surface-subtle);
+	--color-fd-muted-foreground: var(--newspack-ui-color-text-muted);
+	--color-fd-popover: var(--newspack-ui-color-surface);
+	--color-fd-popover-foreground: var(--newspack-ui-color-text);
+	--color-fd-card: var(--newspack-ui-color-surface);
+	--color-fd-card-foreground: var(--newspack-ui-color-text);
+	--color-fd-border: var(--newspack-ui-color-border);
+	--color-fd-primary: var(--newspack-ui-color-accent);
+	--color-fd-primary-foreground: var(--newspack-ui-color-btn-ink);
+	--color-fd-secondary: var(--newspack-ui-color-neutral-fill);
+	--color-fd-secondary-foreground: var(--newspack-ui-color-text);
+	--color-fd-accent: var(--newspack-ui-color-neutral-fill);
+	--color-fd-accent-foreground: var(--newspack-ui-color-text);
+	--color-fd-ring: var(--newspack-ui-color-focus);
+	--color-fd-overlay: var(--newspack-ui-color-overlay-50);
+	--color-fd-info: var(--newspack-ui-color-primary);
+	--color-fd-warning: var(--newspack-ui-color-warning);
+	--color-fd-error: var(--newspack-ui-color-error);
+	--color-fd-success: var(--newspack-ui-color-success);
+	--color-fd-idea: var(--newspack-ui-color-warning);
+}
+
+.dark #nd-sidebar {
+	--color-fd-muted: var(--newspack-ui-color-surface-subtle);
+	--color-fd-secondary: var(--newspack-ui-color-neutral-fill);
+	--color-fd-muted-foreground: var(--newspack-ui-color-text-muted);
+}
+
+#nd-notebook-layout {
+	--fd-layout-width: min(var(--site-wide-width), calc(100% - 2 * var(--newspack-ui-spacer-3)));
+}
+
+@media (min-width: 782px) {
+	#nd-notebook-layout {
+		--fd-layout-width: min(var(--site-wide-width), calc(100% - 2 * var(--newspack-ui-spacer-6)));
+	}
+}
+
+#nd-sidebar [class*='rounded-[inherit]'] {
+	padding-inline-start: 0;
+}
+
+#nd-sidebar-mobile {
+	--animate-fd-sidebar-in: fd-sidebar-in var(--newspack-ui-duration-sheet) var(--newspack-ui-ease-drawer);
+	--animate-fd-sidebar-out: fd-sidebar-out var(--newspack-ui-duration-sheet) var(--newspack-ui-ease-drawer);
+	z-index: 50;
+	inline-size: min(var(--newspack-ui-width-s), calc(100vw - var(--newspack-ui-spacer-6)));
+	max-inline-size: none;
+	border-width: 0;
+	border-radius: 0;
+	background: var(--newspack-ui-color-surface);
+	box-shadow: var(--nui-elevation-4);
+}
+
+#nd-sidebar-mobile:has([data-drawer-search][data-querying]) > :not(:has([data-drawer-search])) {
+	display: none;
+}
+
+#nd-sidebar-mobile > :has(> [data-drawer-search][data-querying]) {
+	flex: 1;
+	min-block-size: 0;
+}
+
+:has(+ #nd-sidebar-mobile)[data-state] {
+	--animate-fd-fade-in: fd-fade-in var(--newspack-ui-duration-sheet) var(--newspack-ui-ease-drawer);
+	--animate-fd-fade-out: fd-fade-out var(--newspack-ui-duration-sheet) var(--newspack-ui-ease-drawer);
+	z-index: 50;
+	background: var(--newspack-ui-color-overlay-50);
+	backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root,
+	#nd-sidebar-mobile {
+		--animate-fd-dialog-in: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-dialog-out: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-popover-in: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-popover-out: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-enterFromLeft: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-enterFromRight: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-exitToLeft: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-exitToRight: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-sidebar-in: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-sidebar-out: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-collapsible-down: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-collapsible-up: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-accordion-down: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-accordion-up: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-nav-menu-in: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-nav-menu-out: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+	}
+
+	[data-toc-popover-trigger] .truncate {
+		translate: none;
+	}
+
+	:has(+ #nd-sidebar-mobile)[data-state] {
+		--animate-fd-fade-in: fd-fade-in var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+		--animate-fd-fade-out: fd-fade-out var(--newspack-ui-duration-modal) var(--newspack-ui-ease-color);
+	}
+}
+
+a.sr-only[href='#nd-page'] {
+	display: none;
+}
+
+button[data-copy]:focus-visible {
+	outline: 2px solid transparent;
+	transition: none;
+	box-shadow: inset 0 0 0 2px var(--newspack-ui-color-focus), 0 0 0 var(--newspack-ui-focus-halo-width) var(--newspack-ui-color-focus-halo);
+}
+
+[data-toc-popover-trigger]:focus-visible {
+	outline: 2px solid transparent;
+	box-shadow: inset 0 0 0 2px var(--newspack-ui-color-focus), inset 0 0 0 calc(2px + var(--newspack-ui-focus-halo-width)) var(--newspack-ui-color-focus-halo);
+}
+
+figure.shiki:focus-visible {
+	outline: 2px solid var(--newspack-ui-color-focus);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 calc(2px + var(--newspack-ui-focus-halo-width)) var(--newspack-ui-color-focus-halo);
+}
+
+figure.shiki .fd-scroll-container:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--newspack-ui-color-focus);
+}
+
+.docs-title {
+	margin: 0;
+	font-family: var(--newspack-ui-font-family-heading);
+	font-size: var(--newspack-ui-font-size-xl);
+	line-height: var(--newspack-ui-line-height-xl);
+	font-weight: var(--newspack-ui-font-weight-strong);
+	letter-spacing: var(--newspack-ui-letter-spacing-display);
+	text-wrap: balance;
+}
+
+.docs-lead {
+	margin: var(--newspack-ui-spacer-1) 0 var(--newspack-ui-spacer-6);
+	color: var(--newspack-ui-color-text-muted);
+	font-size: var(--newspack-ui-font-size-m);
+	line-height: var(--newspack-ui-line-height-m);
+	text-wrap: pretty;
+}
+
+.prose {
+	--tw-prose-body: var(--newspack-ui-color-text);
+	--tw-prose-headings: var(--newspack-ui-color-text);
+	--tw-prose-links: var(--newspack-ui-color-text);
+	--tw-prose-bold: var(--newspack-ui-color-text);
+	--tw-prose-counters: var(--newspack-ui-color-text-muted);
+	--tw-prose-bullets: var(--newspack-ui-color-text-muted);
+	--tw-prose-quotes: var(--newspack-ui-color-text);
+	--tw-prose-code: var(--newspack-ui-color-text);
+	--tw-prose-th-borders: var(--newspack-ui-color-border);
+	--tw-prose-td-borders: var(--newspack-ui-color-border);
+}
+
+.prose:not(.prose-sm) {
+	font-size: var(--newspack-ui-font-size-body);
+	line-height: var(--newspack-ui-line-height-body);
+}
+
+.prose :where(h2):not(:where(.not-prose, .not-prose *)) {
+	font-size: var(--newspack-ui-font-size-title-l);
+	line-height: var(--newspack-ui-line-height-title-l);
+	letter-spacing: var(--newspack-ui-letter-spacing-title-l);
+	font-weight: var(--newspack-ui-font-weight-strong);
+}
+
+.prose :where(h3):not(:where(.not-prose, .not-prose *)) {
+	font-size: var(--newspack-ui-font-size-title-m);
+	line-height: var(--newspack-ui-line-height-title-m);
+	letter-spacing: var(--newspack-ui-letter-spacing-title-m);
+	font-weight: var(--newspack-ui-font-weight-strong);
+}
+
+.prose :where(a:not([data-card], :is(h1, h2, h3, h4, h5, h6) a)):not(:where(.not-prose, .not-prose *)) {
+	text-decoration-color: color-mix(in oklab, currentcolor 50%, transparent);
+	text-underline-offset: 3px;
+	font-weight: var(--newspack-ui-font-weight-medium);
+}
+
+.prose :where(a:not([data-card], :is(h1, h2, h3, h4, h5, h6) a)):not(:where(.not-prose, .not-prose *)):hover {
+	text-decoration-color: currentcolor;
+}
+
+.prose :where(:is(h1, h2, h3, h4, h5, h6) a):not(:where(.not-prose, .not-prose *)) {
+	font-weight: inherit;
+}
+
+[data-search-overlay] {
+	--search-overlay-ink: var(--newspack-ui-color-neutral-0);
+}
+
+.dark [data-search-overlay] {
+	--search-overlay-ink: var(--newspack-ui-color-neutral-100);
+}
