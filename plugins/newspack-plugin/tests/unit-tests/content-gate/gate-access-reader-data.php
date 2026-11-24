@@ -459,4 +459,39 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 
 		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $recipient_id ) );
 	}
+
+	/**
+	 * A change of owner moves access from one reader to another with no
+	 * subscription event and, for an outsider taking over from a previous owner
+	 * who can't take a member's seat, no membership write. Group_Subscription's
+	 * announcement marks both, and their next page views put the gate right.
+	 */
+	public function test_owner_change_marks_both_owners_stale() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$subscription      = $this->create_subscription( $previous_owner_id, true );
+		add_user_meta( $this->create_reader(), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+		$ineligible = function ( $eligible, $user_id ) use ( $previous_owner_id ) {
+			return $user_id === $previous_owner_id ? false : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10, 2 );
+		$this->view_page_as( $previous_owner_id );
+		$this->view_page_as( $new_owner_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $previous_owner_id ) );
+		$this->assertSame( [], $this->stored_gates( $new_owner_id ) );
+
+		$changed = Group_Subscription::change_owner( $subscription, $new_owner_id );
+		remove_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10 );
+
+		$this->assertTrue( $changed );
+		$this->assertEmpty( get_user_meta( $previous_owner_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The previous owner is marked stale.' );
+		$this->assertEmpty( get_user_meta( $new_owner_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The new owner is marked stale.' );
+
+		Group_Subscription::reset_cache();
+		$this->view_page_as( $previous_owner_id );
+		$this->view_page_as( $new_owner_id );
+		$this->assertSame( [], $this->stored_gates( $previous_owner_id ) );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $new_owner_id ) );
+	}
 }
