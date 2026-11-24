@@ -27,7 +27,7 @@ test( 'deck items ship the section, the nav and a comment-free stylesheet', () =
 		assert.ok( existsSync( join( dist, 'site-kit', `${ name }.json` ) ), `${ name }.json exists` );
 	}
 	const bundle = readItem( 'newspack-deck' );
-	assert.deepEqual( bundle.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ), [ 'newspack-brand', 'newspack-logo', 'deck-section', 'deck-nav', 'deck-layouts' ] );
+	assert.deepEqual( bundle.registryDependencies.map( d => d.split( '/' ).pop().replace( /\.json$/, '' ) ), [ 'newspack-brand', 'newspack-logo', 'newspack-favicon', 'deck-section', 'deck-nav', 'deck-layouts' ] );
 	const section = readItem( 'deck-section' );
 	const css = section.files.find( f => f.path.endsWith( 'newspack-deck.css' ) );
 	assert.ok( css, 'deck-section ships newspack-deck.css' );
@@ -110,6 +110,16 @@ test( 'every item that imports @/lib/utils declares the shadcn utils item', () =
 		const declares = ( item.registryDependencies ?? [] ).includes( 'utils' );
 		assert.equal( declares, users.includes( item ), item.name );
 	}
+} );
+
+test( 'the deck bundle ships the Newspack symbol as public/favicon.svg', () => {
+	const item = readItem( 'newspack-favicon' );
+	assert.equal( item.type, 'registry:file' );
+	assert.deepEqual( item.files.map( ( { path, type, target } ) => ( { path, type, target } ) ), [ { path: 'registry/public/favicon.svg', type: 'registry:file', target: '~/public/favicon.svg' } ] );
+	const svg = item.files[ 0 ].content;
+	assert.ok( svg.startsWith( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 528 528">' ) );
+	assert.ok( svg.includes( 'fill="#003da5"' ) && svg.includes( 'M384 316v-36h-36l36 36Z' ) );
+	assert.ok( item.description.includes( '<link rel="icon" type="image/svg+xml" href="/favicon.svg" />' ) );
 } );
 
 test( 'deck dot navigation uses the kit tokens, the brand surface and renders for one slide', () => {

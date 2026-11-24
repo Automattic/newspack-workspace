@@ -115,6 +115,13 @@ export const siteKit = [
 		files: [ component( 'deck/layouts.tsx' ) ],
 	},
 	{
+		name: 'newspack-favicon',
+		type: 'registry:file',
+		title: 'Newspack favicon',
+		description: 'public/favicon.svg, the Newspack symbol. Link it from the page head with <link rel="icon" type="image/svg+xml" href="/favicon.svg" />, so browsers do not request a missing /favicon.ico.',
+		files: [ { path: 'public/favicon.svg', type: 'registry:file', target: '~/public/favicon.svg' } ],
+	},
+	{
 		name: 'site-footer',
 		type: 'registry:component',
 		title: 'Site footer',
@@ -212,7 +219,7 @@ export const siteBundles = [
 	{
 		name: 'newspack-deck',
 		title: 'Newspack deck',
-		description: 'The Newspack brand theme with the logo, the Deck section, the dot navigation and the starter slide layouts.',
-		registryDependencies: [ 'newspack-brand', 'newspack-logo', 'deck-section', 'deck-nav', 'deck-layouts' ],
+		description: 'The Newspack brand theme with the logo, the favicon, the Deck section, the dot navigation and the starter slide layouts.',
+		registryDependencies: [ 'newspack-brand', 'newspack-logo', 'newspack-favicon', 'deck-section', 'deck-nav', 'deck-layouts' ],
 	},
 ];
