@@ -253,6 +253,8 @@ const write = ( name, data ) => writeFileSync( join( dist, 'registry', `${ name 
 write( 'newspack-ui-neutral', themeItem );
 
 const url = name => `${ registryBase }/r/${ name }.json`;
+const usesUtils = files => files.some( file => file.content.includes( '@/lib/utils' ) );
+const dependencyUrls = ( names = [], files = [] ) => [ ...( usesUtils( files ) ? [ 'utils' ] : [] ), ...names.map( url ) ];
 const indexItems = [ { name: 'newspack-ui-neutral', type: themeItem.type, title: themeItem.title, description: themeItem.description } ];
 const lineCounts = {};
 const fileLines = {};
@@ -272,7 +274,7 @@ for ( const item of items ) {
 		...( item.dependencies?.length ? { dependencies: item.dependencies } : {} ),
 		...( item.css ? { css: item.css } : {} ),
 		...( item.docs ? { docs: item.docs } : {} ),
-		registryDependencies: ( item.registryDependencies ?? [] ).map( url ),
+		registryDependencies: dependencyUrls( item.registryDependencies, files ),
 		files,
 	};
 	if ( ! entry.registryDependencies.length ) {
@@ -316,7 +318,7 @@ for ( const item of siteKit ) {
 		title: item.title,
 		description: item.description,
 		...( item.dependencies?.length ? { dependencies: item.dependencies } : {} ),
-		...( item.registryDependencies?.length ? { registryDependencies: item.registryDependencies.map( url ) } : {} ),
+		...( dependencyUrls( item.registryDependencies, files ).length ? { registryDependencies: dependencyUrls( item.registryDependencies, files ) } : {} ),
 		...( item.cssVars ? { cssVars: item.cssVars } : {} ),
 		...( files.length ? { files } : {} ),
 	};

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -219,7 +219,75 @@ test( 'the deck no longer relies on native smooth scrolling and its dot fades on
 	const deck = readFileSync( join( root, 'registry', 'components', 'deck', 'deck.tsx' ), 'utf8' );
 	assert.ok( ! /behavior:\s*'smooth'|scrollBy\(/.test( deck ) );
 	const nav = readFileSync( join( root, 'registry', 'components', 'deck', 'deck-nav.tsx' ), 'utf8' );
-	assert.ok( nav.includes( 'duration-(--newspack-ui-duration-color)' ) );
-	assert.ok( nav.includes( 'ease-(--newspack-ui-ease-color)' ) );
+	assert.ok( nav.includes( 'background-color_var(--newspack-ui-duration-color)_var(--newspack-ui-ease-color)' ) );
+	assert.ok( nav.includes( 'scale_var(--newspack-ui-duration-press)_var(--newspack-ui-ease-out)' ) );
 	assert.ok( ! /\btransition-colors\b/.test( nav ) );
+} );
+
+const TOKEN_DURATION = /^var\(--newspack-ui-duration-[a-z]+\)$/;
+const TOKEN_EASE = /^var\(--newspack-ui-ease-[a-z]+\)$/;
+
+function motionProblems( source ) {
+	const problems = [];
+	const classes = source.match( /[^\s"'`{}]+/g ) ?? [];
+	for ( const raw of classes ) {
+		const utility = raw.replace( /^(?:[a-z-]+(?:-\[[^\]]*\])?:)+/, '' );
+		if ( /^(?:transition|transition-(?:all|colors|opacity|shadow|transform|discrete))$/.test( utility ) ) {
+			problems.push( `${ raw }: a Tailwind transition utility with its default properties` );
+		}
+		if ( /^transition-\[/.test( utility ) && /\ball\b/.test( utility ) ) {
+			problems.push( `${ raw }: transition all` );
+		}
+		if ( /^(?:duration|ease|delay)-/.test( utility ) && ! /^(?:duration-\(--newspack-ui-duration-[a-z]+\)|ease-\(--newspack-ui-ease-[a-z]+\))$/.test( utility ) ) {
+			problems.push( `${ raw }: a duration, easing or delay that is not a newspack-motion token` );
+		}
+		if ( /^animate-/.test( utility ) && utility !== 'animate-none' ) {
+			problems.push( `${ raw }: a Tailwind animation` );
+		}
+		const bracket = /\[transition:([^\]]*)\]/.exec( raw );
+		if ( bracket ) {
+			for ( const part of bracket[ 1 ].split( ',' ) ) {
+				const [ property, duration, easing, ...rest ] = part.split( '_' );
+				if ( property === 'all' || ! TOKEN_DURATION.test( duration ?? '' ) || ! TOKEN_EASE.test( easing ?? '' ) || rest.length ) {
+					problems.push( `${ raw }: ${ part } is not a named property on a duration and an easing token` );
+				}
+			}
+		}
+	}
+	for ( const element of source.match( /className=(?:"[^"]*"|\{[^}]*\})/g ) ?? [] ) {
+		if ( /\btransition-\[/.test( element ) && ! ( /duration-\(--newspack-ui-duration-/.test( element ) && /ease-\(--newspack-ui-ease-/.test( element ) ) ) {
+			problems.push( `${ element.slice( 0, 60 ) }: transition-[…] without a duration and an easing token` );
+		}
+	}
+	const code = source.replace( /\/\*[\s\S]*?\*\/|\/\/.*$|^\s*\*.*$/gm, '' );
+	if ( /\b\d+(?:\.\d+)?m?s\b(?![-\w])/.test( code ) || /cubic-bezier\(/.test( code ) ) {
+		problems.push( 'a literal duration or cubic-bezier()' );
+	}
+	return problems;
+}
+
+test( 'the motion check catches untokenized motion', () => {
+	for ( const bad of [ 'className="transition"', 'className="transition-transform"', 'className="transition-colors"', 'className="duration-150"', 'className="ease-out"', 'className="hover:ease-in"', 'className="animate-spin"', 'className="transition-[all]"', 'className="[transition:scale_160ms_ease-out]"', 'className="transition-[scale] duration-(--newspack-ui-duration-press)"', 'const x = "cubic-bezier(0.2, 0, 0, 1)"', 'const x = "200ms"' ] ) {
+		assert.ok( motionProblems( bad ).length, bad );
+	}
+	assert.deepEqual( motionProblems( 'className="transition-[scale] duration-(--newspack-ui-duration-press) ease-(--newspack-ui-ease-out) motion-reduce:transition-none [transition:scale_var(--newspack-ui-duration-press)_var(--newspack-ui-ease-out)]"' ), [] );
+} );
+
+test( 'every transition in the deck and brand files uses named properties and newspack-motion tokens', () => {
+	const deck = join( root, 'registry', 'components', 'deck' );
+	const files = [
+		...readdirSync( deck ).filter( file => file !== 'deck-motion.ts' ).map( file => join( deck, file ) ),
+		join( root, 'registry', 'components', 'brand', 'newspack-logo.tsx' ),
+		join( root, 'registry', 'styles', 'newspack-deck.css' ),
+	];
+	for ( const file of files ) {
+		assert.deepEqual( motionProblems( readFileSync( file, 'utf8' ) ), [], file );
+	}
+	const brand = JSON.parse( readFileSync( join( root, 'dist', 'registry', 'newspack-brand.json' ), 'utf8' ) );
+	const declarations = [];
+	const walk = node => Object.entries( node ).forEach( ( [ key, value ] ) => ( typeof value === 'object' ? walk( value ) : declarations.push( [ key, value ] ) ) );
+	walk( brand.css );
+	const brandCss = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	assert.deepEqual( declarations.filter( ( [ key ] ) => /^(?:transition|animation)/.test( key ) ), [], 'the brand item sets no transition or animation' );
+	assert.ok( ! /(?:^|[\s{;])(?:transition|animation)(?:-[a-z-]+)?\s*:/m.test( brandCss ), 'brand.css sets no transition or animation' );
 } );

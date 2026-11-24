@@ -147,6 +147,11 @@ export const brandTypeTokens = Object.fromEntries( Object.entries( brandType ).f
 ] ) );
 
 export const brandBase = {
+	body: {
+		'background-color': 'var(--newspack-ui-color-surface)',
+		color: 'var(--newspack-ui-color-text)',
+		'font-family': 'var(--font-sans)',
+	},
 	h1: {
 		'font-family': 'var(--font-display)',
 		'font-weight': '900',
@@ -193,6 +198,13 @@ export const brandBase = {
 	},
 	'a:where(:not([class], [data-card])):hover': {
 		'text-decoration-color': 'var(--newspack-ui-color-link)',
+	},
+	'.newspack-brand-card-title': {
+		'font-family': 'var(--font-heading)',
+		'font-weight': '500',
+		'font-size': 'var(--newspack-ui-brand-h5-size)',
+		'line-height': 'var(--newspack-ui-brand-h5-line-height)',
+		color: 'var(--newspack-ui-color-text)',
 	},
 	'.newspack-brand-eyebrow': {
 		'font-family': 'var(--font-sans)',

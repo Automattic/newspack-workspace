@@ -104,15 +104,22 @@ export const siteKit = [
 		title: 'Deck dot navigation',
 		description: 'DeckNav: dot navigation fixed to the right of a Deck, one button per slide, hidden in print.',
 		registryDependencies: [ 'deck-section' ],
-		files: [ component( 'deck/deck-nav.tsx' ) ],
+		files: [ component( 'deck/deck-nav.tsx' ), component( 'deck/deck-nav-reveal.ts' ) ],
 	},
 	{
 		name: 'deck-layouts',
 		type: 'registry:component',
 		title: 'Deck slide layouts',
-		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text, stats, quote and logos. Examples to copy. They need the newspack-brand theme: the opening and closing slides use its Cobalt surface, and every slide title takes the brand h2 face and size.',
+		description: 'Starter slides for a Deck: opening and closing on Cobalt with the reversed logo, statement, image with text (split or image-led), stats, quote, logos and a blank ContentSlide, plus SLIDE and SLIDE_PADDING for custom slides. Every content layout takes tone="brand" for a blue slide and a className. Examples to copy. They need the newspack-brand theme: the opening and closing slides use its Cobalt surface, the opening title takes the brand h1 size and every slide title the brand h2 face and size.',
 		registryDependencies: [ 'deck-section', 'newspack-logo', 'card' ],
 		files: [ component( 'deck/layouts.tsx' ) ],
+	},
+	{
+		name: 'newspack-favicon',
+		type: 'registry:file',
+		title: 'Newspack favicon',
+		description: 'public/favicon.svg, the Newspack symbol. Link it from the page head with <link rel="icon" type="image/svg+xml" href="/favicon.svg" />, so browsers do not request a missing /favicon.ico.',
+		files: [ { path: 'public/favicon.svg', type: 'registry:file', target: '~/public/favicon.svg' } ],
 	},
 	{
 		name: 'site-footer',
@@ -212,7 +219,7 @@ export const siteBundles = [
 	{
 		name: 'newspack-deck',
 		title: 'Newspack deck',
-		description: 'The Newspack brand theme with the logo, the Deck section, the dot navigation and the starter slide layouts.',
-		registryDependencies: [ 'newspack-brand', 'newspack-logo', 'deck-section', 'deck-nav', 'deck-layouts' ],
+		description: 'The Newspack brand theme with the logo, the favicon, the Deck section, the dot navigation and the starter slide layouts.',
+		registryDependencies: [ 'newspack-brand', 'newspack-logo', 'newspack-favicon', 'deck-section', 'deck-nav', 'deck-layouts' ],
 	},
 ];

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brandFontFiles } from '../scripts/brand.mjs';
 
 const root = resolve( dirname( fileURLToPath( import.meta.url ) ), '..' );
 const registry = join( root, 'dist', 'registry' );
@@ -20,6 +21,28 @@ test( 'defines the heading and display font stacks', () => {
 	assert.equal( brand.cssVars.theme[ 'font-display' ], display );
 	assert.equal( brand.css[ ':root' ][ '--font-heading' ], heading );
 	assert.equal( brand.css[ ':root' ][ '--font-display' ], display );
+} );
+
+test( 'body gets the surface, the text color and Inter, so a deck needs no body rule of its own', () => {
+	assert.deepEqual( base.body, { 'background-color': 'var(--newspack-ui-color-surface)', color: 'var(--newspack-ui-color-text)', 'font-family': 'var(--font-sans)' } );
+	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	assert.match( css, /\n\tbody \{\n\t\tbackground-color: var\(--newspack-ui-color-surface\);/ );
+	assert.ok( brand.docs.includes( 'On a site built with the site kit, set DARK_MODE = false' ) );
+	assert.ok( brand.docs.includes( 'a deck has no site.ts or theme script and needs nothing' ) );
+	assert.ok( brand.description.includes( 'For newspack.com and anything under space.fast.' ) );
+} );
+
+test( 'the card title class sizes a heading in a Card at the brand h5 step', () => {
+	assert.deepEqual( base[ '.newspack-brand-card-title' ], {
+		'font-family': 'var(--font-heading)',
+		'font-weight': '500',
+		'font-size': 'var(--newspack-ui-brand-h5-size)',
+		'line-height': 'var(--newspack-ui-brand-h5-line-height)',
+		color: 'var(--newspack-ui-color-text)',
+	} );
+	const css = readFileSync( join( root, 'dist', 'brand.css' ), 'utf8' );
+	assert.match( css, /\n\t\.newspack-brand-card-title \{\n\t\tfont-family: var\(--font-heading\);/ );
+	assert.ok( brand.docs.includes( '.newspack-brand-card-title' ) );
 } );
 
 test( 'h1 is Cobalt Compressed Black uppercase', () => {
@@ -109,8 +132,20 @@ test( 'the fonts item ships one stylesheet file with five @font-face rules', () 
 	assert.deepEqual( Object.keys( fonts ).sort(), [ '$schema', 'description', 'docs', 'files', 'name', 'title', 'type' ] );
 	assert.equal( fonts.name, 'newspack-brand-fonts' );
 	assert.equal( fonts.type, 'registry:item' );
-	assert.match( fonts.docs, /Automattic domains only/ );
-	assert.match( fonts.docs, /Import styles\/newspack-brand-fonts\.css once, before the theme/ );
+	for ( const text of [ fonts.docs, fonts.description ] ) {
+		assert.ok( text.includes( 'For newspack.com and anything under space.fast only.' ) );
+		assert.ok( text.includes( 'https://newspack-ui-theme.space.fast/fonts/american-grotesk/' ) );
+		assert.ok( ! text.includes( 'Automattic' ) );
+	}
+	assert.match( fonts.docs, /import styles\/newspack-brand-fonts\.css once, before the theme/ );
+	for ( const [ , , , file ] of brandFontFiles ) {
+		assert.ok( fonts.docs.includes( file ), file );
+	}
+	const command = fonts.docs.match( /curl [^\n]*?\}\.woff2'/ )?.[ 0 ];
+	assert.ok( command, 'the docs give a one-line download command' );
+	const names = command.match( /\{([^}]+)\}\.woff2'$/ )[ 1 ].split( ',' ).map( name => `${ name }.woff2` );
+	assert.deepEqual( names, brandFontFiles.map( ( [ , , , file ] ) => file ) );
+	assert.ok( command.includes( "-o 'public/fonts/american-grotesk/#1.woff2'" ) );
 	assert.equal( fonts.files.length, 1 );
 	const [ file ] = fonts.files;
 	assert.equal( file.type, 'registry:file' );

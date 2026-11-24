@@ -66,17 +66,21 @@ const blueHighContrast = prefix( tokenValues( blueContrast ) );
 const contrastQuery = '@media (prefers-contrast: more)';
 const blueSelectors = [ '.dark', '.newspack-brand-inverse' ];
 
-brand.description = 'Newspack brand theme, light, with blue sections. For sites on Automattic domains.';
-brand.docs = `The page is always light: set DARK_MODE = false in site.ts, or the theme script puts .dark on html and the whole page turns blue. A section with the .newspack-brand-inverse or .dark class is blue: a Cobalt surface with white text, white buttons and a white focus ring; the two classes are equivalent, and dark: utilities apply inside a .dark section. h1 and .font-display are American Grotesk Compressed Black, uppercase and Cobalt; h2 is Compressed Black in sentence case and the text color; h3 to h5 are American Grotesk Medium. Without the newspack-brand-fonts item they fall back to Inter 900 and 500. Not covered: ${ blueUnsupported.join( ' ' ) }`;
+brand.description = 'Newspack brand theme, light, with blue sections. For newspack.com and anything under space.fast.';
+brand.docs = `The page is always light, and body gets the surface, text color and Inter. On a site built with the site kit, set DARK_MODE = false in site.ts, or the theme script puts .dark on html and the whole page turns blue; a deck has no site.ts or theme script and needs nothing. A section with the .newspack-brand-inverse or .dark class is blue: a Cobalt surface with white text, white buttons and a white focus ring; the two classes are equivalent, and dark: utilities apply inside a .dark section. h1 and .font-display are American Grotesk Compressed Black, uppercase and Cobalt; h2 is Compressed Black in sentence case and the text color; h3 to h5 are American Grotesk Medium. .newspack-brand-card-title gives a heading inside a Card the h5 size, so it sits below the section's h2 while keeping its level. Without the newspack-brand-fonts item they fall back to Inter 900 and 500. Not covered: ${ blueUnsupported.join( ' ' ) }`;
 
+const fontsUrl = 'https://newspack-ui-theme.space.fast/fonts/american-grotesk/';
+const fontFileNames = brandFontFiles.map( ( [ , , , file ] ) => file );
+const fontFileList = `${ fontFileNames.slice( 0, -1 ).join( ', ' ) } and ${ fontFileNames.at( -1 ) }`;
+const downloadCommand = `curl -fsSL --create-dirs -o 'public/fonts/american-grotesk/#1.woff2' '${ fontsUrl }{${ fontFileNames.map( file => file.replace( /\.woff2$/, '' ) ).join( ',' ) }}.woff2'`;
 const fontsCss = brandFontFiles.map( ( [ family, weight, style, file ] ) => `@font-face {\n\tfont-family: "${ family }";\n\tfont-style: ${ style };\n\tfont-weight: ${ weight };\n\tfont-display: swap;\n\tsrc: url("/fonts/american-grotesk/${ file }") format("woff2");\n}\n` ).join( '\n' );
 const fonts = {
 	$schema: neutral.$schema,
 	name: 'newspack-brand-fonts',
 	type: 'registry:item',
 	title: 'Newspack brand fonts',
-	description: 'American Grotesk @font-face rules for the Newspack brand theme. For sites on Automattic domains only.',
-	docs: 'For sites on Automattic domains only. Copy the five American Grotesk files from the product site\'s /fonts/american-grotesk/ into this site\'s public/fonts/american-grotesk/. Import styles/newspack-brand-fonts.css once, before the theme. Without the fonts the brand theme falls back to Inter.',
+	description: `American Grotesk @font-face rules for the Newspack brand theme. For newspack.com and anything under space.fast only. The five woff2 files are at ${ fontsUrl }; the docs give the download command.`,
+	docs: `For newspack.com and anything under space.fast only. Download the five American Grotesk files (${ fontFileList }) from ${ fontsUrl } into this site's public/fonts/american-grotesk/, from the project root: ${ downloadCommand } Then import styles/newspack-brand-fonts.css once, before the theme. Without the fonts the brand theme falls back to Inter.`,
 	files: [ { path: 'registry/styles/newspack-brand-fonts.css', type: 'registry:file', target: 'styles/newspack-brand-fonts.css', content: fontsCss } ],
 };
 writeJson( join( registryDir, `${ fonts.name }.json` ), fonts );
