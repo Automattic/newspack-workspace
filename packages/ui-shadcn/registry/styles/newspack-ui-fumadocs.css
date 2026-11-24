@@ -118,6 +118,9 @@ figure.shiki .fd-scroll-container:focus-visible {
 	--tw-prose-code: var(--newspack-ui-color-text);
 	--tw-prose-th-borders: var(--newspack-ui-color-border);
 	--tw-prose-td-borders: var(--newspack-ui-color-border);
+}
+
+.prose:not(.prose-sm) {
 	font-size: var(--newspack-ui-font-size-body);
 	line-height: var(--newspack-ui-line-height-body);
 }
