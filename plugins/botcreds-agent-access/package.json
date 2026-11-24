@@ -1,0 +1,24 @@
+{
+	"name": "botcreds-agent-access",
+	"version": "2.4.5",
+	"description": "Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.",
+	"author": "Automattic",
+	"scripts": {
+		"cm": "newspack-scripts commit",
+		"semantic-release": "newspack-scripts release --files=botcreds-agent-access.php",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/botcreds-agent-access --exclude-from='./.distignore' && cd release && zip -r botcreds-agent-access.zip botcreds-agent-access",
+		"release": "npm run semantic-release"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/botcreds-agent-access"
+	},
+	"license": "GPL-2.0-or-later",
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-workspace/issues"
+	},
+	"devDependencies": {
+		"newspack-scripts": "workspace:*"
+	}
+}

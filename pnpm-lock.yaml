@@ -470,6 +470,12 @@ importers:
         specifier: ^17.7.2
         version: 17.7.2
 
+  plugins/botcreds-agent-access:
+    devDependencies:
+      newspack-scripts:
+        specifier: workspace:*
+        version: link:../../packages/scripts
+
   plugins/newspack-ads:
     dependencies:
       '@10up/component-tabs':

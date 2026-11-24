@@ -1,0 +1,11 @@
+{
+	"name": "automattic/botcreds-agent-access",
+	"description": "Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"config": {
+		"platform": {
+			"php": "8.0"
+		}
+	}
+}
