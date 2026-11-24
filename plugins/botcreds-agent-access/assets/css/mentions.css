@@ -1,0 +1,17 @@
+/**
+ * Agent Access @mention styles.
+ */
+.agent-access-mention {
+	color: #E74C3C;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.agent-access-mention:hover {
+	text-decoration: underline;
+}
+
+.agent-access-mention--unknown {
+	color: #999;
+	font-weight: 400;
+}

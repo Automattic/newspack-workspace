@@ -1,0 +1,87 @@
+<?php
+/**
+ * Agent Access Uninstall
+ *
+ * Removes all plugin data when the plugin is deleted via wp-admin.
+ *
+ * @package Agent Access
+ */
+
+if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+	exit;
+}
+
+global $wpdb;
+
+// Remove Agent Access post meta from all posts.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+$wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_agent_access_created' ) );
+
+// Remove any transients we may have set.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+$wpdb->query(
+	$wpdb->prepare(
+		"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+		$wpdb->esc_like( '_transient_agent_access_' ) . '%',
+		$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
+	)
+);
+
+// Remove all plugin-managed Application Passwords.
+// Covers the current name and legacy names from previous rebrands so that
+// uninstalling the plugin actually revokes every credential it ever minted.
+$agent_access_managed_names = array(
+	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0).
+	'BotCreds',                      // interim name during rebrand.
+	'Agent Access',                  // pre-2.0 legacy name.
+	'Agent Access Auto-Provisioned', // legacy provisioner name.
+);
+$agent_access_user_ids = get_users( array( 'fields' => 'ID' ) );
+foreach ( $agent_access_user_ids as $agent_access_uid ) {
+	$agent_access_passwords = WP_Application_Passwords::get_user_application_passwords( $agent_access_uid );
+	foreach ( $agent_access_passwords as $agent_access_item ) {
+		if ( in_array( $agent_access_item['name'], $agent_access_managed_names, true ) ) {
+			WP_Application_Passwords::delete_application_password( $agent_access_uid, $agent_access_item['uuid'] );
+		}
+	}
+}
+
+// Remove all site-specific runtime grants; no capabilities were persisted.
+foreach ( $agent_access_user_ids as $agent_access_uid ) {
+	$agent_access_user_meta = get_user_meta( $agent_access_uid );
+	foreach ( array_keys( $agent_access_user_meta ) as $agent_access_key ) {
+		if ( 0 === strpos( $agent_access_key, '_agent_access_site_management_' ) ) {
+			delete_user_meta( $agent_access_uid, $agent_access_key );
+		}
+	}
+}
+
+// Remove provisioner user meta.
+$agent_access_meta_keys = array(
+	'_agent_access_provisioned',
+	'_agent_access_provisioned_at',
+	'_agent_access_provisioned_ip',
+	'_agent_access_fingerprint',
+	'_agent_access_verified',
+	'_agent_access_verified_at',
+	'_agent_access_verified_email',
+);
+foreach ( $agent_access_meta_keys as $agent_access_meta_key ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+	$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => $agent_access_meta_key ) );
+}
+
+// Remove comment meta.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+$wpdb->delete( $wpdb->commentmeta, array( 'meta_key' => '_agent_access_mentions' ) );
+
+// Remove rate limit option.
+delete_option( '_agent_access_rate_limits' );
+
+// Remove the Agent role.
+remove_role( 'agent' );
+
+// Drop the activity log table.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}agent_access_log" );
+delete_option( 'agent_access_log_db_version' );
