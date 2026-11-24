@@ -41,7 +41,7 @@ The brand items: `newspack-brand` and `newspack-brand-fonts` are in `registry/*`
 | `newspack-brand` | The brand theme, an alternative to `newspack-ui-neutral` |
 | `newspack-brand-fonts` | `styles/newspack-brand-fonts.css`, the American Grotesk `@font-face` rules |
 | `newspack-logo` | The Newspack logo as an inline SVG, in four variants |
-| `deck-section` | `Deck` and `DeckSlide`: full-viewport slides, scroll snapping, keyboard navigation |
+| `deck-section` | `Deck` and `DeckSlide`: full-viewport slides, scroll snapping, keyboard navigation, slide changes on the newspack-motion travel rule |
 | `deck-nav` | The dot navigation |
 | `deck-layouts` | Starter slides: opening, closing, statement, image with text, stats, quote, logos |
 | `newspack-deck` | The theme, the logo, the deck and its dots and layouts in one install |
@@ -63,6 +63,8 @@ h1 is American Grotesk Compressed Black, uppercase and Cobalt, and `font-display
 American Grotesk is licensed for Automattic domains only. The files are never committed here. To use them, copy the five woff2 files into the site's `public/fonts/american-grotesk/` and import `styles/newspack-brand-fonts.css` once, before the theme. Without them the theme falls back to Inter. Get the files from the product site's `/fonts/american-grotesk/`.
 
 For a deck, import `styles/newspack-deck.css`, which `deck-section` ships.
+
+A deck moves between slides with a scripted scroll that follows the newspack-motion travel rule: `--newspack-ui-duration-modal` up to 240px, then 1ms more for every 4px, up to 450ms, on `--newspack-ui-ease-drawer`. Under reduced motion it jumps. A wheel, a touch, a press on the deck's scrollbar or a scrolling key the deck does not handle stops it. A `scroll-behavior` set on the deck has no effect on slide changes. The dot fill fades on `--newspack-ui-duration-color` and `--newspack-ui-ease-color`.
 
 `brand.css` must be imported after `@import "tailwindcss"`, otherwise preflight's heading reset wins over the brand heading styles.
 

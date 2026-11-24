@@ -72,9 +72,10 @@ test( 'deck dot navigation uses the kit tokens, the brand surface and renders fo
 	assert.ok( section.includes( 'window.history.replaceState( window.history.state' ) );
 } );
 
-test( 'deck-section ships the navigation helpers', () => {
+test( 'deck-section ships the navigation and motion helpers', () => {
 	const files = readItem( 'deck-section' ).files.map( f => f.path );
 	assert.ok( files.some( path => path.endsWith( 'deck-navigation.ts' ) ) );
+	assert.ok( files.some( path => path.endsWith( 'deck-motion.ts' ) ) );
 } );
 
 const navigation = await import( '../registry/components/deck/deck-navigation.ts' );

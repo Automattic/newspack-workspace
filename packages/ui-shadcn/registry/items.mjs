@@ -95,8 +95,8 @@ export const siteKit = [
 		name: 'deck-section',
 		type: 'registry:component',
 		title: 'Deck section',
-		description: 'Deck, DeckSlide and the keyboard navigation for a full-viewport, scroll-snapping slide deck, plus styles/newspack-deck.css. The brand tone of DeckSlide needs the newspack-brand theme.',
-		files: [ component( 'deck/deck.tsx' ), component( 'deck/deck-navigation.ts' ), stylesheet( 'newspack-deck.css' ) ],
+		description: 'Deck, DeckSlide and the keyboard navigation for a full-viewport, scroll-snapping slide deck, with slide changes timed by the newspack-motion travel rule, plus styles/newspack-deck.css. The brand tone of DeckSlide needs the newspack-brand theme.',
+		files: [ component( 'deck/deck.tsx' ), component( 'deck/deck-navigation.ts' ), component( 'deck/deck-motion.ts' ), stylesheet( 'newspack-deck.css' ) ],
 	},
 	{
 		name: 'deck-nav',

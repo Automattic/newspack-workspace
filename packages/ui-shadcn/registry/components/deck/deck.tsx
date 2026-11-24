@@ -2,7 +2,9 @@
 
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import { decodeDeckHash, encodeDeckHash, ACTIVATABLE_TARGETS, isIgnoredTarget, planDeckStep } from './deck-navigation';
+import { atDestination, decodeDeckHash, deckKeyAction, encodeDeckHash, planDeckStep, slideScrollTop } from './deck-navigation';
+import { browserMotionEnv, createDeckMotion } from './deck-motion';
+import type { DeckMotion } from './deck-motion';
 
 const DeckContext = createContext< RefObject< HTMLDivElement | null > | null >( null );
 
@@ -14,16 +16,33 @@ export function getDeckSlides( scroller: HTMLElement | null ) {
 	return scroller ? Array.from( scroller.querySelectorAll< HTMLElement >( '[data-deck-slide]' ) ) : [];
 }
 
+const motions = new WeakMap< HTMLElement, DeckMotion >();
+
+export function getDeckMotion( scroller: HTMLElement ) {
+	let motion = motions.get( scroller );
+	if ( ! motion ) {
+		motion = createDeckMotion( scroller, browserMotionEnv( scroller ) );
+		motions.set( scroller, motion );
+	}
+	return motion;
+}
+
 function syncHash( slide: HTMLElement ) {
 	window.history.replaceState( window.history.state, '', encodeDeckHash( slide.id ) );
 }
 
 export function goToDeckSlide( slides: HTMLElement[], index: number, focus = false ) {
-	const slide = slides[ Math.max( 0, Math.min( slides.length - 1, index ) ) ];
+	const target = Math.max( 0, Math.min( slides.length - 1, index ) );
+	const slide = slides[ target ];
 	if ( ! slide ) {
 		return;
 	}
-	slide.scrollIntoView( { block: 'start' } );
+	const scroller = slide.closest< HTMLElement >( '.newspack-deck' );
+	if ( scroller ) {
+		getDeckMotion( scroller ).scrollTo( slideScrollTop( scroller, slide ), target );
+	} else {
+		slide.scrollIntoView( { block: 'start' } );
+	}
 	syncHash( slide );
 	if ( focus ) {
 		slide.focus( { preventScroll: true } );
@@ -41,79 +60,78 @@ export function Deck( { children, className }: { children: ReactNode; className?
 		if ( ! scroller ) {
 			return;
 		}
+		const motion = getDeckMotion( scroller );
 		const hash = decodeDeckHash( window.location.hash );
 		const target = hash && getDeckSlides( scroller ).find( slide => slide.id === hash );
 		if ( target ) {
 			target.scrollIntoView( { block: 'start', behavior: 'instant' } );
 		}
 
-		let pending: number | null = null;
-		let settle: ReturnType< typeof setTimeout > | undefined;
-		const clearPending = () => {
-			pending = null;
-			clearTimeout( settle );
+		const cancel = () => motion.cancel();
+		const onPointerDown = ( event: PointerEvent ) => {
+			if ( event.target === scroller ) {
+				motion.cancel();
+			}
 		};
-		const holdPending = ( index: number ) => {
-			pending = index;
-			clearTimeout( settle );
-			settle = setTimeout( clearPending, 1000 );
-		};
-		scroller.addEventListener( 'scrollend', clearPending );
 
 		const onKeyDown = ( event: KeyboardEvent ) => {
-			if ( event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey ) {
+			const action = deckKeyAction( event, event.target instanceof Element ? event.target : null );
+			if ( ! action ) {
 				return;
 			}
-			const eventTarget = event.target instanceof Element ? event.target : null;
-			if ( isIgnoredTarget( eventTarget ) ) {
-				return;
-			}
-			const space = event.key === ' ';
-			if ( space && eventTarget?.closest( ACTIVATABLE_TARGETS ) ) {
+			if ( action.type === 'cancel' ) {
+				motion.cancel();
 				return;
 			}
 			const slides = getDeckSlides( scroller );
 			if ( ! slides.length ) {
 				return;
 			}
-			let step: 1 | -1 | null = null;
-			let jump: number | null = null;
-			if ( space ) {
-				step = event.shiftKey ? -1 : 1;
-			} else if ( event.shiftKey ) {
-				return;
-			} else if ( [ 'ArrowDown', 'ArrowRight', 'PageDown' ].includes( event.key ) ) {
-				step = 1;
-			} else if ( [ 'ArrowUp', 'ArrowLeft', 'PageUp' ].includes( event.key ) ) {
-				step = -1;
-			} else if ( event.key === 'Home' ) {
-				jump = 0;
-			} else if ( event.key === 'End' ) {
-				jump = slides.length - 1;
-			}
-			if ( step === null && jump === null ) {
-				return;
-			}
 			event.preventDefault();
-			if ( step !== null ) {
-				const plan = planDeckStep( scroller, slides, step, pending );
-				if ( plan?.type === 'scroll' ) {
-					scroller.scrollBy( { top: plan.top } );
-				} else if ( plan ) {
-					holdPending( plan.index );
-					goToDeckSlide( slides, plan.index, true );
-				}
-			} else if ( jump !== null ) {
-				holdPending( jump );
-				goToDeckSlide( slides, jump, true );
+			if ( action.type === 'jump' ) {
+				goToDeckSlide( slides, action.to === 'first' ? 0 : slides.length - 1, true );
+				return;
+			}
+			const offset = motion.destination() - scroller.scrollTop;
+			const plan = planDeckStep(
+				scroller,
+				slides.map( slide => atDestination( slide, offset ) ),
+				action.direction,
+				motion.pending
+			);
+			if ( plan?.type === 'scroll' ) {
+				motion.scrollTo( motion.destination() + plan.top );
+			} else if ( plan ) {
+				goToDeckSlide( slides, plan.index, true );
 			}
 		};
 
+		const onClick = ( event: MouseEvent ) => {
+			if ( event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey ) {
+				return;
+			}
+			const link = event.target instanceof Element ? event.target.closest< HTMLAnchorElement >( 'a[href^="#"]' ) : null;
+			const slides = getDeckSlides( scroller );
+			const index = link ? slides.findIndex( slide => slide.id === decodeDeckHash( link.getAttribute( 'href' ) ?? '' ) ) : -1;
+			if ( index < 0 ) {
+				return;
+			}
+			event.preventDefault();
+			goToDeckSlide( slides, index, true );
+		};
+
+		scroller.addEventListener( 'wheel', cancel, { passive: true } );
+		scroller.addEventListener( 'touchstart', cancel, { passive: true } );
+		scroller.addEventListener( 'pointerdown', onPointerDown );
+		scroller.addEventListener( 'click', onClick );
 		document.addEventListener( 'keydown', onKeyDown );
 		return () => {
 			document.removeEventListener( 'keydown', onKeyDown );
-			scroller.removeEventListener( 'scrollend', clearPending );
-			clearTimeout( settle );
+			scroller.removeEventListener( 'wheel', cancel );
+			scroller.removeEventListener( 'touchstart', cancel );
+			scroller.removeEventListener( 'pointerdown', onPointerDown );
+			scroller.removeEventListener( 'click', onClick );
+			motion.cancel();
 		};
 	}, [] );
 

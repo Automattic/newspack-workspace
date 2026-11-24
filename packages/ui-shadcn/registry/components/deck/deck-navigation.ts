@@ -7,8 +7,63 @@ type DeckScroller = Boxed & { clientHeight: number };
 
 export type DeckStep = { type: 'scroll'; top: number } | { type: 'slide'; index: number };
 
-export function isIgnoredTarget( target: { closest( selector: string ): unknown } | null ) {
+type Closest = { closest( selector: string ): unknown };
+type DeckKey = { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean; defaultPrevented: boolean };
+
+export type DeckKeyAction = { type: 'step'; direction: 1 | -1 } | { type: 'jump'; to: 'first' | 'last' } | { type: 'cancel' } | null;
+
+const NEXT_KEYS = [ 'ArrowDown', 'ArrowRight', 'PageDown' ];
+const PREVIOUS_KEYS = [ 'ArrowUp', 'ArrowLeft', 'PageUp' ];
+export const SCROLL_KEYS = [ ...NEXT_KEYS, ...PREVIOUS_KEYS, 'Home', 'End', ' ' ];
+
+export function isIgnoredTarget( target: Closest | null ) {
 	return Boolean( target?.closest( IGNORED_TARGETS ) );
+}
+
+/**
+ * What a key press does to the deck. `cancel` is a scrolling key the deck leaves to the browser,
+ * which stops a scripted scroll so the two never fight.
+ */
+export function deckKeyAction( event: DeckKey, target: Closest | null ): DeckKeyAction {
+	if ( event.defaultPrevented || ! SCROLL_KEYS.includes( event.key ) || isIgnoredTarget( target ) ) {
+		return null;
+	}
+	const space = event.key === ' ';
+	if ( space && target?.closest( ACTIVATABLE_TARGETS ) ) {
+		return null;
+	}
+	if ( event.ctrlKey || event.metaKey || event.altKey || ( event.shiftKey && ! space ) ) {
+		return { type: 'cancel' };
+	}
+	if ( space ) {
+		return { type: 'step', direction: event.shiftKey ? -1 : 1 };
+	}
+	if ( NEXT_KEYS.includes( event.key ) ) {
+		return { type: 'step', direction: 1 };
+	}
+	if ( PREVIOUS_KEYS.includes( event.key ) ) {
+		return { type: 'step', direction: -1 };
+	}
+	return { type: 'jump', to: event.key === 'Home' ? 'first' : 'last' };
+}
+
+/**
+ * The scroll position that puts `slide` at the top of `scroller`. Stays correct mid-scroll.
+ */
+export function slideScrollTop( scroller: Boxed & { scrollTop: number }, slide: Boxed ) {
+	return scroller.scrollTop + slide.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+}
+
+/**
+ * `box` as it will sit once a scroll still `offset` pixels from its destination arrives.
+ */
+export function atDestination< T extends Boxed >( box: T, offset: number ): Boxed {
+	return {
+		getBoundingClientRect: () => {
+			const rect = box.getBoundingClientRect();
+			return { top: rect.top - offset, bottom: rect.bottom - offset };
+		},
+	};
 }
 
 export function currentDeckIndex( scroller: Boxed, slides: Boxed[] ) {

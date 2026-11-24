@@ -42,7 +42,7 @@ export function DeckNav() {
 					onClick={ () => goToDeckSlide( getDeckSlides( scrollerRef?.current ?? null ), index ) }
 					className="group flex size-6 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-transparent focus-visible:[box-shadow:inset_0_0_0_2px_var(--newspack-ui-color-focus),0_0_0_var(--newspack-ui-focus-halo-width)_var(--newspack-ui-color-focus-halo)]"
 				>
-					<span className="size-2 rounded-full border border-[var(--newspack-ui-color-text)] bg-transparent transition-colors group-aria-[current=step]:bg-[var(--newspack-ui-color-text)] forced-colors:group-aria-[current=step]:bg-[Highlight]" />
+					<span className="size-2 rounded-full border border-[var(--newspack-ui-color-text)] bg-transparent transition-[background-color,border-color] duration-(--newspack-ui-duration-color) ease-(--newspack-ui-ease-color) group-aria-[current=step]:bg-[var(--newspack-ui-color-text)] forced-colors:group-aria-[current=step]:bg-[Highlight]" />
 				</button>
 			) ) }
 		</nav>
