@@ -1217,8 +1217,8 @@ class Agent_Access_Admin {
 					<?php foreach ( $items as $post ) : ?>
 						<tr>
 							<td>
-								<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ?: '' ); ?>">
-									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'botcreds-agent-access' ) ); ?>
+								<a href="<?php echo esc_url( (string) get_edit_post_link( $post->ID ) ); ?>">
+									<?php echo esc_html( $post->post_title ? $post->post_title : __( '(no title)', 'botcreds-agent-access' ) ); ?>
 								</a>
 							</td>
 							<td><?php echo esc_html( ucfirst( $post->post_type ) ); ?></td>
@@ -1396,7 +1396,7 @@ class Agent_Access_Admin {
 								<?php endif; ?>
 							</td>
 							<td><?php echo esc_html( 'media' === $kind ? __( 'Media', 'botcreds-agent-access' ) : __( 'Post', 'botcreds-agent-access' ) ); ?></td>
-							<td><?php echo esc_html( $snap->user_login ?: __( '—', 'botcreds-agent-access' ) ); ?></td>
+							<td><?php echo esc_html( $snap->user_login ? $snap->user_login : __( '—', 'botcreds-agent-access' ) ); ?></td>
 							<td><?php echo esc_html( $snap->method ); ?></td>
 							<td><?php echo esc_html( get_date_from_gmt( $snap->captured_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
 							<td>
@@ -1531,7 +1531,7 @@ class Agent_Access_Admin {
 					<?php foreach ( $tokens as $token ) : ?>
 						<tr>
 							<td><?php echo esc_html( $token->label ); ?></td>
-							<td><?php echo esc_html( $token->display_name ?: $token->user_login ?: '#' . $token->user_id ); ?></td>
+							<td><?php echo esc_html( $token->display_name ? $token->display_name : ( $token->user_login ? $token->user_login : '#' . $token->user_id ) ); ?></td>
 							<td>
 								<?php if ( $token->public_key ) : ?>
 									<span class="agent-access-badge agent-access-badge--green"
@@ -1542,7 +1542,7 @@ class Agent_Access_Admin {
 									<span class="agent-access-badge">Standard</span>
 								<?php endif; ?>
 							</td>
-							<td><code><?php echo esc_html( $token->origin_ip ?: '—' ); ?></code></td>
+							<td><code><?php echo esc_html( $token->origin_ip ? $token->origin_ip : '—' ); ?></code></td>
 							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $token->created_at ) ) ); ?></td>
 							<td>
 								<?php
@@ -1919,8 +1919,8 @@ class Agent_Access_Admin {
 					<?php foreach ( $entries as $row ) : ?>
 						<tr>
 							<td>
-								<a href="<?php echo esc_url( get_edit_post_link( $row->ID ) ?: '' ); ?>">
-									<?php echo esc_html( $row->post_title ?: __( '(no title)', 'botcreds-agent-access' ) ); ?>
+								<a href="<?php echo esc_url( (string) get_edit_post_link( $row->ID ) ); ?>">
+									<?php echo esc_html( $row->post_title ? $row->post_title : __( '(no title)', 'botcreds-agent-access' ) ); ?>
 								</a>
 							</td>
 							<td><?php echo esc_html( ucfirst( $row->post_type ) ); ?></td>
@@ -1938,7 +1938,7 @@ class Agent_Access_Admin {
 								);
 								?>
 											">
-									<?php echo esc_html( $row->display_name ?: $row->user_login ); ?>
+									<?php echo esc_html( $row->display_name ? $row->display_name : $row->user_login ); ?>
 								</a>
 							</td>
 							<td>
@@ -2078,7 +2078,7 @@ class Agent_Access_Admin {
 							<td>
 								<?php if ( $row->user_id ) : ?>
 									<a href="<?php echo esc_url( get_edit_user_link( $row->user_id ) ); ?>">
-										<?php echo esc_html( $row->display_name ?: $row->user_login ?: '#' . $row->user_id ); ?>
+										<?php echo esc_html( $row->display_name ? $row->display_name : ( $row->user_login ? $row->user_login : '#' . $row->user_id ) ); ?>
 									</a>
 								<?php else : ?>
 									&mdash;
@@ -2088,7 +2088,7 @@ class Agent_Access_Admin {
 							<td style="word-break:break-all;"><code><?php echo esc_html( $row->route ); ?></code></td>
 							<td>
 								<?php if ( $row->object_id ) : ?>
-									<a href="<?php echo esc_url( get_edit_post_link( $row->object_id ) ?: '' ); ?>">
+									<a href="<?php echo esc_url( (string) get_edit_post_link( $row->object_id ) ); ?>">
 										<?php echo esc_html( $row->object_type . ' #' . $row->object_id ); ?>
 									</a>
 								<?php elseif ( $row->object_type ) : ?>

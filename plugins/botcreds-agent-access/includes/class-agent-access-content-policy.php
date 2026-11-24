@@ -214,7 +214,7 @@ class Agent_Access_Content_Policy {
 	 */
 	public static function get( $user_id, $uuid ) {
 		$key = get_user_meta( (int) $user_id, self::META_PREFIX . $uuid, true );
-		return $key ?: self::DEFAULT_POLICY;
+		return $key ? $key : self::DEFAULT_POLICY;
 	}
 
 	/**

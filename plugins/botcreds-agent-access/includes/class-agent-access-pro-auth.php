@@ -146,8 +146,8 @@ class Agent_Access_Pro_Auth {
 			array(
 				'token_hash' => $token_hash,
 				'user_id'    => (int) $data['user_id'],
-				'label'      => sanitize_text_field( $data['label'] ?: ( $agent_id ?: 'Agent' ) ),
-				'public_key' => $public_key ?: null,
+				'label'      => sanitize_text_field( $data['label'] ? $data['label'] : ( $agent_id ? $agent_id : 'Agent' ) ),
+				'public_key' => $public_key ? $public_key : null,
 				'origin_ip'  => $remote_ip,
 				'status'     => 'active',
 				'created_at' => current_time( 'mysql' ),

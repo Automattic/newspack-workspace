@@ -290,7 +290,7 @@ class Agent_Access_Rollback {
 		);
 		// phpcs:enable
 
-		return $rows ?: array();
+		return $rows ? $rows : array();
 	}
 
 	// ──────────────────────────────────────────────

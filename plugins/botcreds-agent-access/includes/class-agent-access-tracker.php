@@ -167,7 +167,7 @@ class Agent_Access_Tracker {
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 		$total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $count_params ) );
-		$items = $wpdb->get_results( $wpdb->prepare( $select_sql, $select_params ) ) ?: array();
+		$items = (array) $wpdb->get_results( $wpdb->prepare( $select_sql, $select_params ) );
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		return array(
@@ -220,7 +220,7 @@ class Agent_Access_Tracker {
 		$params[] = $offset;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-		return $wpdb->get_results( $wpdb->prepare( $sql, $params ) ) ?: array();
+		return (array) $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
 	}
 
 	/**
@@ -283,7 +283,8 @@ class Agent_Access_Tracker {
 			 ORDER BY p.post_type",
 				self::META_KEY
 			) 
-		) ?: array();
+		);
+		$types = $types ? $types : array();
 
 		wp_cache_set( $cache_key, $types, 'agent_access', 300 );
 

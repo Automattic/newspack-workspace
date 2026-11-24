@@ -218,7 +218,7 @@ class Agent_Access_Scope {
 			$has_content_scope = true;
 			$rest_base = $slug; // fallback.
 			if ( isset( $all_types[ $slug ] ) ) {
-				$rest_base = $all_types[ $slug ]->rest_base ?: $slug;
+				$rest_base = $all_types[ $slug ]->rest_base ? $all_types[ $slug ]->rest_base : $slug;
 			}
 
 			$routes[] = '/wp/v2/' . $rest_base;
@@ -337,7 +337,7 @@ class Agent_Access_Scope {
 			$parts   = explode( '/', $namespace );
 			$version = array_pop( $parts );
 			$name    = implode( '/', $parts );
-			$label   = $labels[ $name ] ?? ucwords( str_replace( array( '-', '_', '/' ), ' ', $name ?: $namespace ) );
+			$label   = $labels[ $name ] ?? ucwords( str_replace( array( '-', '_', '/' ), ' ', $name ? $name : $namespace ) );
 			$result[] = array(
 				'slug'  => '/' . $namespace . '/*',
 				'label' => $label . ( $name ? ' (' . $version . ')' : '' ),
@@ -499,7 +499,7 @@ class Agent_Access_Scope {
 				$result[] = array(
 					'slug'      => $slug,
 					'label'     => $obj->labels->singular_name ?? ucfirst( $slug ),
-					'rest_base' => $obj->rest_base ?: $slug,
+					'rest_base' => $obj->rest_base ? $obj->rest_base : $slug,
 				);
 			}
 		}
@@ -521,7 +521,7 @@ class Agent_Access_Scope {
 			$result[] = array(
 				'slug'      => $slug,
 				'label'     => $obj->labels->singular_name ?? ucfirst( $slug ),
-				'rest_base' => $obj->rest_base ?: $slug,
+				'rest_base' => $obj->rest_base ? $obj->rest_base : $slug,
 			);
 		}
 

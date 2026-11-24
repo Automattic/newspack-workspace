@@ -152,7 +152,7 @@ class Agent_Access_Rate_Limiter {
 		// Pro Auth token path.
 		if ( ! empty( $GLOBALS['_agent_access_pro_token_row'] ) ) {
 			$tier = $GLOBALS['_agent_access_pro_token_row']->rate_limit ?? null;
-			return $tier ?: self::DEFAULT_TIER;
+			return $tier ? $tier : self::DEFAULT_TIER;
 		}
 
 		// App password path.
@@ -170,7 +170,7 @@ class Agent_Access_Rate_Limiter {
 		$user_id  = get_current_user_id();
 		$tier_key = get_user_meta( $user_id, self::META_PREFIX . $uuid, true );
 
-		return $tier_key ?: self::DEFAULT_TIER;
+		return $tier_key ? $tier_key : self::DEFAULT_TIER;
 	}
 
 	/**
@@ -180,7 +180,8 @@ class Agent_Access_Rate_Limiter {
 	 */
 	private static function get_current_uuid() {
 		if ( function_exists( 'rest_get_authenticated_app_password' ) ) {
-			return rest_get_authenticated_app_password() ?: null;
+			$app_password = rest_get_authenticated_app_password();
+			return $app_password ? $app_password : null;
 		}
 		return null;
 	}
@@ -213,7 +214,7 @@ class Agent_Access_Rate_Limiter {
 	 */
 	public static function get( $user_id, $uuid ) {
 		$key = get_user_meta( (int) $user_id, self::META_PREFIX . $uuid, true );
-		return $key ?: self::DEFAULT_TIER;
+		return $key ? $key : self::DEFAULT_TIER;
 	}
 
 	/**
