@@ -238,3 +238,20 @@ test( 'deck hashes round-trip ids and survive malformed input', () => {
 	assert.equal( navigation.decodeDeckHash( '#%E0%A4%A' ), '' );
 	assert.equal( navigation.decodeDeckHash( '' ), '' );
 } );
+
+test( 'dotTones gives each dot the tone of the slide behind its center', () => {
+	const slides = [ { top: -400, bottom: 400, inverse: true }, { top: 400, bottom: 1200, inverse: false } ];
+	assert.deepEqual( navigation.dotTones( [ 100, 399, 400, 700 ], slides ), [ true, true, false, false ] );
+	assert.deepEqual( navigation.dotTones( [ 1300 ], slides ), [ false ] );
+} );
+
+test( 'each dot takes its tone from the slide behind it, not from the current slide', () => {
+	const nav = readItem( 'deck-nav' ).files.find( f => f.path.endsWith( 'deck-nav.tsx' ) ).content;
+	assert.ok( nav.includes( 'dotTones(' ) );
+	assert.ok( nav.includes( "button.classList.toggle( 'newspack-brand-inverse', tones[ index ] )" ) );
+	assert.ok( ! /\[ current \]\?\.matches/.test( nav ), 'the tone no longer follows the slide whose top passed the viewport top' );
+	assert.ok( ! /className=\{ `newspack-deck-nav\$\{/.test( nav ), 'the nav itself no longer flips tone' );
+	const button = nav.match( /className="(group [^"]*)"/ )[ 1 ].split( ' ' );
+	assert.ok( button.includes( 'bg-transparent' ), 'the blue base rule never paints the button' );
+	assert.ok( [ 'scroll', 'resize' ].every( event => nav.includes( `'${ event }', update` ) ) );
+} );
