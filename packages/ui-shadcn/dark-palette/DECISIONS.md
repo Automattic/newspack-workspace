@@ -6,7 +6,7 @@ Calls made while building the Neutral dark palette, with the reason for each. Th
 
 1. **Scales, not per-token values.** The designer asked for "a similar scale". Every primitive scale newspack-ui aliases (neutral, primary, success, error, warning, overlay) gets a dark scale with the same step names. Semantic tokens keep their light aliases, so dark mode is the primitives redefined.
 2. **Dark step N = light step N's signed Lc, reversed.** Light is measured on white, dark on neutral-900 (#1e1e1e), as the designer confirmed. Anything more than 1 Lc off is logged as an exception. Only the pinned neutral-90 is.
-3. **Clipped steps mirror oklab L.** APCA reports Lc 0 for neutral-5, neutral-10 and the status step-0 tints on white, so it cannot place them. They take dark L = 0.235 + (1 − light L), as the coordinator specified. They also read Lc 0 on #1e1e1e, so the rule still holds.
+3. **Clipped steps mirror oklab L.** APCA reports Lc 0 for neutral-5, neutral-10 and the status step-0 tints on white, so it cannot place them. They take dark L = 0.235 + (1 − light L), as the designer specified. They also read Lc 0 on #1e1e1e, so the rule still holds.
 4. **Pins.** neutral-0 = #1e1e1e (dark base) and neutral-90 = #ffffff ("my text must be white"). Every on-fill token (button ink, snackbar, check glyph, text on brand) aliases one of these two, so each becomes the exact swap with no extra override. The destructive ink is the exception the designer asked for (see 15).
 5. **Hue kept, chroma kept, with a floor.** A dark step keeps its light oklch chroma and loses chroma only to stay in sRGB, so light dark-mode steps never glow more than their light versions. Pure relative-chroma matching was tried: it made success-50/60 neon (c 0.26 to 0.28) and error-5 vivid, so I dropped it. The plain rule left error-5 and error-0 a muddy mauve gray, so chroma is floored at half the light step's relative saturation. That lifts only the mid-lightness tints and borders. After the low-tint rule (26), it mainly keeps the mirrored tints from going gray.
 6. **Snap tolerance.** A solved value snaps to an existing newspack-colors value of the same scale if it lands within 0.5 Lc of the target and 0.02 oklab distance. neutral-30 (#5d5d5d), neutral-80 (#f0f0f0) and neutral-100 (#fff) snapped.
@@ -16,7 +16,7 @@ Calls made while building the Neutral dark palette, with the reason for each. Th
 ## Overlay and scrim
 
 9. **The overlay scale is placed by its effect.** Black at an alpha has no Lc of its own. Each step is solved so that page text under it keeps the light Lc, reversed. Steps 0 to 70 land within 0.02 alpha of the light values (step 0 slightly higher, 30 to 70 slightly lower); steps 80 to 100 clip in both modes and keep their light alphas.
-10. **No heavier scrim.** The brief expected a higher alpha. By this measure 48.4% black pushes a dark page back as far as 50% pushes a light one, and a heavier scrim would not separate two near-blacks any better. The dialog is separated by its raised surface and the hairline edge instead.
+10. **No heavier scrim.** The plan expected a higher alpha. By this measure 48.4% black pushes a dark page back as far as 50% pushes a light one, and a heavier scrim would not separate two near-blacks any better. The dialog is separated by its raised surface and the hairline edge instead.
 
 ## Surfaces and elevation
 
@@ -57,7 +57,7 @@ Only twelve tokens get their own dark value.
 22. **No info scale exists.** newspack-colors has none and newspack-ui has no info role, so the default neutral notice plays that part.
 23. **No dark scales for secondary, tertiary or quaternary.** newspack-ui does not alias them.
 24. **A theme's own brand color is not adapted.** If a theme sets `--newspack-theme-color-primary`, `--newspack-ui-color-primary` keeps that light-mode value. Neutral does not use it in components.
-25. **The preview uses real newspack-ui CSS.** Hover, pressed and focus are forced by `preview-states.css`, which the script generates by cloning the real `:hover`, `:active` and `:focus-visible` rules onto classes. The screenshot was taken through a localhost server, because playwright-cli blocks `file:` URLs.
+25. **The preview uses real newspack-ui CSS.** Hover, pressed and focus are forced by `preview-states.css`, which the script generates by cloning the real `:hover`, `:active` and `:focus-visible` rules onto classes.
 
 ## Low tints (designer call after review)
 

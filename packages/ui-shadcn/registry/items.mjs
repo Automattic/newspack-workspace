@@ -96,7 +96,7 @@ export const siteKit = [
 		name: 'flow-frame',
 		type: 'registry:component',
 		title: 'Flow frame',
-		description: 'A step frame for a prototype: numbered step buttons, a note per step, an optional segmented entry-point switcher, and an iframe of the screens that mirrors its state to the page URL, with an Enlarge overlay. Takes the screen URL, steps, entries, context notes and the extra URL params as props, plus a renderControls slot above the frame.',
+		description: 'A step frame for a prototype: numbered step buttons, a note per step, an optional segmented entry-point switcher, and an iframe of the screens that mirrors its state to the page URL, with an Enlarge overlay. Takes the screen URL, steps, entries, context notes and the extra URL params as props, plus a renderControls slot above the frame. Imports `newspack-playground/bridge`, so it only builds inside the newspack-workspace, where the playground package is linked.',
 		dependencies: [ '@wordpress/icons' ],
 		registryDependencies: [ 'button', 'segmented-control' ],
 		files: [ component( 'flow/flow-frame.tsx' ) ],
