@@ -186,10 +186,10 @@ class Social_Links extends Package_Social_Links {
 	private static function rendered_services( array $parsed_block ): array {
 		$services = [];
 		foreach ( $parsed_block['innerBlocks'] ?? [] as $link ) {
-			$service = (string) ( $link['attrs']['service'] ?? '' );
-			// The package skips links without a service or URL, so they get no pill.
-			if ( '' !== $service && '' !== (string) ( $link['attrs']['url'] ?? '' ) ) {
-				$services[] = strtolower( $service );
+			// The package skips links without a service or URL (same `empty()` test), so
+			// they get no pill.
+			if ( ! empty( $link['attrs']['service'] ) && ! empty( $link['attrs']['url'] ) ) {
+				$services[] = strtolower( (string) $link['attrs']['service'] );
 			}
 		}
 		return $services;
