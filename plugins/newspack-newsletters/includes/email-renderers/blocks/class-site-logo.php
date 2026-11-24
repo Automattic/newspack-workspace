@@ -6,7 +6,7 @@
  * wraps the web markup in a table cell. The logo `<img>` stays inline there and sits
  * on the text baseline, leaving a descender gap under it: in a header row whose
  * columns are vertically centered, the logo ends up a few pixels higher than the text
- * beside it. The web-only image attributes (lazy loading, srcset) also pass through.
+ * beside it.
  *
  * @package Newspack
  */
@@ -22,11 +22,6 @@ defined( 'ABSPATH' ) || exit;
  * Renders core/site-logo as a block-level image.
  */
 class Site_Logo extends Fallback {
-
-	/**
-	 * Image attributes that only matter on the web; email clients ignore them.
-	 */
-	const WEB_ONLY_ATTRIBUTES = [ 'loading', 'decoding', 'srcset', 'sizes', 'fetchpriority' ];
 
 	/**
 	 * Render the site logo.
@@ -45,7 +40,7 @@ class Site_Logo extends Fallback {
 	}
 
 	/**
-	 * Make the logo image block-level and drop its web-only attributes.
+	 * Make the logo image block-level.
 	 *
 	 * A block-level image no longer reserves descender space. Its alignment then comes
 	 * from auto margins instead of the cell's text alignment, which still covers clients
@@ -59,9 +54,6 @@ class Site_Logo extends Fallback {
 		$processor = new \WP_HTML_Tag_Processor( $html );
 		if ( ! $processor->next_tag( 'img' ) ) {
 			return $html;
-		}
-		foreach ( self::WEB_ONLY_ATTRIBUTES as $attribute ) {
-			$processor->remove_attribute( $attribute );
 		}
 		$margins = [
 			'center' => 'margin-left:auto;margin-right:auto;',

@@ -2,9 +2,8 @@
 /**
  * Newspack WC email-editor renderer for the posts-inserter block.
  *
- * Renders each inserted child block through `do_blocks()` so nested blocks are
- * fully rendered and email-processed, instead of leaking raw block-comment
- * delimiters into the email body.
+ * Renders each inserted child as a block, so nested blocks are fully rendered and
+ * email-processed instead of leaking raw block-comment delimiters into the email body.
  *
  * @package Newspack
  */
@@ -22,8 +21,8 @@ defined( 'ABSPATH' ) || exit;
  *
  * The block's server callback concatenates each child's raw `innerHTML`, leaking
  * `<!-- wp:... -->` delimiters when children contain nested blocks. This override
- * wraps each child in its block delimiter and runs it through `do_blocks()` so
- * the WC email callbacks fire automatically.
+ * wraps each child in its block delimiter and renders it as nested content (see
+ * Nested_Blocks), so the WC email callbacks fire for it and its inner blocks.
  */
 class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
@@ -94,8 +93,8 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Render the inserted child blocks to email-safe HTML.
 	 *
-	 * Wraps each child in its block delimiter and runs it through `do_blocks()` so
-	 * the child's `render_email_callback` fires and nested blocks render fully.
+	 * Wraps each child in its block delimiter and renders it as a block, so the child's
+	 * `render_email_callback` fires and nested blocks render fully.
 	 * Rendering bare `innerHTML` would leave the outer block (e.g. `core/columns`)
 	 * as raw markup — its columns would overflow the email width.
 	 *
@@ -195,13 +194,13 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	}
 
 	/**
-	 * Wrap a parsed child block back into block markup for `do_blocks()`.
+	 * Wrap a parsed child block back into block markup, so it can be rendered as a block.
 	 *
 	 * Reads from `innerHTML` (inserted children carry `innerHTML`, not necessarily
 	 * `innerContent`), mirroring core's `serialize_block()`.
 	 *
 	 * @param array $child Child block shaped `{ blockName, attrs, innerHTML }`.
-	 * @return string Block markup ready for `do_blocks()`.
+	 * @return string Block markup.
 	 */
 	private static function serialize_inserted_block( array $child ): string {
 		$name       = (string) $child['blockName'];
