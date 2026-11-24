@@ -2,17 +2,19 @@
 #
 # test-env-proxy-compose.sh
 #
-# Self-proving spec for how an isolated env's compose file reaches the shared
-# proxy (the `proxy` service in docker-compose.yml).
+# Self-proving spec for how an isolated env reaches the shared proxy (the
+# `proxy` service in docker-compose.yml).
 #
 # Envs used to publish 80/443 on a loopback address of their own. Docker
 # Desktop for Mac 4.97+ binds ports below 1024 on all interfaces, so the second
 # container to publish 443 fails to start whatever address it asked for. Envs
-# now publish nothing and have labels the proxy routes by.
+# now publish nothing, and the proxy routes to them from one small file per env.
 #
-# Compose files are written once, at `n env create`, so the helpers under test
-# have two jobs: write the labels for a new env, and move a file from before
-# the proxy onto it without touching anything else in it.
+# The proxy has no Docker socket, so these files are the only way it learns
+# which envs exist. That puts three jobs on the helpers under test: write a
+# route that sends a domain to its own env and nowhere else, keep the set of
+# routes equal to the set of envs, and move a compose file from before the
+# proxy onto it without touching anything else in it.
 #
 # Run: bash bin/tests/test-env-proxy-compose.sh
 
@@ -24,6 +26,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 WORK=$(mktemp -d -t env-proxy-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
+
+# The helpers read both at call time, so pointing them at a sandbox here keeps
+# every case away from the real workspace.
+NABSPATH="$WORK/root"
+PROXY_ROUTES_DIR="$WORK/root/envs/.proxy"
+mkdir -p "$NABSPATH"
 
 failures=0
 ok() { echo "  ok: $1"; }
@@ -69,56 +77,94 @@ networks:
 YAML
 }
 
-echo "env_proxy_labels:"
-labels=$(env_proxy_labels demo demo.test)
-assert_contains "$labels" 'traefik.tcp.routers.env-demo.rule=HostSNI(`demo.test`)' "TLS for the domain is routed by SNI"
-assert_contains "$labels" 'traefik.tcp.routers.env-demo.tls.passthrough=true' "TLS is passed through, so the env keeps its own certificate"
-assert_contains "$labels" 'traefik.http.routers.env-demo.rule=Host(`demo.test`)' "plain HTTP for the domain is routed by Host"
-assert_contains "$labels" 'traefik.docker.network=newspack_envs' "the proxy is told which of the env's two networks to dial"
+echo "env_proxy_route:"
+route=$(env_proxy_route demo demo.test)
+# shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
+assert_contains "$route" 'rule: "HostSNI(`demo.test`)"' "TLS for the domain is matched by SNI"
+assert_contains "$route" 'passthrough: true' "TLS is passed through, so the env keeps its own certificate"
+assert_contains "$route" 'address: "demo.test:443"' "and goes to the env's own 443, found by its domain"
+# shellcheck disable=SC2016
+assert_contains "$route" 'rule: "Host(`demo.test`)"' "plain HTTP for the domain is matched by Host"
+assert_contains "$route" 'url: "http://demo.test:80"' "and goes to the env's own 80"
 
-# A label key is a dotted path to Traefik. Env names allow dots.
-labels=$(env_proxy_labels pr-1.2_x pr-1.2_x.test)
-assert_contains "$labels" 'traefik.tcp.routers.env-pr-1-2-x.rule=HostSNI(`pr-1.2_x.test`)' "a dotted env name yields one router name and keeps its real domain"
+# Env names allow dots, dashes and underscores. Folding them into one safe
+# character would give these two envs the same route, and one would take the
+# other's traffic.
+id_dot=$(env_proxy_route foo.bar foo.bar.test | sed -n '3p')
+id_dash=$(env_proxy_route foo-bar foo-bar.test | sed -n '3p')
+if [[ "$id_dot" != "$id_dash" && "$(proxy_route_file foo.bar)" != "$(proxy_route_file foo-bar)" ]]; then
+	ok "envs named foo.bar and foo-bar get separate routes and files"
+else
+	fail "envs named foo.bar and foo-bar get separate routes and files"
+fi
+
+echo "main_proxy_route:"
+# Without the low priority the catch-all could win over an env's own route.
+assert_eq "$(main_proxy_route | grep -c '^      priority: 1$')" "2" "the catch-all for 443 and for 80 both sit behind every env route"
+
+echo "write_proxy_route:"
+echo "first" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml"
+assert_eq "$(cat "$PROXY_ROUTES_DIR/env-a.yml")" "first" "a route is written"
+inode_before=$(ls -i "$PROXY_ROUTES_DIR/env-a.yml" | awk '{ print $1 }')
+echo "first" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml"
+assert_eq "$(ls -i "$PROXY_ROUTES_DIR/env-a.yml" | awk '{ print $1 }')" "$inode_before" "an unchanged route is not replaced, so the proxy is not made to reload"
+echo "second" | write_proxy_route "$PROXY_ROUTES_DIR/env-a.yml"
+assert_eq "$(cat "$PROXY_ROUTES_DIR/env-a.yml")" "second" "a changed route is replaced"
+# The proxy loads every .yml it sees. A leftover temp file must not be one.
+assert_eq "$(find "$PROXY_ROUTES_DIR" -name '*.tmp' | wc -l | tr -d ' ')" "0" "no temp file is left for the proxy to read"
+rm -f "$PROXY_ROUTES_DIR/env-a.yml"
+
+echo "sync_proxy_routes:"
+legacy_file > "$NABSPATH/docker-compose.env-demo.yml"
+legacy_file | sed 's/demo\.test/custom.example.test/' > "$NABSPATH/docker-compose.env-other.yml"
+echo "stale" > "$PROXY_ROUTES_DIR/env-gone.yml"
+sync_proxy_routes
+assert_eq "$(cat "$PROXY_ROUTES_DIR/main.yml")" "$(main_proxy_route)" "the main route is written"
+assert_eq "$(cat "$PROXY_ROUTES_DIR/env-demo.yml")" "$(env_proxy_route demo demo.test)" "each env gets a route for the domain in its compose file"
+assert_contains "$(cat "$PROXY_ROUTES_DIR/env-other.yml")" 'address: "custom.example.test:443"' "a custom domain is routed as given"
+if [[ -e "$PROXY_ROUTES_DIR/env-gone.yml" ]]; then
+	fail "the route of an env that no longer exists is removed"
+else
+	ok "the route of an env that no longer exists is removed"
+fi
+rm -f "$NABSPATH"/docker-compose.env-*.yml
 
 echo "legacy_env_ip:"
 legacy_file > "$WORK/legacy.yml"
 assert_eq "$(legacy_env_ip "$WORK/legacy.yml")" "127.0.0.7" "a file from before the proxy reports its loopback address"
 assert_eq "$(legacy_env_ip "$WORK/missing.yml")" "" "a missing file reports nothing"
 
-echo "migrate_env_compose_to_proxy:"
+echo "drop_legacy_env_ports:"
 cp "$WORK/legacy.yml" "$WORK/before.yml"
-if migrate_env_compose_to_proxy "$WORK/legacy.yml" demo demo.test; then
-	ok "a legacy file migrates"
-else
-	fail "a legacy file migrates"
-fi
+drop_legacy_env_ports "$WORK/legacy.yml"
+assert_eq "$?" "0" "a legacy file migrates"
 migrated=$(cat "$WORK/legacy.yml")
 assert_eq "$(legacy_env_ip "$WORK/legacy.yml")" "" "the migrated file publishes on no loopback address"
-if grep -q '^    ports:' "$WORK/legacy.yml"; then
-	fail "the emptied ports key is removed"
-else
-	ok "the emptied ports key is removed"
-fi
-assert_eq "$(grep -c 'traefik.enable=true' "$WORK/legacy.yml")" "1" "the labels are added once"
-# The labels take the ports block's place, so they sit inside the service.
-assert_eq "$(awk '/^    labels:/ { l = NR } /^    env_file:/ { e = NR } END { print (l && e && l < e) ? "inside" : "outside" }' "$WORK/legacy.yml")" "inside" "the labels land inside the service, before env_file"
-# Everything that was not a generated port line survives, in order.
-want=$(grep -v -e '^    ports:' -e '^      - "127\.0\.0\.7:' "$WORK/before.yml")
-got=$(awk '/^    labels:/ { skip = 1; next } skip && /^      - "traefik\./ { next } { skip = 0; print }' "$WORK/legacy.yml")
-assert_eq "$got" "$want" "nothing else in the file changes"
+assert_eq "$migrated" "$(grep -v -e '^    ports:' -e '^      - "127\.0\.0\.7:' "$WORK/before.yml")" "only the ports block goes, and nothing else in the file changes"
 
-if migrate_env_compose_to_proxy "$WORK/legacy.yml" demo demo.test; then
-	fail "a migrated file reports nothing to migrate"
-else
-	ok "a migrated file reports nothing to migrate"
-fi
+drop_legacy_env_ports "$WORK/legacy.yml"
+assert_eq "$?" "1" "a migrated file reports nothing to migrate"
 assert_eq "$(cat "$WORK/legacy.yml")" "$migrated" "and is left byte for byte as it was"
 
 # A port added by hand is not one of ours to remove.
 legacy_file '      - "127.0.0.1:9003:9003"' > "$WORK/custom.yml"
-migrate_env_compose_to_proxy "$WORK/custom.yml" demo demo.test
+drop_legacy_env_ports "$WORK/custom.yml"
 assert_eq "$(grep -A1 '^    ports:' "$WORK/custom.yml" | tail -1)" '      - "127.0.0.1:9003:9003"' "a hand-added port stays under its ports key"
 assert_eq "$(legacy_env_ip "$WORK/custom.yml")" "" "while the generated 80/443 lines go"
+
+# An editor that leaves trailing whitespace must not strand the env on its old address.
+legacy_file | sed 's/:443:443"$/:443:443"  /' > "$WORK/trailing.yml"
+drop_legacy_env_ports "$WORK/trailing.yml"
+assert_eq "$(legacy_env_ip "$WORK/trailing.yml")" "" "port lines with trailing whitespace are still removed"
+
+# A file the rewrite cannot handle (here, re-indented) must survive untouched:
+# a half-migrated compose file would take the env down with no way back.
+legacy_file | sed 's/^      - "127/        - "127/' > "$WORK/reindented.yml"
+cp "$WORK/reindented.yml" "$WORK/reindented.before.yml"
+drop_legacy_env_ports "$WORK/reindented.yml"
+assert_eq "$?" "2" "a file the rewrite cannot handle is reported as failed"
+assert_eq "$(cat "$WORK/reindented.yml")" "$(cat "$WORK/reindented.before.yml")" "and is left exactly as it was"
+assert_eq "$(find "$WORK" -maxdepth 1 -name '*.tmp' | wc -l | tr -d ' ')" "0" "with no temp file left behind"
 
 # A new env's file never had the ports, and reads as already on the proxy.
 legacy_file | grep -v -e '^    ports:' -e '^      - "127\.0\.0\.7:' > "$WORK/new.yml"

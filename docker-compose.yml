@@ -49,21 +49,9 @@ services:
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
-    ## No published ports: the proxy below listens on 80 and 443 for every site.
-    ## This is its default backend, so any hostname no isolated env claims still
-    ## lands here. That covers localhost, the additional sites and the manager hub.
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=newspack-docker_default"
-      - "traefik.tcp.routers.newspack-main.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.newspack-main.priority=1"
-      - "traefik.tcp.routers.newspack-main.entrypoints=websecure"
-      - "traefik.tcp.routers.newspack-main.tls.passthrough=true"
-      - "traefik.tcp.services.newspack-main.loadbalancer.server.port=443"
-      - "traefik.http.routers.newspack-main.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.newspack-main.priority=1"
-      - "traefik.http.routers.newspack-main.entrypoints=web"
-      - "traefik.http.services.newspack-main.loadbalancer.server.port=80"
+    ## No published ports: the proxy below listens on 80 and 443 for every site
+    ## and sends this one any hostname no isolated env claims. That covers
+    ## localhost, the additional sites and the manager hub.
     env_file:
       - default.env
       - .env
@@ -93,31 +81,46 @@ services:
   ## second container publishing 443 fails whatever loopback address it asks for.
   ## Each isolated env used to publish 80/443 on a loopback address of its own;
   ## that can no longer run next to the main site. The proxy takes both ports
-  ## once and routes by hostname instead. Envs register through the labels in
-  ## their docker-compose.env-*.yml (see env_proxy_labels in bin/_common.sh).
+  ## once and routes by hostname instead.
   ##
   ## TLS is passed through, not terminated: each site keeps serving its own
-  ## mkcert certificate and nothing inside the containers changes.
+  ## mkcert certificate and nothing inside the site containers changes.
+  ##
+  ## Routes are files in envs/.proxy, written by `n` (see env_proxy_route and
+  ## sync_proxy_routes in bin/_common.sh) and picked up as they change. The proxy
+  ## deliberately has no Docker socket: discovering containers through it would
+  ## give this third-party image control of Docker itself. For the same reason
+  ## it runs as an unprivileged user on a read-only filesystem, and the image is
+  ## pinned by digest so an upstream change cannot arrive unreviewed.
   ##
   ## depends_on is about the upgrade, not startup order: the first `n start`
   ## after this change has to replace the old wordpress container, which is
   ## still bound to 443, before the proxy can bind it.
   proxy:
     container_name: newspack_proxy
-    image: traefik:v3.7
+    image: traefik:v3.7.20@sha256:8301d6f60957a422f98918aacf2b01482abde3e74ead3719aabdb7c64045fe28
     depends_on:
       - wordpress
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=newspack_envs
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      ## Off by default it is not: Traefik otherwise reports its version and
+      ## the machine's public address to its vendor.
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
     ports:
       - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
       - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./envs/.proxy:/etc/traefik/dynamic:ro
     networks:
       - default
       - newspack_envs

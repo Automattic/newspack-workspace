@@ -100,29 +100,171 @@ ensure_envs_network() {
     echo "Created shared network: newspack_envs"
 }
 
-# The `labels:` block that registers an env's compose service with the proxy:
-# TLS for its domain is passed through to the container's 443, plain HTTP for
-# its domain goes to 80. Anything without such a block falls through to the
-# main site (see the newspack-main routers in docker-compose.yml).
+# Where the proxy reads its routes: one small file per env plus one for the main
+# site, written here by `n` and mounted read-only into the proxy, which watches
+# the directory. Files rather than the proxy asking Docker which containers
+# exist, because that needs the Docker socket, and the socket would hand the
+# proxy control of every container and every path Docker can mount.
+#
+# Under envs/ so it is gitignored with the rest. The leading dot keeps it clear
+# of every env's own directory: an env name starts with a letter or digit.
+PROXY_ROUTES_DIR="$NABSPATH/envs/.proxy"
+
+# The route file for an env. The name is used as is, so two envs can never
+# share a file: env names are unique, and all of their characters are legal in
+# a file name and in a route name.
+proxy_route_file() {
+    echo "$PROXY_ROUTES_DIR/env-$1.yml"
+}
+
+# Read domain from a compose file's WP_DOMAIN env var.
+domain_for_env() {
+    grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
+}
+
+# The route for one env: TLS for its domain is passed through to the env's own
+# Apache, which keeps serving the env's certificate, and plain HTTP for its
+# domain goes to port 80.
+#
+# The backend is the env's domain, which is also its alias on the newspack_envs
+# network, so the proxy finds the container through Docker's DNS when a request
+# arrives. An env that is down therefore fails to connect. It does not fall
+# through to the main site.
 #
 # Args: env name, domain.
-env_proxy_labels() {
-    local router domain="$2"
-    # Traefik reads a label key as a dotted path, so a dot in the env name would
-    # cut the router name in two. Env names allow dots and underscores.
-    router="env-$(printf '%s' "$1" | tr -c 'a-zA-Z0-9' '-')"
-    printf '    labels:\n'
-    printf '      - "traefik.enable=true"\n'
-    printf '      - "traefik.docker.network=newspack_envs"\n'
+env_proxy_route() {
+    local id="env-$1" domain="$2"
     # shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
-    printf '      - "traefik.tcp.routers.%s.rule=HostSNI(`%s`)"\n' "$router" "$domain"
-    printf '      - "traefik.tcp.routers.%s.entrypoints=websecure"\n' "$router"
-    printf '      - "traefik.tcp.routers.%s.tls.passthrough=true"\n' "$router"
-    printf '      - "traefik.tcp.services.%s.loadbalancer.server.port=443"\n' "$router"
-    # shellcheck disable=SC2016
-    printf '      - "traefik.http.routers.%s.rule=Host(`%s`)"\n' "$router" "$domain"
-    printf '      - "traefik.http.routers.%s.entrypoints=web"\n' "$router"
-    printf '      - "traefik.http.services.%s.loadbalancer.server.port=80"\n' "$router"
+    printf '%s\n' \
+        'tcp:' \
+        '  routers:' \
+        "    $id:" \
+        '      rule: "HostSNI(`'"$domain"'`)"' \
+        '      entryPoints: [websecure]' \
+        "      service: $id" \
+        '      tls:' \
+        '        passthrough: true' \
+        '  services:' \
+        "    $id:" \
+        '      loadBalancer:' \
+        '        servers:' \
+        "          - address: \"$domain:443\"" \
+        'http:' \
+        '  routers:' \
+        "    $id:" \
+        '      rule: "Host(`'"$domain"'`)"' \
+        '      entryPoints: [web]' \
+        "      service: $id" \
+        '  services:' \
+        "    $id:" \
+        '      loadBalancer:' \
+        '        servers:' \
+        "          - url: \"http://$domain:80\""
+}
+
+# The route for everything no env claims: localhost, the additional sites, the
+# manager hub. Priority 1 puts it behind every env's route.
+main_proxy_route() {
+    # shellcheck disable=SC2016 # the backticks are Traefik rule syntax, not shell.
+    printf '%s\n' \
+        'tcp:' \
+        '  routers:' \
+        '    newspack-main:' \
+        '      rule: "HostSNI(`*`)"' \
+        '      priority: 1' \
+        '      entryPoints: [websecure]' \
+        '      service: newspack-main' \
+        '      tls:' \
+        '        passthrough: true' \
+        '  services:' \
+        '    newspack-main:' \
+        '      loadBalancer:' \
+        '        servers:' \
+        '          - address: "wordpress:443"' \
+        'http:' \
+        '  routers:' \
+        '    newspack-main:' \
+        '      rule: "PathPrefix(`/`)"' \
+        '      priority: 1' \
+        '      entryPoints: [web]' \
+        '      service: newspack-main' \
+        '  services:' \
+        '    newspack-main:' \
+        '      loadBalancer:' \
+        '        servers:' \
+        '          - url: "http://wordpress:80"'
+}
+
+# Write a route file from stdin. The content lands under a dot-name the proxy
+# ignores and is then renamed into place, so the proxy never reads half a file.
+# An unchanged route is left alone, which spares the proxy a reload.
+#
+# Args: target path.
+write_proxy_route() {
+    local target="$1" tmp
+    mkdir -p "$PROXY_ROUTES_DIR" || return 1
+    tmp="$PROXY_ROUTES_DIR/.$(basename "$target").tmp"
+    cat > "$tmp" || return 1
+    if [[ -f "$target" ]] && cmp -s "$tmp" "$target"; then
+        rm -f "$tmp"
+        return 0
+    fi
+    mv "$tmp" "$target"
+}
+
+# Make the route files match the envs that exist: the main route, one route per
+# env compose file, and nothing for an env that is gone. Run before the proxy
+# starts, so the directory it mounts is there and owned by the user. Docker
+# would otherwise create it as root on Linux.
+sync_proxy_routes() {
+    local f name domain route
+    mkdir -p "$PROXY_ROUTES_DIR" || return 1
+    main_proxy_route | write_proxy_route "$PROXY_ROUTES_DIR/main.yml" || return 1
+    for f in "$NABSPATH"/docker-compose.env-*.yml; do
+        [[ -f "$f" ]] || continue
+        name=$(basename "$f")
+        name="${name#docker-compose.env-}"
+        name="${name%.yml}"
+        domain=$(domain_for_env "$f")
+        [[ -n "$domain" ]] || continue
+        env_proxy_route "$name" "$domain" | write_proxy_route "$(proxy_route_file "$name")" || return 1
+    done
+    for route in "$PROXY_ROUTES_DIR"/env-*.yml; do
+        [[ -f "$route" ]] || continue
+        name=$(basename "$route")
+        name="${name#env-}"
+        name="${name%.yml}"
+        [[ -f "$NABSPATH/docker-compose.env-$name.yml" ]] || rm -f "$route"
+    done
+}
+
+# Stop running env containers that still publish 80/443 themselves, as envs did
+# before the proxy. Where Docker binds those ports on every interface, one such
+# container keeps the proxy from starting. The env's data is untouched, and its
+# next `n env up` moves it onto the proxy.
+#
+# Returns 0 when it stopped at least one container, 1 when there was none.
+stop_legacy_env_publishers() {
+    local none_stopped=1 name ports f env
+    while IFS=$'\t' read -r name ports; do
+        [[ "$name" == newspack_env_* ]] || continue
+        [[ "$ports" == *":443->"* || "$ports" == *":80->"* ]] || continue
+        docker stop "$name" >/dev/null 2>&1
+        docker rm "$name" >/dev/null 2>&1
+        env=""
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            if grep -q "container_name: ${name}\$" "$f"; then
+                env=$(basename "$f")
+                env="${env#docker-compose.env-}"
+                env="${env%.yml}"
+                break
+            fi
+        done
+        echo "Stopped $name: it published ports 80/443 itself, which the shared proxy does now. Bring it back with: n env up ${env:-<name>}"
+        none_stopped=0
+    done < <(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null)
+    return "$none_stopped"
 }
 
 # The loopback address an env compose file publishes 443 on, for a file written
@@ -133,44 +275,46 @@ legacy_env_ip() {
     sed -nE 's/^[[:space:]]*-[[:space:]]*"(127\.0\.0\.[0-9]+):443:443"[[:space:]]*$/\1/p' "$1" 2>/dev/null | head -1
 }
 
-# Move a legacy env compose file onto the proxy: drop the 80/443 ports it
-# published on its own loopback address and add the proxy labels where they
-# were. Compose files are written once at create time, so without this an env
-# made before the proxy keeps asking for a port the proxy is already bound to.
+# Move a legacy env compose file onto the proxy by dropping the 80/443 ports it
+# published on its own loopback address. Compose files are written once, at
+# create time, so without this an env made before the proxy keeps asking for a
+# port the proxy is already bound to.
 #
-# Only the two generated port lines are removed. A port someone added by hand
-# stays, under its `ports:` key.
+# Only the two generated port lines go. A port someone added by hand stays,
+# under its `ports:` key. The file is replaced only once the result is known to
+# be good, so a file this cannot handle is left exactly as it was.
 #
-# Args: compose file, env name, domain. Returns 0 when the file was rewritten,
-# 1 when it had nothing to migrate or the rewrite did not take.
-migrate_env_compose_to_proxy() {
-    local file="$1" labels
+# Args: compose file. Returns 0 when the file was rewritten, 1 when there was
+# nothing to migrate, 2 when the rewrite did not produce a usable file.
+drop_legacy_env_ports() {
+    local file="$1"
     [[ -n "$(legacy_env_ip "$file")" ]] || return 1
-    labels=$(env_proxy_labels "$2" "$3")
-    # The labels travel through the environment: awk -v rejects a value with
-    # newlines on macOS.
-    ENV_PROXY_LABELS="$labels" awk '
+    awk '
         function flush_ports(   i) {
             if (!in_ports) return
             if (kept > 0) {
-                print "    ports:"
+                print ports_line
                 for (i = 1; i <= kept; i++) print keep[i]
             }
-            if (!placed) { print ENVIRON["ENV_PROXY_LABELS"]; placed = 1 }
             in_ports = 0
             kept = 0
         }
-        $0 == "    ports:" && !placed { in_ports = 1; next }
+        /^    ports:[[:space:]]*$/ { flush_ports(); in_ports = 1; ports_line = $0; next }
         in_ports && /^      - / {
-            if ($0 ~ /^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"$/) next
+            if ($0 ~ /^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"[[:space:]]*$/) next
             keep[++kept] = $0
             next
         }
         { flush_ports(); print }
         END { flush_ports() }
-    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    ' "$file" > "${file}.tmp" || { rm -f "${file}.tmp"; return 2; }
     # awk cannot report whether it found the block, so read the result back.
-    [[ -z "$(legacy_env_ip "$file")" ]] && grep -q 'traefik.enable=true' "$file"
+    if [[ -s "${file}.tmp" && -z "$(legacy_env_ip "${file}.tmp")" ]] && grep -q 'WP_DOMAIN=' "${file}.tmp"; then
+        mv "${file}.tmp" "$file"
+        return 0
+    fi
+    rm -f "${file}.tmp"
+    return 2
 }
 
 # Whether a project's vendor/ was installed with its dev dependencies.

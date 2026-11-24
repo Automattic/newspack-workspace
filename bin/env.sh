@@ -15,18 +15,49 @@ test_db_name_for_env() {
     echo "wp_tests_$(echo "$1" | tr '-' '_')"
 }
 
-# Read domain from a compose file's WP_DOMAIN env var.
-domain_for_env() {
-    grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
-}
-
 # The address an env's /etc/hosts entry belongs on: the shared proxy's, or the
 # env's own loopback address for a compose file not yet migrated onto the proxy
-# (see migrate_env_compose_to_proxy).
+# (see drop_legacy_env_ports).
 ip_for_env() {
     local legacy
     legacy=$(legacy_env_ip "$1")
     echo "${legacy:-$ENV_PROXY_IP}"
+}
+
+# Finish `up` by asking the env for a page instead of announcing a URL that may
+# not work. Three outcomes are worth telling apart, because each has a different
+# fix: the env answers at its domain; it answers through the proxy but the
+# domain does not resolve to the proxy on this machine; the proxy is not
+# routing it. Any HTTP response counts as an answer, a WordPress error included.
+#
+# Args: env name, domain.
+report_env_reachability() {
+    local env_name="$1" domain="$2" attempt
+    local url="https://${domain}/"
+    local via_proxy=(--resolve "${domain}:443:${ENV_PROXY_IP}")
+    # A non-default host port moves the site off 443, and the check with it.
+    if [[ -n "${PORT_WORDPRESS:-}" ]] || ! command -v curl >/dev/null 2>&1; then
+        echo "Environment '$env_name' is ready at $url"
+        return 0
+    fi
+    for attempt in 1 2 3; do
+        if curl -sk -o /dev/null --max-time 5 "$url"; then
+            echo "Environment '$env_name' is ready at $url"
+            return 0
+        fi
+        curl -sk -o /dev/null --max-time 5 "${via_proxy[@]}" "$url" && break
+        # The proxy normally picks a new route up by itself within a second. If
+        # the file watch missed it, a restart makes it read every route again.
+        [[ "$attempt" == 1 ]] && docker restart newspack_proxy >/dev/null 2>&1
+        sleep 2
+    done
+    if curl -sk -o /dev/null --max-time 5 "${via_proxy[@]}" "$url"; then
+        echo "Environment '$env_name' is running, but $domain does not resolve to $ENV_PROXY_IP on this machine, so a browser cannot reach it yet."
+        echo "Fix it with (replacing any older line for $domain): sudo sh -c 'echo \"$ENV_PROXY_IP $domain\" >> /etc/hosts'"
+        echo "Until then: curl -k --resolve ${domain}:443:${ENV_PROXY_IP} $url"
+    else
+        echo "Warning: environment '$env_name' is running, but the proxy is not routing $domain. See 'docker logs newspack_proxy' and $(proxy_route_file "$env_name")." >&2
+    fi
 }
 
 # Parse a docker-compose volume line for a worktree mount and emit
@@ -328,7 +359,6 @@ case $1 in
         if [[ -z "$domain" ]]; then
             domain="${env_name}.test"
         fi
-        proxy_labels=$(env_proxy_labels "$env_name" "$domain")
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
@@ -354,7 +384,6 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
-${proxy_labels}
     env_file:
       - default.env
       - .env
@@ -385,6 +414,11 @@ networks:
     external: true
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain)"
+        # Tell the proxy where the domain goes. The env publishes no ports itself.
+        if ! env_proxy_route "$env_name" "$domain" | write_proxy_route "$(proxy_route_file "$env_name")"; then
+            echo "Error: could not write the proxy route for $env_name under $PROXY_ROUTES_DIR" >&2
+            exit 1
+        fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
             if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
@@ -540,39 +574,28 @@ MIGRATE
         # publishes them.
         legacy_ip=$(legacy_env_ip "$compose_file")
         if [[ -n "$legacy_ip" ]]; then
-            if migrate_env_compose_to_proxy "$compose_file" "$env_name" "$domain"; then
+            if drop_legacy_env_ports "$compose_file"; then
                 echo "Migrated $env_name: served through the shared proxy instead of $legacy_ip"
             else
-                echo "Warning: could not move $env_name onto the shared proxy ($compose_file has no generated ports block). Recreate the env to pick it up." >&2
+                echo "Error: could not move $env_name onto the shared proxy. $compose_file still publishes ports on $legacy_ip and was left unchanged. Remove its 80/443 port lines by hand, or recreate the env." >&2
+                exit 1
             fi
-            ip=$(ip_for_env "$compose_file")
         fi
-        # A hosts entry written for the old address would keep the browser on a
-        # loopback alias nothing answers on any more. Remove it here; the block
-        # below adds the current one.
-        stale_host_ip=$(awk -v d="$domain" '$1 ~ /^127\./ { for (i = 2; i <= NF; i++) if ($i == d) { print $1; exit } }' /etc/hosts 2>/dev/null)
+        ip="$ENV_PROXY_IP"
+        # A hosts line written for the env's old address keeps the browser on a
+        # loopback alias that is gone after the next reboot. Only a line that
+        # maps this domain alone is ours to replace; the block below then adds
+        # the current one. When it cannot be replaced here, the reachability
+        # report at the end of `up` says so.
+        stale_host_ip=$(awk -v d="$domain" '$1 ~ /^127\./ && NF == 2 && $2 == d { print $1; exit }' /etc/hosts 2>/dev/null)
         if [[ -n "$domain" && -n "$stale_host_ip" && "$stale_host_ip" != "$ip" ]]; then
             if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 sudo newspack-manage-host host-remove "$domain"
             elif [ -t 0 ] && [ -t 1 ]; then
                 echo "Updating the /etc/hosts entry for $domain (requires sudo)..."
-                escaped_domain="${domain//./\\.}"
-                { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
-                    sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
-            else
-                echo "Warning: /etc/hosts still maps $domain to $stale_host_ip. Browser access won't work until it reads: $ip $domain"
-            fi
-        fi
-        # Only an env the migration above could not move still has an address of its
-        # own, and so still needs the alias. macOS only: Linux routes all 127.x.x.x
-        # by default.
-        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! lo0_alias_exists "$ip"; then
-            if command -v newspack-manage-host >/dev/null 2>&1; then
-                sudo newspack-manage-host alias-add "$ip"
-            else
-                echo "Error: loopback alias for $ip is not set up."
-                echo "Run 'n start' to set up networking, or manually: sudo ifconfig lo0 alias $ip"
-                exit 1
+                stale_line="^[[:space:]]*${stale_host_ip//./\\.}[[:space:]]+${domain//./\\.}[[:space:]]*$"
+                { sudo sed -i '' -E "/${stale_line}/d" /etc/hosts 2>/dev/null || \
+                    sudo sed -i -E "/${stale_line}/d" /etc/hosts; }
             fi
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
@@ -607,11 +630,24 @@ MIGRATE
             echo "Error: failed to start container"
             exit 1
         fi
-        # The proxy is what makes the env reachable from the host. --no-deps
-        # because it names the main site as a dependency, and starting an env
-        # is no reason to start that.
-        if ! docker compose -f "$NABSPATH/docker-compose.yml" up -d --no-deps proxy; then
-            echo "Error: could not start the shared proxy on ports 80/443. If another container still publishes them, run 'n restart'." >&2
+        # The proxy is what makes the env reachable from the host. Its routes
+        # come first: the directory it mounts has to exist and be the user's.
+        if ! sync_proxy_routes; then
+            echo "Error: could not write the proxy routes under $PROXY_ROUTES_DIR" >&2
+            exit 1
+        fi
+        # The same compose files as `n start`, so a developer's override of the
+        # proxy is not undone here. --no-deps because the proxy names the main
+        # site as a dependency, and starting an env is no reason to start that.
+        proxy_compose=(-f "$NABSPATH/docker-compose.yml")
+        [[ -f "$NABSPATH/docker-compose.override.yml" ]] && proxy_compose+=(-f "$NABSPATH/docker-compose.override.yml")
+        if ! docker compose "${proxy_compose[@]}" up -d --no-deps proxy; then
+            echo "Error: could not start the shared proxy on ports 80/443." >&2
+            port_holders=$(docker ps --filter publish=443 --filter publish=80 --format '{{.Names}}' 2>/dev/null | grep -v '^newspack_proxy$' | tr '\n' ' ')
+            if [[ -n "$port_holders" ]]; then
+                echo "Still publishing those ports from before the proxy: $port_holders" >&2
+                echo "Run 'n start' to replace the main site's container, and 'n env up <name>' for an env." >&2
+            fi
             exit 1
         fi
         # Generate SSL certificate using host mkcert (trusted CA) and copy into container.
@@ -705,7 +741,7 @@ MIGRATE
         fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
-        echo "Environment '$env_name' is ready at https://${domain}/"
+        report_env_reachability "$env_name" "$domain"
         # Copy built assets from main repos into worktrees.
         if [[ "$auto_build" == true ]]; then
             # Anchored regex (matching each_worktree_in_env / get_target_container
@@ -795,6 +831,9 @@ MIGRATE
             rm -rf "$NABSPATH/envs/${env_name}"
             echo "Removed envs/${env_name}/"
         fi
+        # Remove the proxy's route, so the domain stops being claimed for an env
+        # that no longer exists.
+        rm -f "$(proxy_route_file "$env_name")"
         # Remove log directories.
         if [[ -d "$NABSPATH/logs/env-${env_name}" ]]; then
             rm -rf "$NABSPATH/logs/env-${env_name}"
