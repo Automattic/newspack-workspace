@@ -5,7 +5,7 @@ import { SVG, Path } from '@wordpress/primitives';
 
 const aspectSquare = (
 	<SVG xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style={ { fill: 'none' } } stroke="currentColor" strokeWidth="1.5">
-		<Path d="M6 19.25H18C18.6904 19.25 19.25 18.6904 19.25 18V6C19.25 5.30964 18.6904 4.75 18 4.75H6C5.30964 4.75 4.75 5.30964 4.75 6V18C4.75 18.6904 5.30964 19.25 6 19.25Z" />
+		<Path d="M5.286 3.75H18.714A1.536 1.536 0 0 1 20.25 5.286V18.714A1.536 1.536 0 0 1 18.714 20.25H5.286A1.536 1.536 0 0 1 3.75 18.714V5.286A1.536 1.536 0 0 1 5.286 3.75Z" />
 	</SVG>
 );
 
