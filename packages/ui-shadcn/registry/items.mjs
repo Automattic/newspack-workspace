@@ -1,0 +1,182 @@
+const ui = ( name, title, description, extra = {} ) => ( {
+	name,
+	type: 'registry:ui',
+	title,
+	description,
+	files: [ `ui/${ name }.tsx` ],
+	...extra,
+} );
+
+export const items = [
+	{
+		name: 'newspack-ui-classes',
+		type: 'registry:lib',
+		title: 'newspack-ui classes',
+		description: 'Shared class strings for focus edges and form fields, built on newspack-ui tokens.',
+		files: [ 'lib/newspack-ui.ts' ],
+	},
+	{
+		name: 'newspack-ui-icons',
+		type: 'registry:lib',
+		title: 'newspack-ui icons',
+		description: 'The info, success, warning, error and close icons used by newspack-ui notices and modals.',
+		files: [ 'lib/newspack-ui-icons.tsx' ],
+	},
+	ui( 'button', 'Button', 'Primary, brand (Newspack blue), secondary, outline, ghost, destructive and link buttons in newspack-ui sizes.', { dependencies: [ 'class-variance-authority', 'radix-ui' ] } ),
+	ui( 'input', 'Input', 'Text field with the newspack-ui border, focus edge and error state.', { registryDependencies: [ 'newspack-ui-classes' ] } ),
+	ui( 'textarea', 'Textarea', 'Multi-line field matching the newspack-ui text input.', { registryDependencies: [ 'newspack-ui-classes' ] } ),
+	ui( 'label', 'Label', 'Field label, helper text and error text in the newspack-ui control font.', { dependencies: [ 'radix-ui' ], registryDependencies: [ 'newspack-ui-icons' ] } ),
+	ui( 'checkbox', 'Checkbox', 'Checkbox with the newspack-ui box, tick and focus edge.', { dependencies: [ 'radix-ui' ], registryDependencies: [ 'newspack-ui-classes' ] } ),
+	ui( 'radio-group', 'Radio Group', 'Radio buttons with the newspack-ui ring and dot.', { dependencies: [ 'radix-ui' ], registryDependencies: [ 'newspack-ui-classes' ] } ),
+	ui( 'select', 'Select', 'Select field with the newspack-ui caret and a surface popover.', { dependencies: [ 'radix-ui', 'tw-animate-css' ], registryDependencies: [ 'newspack-ui-classes' ] } ),
+	ui( 'card', 'Card', 'The newspack-ui bordered box.' ),
+	ui( 'dialog', 'Dialog', 'Modal that becomes a bottom sheet below 600px, like newspack-ui.', { dependencies: [ 'radix-ui', 'tw-animate-css' ], registryDependencies: [ 'button', 'newspack-ui-icons' ] } ),
+	ui( 'sheet', 'Sheet', 'Panel that slides in from an edge of the screen, right by default, on the newspack-ui surface and overlay.', { dependencies: [ 'radix-ui', 'tw-animate-css' ], registryDependencies: [ 'button', 'newspack-ui-icons' ] } ),
+	ui( 'alert', 'Alert', 'Info, success, warning and error notices matching newspack-ui.', { dependencies: [ 'class-variance-authority' ] } ),
+	ui( 'badge', 'Badge', 'Badges in the newspack-ui colors and size.', { dependencies: [ 'class-variance-authority', 'radix-ui' ] } ),
+	ui( 'tabs', 'Tabs', 'Underlined tabs matching the newspack-ui tab list.', { dependencies: [ 'radix-ui' ] } ),
+	ui( 'segmented-control', 'Segmented Control', 'Single-choice toggle group in a neutral track with a sliding selected thumb, matching the newspack-ui segmented control. Use it to pick a value or switch the view of the same content (frequency, light or dark, list or grid). Use Tabs to switch between different panels of content.', { dependencies: [ 'radix-ui' ], docs: 'Segmented control or Tabs? A segmented control picks a value or switches the view of the same content: billing frequency, light or dark, list or grid. Exactly one item is always selected and arrow keys select it. Tabs switch between different panels of content, with a panel under each tab. If the choice changes what is shown below it and the content is different, use Tabs. If it changes how the same thing is shown or which value is set, use a segmented control. Give the group an aria-label.' } ),
+	ui( 'sonner', 'Sonner', 'Snackbar toasts in the newspack-ui inverse surface, at the bottom center, with its type icons, close button and motion.', { dependencies: [ 'sonner' ], registryDependencies: [ 'newspack-ui-icons' ], css: {
+		'[data-sonner-toaster][data-y-position="bottom"] [data-sonner-toast]:not([data-mounted="true"])': { '--y': 'translateY(calc(100% + var(--newspack-ui-spacer-5)))' },
+		'@media (prefers-reduced-motion: reduce)': {
+			'[data-sonner-toast]:not([data-swiping="true"])': { transition: 'opacity var(--newspack-ui-duration-snackbar) var(--newspack-ui-ease-snackbar)' },
+			'[data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"]:not([data-mounted="true"])': { '--y': 'translateY(0)' },
+			'[data-sonner-toaster] [data-sonner-toast][data-removed="true"][data-front="true"][data-swipe-out="false"]': { '--y': 'translateY(0)' },
+		},
+	} } ),
+];
+
+const fumadocs = [ 'fumadocs-core@~16.18.4', 'fumadocs-ui@~16.18.4' ];
+const component = path => ( { path: `components/${ path }`, type: 'registry:component' } );
+const stylesheet = name => ( { path: `styles/${ name }`, type: 'registry:file', target: `styles/${ name }` } );
+
+export const siteKit = [
+	{
+		name: 'site-config',
+		type: 'registry:lib',
+		title: 'Site config',
+		description: 'The one file a site edits: SITE_NAME, NAV_LINKS, FOOTER_LINKS, DARK_MODE, DOCS_SIDEBAR, MOBILE_MENU_QUERY, SEARCH_INDEX and SEARCH_EMPTY_HINT, read by every site and docs item.',
+		files: [ { path: 'lib/site.ts', type: 'registry:lib' } ],
+	},
+	{
+		name: 'theme-script',
+		type: 'registry:lib',
+		title: 'Theme script',
+		description: 'The pre-paint head script as a string (stored choice on desktop, system scheme below the mobile breakpoint, live updates, light only when DARK_MODE is off), the theme helpers and the theme toggle button, whose onToggle lets a site apply the theme its own way.',
+		dependencies: [ '@wordpress/icons' ],
+		registryDependencies: [ 'site-config', 'button' ],
+		files: [ { path: 'lib/theme.ts', type: 'registry:lib' }, { path: 'lib/theme-script.ts', type: 'registry:lib' }, component( 'site/theme-toggle.tsx' ) ],
+	},
+	{
+		name: 'theme-script-astro',
+		type: 'registry:file',
+		title: 'Theme script for Astro',
+		description: 'An Astro component that prints the theme script inline in the head. Astro only; other frameworks print THEME_SCRIPT themselves.',
+		registryDependencies: [ 'theme-script' ],
+		files: [ { path: 'components/site/theme-script.astro', type: 'registry:file', target: '@components/site/theme-script.astro' } ],
+	},
+	{
+		name: 'site-header',
+		type: 'registry:block',
+		title: 'Site header',
+		description: 'Sticky header with a skip link, a wordmark slot, the main nav, slots for a search trigger and drawer search, the theme toggle, and below the mobile breakpoint a menu button that opens a Sheet from the right. Ships SkipLink and styles/newspack-ui-site.css, which the site imports once.',
+		dependencies: [ '@wordpress/icons' ],
+		registryDependencies: [ 'site-config', 'theme-script', 'button', 'sheet', 'newspack-ui-icons' ],
+		files: [ component( 'site/drawer-nav.tsx' ), component( 'site/skip-link.tsx' ), component( 'site/site-header.tsx' ), stylesheet( 'newspack-ui-site.css' ) ],
+	},
+	{
+		name: 'site-footer',
+		type: 'registry:component',
+		title: 'Site footer',
+		description: 'Footer with a line of text and the FOOTER_LINKS, on the site container width.',
+		registryDependencies: [ 'site-config', 'site-header' ],
+		files: [ component( 'site/site-footer.tsx' ) ],
+	},
+	{
+		name: 'flow-frame',
+		type: 'registry:component',
+		title: 'Flow frame',
+		description: 'A step frame for a prototype: numbered step buttons, a note per step, an optional segmented entry-point switcher, and an iframe of the screens that mirrors its state to the page URL, with an Enlarge overlay. Takes the screen URL, steps, entries, context notes and the extra URL params as props, plus a renderControls slot above the frame. Imports `newspack-playground/bridge`, so it only builds inside the newspack-workspace, where the playground package is linked.',
+		dependencies: [ '@wordpress/icons' ],
+		registryDependencies: [ 'button', 'segmented-control' ],
+		files: [ component( 'flow/flow-frame.tsx' ) ],
+	},
+	{
+		name: 'fumadocs-theme',
+		type: 'registry:item',
+		title: 'Fumadocs theme',
+		description: 'styles/newspack-ui-fumadocs.css, which the site imports once: the Fumadocs CSS and the newspack-ui mapping onto it (fd colors, layout width, the docs drawer, the search overlay, code focus and prose rules). Maps the Tailwind shadow scale to the elevation tokens.',
+		dependencies: fumadocs,
+		cssVars: {
+			theme: {
+				'shadow-xs': 'var(--nui-elevation-1)',
+				'shadow-sm': 'var(--nui-elevation-1)',
+				'shadow-md': 'var(--nui-elevation-2)',
+				'shadow-lg': 'var(--nui-elevation-2)',
+				'shadow-xl': 'var(--nui-elevation-3)',
+				'shadow-2xl': 'var(--nui-elevation-4)',
+			},
+		},
+		files: [ stylesheet( 'newspack-ui-fumadocs.css' ) ],
+	},
+	{
+		name: 'drawer-search',
+		type: 'registry:component',
+		title: 'Drawer search',
+		description: 'Inline docs search for a mobile drawer, on the Fumadocs static search client, with the themed clear button and results in place of the nav.',
+		dependencies: [ ...fumadocs, 'hast-util-to-jsx-runtime', '@wordpress/icons' ],
+		registryDependencies: [ 'site-config', 'input', 'newspack-ui-icons' ],
+		files: [ component( 'docs/drawer-search.tsx' ) ],
+	},
+	{
+		name: 'docs-header',
+		type: 'registry:component',
+		title: 'Docs header',
+		description: 'The site header wired to Fumadocs: the Search button and the full-screen search overlay (Ctrl or Cmd+K), the drawer search in the Sheet, and the docs drawer button on docs pages.',
+		dependencies: [ ...fumadocs, '@wordpress/icons', 'radix-ui' ],
+		registryDependencies: [ 'site-header', 'drawer-search', 'fumadocs-theme', 'button', 'card', 'input', 'newspack-ui-icons' ],
+		files: [ component( 'docs/search-dialog.tsx' ), component( 'docs/docs-header.tsx' ) ],
+	},
+	{
+		name: 'docs-page-chrome',
+		type: 'registry:component',
+		title: 'Docs page chrome',
+		description: 'Fumadocs notebook breadcrumb, previous and next links and table of contents with WordPress icons, MDX headings and code blocks with copy buttons, and the script that wires them.',
+		dependencies: [ ...fumadocs, '@wordpress/icons' ],
+		registryDependencies: [ 'fumadocs-theme', 'site-config' ],
+		files: [ component( 'docs/page-chrome.tsx' ), component( 'docs/mdx.tsx' ), component( 'docs/copy-buttons.ts' ) ],
+	},
+	{
+		name: 'docs-drawer',
+		type: 'registry:block',
+		title: 'Docs drawer',
+		description: 'The Fumadocs notebook layout with the site header and a right-hand drawer: site links with the docs tree nested under Docs, inline search, the newspack-ui close button, and everything behind it made inert.',
+		dependencies: fumadocs,
+		registryDependencies: [ 'docs-header', 'docs-page-chrome', 'drawer-search', 'site-config', 'site-header', 'fumadocs-theme', 'newspack-ui-icons' ],
+		files: [ component( 'docs/drawer-sidebar.tsx' ), component( 'docs/drawer-a11y.tsx' ), component( 'docs/docs-shell.tsx' ) ],
+	},
+	{
+		name: 'docs-astro',
+		type: 'registry:component',
+		title: 'Docs for Astro',
+		description: 'Astro islands for a site with docs: the docs page and the header for pages outside the docs, each in the Fumadocs Astro provider. Astro only.',
+		dependencies: fumadocs,
+		registryDependencies: [ 'docs-drawer' ],
+		files: [ component( 'docs/astro-docs.tsx' ) ],
+	},
+];
+
+export const siteBundles = [
+	{
+		name: 'newspack-ui-site',
+		title: 'newspack-ui site',
+		description: 'Website chrome on top of the newspack-ui theme: site config, theme script and toggle, header with the mobile Sheet menu, and footer, with only the components they use (Button, Sheet). No docs and no framework-specific files. Install newspack-ui for every component.',
+		registryDependencies: [ 'newspack-ui-neutral', 'site-config', 'theme-script', 'site-header', 'site-footer' ],
+	},
+	{
+		name: 'newspack-ui-docs',
+		title: 'newspack-ui docs',
+		description: 'Fumadocs docs on top of the site chrome: the Fumadocs theme, docs header and search overlay, drawer and page chrome, with only the components they use (Button, Sheet, Input).',
+		registryDependencies: [ 'newspack-ui-site', 'fumadocs-theme', 'drawer-search', 'docs-header', 'docs-page-chrome', 'docs-drawer' ],
+	},
+];
