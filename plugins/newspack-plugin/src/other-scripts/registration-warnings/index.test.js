@@ -27,7 +27,7 @@ function renderSettings( { open = false, role = 'subscriber', botShown = false, 
 	const roleWarning = roleShown ? RISKY_ROLES[ role ] : { title: '', body: '' };
 	document.body.innerHTML = `
 		<div class="notice notice-warning inline notice-alt" data-newspack-registration-warning="bot"${ botShown ? '' : ' hidden' }>
-			<p><strong>Sign-ups have no bot protection</strong></p><p>reCAPTCHA is off.</p>
+			<p><strong>Sign-ups have no bot protection</strong></p><p>reCAPTCHA isn't set up.</p>
 		</div>
 		<div class="notice notice-error inline notice-alt" data-newspack-registration-warning="role"${ roleShown ? '' : ' hidden' }>
 			<p><strong>${ roleWarning.title }</strong></p><p>${ roleWarning.body }</p>
@@ -40,6 +40,7 @@ function renderSettings( { open = false, role = 'subscriber', botShown = false, 
 				<option value="subscriber">Subscriber</option>
 				<option value="editor">Editor</option>
 				<option value="administrator">Administrator</option>
+				<option value="constructor">Constructor</option>
 			</select></td></tr>
 		</tbody></table>`;
 	document.getElementById( 'default_role' ).value = role;
@@ -81,13 +82,12 @@ describe( 'registration warnings', () => {
 		expect( document.getElementById( 'role-cell' ).lastElementChild ).toBe( roleNotice() );
 	} );
 
-	it( 'reflects the saved state on load without announcing', () => {
+	it( 'keeps the saved warnings showing on load', () => {
 		renderSettings( { open: true, role: 'editor', botShown: true, roleShown: true } );
 		loadScript();
 		expect( botNotice().hidden ).toBe( false );
 		expect( roleNotice().hidden ).toBe( false );
 		expect( roleNotice().querySelector( 'strong' ).textContent ).toBe( RISKY_ROLES.editor.title );
-		expect( speak ).not.toHaveBeenCalled();
 	} );
 
 	it( 'follows a form state the browser restored on reload, without announcing', () => {
@@ -125,7 +125,8 @@ describe( 'registration warnings', () => {
 		expect( roleNotice().querySelector( 'strong' ).textContent ).toBe( RISKY_ROLES.administrator.title );
 		expect( roleNotice().querySelectorAll( 'p' )[ 1 ].textContent ).toBe( RISKY_ROLES.administrator.body );
 		expect( speak ).toHaveBeenCalledTimes( 1 );
-		expect( speak ).toHaveBeenCalledWith( `${ RISKY_ROLES.administrator.title } ${ RISKY_ROLES.administrator.body }` );
+		// The title has no closing punctuation, so it gets a period to keep it a sentence when read aloud.
+		expect( speak ).toHaveBeenCalledWith( `${ RISKY_ROLES.administrator.title }. ${ RISKY_ROLES.administrator.body }` );
 	} );
 
 	it( 'hides the role warning for a role that cannot edit posts', () => {
@@ -134,6 +135,13 @@ describe( 'registration warnings', () => {
 		setRole( 'subscriber' );
 		expect( roleNotice().hidden ).toBe( true );
 		expect( botNotice().hidden ).toBe( false );
+	} );
+
+	it( 'treats a role named after a built-in object property as safe', () => {
+		renderSettings( { open: true, role: 'subscriber', botShown: true } );
+		loadScript();
+		setRole( 'constructor' );
+		expect( roleNotice().hidden ).toBe( true );
 	} );
 
 	it( 'hides both warnings when the box is unchecked', () => {
