@@ -47,10 +47,8 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	return {
 		CardSettingsGroup: Passthrough,
 		Divider: () => null,
-		Grid: Passthrough,
 		ImageUpload: () => null,
 		Router: { useHistory: () => ( { push: jest.fn() } ) },
-		SectionHeader: () => null,
 		SplitSection: { Root: Passthrough, Header: () => null, Content: Passthrough },
 		TextControl: () => null,
 		// Confirm immediately: the dialog is not what is under test.
