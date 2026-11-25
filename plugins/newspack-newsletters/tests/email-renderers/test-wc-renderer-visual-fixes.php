@@ -735,13 +735,30 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A link holding text and then an image is a text link and keeps its underline.
+	 * Links holding text as well as an image, in either order.
+	 *
+	 * @return array<string, array{0: string}>
 	 */
-	public function test_link_with_text_and_image_keeps_underline() {
+	public static function text_and_image_links(): array {
+		return [
+			'text before the image' => [ 'Read more <img src="%s" alt="" width="20"/>' ],
+			'image before the text' => [ '<img src="%s" alt="" width="20"/> Read more' ],
+		];
+	}
+
+	/**
+	 * A link holding text is a text link and keeps its underline, wherever its image is.
+	 *
+	 * @dataProvider text_and_image_links
+	 *
+	 * @param string $content Link content, with `%s` for the image URL.
+	 */
+	public function test_link_with_text_and_image_keeps_underline( string $content ) {
 		list( $id ) = $this->image_block();
 		$src        = esc_url( wp_get_attachment_url( $id ) );
-		$html       = $this->render( '<!-- wp:paragraph --><p><a href="https://example.test/more">Read more <img src="' . $src . '" alt="" width="20"/></a></p><!-- /wp:paragraph -->' );
+		$html       = $this->render( '<!-- wp:paragraph --><p><a href="https://example.test/more">' . sprintf( $content, $src ) . '</a></p><!-- /wp:paragraph -->' );
 
-		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>Read more/', $html );
+		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>/', $html );
+		$this->assertDoesNotMatchRegularExpression( '/<a\b[^>]*href="https:\/\/example\.test\/more"[^>]*text-decoration:\s*none/', $html );
 	}
 }

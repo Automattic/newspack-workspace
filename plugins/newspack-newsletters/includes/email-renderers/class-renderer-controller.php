@@ -195,7 +195,7 @@ class Renderer_Controller {
 	}
 
 	/**
-	 * Remove the text-link underline from links that wrap an image.
+	 * Remove the text-link underline from links that hold only images.
 	 *
 	 * Links are underlined like text links in the editor (see Theme_Json_Builder), which
 	 * the CSS inliner applies to every link. On a link around an image, some email
@@ -208,37 +208,42 @@ class Renderer_Controller {
 		if ( false === stripos( $html, 'text-decoration: underline' ) && false === stripos( $html, 'text-decoration:underline' ) ) {
 			return $html;
 		}
-		// First pass: find the links whose content starts with an image. A link closed
-		// before the image (`<a>…</a><img>`), or with text ahead of it (`<a>Read <img></a>`),
-		// is a text link and keeps its underline.
+		// First pass: find the links whose content is images only. A link with any text,
+		// before or after its image (`<a>Read <img></a>`, `<a><img> Read more</a>`), is a
+		// text link and keeps its underline.
 		$image_links = [];
 		$scan        = new \WP_HTML_Tag_Processor( $html );
 		$link_index  = -1;
-		$candidate   = null;
+		$link        = null;
 		while ( $scan->next_token() ) {
 			$type = $scan->get_token_type();
 			if ( '#text' === $type ) {
 				// A failed match (invalid UTF-8) counts as text, so the link keeps its underline.
-				if ( null !== $candidate && 0 !== preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
-					$candidate = null;
+				if ( null !== $link && 0 !== preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
+					$link['text'] = true;
 				}
 				continue;
 			}
 			if ( '#tag' !== $type ) {
 				continue;
 			}
-			$is_opener = ! $scan->is_tag_closer();
-			if ( null !== $candidate ) {
-				if ( $is_opener && 'IMG' === $scan->get_tag() ) {
-					$image_links[ $candidate ] = true;
+			$tag = $scan->get_tag();
+			if ( 'A' === $tag && $scan->is_tag_closer() ) {
+				if ( null !== $link && $link['image'] && ! $link['text'] ) {
+					$image_links[ $link['index'] ] = true;
 				}
-				$candidate = null;
-			}
-			if ( $is_opener && 'A' === $scan->get_tag() ) {
+				$link = null;
+			} elseif ( 'A' === $tag ) {
 				++$link_index;
-				if ( preg_match( '/text-decoration:\s*underline/i', (string) $scan->get_attribute( 'style' ) ) ) {
-					$candidate = $link_index;
-				}
+				$link = preg_match( '/text-decoration:\s*underline/i', (string) $scan->get_attribute( 'style' ) )
+					? [
+						'index' => $link_index,
+						'image' => false,
+						'text'  => false,
+					]
+					: null;
+			} elseif ( 'IMG' === $tag && null !== $link ) {
+				$link['image'] = true;
 			}
 		}
 		if ( empty( $image_links ) ) {
