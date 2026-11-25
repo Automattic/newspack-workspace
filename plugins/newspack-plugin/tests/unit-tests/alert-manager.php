@@ -1478,7 +1478,9 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$pinged = array_column( array_column( $this->captured['sync_retry_exhausted']['error'], 'context' ), 'email' );
 		$this->assertSame( [ 'first@example.test', 'third@example.test' ], $pinged, 'Each integration pings once.' );
 		$this->assertStringContainsString( 'deletion', $this->captured['sync_retry_exhausted']['error'][0]['message'] );
+		$this->assertStringContainsString( 'Further deletions', $this->captured['sync_retry_exhausted']['error'][0]['message'], 'The ping says later deletions this hour go to the log.' );
 		$this->assertCount( 1, $this->captured['sync_retry_exhausted']['warning'], 'The second reader still reaches the log.' );
+		$this->assertStringNotContainsString( 'Further deletions', $this->captured['sync_retry_exhausted']['warning'][0]['message'], 'Log-only entries do not repeat the pointer.' );
 	}
 
 	/**

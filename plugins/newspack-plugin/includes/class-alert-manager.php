@@ -360,6 +360,10 @@ class Alert_Manager {
 			$payload['integration_id'] ?? 'unknown',
 			$payload['reason'] ?? 'unknown'
 		);
+		if ( $is_deletion && 'error' === $severity ) {
+			// The ping is the only one this hour, so say where the rest go.
+			$message .= ' Further deletions on this integration that run out of retries within the hour go to the log only; check the log and the integration\'s Sync Activity for the full list.';
+		}
 
 		/**
 		 * Fires when an alert condition is detected in the sync system.
