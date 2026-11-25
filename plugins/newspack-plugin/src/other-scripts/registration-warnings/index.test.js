@@ -27,7 +27,7 @@ const RISKY_ROLES = {
  * @param {Object}  options
  * @param {boolean} options.open      Whether "Anyone can register" starts checked.
  * @param {string}  options.role      The selected New User Default Role.
- * @param {boolean} options.botShown  Whether PHP printed the amber notice visible.
+ * @param {boolean} options.botShown  Whether PHP printed the bot notice visible.
  * @param {boolean} options.roleShown Whether PHP printed the role notice visible.
  */
 function renderSettings( { open = false, role = 'subscriber', botShown = false, roleShown = false } = {} ) {
@@ -49,6 +49,8 @@ function renderSettings( { open = false, role = 'subscriber', botShown = false, 
 				<option value="administrator">Administrator</option>
 				<option value="contributor">Contributor</option>
 				<option value="constructor">Constructor</option>
+				<option value="staff_writer">Staff</option>
+				<option value="staff_publisher">Staff</option>
 			</select></td></tr>
 		</tbody></table>`;
 	document.getElementById( 'default_role' ).value = role;
@@ -135,6 +137,24 @@ describe( 'registration warnings', () => {
 		expect( speak ).toHaveBeenCalledTimes( 1 );
 		// The title has no closing punctuation, so it gets a period to keep it a sentence when read aloud.
 		expect( speak ).toHaveBeenCalledWith( `${ RISKY_ROLES.administrator.title }. ${ RISKY_ROLES.administrator.body }` );
+	} );
+
+	it( 'swaps the role text between two roles with the same name', () => {
+		// WordPress allows two roles to share a display name, and a custom role's
+		// title is built from its name alone, so the titles match while the bodies differ.
+		const title = 'Anyone can register with the "Staff" role';
+		const riskyRoles = {
+			staff_writer: { title, body: 'This role can write posts.', severity: 'warning' },
+			staff_publisher: { title, body: 'This role can publish posts or upload files.', severity: 'error' },
+		};
+		renderSettings( { open: true, role: 'subscriber', botShown: true } );
+		loadScript( { hasBotProtection: true, riskyRoles } );
+		setRole( 'staff_writer' );
+		speak.mockClear();
+
+		setRole( 'staff_publisher' );
+		expect( roleNotice().querySelectorAll( 'p' )[ 1 ].textContent ).toBe( riskyRoles.staff_publisher.body );
+		expect( speak ).toHaveBeenCalledWith( `${ title }. ${ riskyRoles.staff_publisher.body }` );
 	} );
 
 	it( 'colors the role warning yellow or red to match the role', () => {
