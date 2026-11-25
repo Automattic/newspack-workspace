@@ -1228,26 +1228,44 @@ function newspack_sanitize_svgs() {
 }
 
 /**
- * Truncates text to a specific character length, without breaking a character.
+ * Truncates text to a specific character length, without breaking a word.
+ *
+ * Characters are counted as readers see them: a multibyte character counts once, and a run of
+ * whitespace, including non-breaking spaces, counts as one space. The text is cut right after
+ * the word that holds the last allowed character.
  *
  * @param string $content The text to truncate.
  * @param int    $length The character length to truncate to.
  * @param string $after Text to append after truncation. Default is '...'.
+ * @return string The truncated text, or the original text when it needs no truncation.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
+	$length = absint( $length );
+
+	// Treat any run of whitespace, including non-breaking spaces, as a single space.
+	$normalized = preg_replace( '/(?:[\s\x{00A0}]|&nbsp;|&#160;)+/u', ' ', (string) $content );
+	if ( null === $normalized ) {
+		// Not valid UTF-8, so the text cannot be measured in characters.
+		return $content;
+	}
+	$normalized = trim( $normalized );
+
 	// If content is already shorter than the truncate length, return it.
-	if ( strlen( $content ) <= $length ) {
+	if ( mb_strlen( $normalized ) <= $length ) {
 		return $content;
 	}
 
-	// Find the first space after the desired length.
-	$breakpoint = strpos( $content, ' ', $length );
+	// Find the first space from the last allowed character on, so the word holding it stays whole.
+	$offset     = max( 0, $length - 1 );
+	$tail       = mb_substr( $normalized, $offset );
+	$breakpoint = strpos( $tail, ' ' );
 
-	// Make sure $breakpoint isn't returning false, and is less than length of content.
-	if ( false !== $breakpoint && $breakpoint < strlen( $content ) - 1 ) {
-		$content = substr( $content, 0, $breakpoint ) . $after;
+	// No space left: the last allowed character is in the last word, so nothing is cut.
+	if ( false === $breakpoint ) {
+		return $content;
 	}
-	return $content;
+
+	return mb_substr( $normalized, 0, $offset ) . substr( $tail, 0, $breakpoint ) . $after;
 }
 
 /**
