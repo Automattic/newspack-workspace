@@ -1,3 +1,10 @@
+# newspack [6.58.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.57.0...newspack@6.58.0) (2026-11-25)
+
+
+### Features
+
+* **content-gates:** gate content by publication age (Ref NPPD-2435, [#1663](https://github.com/Automattic/newspack-workspace/issues/1663)) ([c636153](https://github.com/Automattic/newspack-workspace/commit/c636153b9a26c19fbae2e5e89ebb2bf0edb48753))
+
 # newspack [6.57.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.56.11...newspack@6.57.0) (2026-11-23)
 
 
