@@ -74,7 +74,8 @@ final class Registration_Warnings {
 		// It goes through JSON.parse() because an object literal would treat a role
 		// slug of "__proto__" as the object's prototype and drop that role's warning.
 		// The outer encode takes the flags wp_localize_script() uses, so a custom
-		// role name holding markup can't end or reopen the script element.
+		// role name holding markup can't close the script element early or keep
+		// it from closing.
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
 			'window.newspackRegistrationWarnings = JSON.parse( ' . wp_json_encode( wp_json_encode( self::get_script_data() ), JSON_HEX_TAG | JSON_UNESCAPED_SLASHES ) . ' );',
