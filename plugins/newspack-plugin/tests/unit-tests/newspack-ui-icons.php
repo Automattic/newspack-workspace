@@ -57,6 +57,7 @@ class Newspack_Test_UI_Icons extends WP_UnitTestCase {
 			$this->assertNotEmpty( $svg, "$name is registered" );
 			$this->assertStringNotContainsString( 'stroke=', $svg, "$name has no stroke" );
 			$this->assertStringNotContainsString( 'style=', $svg, "$name has no inline style" );
+			$this->assertMatchesRegularExpression( '/\sfill="/', $svg, "$name has a fill the menu painter can recolour" );
 		}
 	}
 }
