@@ -2,7 +2,6 @@
  * Newspack dependencies
  */
 import colors from 'newspack-colors';
-import { contentLoop as icon } from 'newspack-icons';
 
 /**
  * WordPress dependencies
@@ -10,6 +9,7 @@ import { contentLoop as icon } from 'newspack-icons';
 import { createBlock } from '@wordpress/blocks';
 import { applyFilters } from '@wordpress/hooks';
 import { __, _x } from '@wordpress/i18n';
+import { pages as icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies

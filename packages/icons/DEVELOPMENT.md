@@ -10,7 +10,7 @@ This package provides custom SVG icons designed specifically for Newspack projec
 
 ✅ **Use newspack-icons for:**
 - Icons not available in `@wordpress/icons`
-- Newspack-specific functionality (e.g., `newspack`, `emailAd`, `curatedList`)
+- Newspack-specific functionality (e.g., `newspack`, `emailAd`, `collections`)
 - Custom icons designed for Newspack workflows
 
 ❌ **Don't use newspack-icons for:**
@@ -44,16 +44,14 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 51 custom icons:
+This package includes 43 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
 - `ad` - Advertisement icon
-- `account` - Account/user icon
 - `ai` - AI icon
 - `aiText` - AI text icon
 - `appearance` - Appearance (light and dark) icon
-- `archiveLoop` - Archive loop icon
 - `aspectLandscape` - Landscape aspect ratio icon
 - `aspectPortrait` - Portrait aspect ratio icon
 - `aspectSquare` - Square aspect ratio icon
@@ -62,13 +60,10 @@ This package includes 51 custom icons:
 - `browser` - Browser icon
 - `chartReport` - Chart report icon
 - `collections` - Collections icon
-- `comments` - Comments icon
 - `contentCarousel` - Content carousel icon
 - `contentLocked` - Content locked icon
-- `contentLoop` - Content loop icon
 - `corrections` - Corrections icon
 - `countdown` - Countdown icon
-- `curatedList` - Curated list icon
 - `emailAd` - Email advertisement icon
 - `emailCheck` - Email check icon
 - `emailError` - Email error icon
@@ -81,7 +76,6 @@ This package includes 51 custom icons:
 - `mergeTags` - Merge tags icon
 - `newspack` - Newspack logo icon
 - `newspaper` - Newspaper icon
-- `output` - Output icon
 - `overlayBottom` - Overlay bottom icon
 - `overlayCenter` - Overlay center icon
 - `overlayInline` - Overlay inline icon
@@ -93,8 +87,6 @@ This package includes 51 custom icons:
 - `priority` - Priority icon
 - `readerRegistration` - Reader registration icon
 - `searchEmpty` - Empty search icon
-- `tabItem` - Tab item icon
-- `tabs` - Tabs icon
 - `target` - Target icon
 - `theme` - Theme icon
 
@@ -151,7 +143,7 @@ public static $ui_icons = array(
 
 **Important:** `Newspack_UI_Icons` icons are stroked, like the React icons in `packages/icons/src/` and `@wordpress/icons`. Draw each line on its centerline on the 24×24 grid, and give the root `<svg>` `style="fill:none" stroke="currentColor" stroke-width="1.5"`, `aria-hidden="true"`, `focusable="false"` and a CSS class. The `fill:none` goes in `style` rather than a `fill` attribute because frontend `svg { fill: currentcolor }` rules outrank an attribute but not an inline style. Solid parts of a drawing are child elements with `fill="currentColor" stroke="none"`. Recolor icons with `color`; a `fill` rule aimed at the children (`svg path`, `svg *`) fills the outlines solid. `sanitize_svgs()` lists the elements and attributes `wp_kses()` keeps, so add any new one there.
 
-The icons registered as admin menu icons through `base64_encode( get_svg() )` (`ad`, `collections`, `curatedList`, `email`, `globe`, `newspack` and `people`) stay filled, along with the multicolor `google` logo. WordPress repaints menu icons by rewriting every `fill` and `style` attribute in the SVG, which would fill a stroked outline solid.
+The icons registered as admin menu icons through `base64_encode( get_svg() )` (`ad`, `collections`, `curatedList`, `email`, `globe`, `newspack` and `people`) stay filled, along with the multicolor `google` logo. WordPress repaints menu icons by rewriting every `fill` and `style` attribute in the SVG, which would fill a stroked outline solid. Where WordPress has the same icon, the menu version is its drawing with the strokes outlined into filled shapes.
 
 #### Step 2: Use Icon in PHP Templates
 

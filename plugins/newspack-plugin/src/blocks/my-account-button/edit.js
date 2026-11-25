@@ -22,11 +22,7 @@ import {
 	/* eslint-enable @wordpress/no-unsafe-wp-apis */
 } from '@wordpress/block-editor';
 import { ToolbarButton, ToolbarGroup } from '@wordpress/components';
-
-/**
- * Internal dependencies
- */
-import { account as icon } from '../../../packages/icons';
+import { commentAuthorAvatar as icon } from '@wordpress/icons';
 
 function MyAccountButtonEdit( { attributes, setAttributes } ) {
 	const { signedInLabel, signedOutLabel, style, className: blockClassName } = attributes;
