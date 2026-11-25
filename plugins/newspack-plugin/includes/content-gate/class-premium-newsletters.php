@@ -126,16 +126,6 @@ class Premium_Newsletters {
 	private static $sweep_page_size = 100;
 
 	/**
-	 * Gift recipients read just before WCS saves a subscription's edit screen,
-	 * keyed by subscription ID, 0 for a subscription with no recipient account.
-	 * Lets handle_cleared_gift_recipient() tell which reader lost a gift once WCS
-	 * has removed the recipient.
-	 *
-	 * @var array<int, int>
-	 */
-	private static $gift_recipients_before_save = [];
-
-	/**
 	 * User meta key for the renewal-time snapshot of the contact's full ESP list
 	 * membership. Captured by set_subscribed_lists() when a renewal fires; consulted
 	 * by check_access() to suppress auto-signup of any restricted list the contact
@@ -180,10 +170,9 @@ class Premium_Newsletters {
 		// WCS Gifting fires is the only trigger for both readers. It fires whenever
 		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
-		// Clearing a recipient on the subscription edit screen fires no hook at all,
-		// so the recipient is read on either side of WCS's own save, at priority 50.
-		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'remember_gift_recipient_before_save' ], 49 );
-		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'handle_cleared_gift_recipient' ], 51 );
+		// WCS removes a recipient with no hook when an admin clears it or an account
+		// is deleted. WooCommerce_Subscriptions_Gifting announces those instead.
+		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'handle_gift_recipient_cleared' ], 10, 2 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -1465,17 +1454,15 @@ class Premium_Newsletters {
 	 *
 	 * @param array $data Data associated with the event.
 	 *
-	 * @return int[] Member user IDs, or an empty array when the event names no group subscription.
+	 * @return int[] Member user IDs, leaving out the owner and a gift recipient, who
+	 *               are checked on their own. Empty when the event names no enabled
+	 *               group subscription.
 	 */
 	private static function get_group_member_ids( $data ) {
-		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+		if ( empty( $data['subscription_id'] ) ) {
 			return [];
 		}
-		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
-		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
-			return [];
-		}
-		return array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+		return WooCommerce_Subscriptions::get_subscription_readers( (int) $data['subscription_id'] )['members'];
 	}
 
 	/**
@@ -1488,17 +1475,14 @@ class Premium_Newsletters {
 	 * @param array $data Data associated with the event.
 	 *
 	 * @return int The recipient's user ID, or 0 when the event names no gifted
-	 *             subscription or its recipient is the user the event names.
+	 *             subscription, the gift has no recipient account (none yet, or
+	 *             it was deleted), or its recipient is the user the event names.
 	 */
 	private static function get_gift_recipient_id( array $data ): int {
-		if ( empty( $data['subscription_id'] ) || ! function_exists( 'wcs_get_subscription' ) ) {
+		if ( empty( $data['subscription_id'] ) ) {
 			return 0;
 		}
-		$subscription = wcs_get_subscription( (int) $data['subscription_id'] );
-		if ( ! $subscription ) {
-			return 0;
-		}
-		$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		$recipient_id = WooCommerce_Subscriptions::get_subscription_readers( (int) $data['subscription_id'] )['recipient'];
 		return $recipient_id === (int) ( $data['user_id'] ?? 0 ) ? 0 : $recipient_id;
 	}
 
@@ -1522,8 +1506,9 @@ class Premium_Newsletters {
 	 * completed, and when an admin reassigns the gift. Renewal orders never fire
 	 * it. Because one order can fire it more than once with the same reader, an
 	 * unchanged holder is skipped: a recheck could let auto-signup re-add a list
-	 * they left. Clearing a recipient on the edit screen fires no hook;
-	 * handle_cleared_gift_recipient() calls this with no new recipient instead.
+	 * they left. Clearing a recipient on the edit screen or deleting an account
+	 * fires no hook; handle_gift_recipient_cleared() calls this with no new
+	 * recipient instead.
 	 *
 	 * @param \WC_Subscription $subscription     The subscription.
 	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
@@ -1557,60 +1542,25 @@ class Premium_Newsletters {
 	}
 
 	/**
-	 * Remember a gift's recipient before WCS saves the subscription edit screen.
+	 * Recheck a gift's readers when it loses its recipient without the hook WCS
+	 * fires for a change of recipient.
 	 *
-	 * @param int $order_id ID of the order or subscription being saved.
+	 * WCS removes the recipient with no hook when an admin clears it on the edit
+	 * screen, and when the recipient's or the buyer's account is deleted, so without
+	 * this the former recipient would keep the gift's lists and a buyer who gets the
+	 * subscription back would never be checked. WooCommerce_Subscriptions_Gifting
+	 * announces those removals.
 	 *
-	 * @return void
-	 */
-	public static function remember_gift_recipient_before_save( $order_id ): void {
-		$subscription = self::get_subscription_being_saved( $order_id );
-		if ( $subscription ) {
-			self::$gift_recipients_before_save[ (int) $order_id ] = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
-		}
-	}
-
-	/**
-	 * Recheck a gift's readers when an admin clears its recipient.
-	 *
-	 * WCS removes the recipient while it saves the edit screen and fires no hook,
-	 * so without this the former recipient would keep the gift's lists and a buyer
-	 * who gets the subscription back would never be checked. A reassignment fires
-	 * the recipient-changed hook from that same save, so a subscription that still
-	 * has a recipient account is left alone.
-	 *
-	 * @param int $order_id ID of the order or subscription being saved.
+	 * @param \WC_Subscription $subscription          The gift.
+	 * @param int              $previous_recipient_id The recipient it had before.
 	 *
 	 * @return void
 	 */
-	public static function handle_cleared_gift_recipient( $order_id ): void {
-		$order_id         = (int) $order_id;
-		$old_recipient_id = self::$gift_recipients_before_save[ $order_id ] ?? 0;
-		unset( self::$gift_recipients_before_save[ $order_id ] );
-		if ( ! $old_recipient_id ) {
+	public static function handle_gift_recipient_cleared( $subscription, $previous_recipient_id ): void {
+		if ( ! $subscription instanceof \WC_Subscription ) {
 			return;
 		}
-		$subscription = self::get_subscription_being_saved( $order_id );
-		if ( ! $subscription || WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) ) {
-			return;
-		}
-		self::handle_gift_recipient_changed( $subscription, 0, $old_recipient_id );
-	}
-
-	/**
-	 * The subscription an edit-screen save is for, or null when the save is for
-	 * another kind of order.
-	 *
-	 * @param int $order_id ID of the order or subscription being saved.
-	 *
-	 * @return \WC_Subscription|null
-	 */
-	private static function get_subscription_being_saved( $order_id ) {
-		if ( ! function_exists( 'wcs_is_subscription' ) || ! \wcs_is_subscription( $order_id ) ) {
-			return null;
-		}
-		$subscription = \wcs_get_subscription( $order_id );
-		return $subscription ? $subscription : null;
+		self::handle_gift_recipient_changed( $subscription, 0, (int) $previous_recipient_id );
 	}
 
 	/**
@@ -1678,27 +1628,15 @@ class Premium_Newsletters {
 	/**
 	 * Whether a subscription event can change what its readers are entitled to.
 	 *
-	 * Only a move between the two statuses that always grant access, Active and
-	 * Pending cancel, leaves access as it was. Any other move may change it: On
-	 * hold still grants access while a payment retry is pending, so On hold to
-	 * Expired, the last step of a lapse after failed payments, ends it. A plan
-	 * switch reports the same status on both sides but may change the products, so
-	 * it counts as a change too, and so does an event with no status pair.
-	 *
-	 * The status pair can't show payment recovery, so On hold to Active after a
-	 * successful retry still counts as a change.
+	 * See WooCommerce_Connection::status_change_affects_access() for which status
+	 * moves count. An event with no status pair counts as a change.
 	 *
 	 * @param array $data Data associated with the event.
 	 *
 	 * @return bool
 	 */
 	private static function event_changes_access( $data ) {
-		$status_before = $data['status_before'] ?? '';
-		$status_after  = $data['status_after'] ?? '';
-		if ( $status_before === $status_after ) {
-			return true;
-		}
-		return ! ( WooCommerce_Connection::is_subscription_active( $status_before ) && WooCommerce_Connection::is_subscription_active( $status_after ) );
+		return WooCommerce_Connection::status_change_affects_access( (string) ( $data['status_before'] ?? '' ), (string) ( $data['status_after'] ?? '' ) );
 	}
 }
 

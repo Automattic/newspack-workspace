@@ -37,6 +37,9 @@ final class Member_Body_Class {
 		add_filter( 'body_class', [ __CLASS__, 'filter_body_class' ] );
 		add_action( 'woocommerce_subscription_status_updated', [ __CLASS__, 'clear_cache_for_subscription' ] );
 		add_action( 'woocommerce_order_status_changed', [ __CLASS__, 'clear_cache_for_order' ], 10, 4 );
+		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'clear_cache_for_reader' ] );
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'clear_cache_for_gift_recipient_change' ], 10, 3 );
+		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'clear_cache_for_cleared_gift_recipient' ], 10, 2 );
 	}
 
 	/**
@@ -63,12 +66,57 @@ final class Member_Body_Class {
 	}
 
 	/**
-	 * Re-check a reader as soon as their subscription changes status, rather than waiting
-	 * out the cache, so a new subscriber gets the class and a lapsed one loses it.
+	 * Re-check readers as soon as a subscription changes status, rather than waiting out
+	 * the cache, so a new subscriber gets the class and a lapsed one loses it. That covers
+	 * everyone the subscription grants access to: its customer, a gift's recipient, and a
+	 * group's members.
 	 *
 	 * @param \WC_Subscription $subscription Subscription.
 	 */
 	public static function clear_cache_for_subscription( $subscription ) {
+		if ( $subscription instanceof \WC_Subscription ) {
+			wp_cache_delete_multiple( WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ), self::CACHE_GROUP );
+			return;
+		}
+		self::clear_cache_for_customer_of( $subscription );
+	}
+
+	/**
+	 * Re-check one reader, such as one who joined or left a group subscription.
+	 *
+	 * @param int $user_id The reader.
+	 */
+	public static function clear_cache_for_reader( $user_id ) {
+		wp_cache_delete( (int) $user_id, self::CACHE_GROUP );
+	}
+
+	/**
+	 * Re-check both readers when a gift changes hands: the new recipient, and whoever held
+	 * it before. That is the earlier recipient, or with none, the buyer, whose own
+	 * subscription it may have been.
+	 *
+	 * @param \WC_Subscription $subscription          The gifted subscription.
+	 * @param int              $recipient_id          The new recipient.
+	 * @param int              $previous_recipient_id The earlier recipient, 0 for none.
+	 */
+	public static function clear_cache_for_gift_recipient_change( $subscription, $recipient_id, $previous_recipient_id ) {
+		self::clear_cache_for_reader( $recipient_id );
+		if ( (int) $previous_recipient_id > 0 ) {
+			self::clear_cache_for_reader( $previous_recipient_id );
+			return;
+		}
+		self::clear_cache_for_customer_of( $subscription );
+	}
+
+	/**
+	 * Re-check the recipient a gift lost and its buyer, who holds the subscription once it
+	 * is no longer a gift.
+	 *
+	 * @param \WC_Subscription $subscription          The gift.
+	 * @param int              $previous_recipient_id The recipient it had before.
+	 */
+	public static function clear_cache_for_cleared_gift_recipient( $subscription, $previous_recipient_id ) {
+		self::clear_cache_for_reader( $previous_recipient_id );
 		self::clear_cache_for_customer_of( $subscription );
 	}
 
@@ -112,10 +160,9 @@ final class Member_Body_Class {
 		}
 		$has_access = Content_Gate::should_skip_access_checks( $user_id ) || self::passes_any_gate( $user_id );
 		// The hooks above don't catch every change, so this TTL caps how long the rest take
-		// to reach the class, such as gate edits, gift recipients and group members (whose
-		// access follows someone else's subscription), a one-time purchase's access window
-		// closing, email verification, reader data synced from an ESP, and institution grants
-		// that depend on the reader's network.
+		// to reach the class, such as gate edits, a group subscription turned on or off, a
+		// one-time purchase's access window closing, email verification, reader data synced
+		// from an ESP, and institution grants that depend on the reader's network.
 		wp_cache_set( $user_id, $has_access ? 'yes' : 'no', self::CACHE_GROUP, 10 * MINUTE_IN_SECONDS );
 		return $has_access;
 	}

@@ -11,6 +11,7 @@ use Newspack\Data_Events;
 use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Woocommerce_Memberships\Admin as Memberships_Admin;
 use Newspack_Network\Woocommerce\Product_Admin;
+use Newspack_Network\Woocommerce_Subscriptions\Gift_Recipients;
 
 /**
  * Class to register additional listeners to the Newspack Data Events API
@@ -225,6 +226,10 @@ class Events {
 	/**
 	 * Callback for the Data Events API listeners
 	 *
+	 * A gift is reported under its buyer, who is its customer, and marked as a gift
+	 * so other sites keep it from granting the buyer access; its recipient is
+	 * reported separately (see `Gift_Recipients`).
+	 *
 	 * @param int    $item_id     The Subscription ID.
 	 * @param string $status_from The status before the change.
 	 * @param string $status_to   The status after the change.
@@ -244,6 +249,7 @@ class Events {
 		$result['billing_period'] = $item->get_billing_period();
 		$result['billing_interval'] = (int) $item->get_billing_interval();
 		$result['products'] = self::get_subscription_products( $item );
+		$result['is_gift'] = Gift_Recipients::is_gift( $item );
 
 		return $result;
 	}

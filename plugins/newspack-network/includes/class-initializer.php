@@ -66,6 +66,7 @@ class Initializer {
 		Woocommerce_Subscriptions\My_Account::init();
 		Woocommerce_Subscriptions\Subscribers_Dashboard::init();
 		Woocommerce_Subscriptions\Group_Seats::init();
+		Woocommerce_Subscriptions\Gift_Recipients::init();
 		Woocommerce_Memberships\Admin::init();
 		Woocommerce_Memberships\Events::init();
 		Woocommerce_Memberships\Subscriptions_Integration::init();

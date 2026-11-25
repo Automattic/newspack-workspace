@@ -387,6 +387,17 @@ class WC_Customer {
 	public function get_is_paying_customer() {
 		return false;
 	}
+	public function get_order_count() {
+		// Real WC counts the orders the customer placed; the mock counts its own order store.
+		global $orders_database;
+		$count = 0;
+		foreach ( (array) $orders_database as $order ) {
+			if ( (int) $order->get_customer_id() === (int) $this->get_id() ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
 	public function save() {}
 }
 

@@ -6,11 +6,12 @@
  */
 
 use Newspack_Network\Hub\Node;
+use Newspack_Network\Hub\Stores\Event_Log_Items\Gift_Changed;
 use Newspack_Network\Hub\Stores\Event_Log_Items\Group_Seat_Changed;
 use Newspack_Network\Hub\Stores\Event_Log_Items\One_Time_Purchase_Changed;
 
 /**
- * What the hub's Event Log screen says about a seat or purchase event.
+ * What the hub's Event Log screen says about a seat, gift or purchase event.
  */
 class TestReaderProductLogItems extends WP_UnitTestCase {
 
@@ -51,6 +52,25 @@ class TestReaderProductLogItems extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'member@example.test', $summary );
 		$this->assertStringContainsString( '#90', $summary );
+		$this->assertStringContainsString( 'cancelled', $summary );
+	}
+
+	/**
+	 * A gift event names the recipient, the subscription, and the gift's status.
+	 */
+	public function test_gift_summary() {
+		$summary = $this->item(
+			Gift_Changed::class,
+			'newspack_node_gift_changed',
+			[
+				'email'        => 'recipient@example.test',
+				'id'           => 95,
+				'status_after' => 'cancelled',
+			]
+		)->get_summary();
+
+		$this->assertStringContainsString( 'recipient@example.test', $summary );
+		$this->assertStringContainsString( '#95', $summary );
 		$this->assertStringContainsString( 'cancelled', $summary );
 	}
 

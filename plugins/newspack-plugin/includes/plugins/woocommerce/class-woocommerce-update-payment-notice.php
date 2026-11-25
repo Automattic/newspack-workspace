@@ -200,9 +200,12 @@ class WooCommerce_Update_Payment_Notice {
 					$product = wc_get_product( reset( $parent ) );
 				}
 			}
-			// Check if there's another active subscription of the same grouped or variable product.
-			$active_subscriptions = WooCommerce_Subscriptions::get_user_subscription( $product );
-			if ( $active_subscriptions ) {
+			// Check if the reader holds another active subscription of the same grouped
+			// or variable product. Only subscriptions the reader holds count: a gift
+			// they gave someone else gives them no access, so it doesn't replace this one.
+			$children    = $product->get_children();
+			$product_ids = ! empty( $children ) ? $children : [ $product->get_id() ];
+			if ( ! empty( WooCommerce_Connection::get_active_subscriptions_for_user( wp_get_current_user()->ID, $product_ids ) ) ) {
 				continue;
 			}
 			// Also suppress when the reader holds equivalent active access (same

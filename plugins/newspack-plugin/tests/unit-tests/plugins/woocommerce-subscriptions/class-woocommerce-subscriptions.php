@@ -1843,4 +1843,68 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 			WooCommerce_Subscriptions::get_subscription_readers( new \stdClass() )
 		);
 	}
+
+	/**
+	 * A plain subscription's only reader is its customer.
+	 */
+	public function test_get_subscription_reader_ids_plain_subscription() {
+		$purchaser_id = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id );
+
+		$this->assertSame( [ $purchaser_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
+		$this->assertSame(
+			[ $purchaser_id ],
+			WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription->get_id() ),
+			'A subscription ID resolves to the same readers.'
+		);
+	}
+
+	/**
+	 * A gift lists its buyer and its recipient.
+	 */
+	public function test_get_subscription_reader_ids_gift() {
+		$purchaser_id = $this->factory->user->create();
+		$recipient_id = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$this->assertSame( [ $purchaser_id, $recipient_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
+	}
+
+	/**
+	 * A gifted group lists the buyer, the recipient and each member once, even
+	 * when the buyer joined their own group.
+	 */
+	public function test_get_subscription_reader_ids_gifted_group() {
+		$purchaser_id = $this->factory->user->create();
+		$recipient_id = $this->factory->user->create();
+		$member_id    = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id, true );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		$this->add_group_member( $purchaser_id, $subscription );
+		$this->add_group_member( $member_id, $subscription );
+
+		$this->assertSame( [ $purchaser_id, $recipient_id, $member_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
+	}
+
+	/**
+	 * Only real user IDs come back: a subscription with no customer account and a
+	 * gift whose recipient account is gone add no zeros.
+	 */
+	public function test_get_subscription_reader_ids_skips_missing_accounts() {
+		$member_id    = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( 0, true );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = 987654321;
+		$this->add_group_member( $member_id, $subscription );
+
+		$this->assertSame( [ $member_id ], WooCommerce_Subscriptions::get_subscription_reader_ids( $subscription ) );
+	}
+
+	/**
+	 * Anything that isn't a subscription has no readers.
+	 */
+	public function test_get_subscription_reader_ids_non_subscription() {
+		$this->assertSame( [], WooCommerce_Subscriptions::get_subscription_reader_ids( 424242 ), 'An unknown ID has no readers.' );
+		$this->assertSame( [], WooCommerce_Subscriptions::get_subscription_reader_ids( new \stdClass() ), 'A non-subscription object has no readers.' );
+	}
 }

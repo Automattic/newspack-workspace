@@ -339,6 +339,11 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 
 		$groups     = array_map( [ __CLASS__, 'get_group' ], $subscriptions );
 		$member_ids = array_merge( [], ...array_map( fn( $group ) => $group ? $group['member_ids'] : [], $groups ) );
+		// Gift recipients get rows of their own, so prime their accounts with the members'.
+		if ( class_exists( 'WCS_Gifting' ) ) {
+			$recipient_ids = array_map( fn( $subscription ) => (int) \WCS_Gifting::get_recipient_user( $subscription ), $subscriptions );
+			$member_ids    = array_merge( $member_ids, array_filter( $recipient_ids ) );
+		}
 		if ( ! empty( $member_ids ) && function_exists( 'cache_users' ) ) {
 			\cache_users( array_unique( $member_ids ) );
 		}
@@ -432,6 +437,11 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * An owner whose account was deleted has no access and gets no row; the
 	 * subscription still appears through its members, if it has any.
 	 *
+	 * A gift's row goes to its recipient instead of the owner: the buyer pays
+	 * for it but has no access through it. A gift with no recipient account
+	 * (sent to an email that has none, or the account is gone) keeps the
+	 * owner's row.
+	 *
 	 * The Access Through values are fixed English strings rather than
 	 * translations, so spreadsheet filters and formulas built on them work on
 	 * any site language.
@@ -445,7 +455,10 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		$group_name       = $group ? $group['name'] : '';
 		$readers          = [];
 		$owner_id         = (int) $subscription->get_customer_id();
-		if ( $owner_id && \get_user_by( 'id', $owner_id ) ) {
+		$recipient_id     = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		if ( $recipient_id ) {
+			$readers[ $recipient_id ] = 'gift recipient';
+		} elseif ( $owner_id && \get_user_by( 'id', $owner_id ) ) {
 			$readers[ $owner_id ] = 'owner';
 		}
 		foreach ( $group ? $group['member_ids'] : [] as $member_id ) {
@@ -479,7 +492,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * The reader columns of a per-member row.
 	 *
 	 * @param int    $user_id        The reader's user ID.
-	 * @param string $access_through 'owner' or 'group member'.
+	 * @param string $access_through 'owner', 'gift recipient' or 'group member'.
 	 * @param string $group_name     The group's name, or '' when not a group.
 	 * @return array Values keyed by column id.
 	 */

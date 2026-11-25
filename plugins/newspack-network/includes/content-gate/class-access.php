@@ -4,8 +4,8 @@
  *
  * Hooks into newspack-plugin's access rules to grant access when a reader holds,
  * on another network site, something for a product with a matching Network ID: a
- * subscription they own, a seat on someone else's group subscription, or a paid
- * one-time order.
+ * subscription they own, a gift subscription someone bought them, a seat on someone
+ * else's group subscription, or a paid one-time order.
  *
  * @package Newspack
  */
@@ -24,7 +24,7 @@ use Newspack_Network\Woocommerce\Product_Admin;
 class Access {
 
 	/**
-	 * Subscription statuses that grant access, for owned subscriptions and group seats alike.
+	 * Subscription statuses that grant access, for owned subscriptions, gifts and group seats alike.
 	 */
 	const ACTIVE_STATUSES = [ 'active', 'pending-cancel' ];
 
@@ -57,7 +57,8 @@ class Access {
 	 *
 	 * Seats on another site's group subscription count too, unless the check is
 	 * strict: newspack-plugin's access attribution runs the strict check to tell an
-	 * owner from a group member, so a seat must fail it.
+	 * owner from a group member, so a seat must fail it. A gift the reader received
+	 * passes it, as it does on the site that sold it.
 	 *
 	 * @param bool  $has_subscription Whether the user already has an active subscription (from local checks).
 	 * @param int   $user_id          User ID.
@@ -89,11 +90,12 @@ class Access {
 	 *
 	 * @param int   $user_id     User ID.
 	 * @param array $product_ids Required product IDs (local).
-	 * @param bool  $strict      Only count subscriptions the user owns, not group seats.
+	 * @param bool  $strict      Only count subscriptions the user owns or was given, not group seats.
 	 * @return array[] Matches in the order the reader's records list them, owned subscriptions
-	 *                 first. Each has 'site' (the site's URL), 'id' (the subscription's ID on
-	 *                 that site) and 'type' ('subscription' for one the reader owns, 'group'
-	 *                 for a seat on someone else's group subscription).
+	 *                 first, then gifts, then seats. Each has 'site' (the site's URL), 'id' (the
+	 *                 subscription's ID on that site) and 'type' ('subscription' for one the
+	 *                 reader owns, 'gift' for one someone bought them, 'group' for a seat on
+	 *                 someone else's group subscription).
 	 */
 	public static function get_network_subscription_matches( $user_id, $product_ids, $strict = false ) {
 		// If no products specified, we can't match by Network ID.
@@ -122,6 +124,20 @@ class Access {
 			}
 		}
 
+		// Gifts someone bought the reader. They count in a strict check, since the
+		// selling site's own strict check counts a gift its recipient received.
+		foreach ( self::get_user_products( $user_id, 'gift' ) as $site => $gifts ) {
+			foreach ( $gifts as $gift ) {
+				if ( in_array( $gift['status'] ?? '', self::ACTIVE_STATUSES, true ) && self::products_match( $site, $gift['products'] ?? [], $network_ids ) ) {
+					$matches[] = [
+						'site' => $site,
+						'id'   => (int) ( $gift['id'] ?? 0 ),
+						'type' => 'gift',
+					];
+				}
+			}
+		}
+
 		// Seats on group subscriptions owned by someone else.
 		if ( ! $strict ) {
 			foreach ( self::get_user_products( $user_id, 'group' ) as $site => $seats ) {
@@ -143,7 +159,7 @@ class Access {
 	/**
 	 * Add the network records that satisfy a subscription rule to the list of records behind it.
 	 *
-	 * Group seats count, as they do for the access check when it isn't strict.
+	 * Gifts and group seats count, as they do for the access check when it isn't strict.
 	 *
 	 * @param array $records     Records already listed for the rule, such as local subscriptions.
 	 * @param int   $user_id     User ID.
@@ -234,7 +250,7 @@ class Access {
 	 * The reader's products on other sites, of one type, keyed by site.
 	 *
 	 * @param int    $user_id User ID.
-	 * @param string $type    'group' or 'purchase'.
+	 * @param string $type    'gift', 'group' or 'purchase'.
 	 * @return array Site URL => records.
 	 */
 	private static function get_user_products( $user_id, $type ) {
@@ -317,6 +333,12 @@ class Access {
 	/**
 	 * Gets all active subscriptions for a user across all network sites.
 	 *
+	 * Leaves out a subscription the user bought as a gift for someone else: the
+	 * recipient reads with it, and the buyer must not get access, or be stopped from
+	 * buying the product for themselves, through it. The recipient's copy is a gift
+	 * record among their reader products. A record from a site running an older
+	 * version carries no gift flag and still counts.
+	 *
 	 * @param int $user_id The user ID.
 	 * @return array An array with the site as key and an array of subscriptions as value.
 	 */
@@ -332,7 +354,7 @@ class Access {
 			$returned_subs[ $site ] = array_filter(
 				$subscriptions,
 				function ( $sub ) {
-					return in_array( $sub['status'], self::ACTIVE_STATUSES, true );
+					return in_array( $sub['status'], self::ACTIVE_STATUSES, true ) && empty( $sub['is_gift'] );
 				}
 			);
 			if ( empty( $returned_subs[ $site ] ) ) {
