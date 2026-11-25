@@ -44,7 +44,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 53 custom icons:
+This package includes 54 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -52,6 +52,7 @@ This package includes 53 custom icons:
 - `account` - Account/user icon
 - `ai` - AI icon
 - `aiText` - AI text icon
+- `appearance` - Appearance (light and dark) icon
 - `archiveLoop` - Archive loop icon
 - `aspectLandscape` - Landscape aspect ratio icon
 - `aspectPortrait` - Portrait aspect ratio icon
