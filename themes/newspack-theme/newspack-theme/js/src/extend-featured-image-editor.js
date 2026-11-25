@@ -1,7 +1,13 @@
 'use strict';
 
 import { addFilter } from '@wordpress/hooks';
-import { RadioControl, TextControl, ToggleControl } from '@wordpress/components';
+import {
+	RadioControl,
+	TextControl,
+	ToggleControl,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+} from '@wordpress/components';
 import { withDispatch, withSelect, select } from '@wordpress/data';
 import { Component, Fragment } from '@wordpress/element';
 import { compose } from '@wordpress/compose';
@@ -204,11 +210,11 @@ const wrapPostFeaturedImage = OriginalComponent => {
 		}
 
 		return (
-			<Fragment>
+			<VStack spacing={ 4 }>
 				<OriginalComponent { ...props } />
 				<ComposedRadio />
 				<CaptionControl />
-			</Fragment>
+			</VStack>
 		);
 	};
 };
