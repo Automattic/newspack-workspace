@@ -28,6 +28,8 @@ const tabs = {
 			src: icon,
 			foreground: '#406ebc',
 		},
+		template: [ [ 'newspack/tabs-item', { header: '' }, [ [ 'core/paragraph', {} ] ] ] ],
+		templateInsertUpdatesSelection: true,
 		edit,
 		save: () => <InnerBlocks.Content />,
 	},
