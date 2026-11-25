@@ -136,7 +136,8 @@ class Subscribers_Donors {
 	 * subscription by its own settings, but holders() can't run those in SQL, so
 	 * it leaves out the site's group list instead, which reads some subscriptions
 	 * differently: one with any line item on a group product (the settings read
-	 * the first), `enabled` meta other than exactly `yes` or `no`, the two settings
+	 * the first), `enabled` meta on the subscription or its product that isn't
+	 * exactly `yes` or `no`, the two settings
 	 * filters, and a five-minute cache. For such a donation subscription the
 	 * Donor filter disagrees with this badge. See holders() and the matching note
 	 * in the Subscribers_Index class docblock.
@@ -331,8 +332,9 @@ class Subscribers_Donors {
 	 * wizard's Plan and Complimentary filters do. The two can read a subscription
 	 * differently: the list takes a subscription with any line item on a group
 	 * product, where the settings read the first line item's product; it matches
-	 * the subscription's `enabled` meta only when it is exactly `yes` or `no`,
-	 * where the settings read any boolean string; it applies neither settings
+	 * the subscription's `enabled` meta only when it is exactly `yes` or `no`, and
+	 * the product's only when it is exactly `yes`, where the settings read any
+	 * boolean string; it applies neither settings
 	 * filter; and it is cached for five minutes. For a donation subscription the
 	 * two read differently, the Donor filter disagrees with the badge. It is the
 	 * gap the Subscribers_Index class docblock describes, accepted here as it is

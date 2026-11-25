@@ -2907,7 +2907,8 @@ class Subscribers_Wizard extends Wizard {
 	 * Each input is bounded. Subscribers_Donors::holders() reads the live and the
 	 * ended holders in two SQL queries, across every donation product, and each
 	 * returns at most FILTER_INCLUDE_CAP distinct readers; pending, switched and
-	 * trashed subscriptions are never read. Up to the cap both lists are exact.
+	 * trashed subscriptions are never read. Up to the cap both lists are exact,
+	 * apart from the group-list gap noted on Subscribers_Donors::holders().
 	 * Past it, which readers a list leaves out is up to the database. A reader
 	 * left out of the ended list drops out of Former, and reads One-time if they
 	 * carry the `is_donor` flag, or shows under "Not a donor" if they carry no

@@ -31,8 +31,8 @@ class Donors {
 	/**
 	 * Flag readers who donated before the donor flags existed.
 	 *
-	 * Gives the flags to readers who have neither, with the same rules as the donor
-	 * badge in Audience > Subscribers. A reader whose donation subscription ended,
+	 * Gives the flags to readers who have neither, with the same rules as the Donor
+	 * filter in Audience > Subscribers. A reader whose donation subscription ended,
 	 * with no live one, gets `is_former_donor`. Any other reader with a completed
 	 * donation order gets `is_donor`. Readers who already have either flag are left
 	 * alone, so a repeat run skips everyone it flagged before. When a flag can't be
