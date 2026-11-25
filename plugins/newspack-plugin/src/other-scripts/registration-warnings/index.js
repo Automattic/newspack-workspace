@@ -79,7 +79,8 @@ function init() {
 			roleNotice.classList.toggle( 'notice-error', ! isWarning );
 		}
 		let changed = false;
-		if ( roleWarning && roleTitle && roleBody && roleTitle.textContent !== roleWarning.title ) {
+		// Two roles can share a display name, and with it a title, so the body is compared too.
+		if ( roleWarning && roleTitle && roleBody && ( roleTitle.textContent !== roleWarning.title || roleBody.textContent !== roleWarning.body ) ) {
 			roleTitle.textContent = roleWarning.title;
 			roleBody.textContent = roleWarning.body;
 			changed = true;
