@@ -57,6 +57,12 @@ env_cert_served() {
 report_env_reachability() {
     local env_name="$1" domain="$2" routed=false hosts_ip
     local url="https://${domain}/"
+    # No route means another env has this domain (see sync_proxy_routes). That
+    # env would answer the certificate check below, for the same name.
+    if [[ ! -f "$(proxy_route_file "$env_name")" ]]; then
+        echo "Error: environment '$env_name' is running, but the proxy has no route for it because another environment uses $domain. Recreate it with another --domain." >&2
+        return 1
+    fi
     # A non-default host port moves the site off 443, and the check with it.
     if [[ -n "${PORT_WORDPRESS:-}" ]] || ! command -v openssl >/dev/null 2>&1; then
         echo "Environment '$env_name' is ready at $url"

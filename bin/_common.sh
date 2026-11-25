@@ -289,15 +289,20 @@ hosts_ip_for() {
 # terminal to ask on, and otherwise prints what to change. Returns 0 when the
 # file ends up right, 1 when it still needs a change by hand.
 #
-# Only a line that maps this domain alone is replaced. One that lists other
-# names too was written by hand, and removing it would take those names with
-# it, so it is reported instead.
+# Only a single line that maps this domain alone is replaced. A line that lists
+# other names too was written by hand, and removing it would take those names
+# with it. The wrapper removes every line ending in the domain, so the domain
+# appearing on more than one line is treated the same way. Both are reported
+# instead.
 point_host_at_proxy() {
-    local domain="$1" current stale_line shared_line=""
+    local domain="$1" current stale_line shared_line="" mentions
     current=$(hosts_ip_for "$domain")
     [[ "$current" == "$ENV_PROXY_IP" ]] && return 0
-    if [[ -n "$current" ]] && ! awk -v d="$domain" -v ip="$current" '$1 == ip && NF == 2 && $2 == d { alone = 1 } END { exit !alone }' /etc/hosts 2>/dev/null; then
-        shared_line=1
+    if [[ -n "$current" ]]; then
+        mentions=$(grep -cE "(^|[[:space:]])${domain//./\\.}([[:space:]]|\$)" /etc/hosts 2>/dev/null)
+        if [[ "$mentions" != 1 ]] || ! awk -v d="$domain" -v ip="$current" '$1 == ip && NF == 2 && $2 == d { alone = 1 } END { exit !alone }' /etc/hosts 2>/dev/null; then
+            shared_line=1
+        fi
     fi
     if [[ -n "$shared_line" ]]; then
         : # Left for the warning below.
@@ -315,7 +320,9 @@ point_host_at_proxy() {
     fi
     current=$(hosts_ip_for "$domain")
     [[ "$current" == "$ENV_PROXY_IP" ]] && return 0
-    if [[ -n "$current" ]]; then
+    if [[ -n "$shared_line" ]]; then
+        echo "Warning: /etc/hosts maps $domain to $current, on a line with other names or on more than one line, so it was left alone. Give $domain a line of its own that reads: $ENV_PROXY_IP $domain"
+    elif [[ -n "$current" ]]; then
         echo "Warning: /etc/hosts maps $domain to $current, an address from before the shared proxy. It stops working after a reboot. Change that line to: $ENV_PROXY_IP $domain"
     else
         echo "Warning: $domain is not in /etc/hosts, so a browser cannot reach it. Add it with: sudo sh -c 'echo \"$ENV_PROXY_IP $domain\" >> /etc/hosts'"
