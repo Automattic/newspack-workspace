@@ -205,8 +205,11 @@ main_proxy_route() {
         '          - url: "http://wordpress:80"'
 }
 
-# Write a route file from stdin. The content lands in a temp file the proxy
-# ignores and is then renamed into place, so the proxy never reads half a file.
+# Write a route file from stdin. The content lands in a temp file and is then
+# renamed into place, so the proxy never reads half a file. The temp name has
+# no .yml extension, which is the one thing the proxy goes by when it decides
+# what to load: a half-written .yml would fail the whole directory, main route
+# included.
 # The temp name is unique to this call, because several `n` commands sync the
 # routes at once and would otherwise write through the same file. An unchanged
 # route is left alone, which spares the proxy a reload.
@@ -354,27 +357,37 @@ legacy_env_ip() {
 drop_legacy_env_ports() {
     local file="$1"
     [[ -n "$(legacy_env_ip "$file")" ]] || return 1
-    awk '
+    local generated='^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"[[:space:]]*$'
+    local header='^    ports:[[:space:]]*$'
+    # The block runs until the next line that is not indented deeper than its
+    # key. Comments and blank lines inside it stay with it: ending the block at
+    # one would drop the key and leave a hand-added port below it stranded
+    # under whatever came before.
+    # The pattern travels through the environment: awk -v would eat its backslashes.
+    GENERATED_PORT_LINE="$generated" awk '
         function flush_ports(   i) {
             if (!in_ports) return
-            if (kept > 0) {
-                print ports_line
-                for (i = 1; i <= kept; i++) print keep[i]
-            }
+            if (entries > 0) print ports_line
+            for (i = 1; i <= kept; i++) print keep[i]
             in_ports = 0
             kept = 0
+            entries = 0
         }
         /^    ports:[[:space:]]*$/ { flush_ports(); in_ports = 1; ports_line = $0; next }
-        in_ports && /^      - / {
-            if ($0 ~ /^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"[[:space:]]*$/) next
+        in_ports && ($0 ~ /^[[:space:]]*$/ || $0 ~ /^     /) {
+            if ($0 ~ ENVIRON["GENERATED_PORT_LINE"]) next
             keep[++kept] = $0
+            if ($0 ~ /^[[:space:]]*-[[:space:]]/) entries++
             next
         }
         { flush_ports(); print }
         END { flush_ports() }
     ' "$file" > "${file}.tmp" || { rm -f "${file}.tmp"; return 2; }
-    # awk cannot report whether it found the block, so read the result back.
-    if [[ -s "${file}.tmp" && -z "$(legacy_env_ip "${file}.tmp")" ]] && grep -q 'WP_DOMAIN=' "${file}.tmp"; then
+    # awk cannot report what it did, so read the result back: no generated line
+    # left, and every other line still there, in order. Only the `ports:` key
+    # itself may have gone with them.
+    if [[ -s "${file}.tmp" && -z "$(legacy_env_ip "${file}.tmp")" ]] \
+        && diff -q <(grep -vE "$generated" "$file" | grep -vE "$header") <(grep -vE "$header" "${file}.tmp") >/dev/null 2>&1; then
         mv "${file}.tmp" "$file"
         return 0
     fi

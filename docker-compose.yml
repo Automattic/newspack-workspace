@@ -79,9 +79,7 @@ services:
   ##
   ## Docker Desktop for Mac 4.97+ binds ports below 1024 on all interfaces, so a
   ## second container publishing 443 fails whatever loopback address it asks for.
-  ## Each isolated env used to publish 80/443 on a loopback address of its own;
-  ## that can no longer run next to the main site. The proxy takes both ports
-  ## once and routes by hostname instead.
+  ## The proxy takes both ports once and routes by hostname.
   ##
   ## TLS is passed through, not terminated: each site keeps serving its own
   ## mkcert certificate and nothing inside the site containers changes.
@@ -91,11 +89,11 @@ services:
   ## deliberately has no Docker socket: discovering containers through it would
   ## give this third-party image control of Docker itself. For the same reason
   ## it runs as an unprivileged user on a read-only filesystem, and the image is
-  ## pinned by digest so an upstream change cannot arrive unreviewed.
+  ## pinned by digest so an upstream change cannot arrive unreviewed. Dependabot
+  ## proposes the bumps, and auto-merge leaves them for a person.
   ##
-  ## depends_on is about the upgrade, not startup order: the first `n start`
-  ## after this change has to replace the old wordpress container, which is
-  ## still bound to 443, before the proxy can bind it.
+  ## depends_on makes Compose replace a wordpress container that still
+  ## publishes 443 itself before it starts the proxy, which needs that port.
   proxy:
     container_name: newspack_proxy
     image: traefik:v3.7.20@sha256:8301d6f60957a422f98918aacf2b01482abde3e74ead3719aabdb7c64045fe28
@@ -111,6 +109,12 @@ services:
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
+      ## A tunnel that terminates TLS reaches the site on port 80 and says so in
+      ## X-Forwarded-Proto, which the site reads to build its https URLs. The
+      ## proxy would replace that header with its own. Trusting it adds nothing
+      ## new: Apache took these headers from any local client before the proxy
+      ## sat in front of it.
+      - --entrypoints.web.forwardedheaders.insecure=true
       - --entrypoints.websecure.address=:443
       ## Traefik otherwise reports its version and the machine's public address
       ## to its vendor. Usage statistics are off by default already; the flag

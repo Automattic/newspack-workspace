@@ -168,6 +168,13 @@ drop_legacy_env_ports "$WORK/custom.yml"
 assert_eq "$(grep -A1 '^    ports:' "$WORK/custom.yml" | tail -1)" '      - "127.0.0.1:9003:9003"' "a hand-added port stays under its ports key"
 assert_eq "$(legacy_env_ip "$WORK/custom.yml")" "" "while the generated 80/443 lines go"
 
+# A comment inside the block must not end it. If it did, the emptied key would
+# be dropped and the hand-added port below the comment would be read as part
+# of the volumes list above.
+legacy_file $'      # Xdebug\n      - "127.0.0.1:9003:9003"' > "$WORK/commented.yml"
+drop_legacy_env_ports "$WORK/commented.yml"
+assert_eq "$(grep -A2 '^    ports:' "$WORK/commented.yml")" $'    ports:\n      # Xdebug\n      - "127.0.0.1:9003:9003"' "a comment in the block stays with the hand-added port under the ports key"
+
 # An editor that leaves trailing whitespace must not strand the env on its old address.
 legacy_file | sed 's/:443:443"$/:443:443"  /' > "$WORK/trailing.yml"
 drop_legacy_env_ports "$WORK/trailing.yml"

@@ -67,9 +67,11 @@ report_env_reachability() {
         return 1
     fi
     hosts_ip=$(hosts_ip_for "$domain")
-    # No hosts line is fine when the name resolves another way, such as a local
-    # DNS server for .test.
-    if [[ "$hosts_ip" == "$ENV_PROXY_IP" ]] || { [[ -z "$hosts_ip" ]] && env_cert_served "$domain" "$domain"; }; then
+    # No hosts line is fine when the name reaches the proxy another way, such as
+    # a local DNS server for .test. It has to be the proxy that answers: a
+    # custom domain that also exists publicly resolves to the real site.
+    if [[ "$hosts_ip" == "$ENV_PROXY_IP" ]] \
+        || { [[ -z "$hosts_ip" ]] && [[ "$(curl -sk -o /dev/null --max-time 5 -w '%{remote_ip}' "$url" 2>/dev/null)" == "$ENV_PROXY_IP" ]]; }; then
         echo "Environment '$env_name' is ready at $url"
     else
         echo "Environment '$env_name' is running, but $domain does not resolve to $ENV_PROXY_IP on this machine (see the warning above)."
@@ -339,6 +341,33 @@ case $1 in
                     ;;
             esac
         done
+        # A domain can have one owner. An env's route outranks the main site's
+        # catch-all, so a name the main container already serves would be taken
+        # from it, and two envs given one domain would both claim it.
+        new_domain=$(printf '%s' "${domain:-${env_name}.test}" | tr '[:upper:]' '[:lower:]')
+        domain_owner=""
+        case "$new_domain" in
+            localhost|manager.com) domain_owner="the main container" ;;
+        esac
+        for site_dir in "$NABSPATH"/additional-sites-html/*/; do
+            [[ -d "$site_dir" ]] || continue
+            site_label=$(basename "$site_dir")
+            if [[ "$(printf '%s' "$site_label" | tr '[:upper:]' '[:lower:]').test" == "$new_domain" ]]; then
+                domain_owner="the additional site '$site_label'"
+            fi
+        done
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            existing=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+            [[ "$existing" == "$env_name" ]] && continue
+            if [[ "$(domain_for_env "$f" | tr '[:upper:]' '[:lower:]')" == "$new_domain" ]]; then
+                domain_owner="environment '$existing'"
+            fi
+        done
+        if [[ -n "$domain_owner" ]]; then
+            echo "Error: the domain '$new_domain' is already served by $domain_owner. Choose another with --domain."
+            exit 1
+        fi
         # All args validated -- now create the recorded worktrees. If a creation
         # fails mid-batch, roll back the ones made in this run (worktree dir +
         # registration only; branches are left alone) so we don't leave orphans.

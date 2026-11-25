@@ -130,18 +130,22 @@ start() {
     # The proxy is pulled here too: left to `up`, an image that is not cached yet
     # makes Compose try to pull the locally built newspack-dev image as well.
     docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit proxy >/dev/null 2>&1
-    if ! docker compose "${compose_files[@]}" up -d; then
-        # With the proxy down, the likely cause on the first start after it
-        # arrived is an isolated env from before it, still running and
-        # publishing 443 itself. Stop those and try once more. A failure with
-        # the proxy up is something else, and no reason to stop anyone's env.
-        if [[ -n "$(docker ps -q --filter name='^newspack_proxy$' --filter status=running 2>/dev/null)" ]] \
+    up_log=$(mktemp "${TMPDIR:-/tmp}/n-start.XXXXXX")
+    docker compose "${compose_files[@]}" up -d 2>&1 | tee "$up_log"
+    if [[ "${PIPESTATUS[0]}" -ne 0 ]]; then
+        # A port already in use points at an isolated env from before the proxy,
+        # still running and publishing 443 itself. Stop those and try once more.
+        # Any other failure, a missing image for one, is no reason to stop
+        # anyone's env.
+        if ! grep -qE 'address already in use|port is already allocated' "$up_log" \
             || ! stop_legacy_env_publishers \
             || ! docker compose "${compose_files[@]}" up -d; then
+            rm -f "$up_log"
             echo "Error: the stack did not start. See the Docker output above." >&2
             exit 1
         fi
     fi
+    rm -f "$up_log"
 
     # macOS: make sure every isolated env's domain resolves to the proxy, so
     # agents can bring envs up without sudo later. A line left from when an env
