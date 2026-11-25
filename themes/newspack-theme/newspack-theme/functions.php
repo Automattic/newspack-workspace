@@ -1247,7 +1247,7 @@ function newspack_truncate_text( $content, $length, $after = '...' ) {
 	// Count entities such as `&amp;` as the one character they display, and treat any run of
 	// whitespace, including non-breaking spaces, as a single space. The result is encoded again
 	// before it is returned, so the text stays as safe to print as the stored bio was.
-	$decoded   = html_entity_decode( (string) $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	$decoded    = html_entity_decode( (string) $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	$normalized = preg_replace( '/[\s\x{00A0}]+/u', ' ', $decoded );
 	if ( null === $normalized ) {
 		// Not valid UTF-8, so the text cannot be measured in characters.
