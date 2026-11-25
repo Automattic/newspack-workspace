@@ -1,6 +1,6 @@
 import matchingFunctions from './matching-functions';
 
-const { date_range: dateRange, boolean } = matchingFunctions;
+const { date_range: dateRange, boolean, range } = matchingFunctions;
 
 const absolute = date => ( { type: 'absolute', date } );
 const relative = days => ( { type: 'relative', days } );
@@ -172,6 +172,74 @@ describe( 'date_range matching function', () => {
 		// five-digit one sorts above. Both are rejected rather than compared.
 		expect( dateRange( { value: '2026-06-15' }, { value: { start: relative( -1000000 ) } } ) ).toBe( false );
 		expect( dateRange( { value: '2026-06-15' }, { value: { end: relative( 10000000 ) } } ) ).toBe( false );
+	} );
+} );
+
+describe( 'range matching function', () => {
+	it( 'matches a number inside the bounds, edges included', () => {
+		const config = { value: { min: 1, max: 10 } };
+		expect( range( { value: 5 }, config ) ).toBe( true );
+		expect( range( { value: 1 }, config ) ).toBe( true );
+		expect( range( { value: 10 }, config ) ).toBe( true );
+		expect( range( { value: 0 }, config ) ).toBe( false );
+		expect( range( { value: 11 }, config ) ).toBe( false );
+	} );
+
+	it( 'never matches a reader holding no number, matching the server side', () => {
+		// A blank provider field is stored as JSON null, and the store returns null
+		// for a key it never held. Neither may read as 0 and pass a max.
+		const config = { value: { max: 10 } };
+		expect( range( { value: null }, config ) ).toBe( false );
+		expect( range( { value: undefined }, config ) ).toBe( false );
+		expect( range( { value: '' }, config ) ).toBe( false );
+		expect( range( { value: ' ' }, config ) ).toBe( false );
+		expect( range( { value: false }, config ) ).toBe( false );
+		expect( range( { value: true }, config ) ).toBe( false );
+		expect( range( { value: [] }, config ) ).toBe( false );
+		expect( range( { value: [ 5 ] }, config ) ).toBe( false );
+		expect( range( { value: 'abc' }, config ) ).toBe( false );
+		expect( range( { value: '0x5' }, config ) ).toBe( false );
+		expect( range( { value: null }, { value: { min: 0 } } ) ).toBe( false );
+	} );
+
+	it( 'reads a numeric string as a number', () => {
+		expect( range( { value: '5' }, { value: { max: 10 } } ) ).toBe( true );
+		expect( range( { value: ' 5 ' }, { value: { max: 10 } } ) ).toBe( true );
+		expect( range( { value: '1e3' }, { value: { min: 100 } } ) ).toBe( true );
+		// Bounds saved as strings compare as numbers too: as text, '5' sorts after
+		// '10' and '100' before '20'.
+		expect( range( { value: '5' }, { value: { min: '1', max: '10' } } ) ).toBe( true );
+		expect( range( { value: '100' }, { value: { max: '20' } } ) ).toBe( false );
+	} );
+
+	it( 'never matches a reader value too large for a float', () => {
+		expect( range( { value: Infinity }, { value: { min: 1 } } ) ).toBe( false );
+		expect( range( { value: '1e400' }, { value: { min: 1 } } ) ).toBe( false );
+		expect( range( { value: -Infinity }, { value: { max: 10 } } ) ).toBe( false );
+		expect( range( { value: NaN }, { value: {} } ) ).toBe( false );
+	} );
+
+	it( 'never matches when the segment value is not a set of bounds', () => {
+		// A value left from exact matching, before the field was switched to a range.
+		expect( range( { value: 500 }, { value: '5' } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: 5 } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: [ 1, 10 ] } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: [ '5' ] } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: { min: 1, start: 2 } } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: null } ) ).toBe( false );
+		expect( range( { value: 5 }, {} ) ).toBe( false );
+	} );
+
+	it( 'treats an absent bound as unbounded', () => {
+		expect( range( { value: 5 }, { value: {} } ) ).toBe( true );
+		expect( range( { value: 5 }, { value: { min: null, max: '' } } ) ).toBe( true );
+		expect( range( { value: -5 }, { value: { max: 10 } } ) ).toBe( true );
+	} );
+
+	it( 'fails closed on a bound that is present but not a number', () => {
+		expect( range( { value: 5 }, { value: { min: 'abc' } } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: { max: 'abc' } } ) ).toBe( false );
+		expect( range( { value: 5 }, { value: { min: false } } ) ).toBe( false );
 	} );
 } );
 

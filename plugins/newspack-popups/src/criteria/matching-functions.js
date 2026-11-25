@@ -125,6 +125,44 @@ const resolveDateBound = bound => {
 	return null;
 };
 
+// A string PHP's is_numeric() accepts: optional surrounding whitespace, a sign,
+// digits with an optional fraction, and an optional exponent. Number() alone would
+// also read '', ' ', '0x1A' and '0b1' as numbers, which the server refuses.
+const NUMERIC_STRING = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/;
+
+/**
+ * Reads a value as a number for range matching, or null when it isn't one.
+ *
+ * Mirrors the numeric check in `Promoted_Fields::is_in_range()` (newspack-plugin):
+ * a finite number, or a string holding one. Null, '', booleans, lists and objects
+ * are not numbers, so a reader holding no value is never read as 0. A value too
+ * large for a float reads as infinite and is refused, since it would pass any
+ * minimum or, if negative, any maximum.
+ *
+ * @param {*} value The value.
+ * @return {?number} The number, or null.
+ */
+const toRangeNumber = value => {
+	let number = null;
+	if ( typeof value === 'number' ) {
+		number = value;
+	} else if ( typeof value === 'string' && NUMERIC_STRING.test( value ) ) {
+		number = Number( value );
+	}
+	return Number.isFinite( number ) ? number : null;
+};
+
+/**
+ * Whether a segment value has the shape of range bounds: a plain object keyed by
+ * nothing but `min` and `max`. An empty object qualifies, as a range with no
+ * bounds. Mirrors `Promoted_Fields::is_range_shape()` (newspack-plugin).
+ *
+ * @param {*} value The segment value.
+ * @return {boolean} Whether it is a set of bounds.
+ */
+const isRangeShape = value =>
+	!! value && typeof value === 'object' && ! Array.isArray( value ) && Object.keys( value ).every( key => 'min' === key || 'max' === key );
+
 /**
  * Common matching functions that can be used by criteria.
  */
@@ -184,29 +222,44 @@ export default {
 	/**
 	 * Matches the criteria value against a range of 'min' and 'max' provided by
 	 * the segment config.
+	 *
+	 * Fails closed wherever the comparison can't be made as the segment meant it,
+	 * the way `Promoted_Fields::is_in_range()` (newspack-plugin) does for an access
+	 * rule on the same field. A reader holding no number (a blank value, or none at
+	 * all) is not read as 0, and a segment value that isn't a set of bounds matches
+	 * nobody: text left from before the field was switched to a range would
+	 * otherwise read as no bounds and admit every reader holding a number.
 	 */
 	range: ( criteria, config ) => {
-		if ( isNaN( criteria.value ) ) {
+		const value = toRangeNumber( criteria.value );
+		if ( null === value || ! isRangeShape( config.value ) ) {
 			return false;
 		}
 		const { min, max } = config.value;
-		// Treat only genuinely-absent bounds ( undefined / null / '' ) as unbounded, so a
-		// min or max of 0 is still enforced. This matches the server's (float) compare only
-		// while a bound is present: the server floors an absent min at 0 and caps an absent
-		// max at PHP_INT_MAX ( class-promoted-fields.php ), whereas an absent bound here is
-		// fully unbounded, so the two diverge for a negative reader value with no lower
-		// bound. The isNaN guard above also fails closed where the server coerces a
-		// non-numeric reader value to 0.0. ESP numeric fields are typically non-negative,
-		// so the divergence is narrow in practice.
-		const hasBound = value => undefined !== value && null !== value && '' !== value;
-		// A max of 0 or less is invalid and is discarded, so it never bounds the value.
-		// The segment editor stores max: 0 when the Max bound is unticked, and the
-		// pre-criteria migration stored it for every "at least N" segment; the model
-		// drops it on save and read, and this keeps a client with older stored
-		// criteria in agreement. A fractional max (e.g. 0.8) is still a bound.
-		const hasMax = hasBound( max ) && Number( max ) > 0;
-		if ( ( hasBound( min ) && criteria.value < min ) || ( hasMax && criteria.value > max ) ) {
-			return false;
+		// Only a genuinely absent bound ( undefined / null / '' ) is unbounded, as on
+		// the server, so a min of 0 is still enforced. A bound that is present but
+		// not a number fails closed, also as on the server. Both sides compare as
+		// numbers, so a reader value and a bound saved as strings never compare as text.
+		const hasBound = bound => undefined !== bound && null !== bound && '' !== bound;
+		if ( hasBound( min ) ) {
+			const limit = toRangeNumber( min );
+			if ( null === limit || value < limit ) {
+				return false;
+			}
+		}
+		if ( hasBound( max ) ) {
+			const limit = toRangeNumber( max );
+			if ( null === limit ) {
+				return false;
+			}
+			// A max of 0 or less is invalid and is discarded, so it never bounds the value.
+			// The segment editor stores max: 0 when the Max bound is unticked, and the
+			// pre-criteria migration stored it for every "at least N" segment; the model
+			// drops it on save and read, and this keeps a client with older stored
+			// criteria in agreement. A fractional max (e.g. 0.8) is still a bound.
+			if ( limit > 0 && value > limit ) {
+				return false;
+			}
 		}
 		return true;
 	},
