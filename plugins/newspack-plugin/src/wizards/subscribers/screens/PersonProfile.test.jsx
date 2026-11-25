@@ -37,8 +37,8 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 
 // Button is real enough to take a ref and to name the card's "more" toggle. Card
 // and Grid pass their content through so the real SubscriptionCard, with its real
-// "more" menu, renders inside the profile. SectionHeader renders its title as a
-// heading, so the sections the profile lays out can be found.
+// "more" menu, renders inside the profile. SplitSection.Header renders its title as
+// a heading, so the sections the profile lays out can be found.
 jest.mock( '../../../../packages/components/src', () => ( {
 	Button: require( 'react' ).forwardRef( ( { children, label, ...props }, ref ) => {
 		// Component-only props that a DOM button would warn about.
@@ -58,7 +58,11 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	// The money flows open in a modal; this one renders inline so its copy is queryable.
 	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
 	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
-	SectionHeader: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+	SplitSection: {
+		Root: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+		Header: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+		Content: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+	},
 	Waiting: () => null,
 	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
 } ) );
@@ -93,16 +97,16 @@ describe( 'the person profile failure states', () => {
 		apiFetch.mockRejectedValue( new Error( 'nope' ) );
 		await renderProfile();
 
-		expect( screen.getByText( /Could not load this subscriber: nope/ ) ).toBeInTheDocument();
-		expect( speak ).toHaveBeenCalledWith( 'Could not load this subscriber: nope', 'assertive' );
+		expect( screen.getByText( /Could not load this reader: nope/ ) ).toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( 'Could not load this reader: nope', 'assertive' );
 	} );
 
 	it( 'gives a read that came back empty its own sentence', async () => {
 		apiFetch.mockResolvedValue( null );
 		await renderProfile();
 
-		expect( screen.getByText( /This subscriber could not be loaded\./ ) ).toBeInTheDocument();
-		expect( speak ).toHaveBeenCalledWith( 'This subscriber could not be loaded.', 'assertive' );
+		expect( screen.getByText( /This reader could not be loaded\./ ) ).toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( 'This reader could not be loaded.', 'assertive' );
 	} );
 
 	it( 'tells a missing person apart from a failed read, and offers a way back', async () => {
@@ -461,6 +465,27 @@ const reader = overrides => ( {
 	groups: [],
 	paymentMethods: [],
 	...overrides,
+} );
+
+/**
+ * A profile opens from the list of every reader, so its header cannot assume a
+ * subscription: the date on it is when the account was created.
+ */
+describe( 'the profile of a reader with no subscription', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		setHeaderData.mockClear();
+	} );
+
+	it( 'sits under Readers and calls them a member since their account was created', async () => {
+		await renderCards( reader( { status: '', memberSince: '2026-01-05T00:00:00Z' } ) );
+
+		const { sectionName, sectionDescription, badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( sectionName[ 0 ].label ).toBe( 'Readers' );
+		expect( sectionDescription ).toMatch( /Member since/ );
+		expect( sectionDescription ).not.toMatch( /Subscriber/ );
+		expect( badges ).toEqual( [] );
+	} );
 } );
 
 describe( 'a subscription managed on another network site', () => {

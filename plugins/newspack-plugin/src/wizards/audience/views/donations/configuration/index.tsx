@@ -20,7 +20,7 @@ import {
  * Internal dependencies.
  */
 import MoneyInput from '../../../components/money-input';
-import { Button, Divider, Grid, Notice, SectionHeader, TextControl } from '../../../../../../packages/components/src';
+import { Button, Divider, Grid, Notice, SectionHeader, SplitSection, TextControl } from '../../../../../../packages/components/src';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../wizards-tab';
@@ -243,14 +243,12 @@ const Donation = () => {
 
 			{ wizardData.donation_page && (
 				<>
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ __( 'Donations Landing Page', 'newspack-plugin' ) }
 							description={ __( 'Manage the landing page for your donations.', 'newspack-plugin' ) }
-							noMargin
 						/>
-						<VStack spacing={ 6 }>
+						<SplitSection.Content>
 							{ 'publish' === wizardData.donation_page.status ? (
 								<CoreNotice status="success" isDismissible={ false }>
 									{ __( 'Your donations landing page is published.', 'newspack-plugin' ) }
@@ -270,27 +268,25 @@ const Donation = () => {
 									{ __( 'Edit Page' ) }
 								</Button>
 							</div>
-						</VStack>
-					</Grid>
+						</SplitSection.Content>
+					</SplitSection.Root>
 					{ hasDonationData && <Divider alignment="full-width" variant="tertiary" /> }
 				</>
 			) }
 
 			{ hasDonationData && (
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader
-						heading={ 2 }
+				<SplitSection.Root>
+					<SplitSection.Header
 						title={ __( 'Suggested Donations', 'newspack-plugin' ) }
 						description={ __(
 							'Set suggested donation amounts. These will be the default settings for the Donate block.',
 							'newspack-plugin'
 						) }
-						noMargin
 					/>
-					<VStack spacing={ 6 }>
+					<SplitSection.Content>
 						<DonationAmounts hideHeader />
-					</VStack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 			) }
 		</WizardsTab>
 	);

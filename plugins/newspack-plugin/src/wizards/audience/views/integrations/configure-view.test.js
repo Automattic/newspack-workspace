@@ -14,10 +14,9 @@ const mockSetHeaderData = jest.fn();
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
 } ) );
-// An empty column is a real element costing a real gap, so the stub keeps it
-// queryable for the tests that assert none is left behind. It also echoes the
-// layout props back: `direction` and `gap` are the only things carrying the
-// column rhythm now that the controls supply no margins of their own.
+// The stub tags each picker list so the tests can count them, including the
+// empty ones that should not render, and echoes `direction` and `gap` back,
+// since those props are all that space a list's items.
 jest.mock( '@wordpress/ui', () => ( {
 	Badge: ( { children } ) => <span data-testid="badge">{ children }</span>,
 	Stack: ( { children, direction, gap } ) => (
@@ -83,8 +82,11 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 	Divider: ( { alignment, ...props } ) => (
 		<hr data-testid={ props[ 'data-testid' ] || ( 'full-width' === alignment ? 'section-divider' : 'toggle-divider' ) } />
 	),
-	Grid: ( { children } ) => children,
-	SectionHeader: ( { title } ) => <h2>{ title }</h2>,
+	SplitSection: {
+		Root: ( { children } ) => children,
+		Header: ( { title } ) => <h2>{ title }</h2>,
+		Content: ( { children } ) => <div data-testid="split-section-content">{ children }</div>,
+	},
 	// Mirrors the real control: the Newspack wrapper renders its div whatever
 	// happens, and core's select inside it renders nothing without options.
 	SelectControl: ( { label, value, onChange, options, disabled } ) => (
@@ -894,8 +896,9 @@ describe( 'ConfigureView per-direction sections', () => {
 		} );
 		expect( screen.getByLabelText( 'Enable inbound sync' ).checked ).toBe( true );
 		expect( screen.queryAllByTestId( 'toggle-divider' ) ).toHaveLength( 0 );
-		// The section column itself, and not the list it would have wrapped.
-		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 1 );
+		// The section renders, but an empty picker list does not.
+		expect( screen.queryAllByTestId( 'split-section-content' ) ).toHaveLength( 1 );
+		expect( screen.queryAllByTestId( 'stack' ) ).toHaveLength( 0 );
 	} );
 
 	const outboundIntegration = groupedOptions => ( {
@@ -992,16 +995,13 @@ describe( 'ConfigureView per-direction sections', () => {
 		expect( screen.getByLabelText( 'Audience' ) ).toBeTruthy();
 	} );
 
-	// Nothing else supplies the vertical rhythm: the package's grid reset is gone
-	// and the controls no longer carry margins, so a wrong prop here is invisible.
-	it( 'stacks every section column and picker list vertically at its own gap', () => {
+	// The controls carry no margins, so the picker lists supply their own vertical
+	// rhythm and a wrong prop here is invisible.
+	it( 'stacks every picker list vertically at its own gap', () => {
 		renderConfigureView( { integrations: bidirectionalIntegration() } );
 		const stacks = screen.getAllByTestId( 'stack' ).map( el => [ el.dataset.direction, el.dataset.gap ] );
 		expect( stacks ).toEqual( [
-			[ 'column', 'xl' ],
-			[ 'column', 'xl' ],
 			[ 'column', 'sm' ],
-			[ 'column', 'xl' ],
 			[ 'column', 'sm' ],
 		] );
 	} );

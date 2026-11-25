@@ -239,7 +239,7 @@ export default function SubscriberList() {
 		() => [
 			{
 				id: 'name',
-				label: __( 'Subscriber', 'newspack-plugin' ),
+				label: __( 'Reader', 'newspack-plugin' ),
 				enableGlobalSearch: true,
 				enableSorting: true,
 				// The avatar takes its accessible name from this field, and row clicks find the reader through it.
@@ -283,15 +283,27 @@ export default function SubscriberList() {
 				// A subscriber can hold several statuses at once, so they stack rather
 				// than sitting on one line, where two icon-and-label pairs would run
 				// together into one phrase.
-				render: ( { item } ) => (
-					<Stack direction="column" align="flex-start" gap="sm">
-						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<StatusBadge key={ status } status={ STATUS_INDICATORS[ status ] }>
-								{ STATUS_LABELS[ status ] }
-							</StatusBadge>
-						) ) }
-					</Stack>
-				),
+				render: ( { item } ) => {
+					const statuses = subscriberStatuses( item, groupEntriesOf( item ) );
+					// A reader may have no subscription, and an empty cell would read as missing
+					// data. "No subscription" is not a subscription status, so it stays out of
+					// STATUS_LABELS (the filter options) and its badge has no intent. The class
+					// gives it the column layout StatusBadge gets.
+					return (
+						<Stack direction="column" align="flex-start" gap="sm">
+							{ statuses.length === 0 && (
+								<Badge intent="none" className="newspack-status-badge">
+									{ __( 'No subscription', 'newspack-plugin' ) }
+								</Badge>
+							) }
+							{ statuses.map( status => (
+								<StatusBadge key={ status } status={ STATUS_INDICATORS[ status ] }>
+									{ STATUS_LABELS[ status ] }
+								</StatusBadge>
+							) ) }
+						</Stack>
+					);
+				},
 			},
 			{
 				id: 'plans',
@@ -512,7 +524,7 @@ export default function SubscriberList() {
 		}
 	};
 
-	// Surface the subscriber count in the header breadcrumb, e.g. "/ Subscribers (85)".
+	// Surface the reader count in the header breadcrumb, e.g. "/ Readers (85)".
 	// Before paint: this carries the width override, and an error arrives outside a
 	// React event, so a passive effect would paint full-bleed for one frame first.
 	useLayoutEffect( () => {
@@ -522,11 +534,11 @@ export default function SubscriberList() {
 			fullWidth: error ? false : undefined,
 			sectionName: [
 				{
-					label: __( 'Subscribers', 'newspack-plugin' ),
+					label: __( 'Readers', 'newspack-plugin' ),
 					count: subscribersLoading || error ? undefined : total,
 					countLabel: sprintf(
-						/* translators: %s: number of subscribers matching the current view. */
-						_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+						/* translators: %s: number of readers matching the current view. */
+						_n( '%s reader', '%s readers', total, 'newspack-plugin' ),
 						formatCount( total )
 					),
 				},
@@ -555,8 +567,8 @@ export default function SubscriberList() {
 	useAnnounceRefresh(
 		isRefreshing,
 		sprintf(
-			/* translators: %s: number of subscribers matching the current view. */
-			_n( '%s subscriber', '%s subscribers', total, 'newspack-plugin' ),
+			/* translators: %s: number of readers matching the current view. */
+			_n( '%s reader', '%s readers', total, 'newspack-plugin' ),
 			formatCount( total )
 		)
 	);
@@ -569,12 +581,12 @@ export default function SubscriberList() {
 		);
 	}
 
-	// A failed read must not read as "this site has no subscribers": say so, and
+	// A failed read must not read as "this site has no readers": say so, and
 	// offer a retry.
 	if ( error ) {
 		const message = sprintf(
 			/* translators: %s: the error message returned by the server. */
-			__( 'Could not load subscribers: %s', 'newspack-plugin' ),
+			__( 'Could not load readers: %s', 'newspack-plugin' ),
 			error
 		);
 		return (
@@ -611,8 +623,8 @@ export default function SubscriberList() {
 				fitColumns={ FIT_COLUMNS }
 				countLabel={ ( count, formatted ) =>
 					sprintf(
-						/* translators: %s: number of subscribers. */
-						_n( '%s subscriber', '%s subscribers', count, 'newspack-plugin' ),
+						/* translators: %s: number of readers. */
+						_n( '%s reader', '%s readers', count, 'newspack-plugin' ),
 						formatted
 					)
 				}

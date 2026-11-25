@@ -1,7 +1,7 @@
 /**
  * The subscriber list publishes its row count to the wizard header. A read still
  * in flight, or one that never landed, has no count to publish: "(0)" would
- * assert the site has no subscribers.
+ * assert the site has no readers.
  */
 
 /**
@@ -43,6 +43,7 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Notice: () => null,
+	StatusBadge: ( { children } ) => require( 'react' ).createElement( 'span', null, children ),
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -96,13 +97,13 @@ describe( 'the subscriber list header count', () => {
 		apiFetch.mockReset();
 	} );
 
-	it( 'publishes the count once the subscribers land', async () => {
+	it( 'publishes the count once the readers land', async () => {
 		apiFetch.mockResolvedValue( page( 2 ) );
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
 
-		expect( publishedSection().label ).toBe( 'Subscribers' );
+		expect( publishedSection().label ).toBe( 'Readers' );
 		expect( publishedSection().count ).toBe( 2 );
 	} );
 
@@ -115,7 +116,7 @@ describe( 'the subscriber list header count', () => {
 		);
 		render( <SubscriberList /> );
 
-		expect( publishedSection().label ).toBe( 'Subscribers' );
+		expect( publishedSection().label ).toBe( 'Readers' );
 		expect( publishedSection().count ).toBeUndefined();
 
 		await act( async () => {
@@ -131,7 +132,7 @@ describe( 'the subscriber list header count', () => {
 			render( <SubscriberList /> );
 		} );
 
-		expect( publishedSection().label ).toBe( 'Subscribers' );
+		expect( publishedSection().label ).toBe( 'Readers' );
 		expect( publishedSection().count ).toBeUndefined();
 	} );
 
@@ -140,14 +141,14 @@ describe( 'the subscriber list header count', () => {
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '1 subscriber' );
+		expect( publishedSection().countLabel ).toBe( '1 reader' );
 
 		headerCalls = [];
 		apiFetch.mockResolvedValue( page( 2 ) );
 		await act( async () => {
 			render( <SubscriberList /> );
 		} );
-		expect( publishedSection().countLabel ).toBe( '2 subscribers' );
+		expect( publishedSection().countLabel ).toBe( '2 readers' );
 	} );
 } );
 
@@ -157,7 +158,7 @@ describe( 'the subscriber list width override', () => {
 		apiFetch.mockReset();
 	} );
 
-	it( 'leaves the section width alone once the subscribers land', async () => {
+	it( 'leaves the section width alone once the readers land', async () => {
 		apiFetch.mockResolvedValue( page( 1 ) );
 		await act( async () => {
 			render( <SubscriberList /> );
@@ -191,7 +192,7 @@ describe( 'the SubscriberList load-failure announcement', () => {
 			render( <SubscriberList /> );
 		} );
 
-		expect( speak ).toHaveBeenCalledWith( 'Could not load subscribers: nope', 'assertive' );
+		expect( speak ).toHaveBeenCalledWith( 'Could not load readers: nope', 'assertive' );
 	} );
 
 	it( 'says nothing when the read succeeds', async () => {
@@ -681,5 +682,40 @@ describe( 'the subscriber column', () => {
 		const { container } = render( name.render( { item: subscriber( 4 ) } ) );
 
 		expect( container.querySelector( '[data-subscriber-id="4"]' ).textContent ).toBe( 'Reader 4' );
+	} );
+} );
+
+/**
+ * The list holds every reader account, so most rows can be readers who never
+ * subscribed. Their status cell says so: an empty one reads as missing data.
+ */
+describe( 'the status cell', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	const renderStatusField = async () => {
+		apiFetch.mockResolvedValue( page( 1 ) );
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		return mockDataViewsProps.fields.find( field => 'status' === field.id );
+	};
+
+	it( 'says "No subscription" only for a reader who holds none, not for a lapsed subscriber', async () => {
+		const status = await renderStatusField();
+		const statusText = item => render( status.render( { item } ) ).container.textContent;
+
+		expect( statusText( { ...subscriber( 1 ), status: '' } ) ).toBe( 'No subscription' );
+		expect( statusText( { ...subscriber( 2 ), status: 'active' } ) ).toBe( 'Active' );
+		expect( statusText( { ...subscriber( 3 ), status: 'cancelled', subscriptions: [ { status: 'cancelled' } ] } ) ).toBe( 'Cancelled' );
+	} );
+
+	it( 'filters by subscription statuses alone', async () => {
+		const status = await renderStatusField();
+
+		expect( status.elements.map( ( { label } ) => label ) ).toEqual( [ 'Active', 'Pending', 'On hold', 'Cancelled' ] );
 	} );
 } );

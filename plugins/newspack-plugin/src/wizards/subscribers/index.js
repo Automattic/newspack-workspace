@@ -40,7 +40,7 @@ function SubscribersApp() {
 			headerText={ __( 'Audience Management', 'newspack-plugin' ) }
 			sections={ [
 				{
-					label: __( 'Subscribers', 'newspack-plugin' ),
+					label: __( 'Readers', 'newspack-plugin' ),
 					path: '/',
 					exact: true,
 					// A person profile is a sub-view of this tab, so keep the tab
@@ -54,7 +54,7 @@ function SubscribersApp() {
 					label: GROUP_LABEL_PLURAL,
 					path: '/groups',
 					exact: true,
-					// As with Subscribers: a group's detail screen keeps this tab selected.
+					// As with Readers: a group's detail screen keeps this tab selected.
 					activeTabPaths: [ '/groups/*' ],
 					fullWidth: true,
 					render: GroupList,

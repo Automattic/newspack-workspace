@@ -18,12 +18,12 @@ import {
 import { EmptyState, Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { gift } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Button, Divider, Grid, SectionHeader, SelectControl, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
-import { gift } from '../../../../../../packages/icons';
+import { Button, Divider, SelectControl, SplitSection, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -189,9 +189,9 @@ const ContentGiftingSettings = () => {
 					{ giftingErrors.join( ', ' ) }
 				</Notice>
 			) }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader heading={ 2 } title={ __( 'General Settings', 'newspack-plugin' ) } />
-				<Stack direction="column" gap="xl">
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'General Settings', 'newspack-plugin' ) } />
+				<SplitSection.Content>
 					<RangeControl
 						label={ __( 'Gifting limit', 'newspack-plugin' ) }
 						help={ __( 'Maximum number of articles that can be gifted per user for the configured interval.', 'newspack-plugin' ) }
@@ -237,13 +237,13 @@ const ContentGiftingSettings = () => {
 						] }
 						__next40pxDefaultSize
 					/>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
 			<Stack direction="column" gap="xl">
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader heading={ 2 } title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
-					<Stack direction="column" gap="xl">
+				<SplitSection.Root>
+					<SplitSection.Header title={ __( 'Recipient Banner', 'newspack-plugin' ) } />
+					<SplitSection.Content>
 						<TextControl
 							label={ __( 'Message', 'newspack-plugin' ) }
 							help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
@@ -309,8 +309,8 @@ const ContentGiftingSettings = () => {
 							settings={ config?.content_gifting || {} }
 							onChange={ value => setConfig( { ...config, content_gifting: { ...config?.content_gifting, ...value } } ) }
 						/>
-					</Stack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 				<BaseControl id="newspack-content-gifting-cta-preview" label={ __( 'Preview', 'newspack-plugin' ) }>
 					<div className="newspack-content-gifting__cta-preview" inert="true">
 						<div className="newspack-ui">

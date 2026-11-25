@@ -140,7 +140,6 @@ $status-dot-margin-end: calc((1.25em - #{$status-dot-size}) / 2);
 	> svg {
 		align-self: center;
 		color: var(--newspack-ui-status-color);
-		fill: currentcolor;
 		flex: none;
 		height: 1.25em;
 		margin-inline-start: calc(1.25em / -6);

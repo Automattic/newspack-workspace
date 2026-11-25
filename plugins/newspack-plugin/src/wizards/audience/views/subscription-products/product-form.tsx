@@ -1,7 +1,7 @@
 /**
  * Full-page create/edit form for a plan, rendered as a routed wizard section (mirroring the
- * institutions editor). Save / back live in the wizard header; the body is a 2-column Grid
- * (SectionHeader left, fields right). Covers simple, variable (plan repeater), grouped
+ * institutions editor). Save / back live in the wizard header; the body is a stack of SplitSection rows
+ * (header left, fields right). Covers simple, variable (plan repeater), grouped
  * (bundle picker), and one-time, plus category + availability + group subscription. POSTs to
  * create or PUTs to update, then returns to the list. Type is locked when editing.
  */
@@ -28,7 +28,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { SplitSection, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { EffectivePrice } from './policy-cells';
 import { gateLinks, ruleLinks } from './item-links';
@@ -309,12 +309,12 @@ export default function ProductForm( {
 				</Notice>
 			) }
 
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Plan details', 'newspack-plugin' ) }
 					description={ __( 'The name, type, and publish status of this plan.', 'newspack-plugin' ) }
 				/>
-				<VStack spacing={ 4 }>
+				<SplitSection.Content>
 					<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ name } onChange={ setName } __next40pxDefaultSize />
 					<Stack align="flex-start" gap="lg">
 						<div className="newspack-subscription-products__field">
@@ -349,13 +349,13 @@ export default function ProductForm( {
 							/>
 						</div>
 					</Stack>
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Pricing', 'newspack-plugin' ) }
 					description={
 						type === 'grouped'
@@ -363,7 +363,7 @@ export default function ProductForm( {
 							: __( 'How much this plan costs and how often it bills.', 'newspack-plugin' )
 					}
 				/>
-				<VStack spacing={ 4 }>
+				<SplitSection.Content>
 					{ type === 'subscription' && (
 						<Stack align="flex-start" gap="lg">
 							<div className="newspack-subscription-products__field">
@@ -494,17 +494,17 @@ export default function ProductForm( {
 							) }
 						</div>
 					) }
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Availability & categories', 'newspack-plugin' ) }
 					description={ __( 'Where and to whom this plan is offered.', 'newspack-plugin' ) }
 				/>
-				<VStack spacing={ 4 }>
+				<SplitSection.Content>
 					<SelectControl
 						label={ __( 'Availability', 'newspack-plugin' ) }
 						value={ availability }
@@ -525,17 +525,17 @@ export default function ProductForm( {
 						__experimentalExpandOnFocus
 						__next40pxDefaultSize
 					/>
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Options', 'newspack-plugin' ) }
 					description={ __( 'Multi-seat access and donation handling.', 'newspack-plugin' ) }
 				/>
-				<VStack spacing={ 4 }>
+				<SplitSection.Content>
 					{ groupSubscriptionsEnabled && ( type === 'subscription' || type === 'variable-subscription' ) && (
 						<VStack spacing={ 2 }>
 							<CheckboxControl
@@ -557,18 +557,18 @@ export default function ProductForm( {
 						</VStack>
 					) }
 					<CheckboxControl label={ __( 'This is a donation', 'newspack-plugin' ) } checked={ isDonation } onChange={ setIsDonation } />
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			{ isEdit && initial && ( initial.unlocks.length > 0 || policyRows.length > 0 ) && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ __( 'Policies & access', 'newspack-plugin' ) }
 							description={ __( 'Read-only: pricing policies applied to this plan and the content it unlocks.', 'newspack-plugin' ) }
 						/>
-						<VStack spacing={ 4 }>
+						<SplitSection.Content>
 							{ policyRows.length > 0 && (
 								<div>
 									<span className="newspack-subscription-products__modal-label">
@@ -597,8 +597,8 @@ export default function ProductForm( {
 									</VStack>
 								</div>
 							) }
-						</VStack>
-					</Grid>
+						</SplitSection.Content>
+					</SplitSection.Root>
 				</>
 			) }
 		</div>

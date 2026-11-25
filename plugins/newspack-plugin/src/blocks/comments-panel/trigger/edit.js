@@ -17,13 +17,13 @@ import {
 	__experimentalToolsPanelItem as ToolsPanelItem,
 } from '@wordpress/components';
 import { useSelect } from '@wordpress/data';
+import { postComments as commentsIcon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import PanelPreviewToggle from '../panel-preview-toggle';
 import { panelToggles, subscribeToPanel } from '../preview-refs';
-import { comments as commentsIcon } from '../../../../packages/icons';
 
 /**
  * Edit component for the Comments Panel Trigger block.

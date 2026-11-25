@@ -48,6 +48,7 @@ export { default as ReorderModal } from './reorder-modal';
 export { default as SectionHeader } from './section-header';
 export { default as SelectControl } from './select-control';
 export { default as Settings } from './settings';
+export { default as SplitSection } from './split-section';
 export { default as StatCard, STAT_CARD_NULL_GLYPH } from './stat-card';
 export { default as StatusBadge, statusBadgeIntent } from './status-badge';
 export { default as StatusIndicator } from './status-indicator';

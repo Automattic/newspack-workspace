@@ -10,7 +10,7 @@ import { Badge, Stack } from '@wordpress/ui';
 /**
  * Internal dependencies
  */
-import { CollapsibleGroup, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
+import { CollapsibleGroup, Divider, SplitSection, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField, settingsFieldRenders, toBool } from './settings-field';
@@ -472,9 +472,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 			<div className="newspack-configure-view">
 				{ /* Section 1: Settings */ }
 				{ visibleSettingsFields.length > 0 && (
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Stack direction="column" gap="xl">
+					<SplitSection.Root>
+						<SplitSection.Header title={ __( 'Settings', 'newspack-plugin' ) } />
+						<SplitSection.Content>
 							{ visibleSettingsFields.map( field => (
 								<SettingsField
 									key={ field.key }
@@ -483,17 +483,17 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 									onChange={ val => handleFieldChange( field.key, val ) }
 								/>
 							) ) }
-						</Stack>
-					</Grid>
+						</SplitSection.Content>
+					</SplitSection.Root>
 				) }
 
 				{ /* Section 2: Inbound */ }
 				{ inboundField && ( inboundOptions.length > 0 || !! inboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Stack direction="column" gap="xl">
+						<SplitSection.Root>
+							<SplitSection.Header title={ __( 'Inbound', 'newspack-plugin' ) } />
+							<SplitSection.Content>
 								{ renderSectionToggle( inboundToggleField, inboundEnabled && inboundOptions.length > 0 ) }
 								{ inboundEnabled && inboundOptions.length > 0 && (
 									<Stack direction="column" gap="sm">
@@ -561,8 +561,8 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										} ) }
 									</Stack>
 								) }
-							</Stack>
-						</Grid>
+							</SplitSection.Content>
+						</SplitSection.Root>
 					</>
 				) }
 
@@ -570,9 +570,9 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 				{ ( outboundGroups.length > 0 || visibleOutboundSettingsFields.length > 0 || !! outboundToggleField ) && (
 					<>
 						<Divider alignment="full-width" variant="tertiary" />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<Stack direction="column" gap="xl">
+						<SplitSection.Root>
+							<SplitSection.Header title={ __( 'Outbound', 'newspack-plugin' ) } />
+							<SplitSection.Content>
 								{ renderSectionToggle(
 									outboundToggleField,
 									outboundEnabled && ( visibleOutboundSettingsFields.length > 0 || outboundGroups.length > 0 )
@@ -635,8 +635,8 @@ const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, o
 										} ) }
 									</CollapsibleGroup>
 								) }
-							</Stack>
-						</Grid>
+							</SplitSection.Content>
+						</SplitSection.Root>
 					</>
 				) }
 			</div>

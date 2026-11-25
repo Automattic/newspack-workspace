@@ -19,11 +19,10 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	CardSettingsGroup,
 	Divider,
-	Grid,
 	ImageUpload,
 	Notice,
 	Router,
-	SectionHeader,
+	SplitSection,
 	TextControl,
 	useConfirmDialog,
 } from '../../../../../../packages/components/src';
@@ -415,15 +414,15 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 			{ deleteDialog }
 
 			{ /* Section 1: Name and description */ }
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Name and Description', 'newspack-plugin' ) }
 					description={ __(
 						'Identify this institution. The name and image are shown on the access verification page.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
+				<SplitSection.Content className="newspack-content-gates__stack">
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ name }
@@ -449,101 +448,103 @@ export default function InstitutionEdit( { match }: { match: { params: { id?: st
 							} }
 						/>
 					) }
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
 			{ /* Section 2: Access Rules */ }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Access Rules', 'newspack-plugin' ) }
 					description={ __(
 						'Define how readers from this institution are identified. Rules use OR logic — matching any rule grants access.',
 						'newspack-plugin'
 					) }
 				/>
-				<Stack direction="column" gap="lg">
-					<CardSettingsGroup
-						title={ __( 'Email Domain', 'newspack-plugin' ) }
-						description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
-						icon={ envelope }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_email_domain }
-						onEnable={ () => toggleRule( 'np_institution_email_domain' ) }
-					>
-						<CardBody size="small">
-							<TextControl
-								label={ __( 'Domains (comma-separated)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ emailDomain }
-								onChange={ ( val: string ) => updateMeta( 'np_institution_email_domain', val ) }
-								placeholder="university.edu, school.org"
-							/>
-						</CardBody>
-					</CardSettingsGroup>
-
-					<CardSettingsGroup
-						title={ __( 'IP Range', 'newspack-plugin' ) }
-						description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
-						icon={ globe }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_ip_range }
-						onEnable={ () => toggleRule( 'np_institution_ip_range' ) }
-					>
-						<CardBody size="small">
-							<TextControl
-								label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
-								withMargin={ false }
-								value={ ipRange }
-								onChange={ updateIpRange }
-								onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
-									setIpRangeAnalysis( analyzeIpRangeEntries( event.target.value ) )
-								}
-								placeholder="198.51.100.0/24, 203.0.113.0-203.0.113.255, 203.0.113.5"
-								aria-describedby={ IP_RANGE_MESSAGES_ID }
-								aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
-							/>
-							{ /* Always rendered so it is an established live region by the time a warning appears. */ }
-							<Stack
-								id={ IP_RANGE_MESSAGES_ID }
-								role="status"
-								direction="column"
-								gap="sm"
-								className="newspack-content-gates__stack newspack-content-gates__rule-messages"
-							>
-								{ ipRangeWarnings.map( warning => (
-									<Notice key={ warning } isWarning noticeText={ warning } />
-								) ) }
-							</Stack>
-						</CardBody>
-					</CardSettingsGroup>
-
-					<CardSettingsGroup
-						title={ __( 'Reader Data', 'newspack-plugin' ) }
-						description={ __( 'Match readers by custom metadata', 'newspack-plugin' ) }
-						icon={ customPostType }
-						actionType="toggle"
-						isActive={ enabledRules.np_institution_reader_data }
-						onEnable={ () => toggleRule( 'np_institution_reader_data' ) }
-					>
-						<CardBody size="small">
-							<AccessRuleValueNotice
-								label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
-								notice={ readerDataNotice }
-							>
+				<SplitSection.Content>
+					<Stack direction="column" gap="lg">
+						<CardSettingsGroup
+							title={ __( 'Email Domain', 'newspack-plugin' ) }
+							description={ __( 'Match readers by verified email domain', 'newspack-plugin' ) }
+							icon={ envelope }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_email_domain }
+							onEnable={ () => toggleRule( 'np_institution_email_domain' ) }
+						>
+							<CardBody size="small">
 								<TextControl
-									label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+									label={ __( 'Domains (comma-separated)', 'newspack-plugin' ) }
 									withMargin={ false }
-									value={ readerData }
-									onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
-									placeholder="org=university;role=staff"
+									value={ emailDomain }
+									onChange={ ( val: string ) => updateMeta( 'np_institution_email_domain', val ) }
+									placeholder="university.edu, school.org"
 								/>
-							</AccessRuleValueNotice>
-						</CardBody>
-					</CardSettingsGroup>
-				</Stack>
-			</Grid>
+							</CardBody>
+						</CardSettingsGroup>
+
+						<CardSettingsGroup
+							title={ __( 'IP Range', 'newspack-plugin' ) }
+							description={ __( 'Match visitors by IP address, CIDR block, or IP range', 'newspack-plugin' ) }
+							icon={ globe }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_ip_range }
+							onEnable={ () => toggleRule( 'np_institution_ip_range' ) }
+						>
+							<CardBody size="small">
+								<TextControl
+									label={ __( 'IPs, CIDR blocks, or IP ranges (comma-separated)', 'newspack-plugin' ) }
+									withMargin={ false }
+									value={ ipRange }
+									onChange={ updateIpRange }
+									onBlur={ ( event: React.FocusEvent< HTMLInputElement > ) =>
+										setIpRangeAnalysis( analyzeIpRangeEntries( event.target.value ) )
+									}
+									placeholder="198.51.100.0/24, 203.0.113.0-203.0.113.255, 203.0.113.5"
+									aria-describedby={ IP_RANGE_MESSAGES_ID }
+									aria-invalid={ ipRangeAnalysis.invalid.length > 0 }
+								/>
+								{ /* Always rendered so it is an established live region by the time a warning appears. */ }
+								<Stack
+									id={ IP_RANGE_MESSAGES_ID }
+									role="status"
+									direction="column"
+									gap="sm"
+									className="newspack-content-gates__stack newspack-content-gates__rule-messages"
+								>
+									{ ipRangeWarnings.map( warning => (
+										<Notice key={ warning } isWarning noticeText={ warning } />
+									) ) }
+								</Stack>
+							</CardBody>
+						</CardSettingsGroup>
+
+						<CardSettingsGroup
+							title={ __( 'Reader Data', 'newspack-plugin' ) }
+							description={ __( 'Match readers by custom metadata', 'newspack-plugin' ) }
+							icon={ customPostType }
+							actionType="toggle"
+							isActive={ enabledRules.np_institution_reader_data }
+							onEnable={ () => toggleRule( 'np_institution_reader_data' ) }
+						>
+							<CardBody size="small">
+								<AccessRuleValueNotice
+									label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+									notice={ readerDataNotice }
+								>
+									<TextControl
+										label={ __( 'Key=value pairs (semicolon-delimited)', 'newspack-plugin' ) }
+										withMargin={ false }
+										value={ readerData }
+										onChange={ ( val: string ) => updateMeta( 'np_institution_reader_data', val ) }
+										placeholder="org=university;role=staff"
+									/>
+								</AccessRuleValueNotice>
+							</CardBody>
+						</CardSettingsGroup>
+					</Stack>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</div>
 	);
 }
