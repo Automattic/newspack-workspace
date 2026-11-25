@@ -125,6 +125,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/class-api.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-profile.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-recaptcha.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-registration-warnings.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-magic-link.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-revenue/stripe/class-stripe-connection.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/class-woocommerce-connection.php';
