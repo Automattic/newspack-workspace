@@ -362,6 +362,28 @@ class TestGiftRecipients extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Deleting a gift's buyer clears its recipient, but the buyer's subscription is not
+	 * sent again: with their account gone it would read as an active subscription that
+	 * is not a gift, and other sites would create the deleted account again. The
+	 * recipient still loses the gift.
+	 */
+	public function test_deleted_buyer_is_not_resent_but_the_recipient_loses_the_gift() {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+
+		$buyer        = self::factory()->user->create( [ 'user_email' => 'deleted-buyer@example.test' ] );
+		$recipient    = self::factory()->user->create();
+		$subscription = $this->subscription( 92, 'active', $buyer );
+
+		do_action( 'newspack_subscription_gift_recipient_cleared', $subscription, $recipient );
+		wp_delete_user( $buyer );
+		Gift_Recipients::dispatch_queued();
+
+		$this->assertCount( 1, $this->resent );
+		$this->assertNull( Gift_Recipients::get_subscription_event_data( ...$this->resent[0] ) );
+		$this->assertSame( [ $recipient => 'cancelled' ], $this->reported_statuses() );
+	}
+
+	/**
 	 * A subscription given a recipient after it was bought becomes a gift with no status
 	 * change, so the buyer's subscription event is sent again, once per request, saying
 	 * it is a gift, and other sites stop giving the buyer access through it.

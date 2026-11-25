@@ -262,6 +262,13 @@ class Gift_Recipients {
 		if ( ! $subscription ) {
 			return null;
 		}
+		// Deleting a gift's buyer also clears its recipient. Sent now, with the buyer's
+		// account gone, it would read as an active subscription that isn't a gift, and
+		// other sites would create the deleted account again.
+		$customer_id = (int) $subscription->get_customer_id();
+		if ( ! $customer_id || ! get_userdata( $customer_id ) ) {
+			return null;
+		}
 		$status = $subscription->get_status();
 		return Woo_Events::subscription_changed( $subscription->get_id(), $status, $status, $subscription );
 	}
