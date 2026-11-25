@@ -418,15 +418,33 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A cover with a gradient overlay is not tinted with the default black.
+	 * A cover's preset gradient overlay is drawn over its image at the dim ratio, not
+	 * replaced by the default black.
 	 */
-	public function test_cover_gradient_overlay_is_not_tinted_black() {
+	public function test_cover_gradient_overlay_is_drawn() {
 		list( $id ) = $this->image_block();
 		$src        = esc_url( wp_get_attachment_url( $id ) );
 		$html       = $this->render( '<!-- wp:cover {"url":"' . $src . '","id":' . $id . ',"dimRatio":50,"gradient":"luminous-vivid-amber-to-luminous-vivid-orange"} --><div class="wp-block-cover"><span aria-hidden="true" class="wp-block-cover__background has-background-dim has-background-gradient has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background"></span><img class="wp-block-cover__image-background wp-image-' . $id . '" alt="" src="' . $src . '" data-object-fit="cover"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
 
-		$this->assertStringNotContainsString( 'linear-gradient(rgba(0, 0, 0', html_entity_decode( $html ) );
-		$this->assertMatchesRegularExpression( '/class="email-block-cover[^"]*"[^>]*style="[^"]*background-image:\s*url\(/', $html, 'Expected the cover image to be left in place.' );
+		$html = html_entity_decode( $html, ENT_QUOTES | ENT_HTML5 );
+		$this->assertStringNotContainsString( 'linear-gradient(rgba(0, 0, 0', $html );
+		$this->assertMatchesRegularExpression( '/background-image:\s*linear-gradient\(135deg,\s*rgba\(252, 185, 0, 0\.5\) 0%,\s*rgba\(255, 105, 0, 0\.5\) 100%\),\s*url\(/', $html, 'Expected the gradient at 50% over the image.' );
+		$this->assertStringContainsString( 'background-color: rgb(252, 185, 0)', $html, 'Expected the first stop as the fallback color.' );
+	}
+
+	/**
+	 * A custom gradient's stops are faded by the dim ratio, whatever their color format,
+	 * and anything that isn't a plain gradient is left out.
+	 */
+	public function test_cover_custom_gradient_overlay() {
+		$table = '<table class="email-block-cover" style="background-image: url(\'https://example.test/a.jpg\'); background-size: cover;"><tr><td>Cover</td></tr></table>';
+
+		$html = html_entity_decode( Cover::apply_gradient_overlay( $table, 'linear-gradient(90deg,#ff0000 0%,rgba(0,0,255,0.5) 100%)', 40 ), ENT_QUOTES | ENT_HTML5 );
+		$this->assertStringContainsString( "background-image: linear-gradient(90deg,rgba(255, 0, 0, 0.4) 0%,rgba(0, 0, 255, 0.2) 100%), url('https://example.test/a.jpg')", $html );
+		$this->assertSame( $table, Cover::apply_gradient_overlay( $table, '', 40 ), 'Expected no change for an unresolved gradient.' );
+
+		$unsafe = $this->render( '<!-- wp:cover {"url":"https://example.test/a.jpg","dimRatio":50,"customGradient":"linear-gradient(red,blue);color:red"} --><div class="wp-block-cover"><img class="wp-block-cover__image-background" alt="" src="https://example.test/a.jpg"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
+		$this->assertStringNotContainsString( 'color:red', $unsafe, 'Expected an unsafe custom gradient to be dropped.' );
 	}
 
 	// ------------------------------------------------------------------
