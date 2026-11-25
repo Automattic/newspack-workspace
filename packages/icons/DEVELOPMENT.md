@@ -44,7 +44,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 43 custom icons:
+This package includes 41 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -52,7 +52,6 @@ This package includes 43 custom icons:
 - `ai` - AI icon
 - `aiText` - AI text icon
 - `appearance` - Appearance (light and dark) icon
-- `aspectLandscape` - Landscape aspect ratio icon
 - `aspectPortrait` - Portrait aspect ratio icon
 - `aspectSquare` - Square aspect ratio icon
 - `ballotBox` - Ballot box icon
@@ -88,7 +87,6 @@ This package includes 43 custom icons:
 - `readerRegistration` - Reader registration icon
 - `searchEmpty` - Empty search icon
 - `target` - Target icon
-- `theme` - Theme icon
 
 ## Usage Examples
 
