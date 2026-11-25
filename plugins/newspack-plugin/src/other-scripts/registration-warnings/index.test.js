@@ -147,7 +147,7 @@ describe( 'registration warnings', () => {
 			staff_writer: { title, body: 'This role can write posts.', severity: 'warning' },
 			staff_publisher: { title, body: 'This role can publish posts or upload files.', severity: 'error' },
 		};
-		renderSettings( { open: true, role: 'subscriber', botShown: true } );
+		renderSettings( { open: true, role: 'subscriber' } );
 		loadScript( { hasBotProtection: true, riskyRoles } );
 		setRole( 'staff_writer' );
 		speak.mockClear();
