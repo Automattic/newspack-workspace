@@ -21,6 +21,13 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	private $added_roles = [];
 
 	/**
+	 * Capabilities granted to existing roles during the test, as [ role, capability ] pairs.
+	 *
+	 * @var array[]
+	 */
+	private $granted_caps = [];
+
+	/**
 	 * Start every test with registration closed, the core default role and reCAPTCHA off.
 	 */
 	public function set_up() {
@@ -33,13 +40,17 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Remove roles added by the test.
+	 * Remove roles added and capabilities granted by the test.
 	 */
 	public function tear_down() {
 		foreach ( $this->added_roles as $role ) {
 			remove_role( $role );
 		}
 		$this->added_roles = [];
+		foreach ( $this->granted_caps as list( $role, $cap ) ) {
+			get_role( $role )->remove_cap( $cap );
+		}
+		$this->granted_caps = [];
 		wp_dequeue_script( 'newspack-registration-warnings' );
 		wp_deregister_script( 'newspack-registration-warnings' );
 		set_current_screen( 'front' );
@@ -77,6 +88,20 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		// A role that already exists, such as the plugin's own guest contributor role, stays after the test.
 		if ( add_role( $role, $display_name, $caps ) ) { // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
 			$this->added_roles[] = $role;
+		}
+	}
+
+	/**
+	 * Give an existing role a capability for this test only.
+	 *
+	 * @param string $role Role slug.
+	 * @param string $cap  Capability.
+	 */
+	private function grant_cap( $role, $cap ) {
+		$role_object = get_role( $role );
+		if ( ! $role_object->has_cap( $cap ) ) {
+			$role_object->add_cap( $cap );
+			$this->granted_caps[] = [ $role, $cap ];
 		}
 	}
 
@@ -288,9 +313,35 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A site that lets Contributors publish or upload gets the red warning,
+	 * with the publishing copy under the Contributor title.
+	 *
+	 * @dataProvider data_contributor_publishing_caps
+	 * @param string $cap Capability the site gives Contributors.
+	 */
+	public function test_contributor_that_publishes_or_uploads_is_red( $cap ) {
+		$this->grant_cap( 'contributor', $cap );
+		$warning = Registration_Warnings::get_role_warning( 'contributor' );
+		$this->assertSame( 'error', $warning['severity'] );
+		$this->assertSame( 'Anyone can register as a Contributor', $warning['title'] );
+		$this->assertSame( 'This role can publish posts or upload files. With "Anyone can register" checked, anyone who registers will have these abilities, including spammers. Uncheck "Anyone can register", or choose Subscriber unless the users who sign up here need to publish posts.', $warning['body'] );
+	}
+
+	/**
+	 * Capabilities a site can give Contributors that let them publish or upload files.
+	 */
+	public function data_contributor_publishing_caps() {
+		return [
+			'publishes' => [ 'publish_posts' ],
+			'uploads'   => [ 'upload_files' ],
+		];
+	}
+
+	/**
 	 * Roles, the capabilities to add a custom one with (null for a core role),
-	 * and the warning's severity: "warning" (yellow) for a role that can only
-	 * write posts for review, "error" (red) for one that can publish or upload.
+	 * and the warning's severity: "error" (red) for Author, Editor, Administrator
+	 * and any role that can publish posts or upload files, "warning" (yellow) for
+	 * any other role that can edit posts.
 	 */
 	public function data_role_severities() {
 		return [
@@ -370,7 +421,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The amber warning's copy, as approved, with the settings path linked.
+	 * The bot warning's copy, as approved, with the settings path linked.
 	 */
 	public function test_bot_protection_copy() {
 		$warning = Registration_Warnings::get_bot_protection_warning();
@@ -436,7 +487,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 */
 	public function data_role_test_states() {
 		return [
-			'closed'            => [ false, 'editor', 'good', 'No one can sign up with the New User Default Role' ],
+			'closed'            => [ false, 'editor', 'good', "WordPress's registration form is closed" ],
 			'open, safe role'   => [ true, 'subscriber', 'good', "New accounts get a role that can't edit posts" ],
 			'open, contributor' => [ true, 'contributor', 'recommended', 'Open registration gives new accounts a role that can edit posts' ],
 			'open, author'      => [ true, 'author', 'critical', 'Open registration gives new accounts a role that can edit posts' ],
@@ -445,9 +496,8 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The role check reports a problem only while the condition holds: Recommended
-	 * for a role that can only write posts for review, Critical for one that can
-	 * publish or upload files.
+	 * The role check reports a problem only while the condition holds: Critical
+	 * for a red warning, Recommended for a yellow one.
 	 *
 	 * @dataProvider data_role_test_states
 	 * @param bool   $open   Whether "Anyone can register" is on.
@@ -477,7 +527,6 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		$description = Registration_Warnings::site_health_role_test()['description'];
 		$this->assertStringContainsString( esc_html( 'Anyone can register with the "Staff Writer" role' ), $description );
 		$this->assertStringContainsString( 'This role can write posts.', $description );
-		$this->assertStringNotContainsString( 'with it.', $description );
 	}
 
 	/**
@@ -494,7 +543,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 		foreach ( [ $role, $bot ] as $result ) {
 			$this->assertSame( 'good', $result['status'] );
 			$this->assertStringContainsString( esc_html( '"Anyone can register" is off, so no one can create an account' ), $result['description'] );
-			$this->assertStringNotContainsString( "can't edit posts", $result['description'] );
+			$this->assertStringNotContainsString( esc_html( "can't edit posts" ), $result['description'] );
 		}
 	}
 
@@ -503,7 +552,7 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 */
 	public function data_bot_protection_test_states() {
 		return [
-			'closed'              => [ false, false, 'good', "Bots can't sign up through the registration form" ],
+			'closed'              => [ false, false, 'good', "Bots can't sign up through WordPress's registration form" ],
 			'open, reCAPTCHA on'  => [ true, true, 'good', 'Sign-ups are protected by reCAPTCHA' ],
 			'open, reCAPTCHA off' => [ true, false, 'recommended', 'Open registration has no bot protection' ],
 		];
@@ -649,8 +698,8 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The role warning prints yellow for a role that can only write posts for
-	 * review, red for one that can publish.
+	 * The role warning prints in its severity's color: yellow for Contributor,
+	 * red for Author.
 	 *
 	 * @dataProvider data_role_notice_classes
 	 * @param string $role  Saved default role.
