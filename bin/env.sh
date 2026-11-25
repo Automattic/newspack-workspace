@@ -645,6 +645,15 @@ MIGRATE
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do
             if docker exec "$container_name" test -f /var/www/html/wp-config.php 2>/dev/null; then
+                # Wait until the database answers before asking whether WordPress is
+                # installed. After a reboot the env container can come up while the
+                # shared db is still starting; a failed query then looks the same as
+                # missing tables, and an installed site would go down the fresh-install
+                # path below and have its theme switched.
+                if ! docker exec "$container_name" wp --allow-root db query "SELECT 1" 2>/dev/null | grep -q 1; then
+                    sleep 3
+                    continue
+                fi
                 # Check if core tables exist (wp core is-installed returns true even without them).
                 if docker exec "$container_name" wp --allow-root db query "SELECT 1 FROM wp_options LIMIT 1" 2>/dev/null | grep -q 1; then
                     echo "WordPress already installed."
@@ -659,20 +668,26 @@ MIGRATE
                 fi
                 echo "Installing WordPress..."
                 docker exec "$container_name" wp --allow-root cache flush 2>/dev/null
-                docker exec "$container_name" wp --allow-root core install \
+                install_out=$(docker exec "$container_name" wp --allow-root core install \
                     --url="https://${domain}" \
                     --title="${WP_TITLE:-Newspack}" \
                     --admin_user="${WP_ADMIN_USER:-admin}" \
                     --admin_password="${WP_ADMIN_PASSWORD:-password}" \
                     --admin_email="${WP_ADMIN_EMAIL:-wordpress@example.com}" \
-                    --skip-email
+                    --skip-email 2>&1)
+                printf '%s\n' "$install_out"
                 # Activate newspack-theme so a fresh env starts on the Newspack
                 # theme rather than WordPress's default. link-repos.sh symlinks
                 # the theme into wp-content/themes at container startup, so it's
                 # available by now. `n setup` does this too, but envs brought up
                 # with just `n env up` skip that, so it has to happen here.
-                docker exec "$container_name" wp --allow-root theme activate newspack-theme 2>/dev/null \
-                    || echo "Warning: could not activate newspack-theme (is it built/symlinked?)."
+                # Only after an install that actually happened: `core install` on a
+                # site that is already installed does nothing and still exits 0, and
+                # switching that site's theme would throw away its chosen design.
+                if grep -q "installed successfully" <<<"$install_out"; then
+                    docker exec "$container_name" wp --allow-root theme activate newspack-theme 2>/dev/null \
+                        || echo "Warning: could not activate newspack-theme (is it built/symlinked?)."
+                fi
                 break
             fi
             sleep 3
