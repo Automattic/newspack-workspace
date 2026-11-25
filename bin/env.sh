@@ -595,6 +595,16 @@ MIGRATE
         set +a
         # Ensure db is running and create the environment database.
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db
+        # `up -d` returns before MariaDB accepts connections, which after a reboot
+        # takes a few seconds. A CREATE DATABASE sent before then fails silently
+        # and leaves a new env with no database to install into. The ping goes
+        # over TCP because the image's first-run setup server listens only on the
+        # socket and is not yet the server the env will talk to.
+        for _ in $(seq 1 30); do
+            docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+                mariadb-admin -h 127.0.0.1 --silent ping >/dev/null 2>&1 && break
+            sleep 1
+        done
         echo "Creating database $db_name..."
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
