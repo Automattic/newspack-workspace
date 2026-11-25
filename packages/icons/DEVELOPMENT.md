@@ -44,7 +44,7 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 54 custom icons:
+This package includes 51 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
@@ -73,12 +73,9 @@ This package includes 54 custom icons:
 - `emailCheck` - Email check icon
 - `emailError` - Email error icon
 - `emailPremium` - Email premium icon
-- `emailSend` - Email send icon
 - `feather` - Feather icon
-- `gift` - Gift icon
 - `hand` - Hand icon
 - `iframe` - Iframe icon
-- `key` - Key icon
 - `liveStreaming` - Live streaming icon
 - `logout` - Logout icon
 - `mergeTags` - Merge tags icon
@@ -116,7 +113,7 @@ import { Icon, chartBar, settings } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import { ad, emailAd, gift } from '../../../../packages/icons';
+import { ad, emailAd, newspaper } from '../../../../packages/icons';
 
 function MyComponent() {
 	return (
@@ -128,7 +125,7 @@ function MyComponent() {
 			{/* Newspack icon */}
 			<Icon icon={ ad } />
 			<Icon icon={ emailAd } />
-			<Icon icon={ gift } />
+			<Icon icon={ newspaper } />
 		</div>
 	);
 }

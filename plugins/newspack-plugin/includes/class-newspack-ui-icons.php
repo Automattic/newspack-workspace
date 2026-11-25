@@ -179,8 +179,7 @@ class Newspack_UI_Icons {
 			</svg>',
 		'emailSend'        =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--email-send">
-				<path d="M8.25 12L4.75 4.75L19.25 12L4.75 19.25Z" stroke-linejoin="round" />
-				<path d="M8.25 12H12" />
+				<path d="M4.75 13V18L19 12L4.75 6V11M4.75 13L7.5 12L4.75 11M4.75 13V11" />
 			</svg>',
 		'error'            =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--error">
@@ -188,10 +187,7 @@ class Newspack_UI_Icons {
 			</svg>',
 		'gift'             =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--gift">
-				<path d="M4.75 9.75H19.25V19.25H4.75Z" />
-				<path d="M12.25 9.75V19.25" />
-				<path d="M9.75 8.25A1.75 1.75 0 1 1 11.5 6.5V8.25Z" />
-				<path d="M14.75 8.25A1.75 1.75 0 1 0 13 6.5V8.25Z" />
+				<path d="M12 19.25H18C18.6904 19.25 19.25 18.6904 19.25 18V10C19.25 9.30964 18.6904 8.75 18 8.75H12M12 19.25H6C5.30964 19.25 4.75 18.6904 4.75 18V10C4.75 9.30964 5.30964 8.75 6 8.75H12M12 19.25V8.75M12 8.75V6.75M12 8.75H9.5C8.11929 8.75 7 7.85457 7 6.75C7 5.64543 8.11929 4.75 9.5 4.75C10.8807 4.75 12 5.64543 12 6.75M12 8.75H14.5C15.8807 8.75 17 7.85457 17 6.75C17 5.64543 15.8807 4.75 14.5 4.75C13.1193 4.75 12 5.64543 12 6.75" />
 			</svg>',
 		'globe'            =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--globe">
@@ -210,8 +206,7 @@ class Newspack_UI_Icons {
 			</svg>',
 		'key'              =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--key">
-				<path d="M9.8825 10.614A4.75 4.75 0 1 1 13.383 14.117L12.25 15.25H10.25V17.25H8.25V19.25H4.75V15.7465L9.8825 10.614Z" />
-				<path d="M15.4984 9.5C15.7636 9.5 16.018 9.39464 16.2055 9.20711C16.3931 9.01957 16.4984 8.76522 16.4984 8.5C16.4984 8.23478 16.3931 7.98043 16.2055 7.79289C16.018 7.60536 15.7636 7.5 15.4984 7.5C15.2332 7.5 14.9788 7.60536 14.7913 7.79289C14.6038 7.98043 14.4984 8.23478 14.4984 8.5C14.4984 8.76522 14.6038 9.01957 14.7913 9.20711C14.9788 9.39464 15.2332 9.5 15.4984 9.5Z" fill="currentColor" stroke="none" />
+				<path d="M11.75 12C11.75 13.7949 10.2949 15.25 8.5 15.25C6.70507 15.25 5.25 13.7949 5.25 12C5.25 10.2051 6.70507 8.75 8.5 8.75C10.2949 8.75 11.75 10.2051 11.75 12ZM11.75 12H15.75M19 12H16.25M15.75 12V15H16.25V12M15.75 12H16.25" />
 			</svg>',
 		'lineSolid'        =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--line-solid">

@@ -18,12 +18,12 @@ import {
 import { EmptyState, Stack } from '@wordpress/ui';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { gift } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { Button, Divider, SelectControl, SplitSection, TextControl, useConfirmDialog } from '../../../../../../packages/components/src';
-import { gift } from '../../../../../../packages/icons';
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
