@@ -128,7 +128,7 @@ final class Active_Subscriptions_Reader_Data {
 	 * without one: a missing item and an empty one match the same segments and
 	 * report the same to GA4, so writing it would only add a row per reader. An
 	 * unchanged list is not rewritten, which keeps `newspack_reader_data_updated`
-	 * listeners quiet.
+	 * listeners quiet, unless it lacks the server's mark.
 	 *
 	 * The stamp is written once the item is stored, or found already right, so a
 	 * refused write is retried on the next page view instead of waiting out the
@@ -146,7 +146,12 @@ final class Active_Subscriptions_Reader_Data {
 		}
 		$value      = wp_json_encode( $product_ids );
 		$stored     = Reader_Data::get_data( $user_id, self::STORE_KEY );
-		$is_current = false === $stored ? empty( $product_ids ) : $stored === $value;
+		// A list stored without the server's mark, such as one written before the
+		// mark existed, is rewritten even when it is right: reader-data rules ignore
+		// an unmarked value, so leaving it would keep a subscriber out of them.
+		$is_current = false === $stored
+			? empty( $product_ids )
+			: $stored === $value && Reader_Data_Trust::has_valid_mark( $user_id, self::STORE_KEY );
 		if ( ! $is_current && \is_wp_error( Reader_Data::update_item( $user_id, self::STORE_KEY, $value ) ) ) {
 			return;
 		}
