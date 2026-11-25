@@ -9,6 +9,7 @@ namespace Newspack\Data_Events\Connectors;
 
 use Newspack\Access_Rules;
 use Newspack\Data_Events;
+use Newspack\Group_Subscription;
 use Newspack\Logger;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\WooCommerce_Connection;
@@ -16,6 +17,7 @@ use Newspack\WooCommerce_Subscriptions;
 use Newspack\WooCommerce_Subscriptions_Gifting;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
 use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
+use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Access_Metadata;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -92,6 +94,7 @@ class Contact_Sync_Connector {
 
 		// Changes to who holds a gift or a group seat that no data event reports.
 		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'group_memberships_changed' ] );
+		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'group_settings_updated' ], 10, 2 );
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'gift_recipient_changed' ], 10, 3 );
 		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'gift_recipient_cleared' ], 10, 2 );
 	}
@@ -237,8 +240,8 @@ class Contact_Sync_Connector {
 	 *
 	 * The recipient is synced like the customer. Members are synced in the
 	 * background, because a group can be large, and only when the change can
-	 * affect their access and an integration sends Content Access: a group's
-	 * status is the only thing about it that reaches its members' contacts.
+	 * affect their access and an integration sends a Content Access field: those
+	 * are the only fields on a member's contact that a group's status reaches.
 	 *
 	 * @param int   $timestamp Timestamp of the event.
 	 * @param array $data      Data associated with the event.
@@ -264,7 +267,7 @@ class Contact_Sync_Connector {
 		if (
 			! empty( $readers['members'] )
 			&& WooCommerce_Connection::status_change_affects_access( $status_before, $status_after )
-			&& Sync_Metadata::is_field_push_enabled( 'Content_Access' )
+			&& self::is_content_access_pushed()
 		) {
 			self::queue_reader_syncs(
 				$readers['members'],
@@ -312,10 +315,47 @@ class Contact_Sync_Connector {
 	 * @param int $user_id The reader.
 	 */
 	public static function group_memberships_changed( $user_id ) {
-		if ( ! Sync_Metadata::is_field_push_enabled( 'Content_Access' ) ) {
+		if ( ! self::is_content_access_pushed() ) {
 			return;
 		}
 		self::queue_reader_syncs( [ (int) $user_id ], 'RAS Group subscription membership changed' );
+	}
+
+	/**
+	 * Queue an ESP sync for every member of a group that was turned on or off,
+	 * which gives or takes away their access.
+	 *
+	 * Members are read straight from the group: once it is off, the shared reader
+	 * lookup no longer lists them, and they are the readers who just lost access.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string[]         $changed_keys The group settings that changed.
+	 */
+	public static function group_settings_updated( $subscription, $changed_keys ) {
+		if ( ! in_array( 'enabled', (array) $changed_keys, true ) || ! self::is_content_access_pushed() ) {
+			return;
+		}
+		$subscription_id = $subscription instanceof \WC_Subscription ? $subscription->get_id() : (int) $subscription;
+		self::queue_reader_syncs(
+			array_map( 'intval', (array) Group_Subscription::get_members( $subscription ) ),
+			sprintf( 'RAS Group subscription %d turned on or off', $subscription_id )
+		);
+	}
+
+	/**
+	 * Whether an integration sends any of the Content Access fields. A group
+	 * change can alter all three (access, its source, and the group's name), and
+	 * an integration may send any one of them without the others.
+	 *
+	 * @return bool
+	 */
+	private static function is_content_access_pushed() {
+		foreach ( array_keys( Content_Access_Metadata::get_fields() ) as $field ) {
+			if ( Sync_Metadata::is_field_push_enabled( $field ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

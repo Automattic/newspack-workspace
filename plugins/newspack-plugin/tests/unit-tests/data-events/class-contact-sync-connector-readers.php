@@ -168,6 +168,90 @@ class Newspack_Test_Contact_Sync_Connector_Readers extends \WP_UnitTestCase {
 
 		$this->handle_event( 'product_subscription_changed', $this->get_status_change_data( $subscription, 'active', 'cancelled' ) );
 		Group_Subscription::update_members( $subscription, [ $this->create_reader( 'joiner@example.test' ) ] );
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'enabled' => false ] );
+		$this->run_connector_shutdown();
+
+		$this->assertSame( [], $this->get_sync_readers_actions() );
+	}
+
+	/**
+	 * Content Access Source and Content Access Group change along with a member's
+	 * access, so an integration that sends either one without Content Access
+	 * itself still gets member syncs.
+	 *
+	 * @dataProvider data_content_access_fields_sent_alone
+	 *
+	 * @param string $label The one Content Access field the integration sends.
+	 */
+	public function test_members_are_queued_when_an_integration_sends_any_content_access_field( string $label ) {
+		$this->set_outgoing_fields( [ $label ] );
+		$member_id    = $this->create_reader( 'member@example.test' );
+		$joiner_id    = $this->create_reader( 'joiner@example.test' );
+		$subscription = $this->create_subscription( $this->create_reader( 'owner@example.test' ), true );
+		$this->add_group_member( $member_id, $subscription );
+
+		$this->handle_event( 'product_subscription_changed', $this->get_status_change_data( $subscription, 'active', 'cancelled' ) );
+		Group_Subscription::update_members( $subscription, [ $joiner_id ] );
+		$this->run_connector_shutdown();
+
+		$this->assertEqualsCanonicalizing( [ $member_id, $joiner_id ], $this->get_queued_reader_ids() );
+	}
+
+	/**
+	 * The Content Access fields an integration can send on their own.
+	 *
+	 * @return array
+	 */
+	public function data_content_access_fields_sent_alone(): array {
+		return [
+			'Content Access Source only' => [ 'Content Access Source' ],
+			'Content Access Group only'  => [ 'Content Access Group' ],
+		];
+	}
+
+	/**
+	 * Turning a subscription's group off or on changes every member's access, so
+	 * each member is queued, including right after the group is turned off, when
+	 * the shared reader lookup no longer lists them.
+	 *
+	 * @dataProvider data_group_toggles
+	 *
+	 * @param bool $enabled Whether the group is turned on.
+	 */
+	public function test_turning_a_group_on_or_off_queues_its_members( bool $enabled ) {
+		$subscription = $this->create_subscription( $this->create_reader( 'owner@example.test' ), ! $enabled );
+		$member_ids   = [ $this->create_reader( 'member-1@example.test' ), $this->create_reader( 'member-2@example.test' ) ];
+		foreach ( $member_ids as $member_id ) {
+			$this->add_group_member( $member_id, $subscription );
+		}
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'enabled' => $enabled ] );
+		$this->run_connector_shutdown();
+
+		$this->assertEqualsCanonicalizing( $member_ids, $this->get_queued_reader_ids() );
+	}
+
+	/**
+	 * Both directions of the group toggle.
+	 *
+	 * @return array
+	 */
+	public function data_group_toggles(): array {
+		return [
+			'turned off' => [ false ],
+			'turned on'  => [ true ],
+		];
+	}
+
+	/**
+	 * A group setting that doesn't change who holds the subscription, such as its
+	 * seat limit, queues nothing.
+	 */
+	public function test_changing_another_group_setting_queues_no_members() {
+		$subscription = $this->create_subscription( $this->create_reader( 'owner@example.test' ), true );
+		$this->add_group_member( $this->create_reader( 'member@example.test' ), $subscription );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'limit' => 5 ] );
 		$this->run_connector_shutdown();
 
 		$this->assertSame( [], $this->get_sync_readers_actions() );
