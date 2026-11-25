@@ -83,6 +83,16 @@ describe( 'viewToParams', () => {
 		);
 	} );
 
+	it( "sends the Donor filter as the endpoint's donor param", () => {
+		const params = viewToParams( {
+			...baseView,
+			filters: [ { field: 'donor', operator: 'isAny', value: [ 'one-time', 'none' ] } ],
+		} );
+		expect( params.donor ).toEqual( [ 'one-time', 'none' ] );
+		// An empty selection must not reach the endpoint: `donor=` would filter to nobody.
+		expect( viewToParams( { ...baseView, filters: [ { field: 'donor', operator: 'isAny', value: [] } ] } ) ).not.toHaveProperty( 'donor' );
+	} );
+
 	it( "sends the plans filter as the endpoint's `plan` param", () => {
 		// The field is `plans` (the Subscription column) but the endpoint arg is
 		// `plan`; a mismatch here silently returns the unfiltered list.

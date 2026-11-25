@@ -32,6 +32,7 @@ import LoadFailureNotice from '../components/LoadFailureNotice';
 import RefreshOverlay, { useAnnounceRefresh } from '../components/RefreshOverlay';
 import { useRetryFocus } from '../use-retry-focus';
 import { fmtRelative, fmtDate } from '../format';
+import { DONOR_BADGE_INTENT, DONOR_FILTER_ELEMENTS, DONOR_LABELS, donorKind, donorsEnabled } from '../donor';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { getSavedListView, saveListView } from '../data/list-view-state';
 import { usePlans } from '../data/use-plans';
@@ -122,16 +123,22 @@ const { useHistory, useLocation } = Router;
  * subscription while the row resolves to the person, so the two affordances stay
  * distinct — see links.jsx.
  *
+ * A One-time donor's latest gift follows the plans as one more line. It has no
+ * subscription, so it links to the order instead, with the date below; an order
+ * with no paid date shows the link alone.
+ *
  * The open rows live in `expandedIds`, outside the cell: DataViews remounts every
  * cell when the fields are rebuilt (avatars and plans arrive after the first paint),
  * which would otherwise fold an open row back up.
  *
- * @param {Object} props             Component props.
- * @param {Array}  props.entries     The plan entries to list, already filtered.
- * @param {Set}    props.expandedIds The ids of the rows that are open.
- * @param {*}      props.id          This row's id.
+ * @param {Object}      props              Component props.
+ * @param {Array}       props.entries      The plan entries to list, already filtered.
+ * @param {Object|null} props.lastDonation The reader's latest one-time donation
+ *                                         ({ date, editUrl }), or null.
+ * @param {Set}         props.expandedIds  The ids of the rows that are open.
+ * @param {*}           props.id           This row's id.
  */
-const PlanEntries = ( { entries, expandedIds, id } ) => (
+const PlanEntries = ( { entries, lastDonation, expandedIds, id } ) => (
 	<CellList defaultExpanded={ expandedIds.has( id ) } onToggle={ isExpanded => ( isExpanded ? expandedIds.add( id ) : expandedIds.delete( id ) ) }>
 		{ entries.map( ( e, i ) => (
 			<div key={ i }>
@@ -140,6 +147,12 @@ const PlanEntries = ( { entries, expandedIds, id } ) => (
 				{ e.site && <>&nbsp;{ `(${ e.site })` }</> }
 			</div>
 		) ) }
+		{ lastDonation && (
+			<div key="last-donation">
+				<SubscriptionLink href={ lastDonation.editUrl }>{ __( 'One-time donation', 'newspack-plugin' ) }</SubscriptionLink>
+				{ lastDonation.date && <div className="newspack-subscribers__muted">{ fmtDate( lastDonation.date ) }</div> }
+			</div>
+		) }
 	</CellList>
 );
 
@@ -235,6 +248,9 @@ export default function SubscriberList() {
 		}
 	};
 
+	// Whether the site tracks donors: the Donor filter only exists when it does.
+	const showDonor = donorsEnabled();
+
 	const fields = useMemo(
 		() => [
 			{
@@ -282,16 +298,29 @@ export default function SubscriberList() {
 				getValue: ( { item } ) => subscriberStatuses( item, groupEntriesOf( item ) ),
 				// A subscriber can hold several statuses at once, so they stack rather
 				// than sitting on one line, where two icon-and-label pairs would run
-				// together into one phrase.
-				render: ( { item } ) => (
-					<Stack direction="column" align="flex-start" gap="sm">
-						{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
-							<StatusBadge key={ status } status={ STATUS_INDICATORS[ status ] }>
-								{ STATUS_LABELS[ status ] }
-							</StatusBadge>
-						) ) }
-					</Stack>
-				),
+				// together into one phrase. The donor kind follows as a plain Badge, not a
+				// StatusBadge: it labels the reader rather than a subscription's state, so
+				// it takes an intent no subscription status uses (see DONOR_BADGE_INTENT)
+				// and stays out of `elements` and `getValue` above, which belong to the
+				// Status filter. It keeps to one line like the status badges, since this
+				// column is fitted to its content.
+				render: ( { item } ) => {
+					const kind = donorKind( item );
+					return (
+						<Stack direction="column" align="flex-start" gap="sm">
+							{ subscriberStatuses( item, groupEntriesOf( item ) ).map( status => (
+								<StatusBadge key={ status } status={ STATUS_INDICATORS[ status ] }>
+									{ STATUS_LABELS[ status ] }
+								</StatusBadge>
+							) ) }
+							{ DONOR_LABELS[ kind ] && (
+								<Badge intent={ DONOR_BADGE_INTENT[ kind ] } className="newspack-subscribers__nowrap">
+									{ DONOR_LABELS[ kind ] }
+								</Badge>
+							) }
+						</Stack>
+					);
+				},
 			},
 			{
 				id: 'plans',
@@ -306,10 +335,13 @@ export default function SubscriberList() {
 				enableSorting: false,
 				render: ( { item } ) => {
 					const entries = visiblePlanEntries( planEntries( item, groupEntriesOf( item ) ) );
-					if ( entries.length === 0 ) {
+					// Only a One-time donor carries this: Recurring and Former donors
+					// already show their donation plan among the entries.
+					const lastDonation = item.donor?.lastDonation;
+					if ( entries.length === 0 && ! lastDonation ) {
 						return <span>—</span>;
 					}
-					return <PlanEntries entries={ entries } expandedIds={ expandedPlans.current } id={ item.id } />;
+					return <PlanEntries entries={ entries } lastDonation={ lastDonation } expandedIds={ expandedPlans.current } id={ item.id } />;
 				},
 			},
 			{
@@ -330,6 +362,23 @@ export default function SubscriberList() {
 						<span>—</span>
 					),
 			},
+			...( showDonor
+				? [
+						{
+							id: 'donor',
+							label: __( 'Donor', 'newspack-plugin' ),
+							// Hidden by default, filter-only in practice: the badge in the
+							// Status column is how a donor shows. Filtered server-side: the
+							// `donor` param matches readers by the same kind the badge
+							// shows, and `none` is a reader who has no kind.
+							elements: DONOR_FILTER_ELEMENTS,
+							filterBy: { operators: [ 'isAny' ] },
+							enableSorting: false,
+							getValue: ( { item } ) => donorKind( item ) || 'none',
+							render: ( { item } ) => <span>{ DONOR_LABELS[ donorKind( item ) ] || '—' }</span>,
+						},
+				  ]
+				: [] ),
 			...( managedOnElements.length
 				? [
 						{
@@ -482,7 +531,7 @@ export default function SubscriberList() {
 				},
 			},
 		],
-		[ avatars, planElements, managedOnElements ]
+		[ avatars, planElements, managedOnElements, showDonor ]
 	);
 
 	// DataViews only makes the title cell and the avatar clickable; delegate

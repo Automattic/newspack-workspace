@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, act, screen, fireEvent } from '@testing-library/react';
+import { render, act, screen, fireEvent, within } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -43,6 +43,9 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		require( 'react' ).createElement( 'button', { ...props, ref }, children )
 	),
 	Notice: () => null,
+	// The real status badge, so a test can tell the status badges from the donor
+	// badge beside them.
+	StatusBadge: jest.requireActual( '../../../../packages/components/src/status-badge' ).default,
 	Waiting: () => null,
 	Router: { useHistory: () => ( { push: jest.fn() } ), useLocation: () => ( { pathname: '/' } ) },
 } ) );
@@ -681,5 +684,205 @@ describe( 'the subscriber column', () => {
 		const { container } = render( name.render( { item: subscriber( 4 ) } ) );
 
 		expect( container.querySelector( '[data-subscriber-id="4"]' ).textContent ).toBe( 'Reader 4' );
+	} );
+} );
+
+/**
+ * A donor's kind shows as a badge after the subscription status badges, a one-time
+ * donor's latest gift sits in the Subscription column, and the hidden Donor field
+ * lets the list narrow by kind. The kind is decided on the server; these cells only
+ * show it.
+ */
+describe( 'the donor badge and filter', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		mockDataViewsProps = null;
+		apiFetch.mockReset();
+	} );
+
+	afterEach( () => {
+		delete window.newspackSubscribers;
+	} );
+
+	const donationPlan = { id: 9, plan: 'Monthly gift', status: 'active', editUrl: '/edit/9', isComplimentary: false, isDonation: true };
+	const lastDonation = { date: '2026-03-04', editUrl: 'https://example.com/wp-admin/post.php?post=77&action=edit' };
+
+	/** Mount the list, then hand back a lookup for the fields DataViews received. */
+	const mount = async () => {
+		apiFetch.mockImplementation( ( { path } ) =>
+			Promise.resolve( path.includes( '/plans' ) ? { items: [], sites: [] } : { items: [ subscriber( 1 ) ], total: 1, pages: 1 } )
+		);
+		await act( async () => {
+			render( <SubscriberList /> );
+		} );
+		return id => mockDataViewsProps.fields.find( f => id === f.id );
+	};
+
+	/** The text of one cell, rendered into its own container. */
+	const cell = ( field, item ) => render( field.render( { item } ) ).container;
+
+	describe( 'in the Status column', () => {
+		it( 'shows a one-time donor with no subscription as the donor badge alone', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), status: '', donor: { kind: 'one-time', lastDonation } };
+
+			expect( cell( field( 'status' ), item ).textContent ).toBe( 'One-time donor' );
+		} );
+
+		it( 'puts the donor badge after the status badges, as a badge of its own', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), subscriptions: [ donationPlan ], donor: { kind: 'recurring', lastDonation: null } };
+			const badges = [ ...cell( field( 'status' ), item ).firstChild.children ];
+
+			expect( badges.map( badge => badge.textContent ) ).toEqual( [ 'Active', 'Recurring donor' ] );
+			// A status badge would read as one more subscription status.
+			expect( badges[ 0 ].classList.contains( 'newspack-status-badge' ) ).toBe( true );
+			expect( badges[ 1 ].classList.contains( 'newspack-status-badge' ) ).toBe( false );
+		} );
+
+		it( 'labels a former donor', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), status: '', donor: { kind: 'former', lastDonation: null } };
+
+			expect( cell( field( 'status' ), item ).textContent ).toBe( 'Former donor' );
+		} );
+
+		it( 'adds no badge when the reader is not a donor, or the site sends no donor data', async () => {
+			const field = await mount();
+			const base = { ...subscriber( 1 ), subscriptions: [ { ...donationPlan, isDonation: false } ] };
+
+			expect( cell( field( 'status' ), base ).textContent ).toBe( 'Active' );
+			expect( cell( field( 'status' ), { ...base, donor: { kind: '', lastDonation: null } } ).textContent ).toBe( 'Active' );
+		} );
+
+		it( 'leaves the Status filter and its values to the subscription statuses', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), subscriptions: [ donationPlan ], donor: { kind: 'recurring', lastDonation: null } };
+
+			expect( field( 'status' ).getValue( { item } ) ).toEqual( [ 'active' ] );
+			expect( field( 'status' ).elements.map( e => e.value ) ).toEqual( [ 'active', 'pending', 'on-hold', 'cancelled' ] );
+		} );
+	} );
+
+	describe( 'in the Subscription column', () => {
+		it( 'links the latest one-time donation to its order, with the date below', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), donor: { kind: 'one-time', lastDonation } };
+			const container = cell( field( 'plans' ), item );
+
+			const link = container.querySelector( 'a' );
+			expect( link.textContent ).toBe( 'One-time donation' );
+			expect( link.getAttribute( 'href' ) ).toBe( lastDonation.editUrl );
+			expect( container.textContent ).toBe( 'One-time donationMarch 4, 2026' );
+			expect( container.textContent ).not.toContain( '—' );
+		} );
+
+		it( 'lists the donation after the reader’s own plans', async () => {
+			const field = await mount();
+			const other = { id: 3, plan: 'Digital', status: 'active', editUrl: '/edit/3', isComplimentary: false };
+			const item = { ...subscriber( 1 ), subscriptions: [ other ], donor: { kind: 'one-time', lastDonation } };
+
+			expect( cell( field( 'plans' ), item ).textContent ).toBe( 'DigitalOne-time donationMarch 4, 2026' );
+		} );
+
+		it( 'links the donation without a date when the order has none', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), donor: { kind: 'one-time', lastDonation: { date: null, editUrl: lastDonation.editUrl } } };
+			const container = cell( field( 'plans' ), item );
+
+			expect( container.querySelector( 'a' ).getAttribute( 'href' ) ).toBe( lastDonation.editUrl );
+			expect( container.textContent ).toBe( 'One-time donation' );
+		} );
+
+		it( 'adds no donation line without a latest donation', async () => {
+			const field = await mount();
+			const recurring = { ...subscriber( 1 ), subscriptions: [ donationPlan ], donor: { kind: 'recurring', lastDonation: null } };
+
+			expect( cell( field( 'plans' ), recurring ).textContent ).toBe( 'Monthly gift' );
+			expect( cell( field( 'plans' ), { ...subscriber( 1 ), donor: { kind: 'former', lastDonation: null } } ).textContent ).toBe( '—' );
+			expect( cell( field( 'plans' ), subscriber( 1 ) ).textContent ).toBe( '—' );
+		} );
+
+		it( 'folds the donation into the list toggle as its last line', async () => {
+			const field = await mount();
+			const plans = [ 3, 4, 5 ].map( id => ( { ...donationPlan, id, plan: `Plan ${ id }`, editUrl: `/edit/${ id }`, isDonation: false } ) );
+			const item = { ...subscriber( 1 ), subscriptions: plans, donor: { kind: 'one-time', lastDonation } };
+			const container = cell( field( 'plans' ), item );
+
+			expect( container.textContent ).not.toContain( 'One-time donation' );
+
+			fireEvent.click( within( container ).getByRole( 'button', { name: 'Show 2 more' } ) );
+
+			const links = [ ...container.querySelectorAll( 'a' ) ];
+			expect( links.map( link => link.textContent ) ).toEqual( [ 'Plan 3', 'Plan 4', 'Plan 5', 'One-time donation' ] );
+		} );
+
+		it( 'keeps the donation out of the Subscription filter values', async () => {
+			const field = await mount();
+			const item = { ...subscriber( 1 ), donor: { kind: 'one-time', lastDonation } };
+
+			expect( field( 'plans' ).getValue( { item } ) ).toEqual( [] );
+		} );
+	} );
+
+	describe( 'the Donor field', () => {
+		it( 'is a hidden, filter-only field on a site that tracks donors', async () => {
+			window.newspackSubscribers = { donorsEnabled: true };
+			const field = await mount();
+
+			expect( field( 'donor' ).label ).toBe( 'Donor' );
+			expect( field( 'donor' ).filterBy ).toEqual( { operators: [ 'isAny' ] } );
+			expect( field( 'donor' ).enableSorting ).toBe( false );
+			expect( field( 'donor' ).elements.map( e => e.value ) ).toEqual( [ 'one-time', 'recurring', 'former', 'none' ] );
+			expect( mockDataViewsProps.view.fields ).not.toContain( 'donor' );
+		} );
+
+		it( 'is absent when the site does not track donors', async () => {
+			window.newspackSubscribers = { donorsEnabled: false };
+			const field = await mount();
+
+			expect( field( 'donor' ) ).toBeUndefined();
+		} );
+
+		it( 'is absent when the server sent no config', async () => {
+			const field = await mount();
+
+			expect( field( 'donor' ) ).toBeUndefined();
+		} );
+
+		it( 'matches a non-donor by the value the endpoint calls none', async () => {
+			window.newspackSubscribers = { donorsEnabled: true };
+			const field = await mount();
+			const donor = kind => ( { ...subscriber( 1 ), donor: { kind, lastDonation: null } } );
+
+			expect( field( 'donor' ).getValue( { item: donor( 'recurring' ) } ) ).toBe( 'recurring' );
+			expect( field( 'donor' ).getValue( { item: donor( 'former' ) } ) ).toBe( 'former' );
+			expect( field( 'donor' ).getValue( { item: donor( '' ) } ) ).toBe( 'none' );
+			expect( field( 'donor' ).getValue( { item: subscriber( 1 ) } ) ).toBe( 'none' );
+		} );
+
+		it( 'shows the kind as a label when added as a column, and a dash for a non-donor', async () => {
+			window.newspackSubscribers = { donorsEnabled: true };
+			const field = await mount();
+			const donor = kind => ( { ...subscriber( 1 ), donor: { kind, lastDonation: null } } );
+
+			expect( cell( field( 'donor' ), donor( 'one-time' ) ).textContent ).toBe( 'One-time donor' );
+			expect( cell( field( 'donor' ), donor( '' ) ).textContent ).toBe( '—' );
+			expect( cell( field( 'donor' ), subscriber( 1 ) ).textContent ).toBe( '—' );
+		} );
+
+		it( 'sends the picked kinds to the endpoint', async () => {
+			window.newspackSubscribers = { donorsEnabled: true };
+			await mount();
+			await act( async () => {
+				mockDataViewsProps.onChangeView( {
+					...mockDataViewsProps.view,
+					filters: [ { field: 'donor', operator: 'isAny', value: [ 'recurring', 'none' ] } ],
+				} );
+			} );
+
+			const paths = apiFetch.mock.calls.map( ( [ { path } ] ) => path );
+			expect( paths[ paths.length - 1 ] ).toContain( 'donor%5B0%5D=recurring&donor%5B1%5D=none' );
+		} );
 	} );
 } );
