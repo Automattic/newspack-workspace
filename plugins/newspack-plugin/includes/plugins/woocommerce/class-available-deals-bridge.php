@@ -60,15 +60,25 @@ final class Available_Deals_Bridge {
 	}
 
 	/**
-	 * Data-event handler: recompute available deals for the event's user.
+	 * Data-event handler: recompute available deals for the event's user. A
+	 * subscription event names the purchaser only, so a gift's recipient, who
+	 * holds the gift, is recomputed too. Group members are not: none of them owns
+	 * the subscription, and a group can have hundreds.
 	 *
 	 * @param int   $timestamp Event timestamp.
-	 * @param array $data      Event data (carries user_id).
+	 * @param array $data      Event data (carries user_id, and subscription_id for subscription events).
 	 */
 	public static function refresh_on_event( int $timestamp, array $data ): void {
 		$user_id = (int) ( $data['user_id'] ?? 0 );
 		if ( $user_id > 0 ) {
 			self::refresh( $user_id );
+		}
+		if ( empty( $data['subscription_id'] ) ) {
+			return;
+		}
+		$recipient_id = WooCommerce_Subscriptions::get_subscription_readers( (int) $data['subscription_id'] )['recipient'];
+		if ( $recipient_id > 0 && $recipient_id !== $user_id ) {
+			self::refresh( $recipient_id );
 		}
 	}
 

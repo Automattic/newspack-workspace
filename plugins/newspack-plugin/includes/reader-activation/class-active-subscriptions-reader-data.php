@@ -27,8 +27,9 @@ defined( 'ABSPATH' ) || exit;
  * cannot list it.
  *
  * Each reader's list carries a stamp: when it was computed. A page view
- * recomputes a list that is missing or more than a day old, which is what
- * catches a change that fires no event.
+ * recomputes a list that is missing, was computed before a product's group
+ * setting changed, or is more than a day old. The age limit is what catches a
+ * change that fires no event.
  */
 final class Active_Subscriptions_Reader_Data {
 	const STORE_KEY = 'active_subscriptions';
@@ -53,9 +54,10 @@ final class Active_Subscriptions_Reader_Data {
 		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'handle_memberships_changed' ] );
 
-		// No Data Event fires for handing a gift to someone else, or for turning a
-		// group on or off, either.
+		// No Data Event fires for handing a gift to someone else, clearing its
+		// recipient, or turning a group on or off, either.
 		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
+		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'handle_gift_recipient_cleared' ], 10, 2 );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
 
 		// Runs before Reader_Data hands the stored items to the browser (priority 10
@@ -221,10 +223,8 @@ final class Active_Subscriptions_Reader_Data {
 	 * it (an admin can turn a buyer's own subscription into a gift), which costs
 	 * one meta delete when they didn't.
 	 *
-	 * Clearing a recipient (`WCS_Gifting::delete_recipient_user()`) fires no hook.
-	 * The recipient who lost the gift, and whoever holds it afterwards, are put
-	 * right by the daily stale window instead. A gift bought at checkout keeps the
-	 * recipient's email, so nobody holds it then.
+	 * Clearing a recipient fires a different hook; see
+	 * handle_gift_recipient_cleared().
 	 *
 	 * @param \WC_Subscription $subscription          The gifted subscription.
 	 * @param int              $recipient_id          The new recipient.
@@ -240,15 +240,29 @@ final class Active_Subscriptions_Reader_Data {
 	}
 
 	/**
+	 * Mark stale the readers whose list changes when a gift loses its recipient
+	 * account without WCS's recipient-changed hook (an admin cleared it, or an
+	 * account was deleted): the recipient who lost the gift, and the buyer, who
+	 * holds it once it is no longer a gift. A gift that keeps the recipient's
+	 * email is held by nobody, so marking the buyer then costs one meta delete.
+	 *
+	 * @param \WC_Subscription $subscription          The gift.
+	 * @param int              $previous_recipient_id The recipient it had before.
+	 */
+	public static function handle_gift_recipient_cleared( $subscription, $previous_recipient_id ): void {
+		self::mark_stale( (int) $previous_recipient_id );
+		self::mark_stale( $subscription instanceof \WC_Subscription ? (int) $subscription->get_customer_id() : 0 );
+	}
+
+	/**
 	 * Mark a group's members stale when the group is turned on or off. Members
 	 * hold its products only while it is on, and the change names none of them.
 	 * The owner holds their own subscription either way.
 	 *
 	 * This covers a setting changed on the subscription. Turning group
 	 * subscriptions on or off for a product fires no
-	 * `newspack_group_subscription_settings_updated`, so members of groups that
-	 * inherit the product's setting are put right at their next login or within
-	 * a day.
+	 * `newspack_group_subscription_settings_updated`; is_stale() catches that
+	 * instead, through the time Group_Subscription_Settings records for it.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
 	 * @param string[]         $changed_keys The settings that changed.
@@ -315,8 +329,11 @@ final class Active_Subscriptions_Reader_Data {
 	}
 
 	/**
-	 * Whether a reader's stored list needs recomputing: it was never computed, or
-	 * was computed more than a day ago.
+	 * Whether a reader's stored list needs recomputing: it was never computed, was
+	 * computed more than a day ago, or was computed no later than the last change
+	 * to a product's group setting. That change turns every group that inherits it
+	 * on or off, naming none of their members, and a list computed in the same
+	 * second may predate it.
 	 *
 	 * @param int $user_id User ID.
 	 *
@@ -324,7 +341,7 @@ final class Active_Subscriptions_Reader_Data {
 	 */
 	public static function is_stale( int $user_id ): bool {
 		$computed = (int) get_user_meta( $user_id, self::STAMP_META_KEY, true );
-		return $computed < time() - DAY_IN_SECONDS;
+		return $computed < time() - DAY_IN_SECONDS || $computed <= Group_Subscription_Settings::get_products_changed_at();
 	}
 }
 Active_Subscriptions_Reader_Data::init();

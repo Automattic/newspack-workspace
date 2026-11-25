@@ -12,6 +12,7 @@ use Newspack\Group_Subscription_Settings;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Data;
 
+require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 require_once dirname( __DIR__, 2 ) . '/mocks/newspack-segments-model-mock.php';
 require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 require_once dirname( __DIR__, 2 ) . '/mocks/wcsg-recipient-addresses-mock.php';
@@ -159,6 +160,275 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	private function view_page_as( $user_id ) {
 		wp_set_current_user( $user_id );
 		Gate_Access_Reader_Data::maybe_backfill_current_reader();
+	}
+
+	/**
+	 * Give a subscription to a recipient, or hand it to a different one.
+	 *
+	 * WooCommerce Subscriptions Gifting lists a gift under its recipient, so the
+	 * lookup filter reads the recipient map each time it runs. Handing the gift on,
+	 * or clearing its recipient, is then one write to the map.
+	 *
+	 * @param \WC_Subscription $subscription Subscription to gift.
+	 * @param int              $recipient_id Recipient.
+	 */
+	private function gift_to( $subscription, $recipient_id ) {
+		$is_gifted = isset( \WCS_Gifting::$recipients[ $subscription->get_id() ] );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		if ( $is_gifted ) {
+			return;
+		}
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $subscription ) {
+				if ( (int) $user_id === ( \WCS_Gifting::$recipients[ $subscription->get_id() ] ?? 0 ) ) {
+					$subscriptions[ $subscription->get_id() ] = $subscription;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+	}
+
+	/**
+	 * A gift's status change names its buyer. The recipient, who holds the gift,
+	 * is marked stale and loses the gate on their next page view.
+	 */
+	public function test_gift_status_change_marks_the_recipient_stale() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$gift         = $this->create_subscription( $buyer_id );
+		$this->gift_to( $gift, $recipient_id );
+		$this->view_page_as( $recipient_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $recipient_id ) );
+
+		$gift->update_status( 'cancelled' );
+		Gate_Access_Reader_Data::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $buyer_id,
+				'subscription_id' => $gift->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			]
+		);
+
+		$this->assertEmpty( get_user_meta( $recipient_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The recipient is marked stale.' );
+		$this->view_page_as( $recipient_id );
+		$this->assertSame( [], $this->stored_gates( $recipient_id ) );
+	}
+
+	/**
+	 * With WooCommerce Memberships active, Group_Subscription::is_group_subscription()
+	 * answers "no" on a My Account page. A status change made there still marks the
+	 * group's members stale.
+	 *
+	 * Runs in its own process: the Memberships stand-in can't be undeclared, and
+	 * would make Memberships::is_active() true for every later test.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_group_status_change_on_my_account_marks_members_stale() {
+		require dirname( __DIR__, 2 ) . '/mocks/wc-memberships-active-mock.php';
+		if ( ! function_exists( 'is_account_page' ) ) {
+			/**
+			 * Stub for WooCommerce is_account_page().
+			 *
+			 * @return bool
+			 */
+			function is_account_page() {
+				return $GLOBALS['newspack_test_is_account_page'] ?? false;
+			}
+		}
+		$owner_id     = $this->create_reader();
+		$member_id    = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, true );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		update_user_meta(
+			$member_id,
+			Gate_Access_Reader_Data::STAMP_META_KEY,
+			[
+				'version'  => (string) get_option( Gate_Access_Reader_Data::GATES_VERSION_OPTION, '' ),
+				'computed' => time(),
+			]
+		);
+		$GLOBALS['newspack_test_is_account_page'] = true;
+		$this->assertFalse( Group_Subscription::is_group_subscription( $subscription ), 'The My Account caveat applies.' );
+
+		$subscription->update_status( 'cancelled' );
+		Gate_Access_Reader_Data::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			]
+		);
+		unset( $GLOBALS['newspack_test_is_account_page'] );
+
+		$this->assertEmpty( get_user_meta( $member_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The member is marked stale.' );
+	}
+
+	/**
+	 * Handing a gift to someone else fires no subscription event. The new
+	 * recipient gains the gate and the old one loses it, on their next page view.
+	 */
+	public function test_reassigning_a_gift_moves_the_gate_to_the_new_recipient() {
+		$buyer_id = $this->create_reader();
+		$old_id   = $this->create_reader();
+		$new_id   = $this->create_reader();
+		$gift     = $this->create_subscription( $buyer_id );
+		$this->gift_to( $gift, $old_id );
+		$this->view_page_as( $old_id );
+		$this->view_page_as( $new_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $old_id ) );
+		$this->assertSame( [], $this->stored_gates( $new_id ) );
+
+		$this->gift_to( $gift, $new_id );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $gift, $new_id, $old_id );
+
+		$this->view_page_as( $old_id );
+		$this->view_page_as( $new_id );
+		$this->assertSame( [], $this->stored_gates( $old_id ), 'The old recipient loses the gate.' );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $new_id ), 'The new recipient gains it.' );
+	}
+
+	/**
+	 * A subscription that becomes a gift was the buyer's own until then. The
+	 * recipient-changed hook reports no earlier recipient, so the buyer is marked,
+	 * and loses the gate on their next page view.
+	 */
+	public function test_gifting_a_subscription_the_buyer_held_takes_the_gate_from_the_buyer() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$subscription = $this->create_subscription( $buyer_id );
+		$this->view_page_as( $buyer_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $buyer_id ) );
+
+		$this->gift_to( $subscription, $recipient_id );
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $recipient_id, 0 );
+
+		$this->view_page_as( $buyer_id );
+		$this->view_page_as( $recipient_id );
+		$this->assertSame( [], $this->stored_gates( $buyer_id ) );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $recipient_id ) );
+	}
+
+	/**
+	 * Clearing a gift's recipient (in the admin, or by deleting an account) fires
+	 * Newspack's own announcement instead of the WCS hook. The previous recipient
+	 * loses the gate, and the buyer, who holds a subscription that is no longer a
+	 * gift, gains it.
+	 */
+	public function test_clearing_a_gift_recipient_takes_the_gate_from_them() {
+		$buyer_id     = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$gift         = $this->create_subscription( $buyer_id );
+		$this->gift_to( $gift, $recipient_id );
+		$this->view_page_as( $recipient_id );
+		$this->view_page_as( $buyer_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $recipient_id ) );
+		$this->assertSame( [], $this->stored_gates( $buyer_id ) );
+
+		unset( \WCS_Gifting::$recipients[ $gift->get_id() ] );
+		do_action( 'newspack_subscription_gift_recipient_cleared', $gift, $recipient_id );
+
+		$this->view_page_as( $recipient_id );
+		$this->view_page_as( $buyer_id );
+		$this->assertSame( [], $this->stored_gates( $recipient_id ), 'The previous recipient loses the gate.' );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $buyer_id ), 'The buyer holds what is no longer a gift.' );
+	}
+
+	/**
+	 * Turning a group off fires no subscription event. Its members hold the
+	 * product only while it is on, so each loses the gate on their next page view.
+	 * Turning it back on gives it back.
+	 */
+	public function test_turning_a_group_off_takes_the_gate_from_its_members() {
+		$owner_id     = $this->create_reader();
+		$member_id    = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, true );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+		$this->view_page_as( $member_id );
+		$this->view_page_as( $owner_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $member_id ) );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'enabled' => false ] );
+		Group_Subscription::reset_cache();
+
+		$this->assertNotEmpty( get_user_meta( $owner_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The owner holds their subscription either way.' );
+		$this->view_page_as( $member_id );
+		$this->assertSame( [], $this->stored_gates( $member_id ), 'A member of a group that is off loses the gate.' );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'enabled' => true ] );
+		Group_Subscription::reset_cache();
+
+		$this->view_page_as( $member_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $member_id ) );
+	}
+
+	/**
+	 * A settings save that leaves the group's on/off state alone does not touch
+	 * its members.
+	 */
+	public function test_changing_another_group_setting_leaves_members_alone() {
+		$owner_id     = $this->create_reader();
+		$member_id    = $this->create_reader();
+		$subscription = $this->create_subscription( $owner_id, true );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		$this->view_page_as( $member_id );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'limit' => 5 ] );
+
+		$this->assertNotEmpty( get_user_meta( $member_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ) );
+	}
+
+	/**
+	 * A group that doesn't set its own on/off state follows its product's. Turning
+	 * group subscriptions off for the product names no group or member, so every
+	 * list computed before the change goes stale, and the member loses the gate on
+	 * their next page view.
+	 */
+	public function test_turning_a_products_groups_off_takes_the_gate_from_inheriting_members() {
+		$enabled_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
+		$product_id  = $this->factory->post->create( [ 'post_type' => 'product' ] );
+		add_post_meta( $product_id, $enabled_key, 'yes' );
+		$product = wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+				'meta' => [ $enabled_key => 'yes' ],
+			]
+		);
+		$gate_id      = $this->create_gate( 'Group plan', [ [ self::subscription_rule( $product_id ) ] ] );
+		$owner_id     = $this->create_reader();
+		$member_id    = $this->create_reader();
+		$subscription = \wcs_create_subscription(
+			[
+				'customer_id'    => $owner_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'items'          => [ new \WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ],
+			]
+		);
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		// Lists computed from here on postdate the product's last change.
+		update_option( 'newspack_group_subscription_products_changed_at', time() - MINUTE_IN_SECONDS );
+		Group_Subscription::reset_cache();
+		$this->view_page_as( $member_id );
+		$this->assertSame( [ $gate_id ], $this->stored_gates( $member_id ), 'The group inherits the product setting.' );
+
+		// What WooCommerce_Products::save_custom_product_options() writes when the box is unchecked.
+		$product->update_meta_data( $enabled_key, 'no' );
+		update_post_meta( $product_id, $enabled_key, 'no' );
+		Group_Subscription::reset_cache();
+
+		$this->view_page_as( $member_id );
+		$this->assertSame( [], $this->stored_gates( $member_id ), 'The member loses the gate with the product setting.' );
 	}
 
 	/**
