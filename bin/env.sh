@@ -596,19 +596,30 @@ MIGRATE
         # Ensure db is running and create the environment database.
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db
         # `up -d` returns before MariaDB accepts connections, which after a reboot
-        # takes a few seconds. A CREATE DATABASE sent before then fails silently
-        # and leaves a new env with no database to install into. The ping goes
-        # over TCP because the image's first-run setup server listens only on the
+        # takes a few seconds. A CREATE DATABASE sent before then fails and
+        # leaves a new env with no database to install into. The ping goes over
+        # TCP because the image's first-run setup server listens only on the
         # socket and is not yet the server the env will talk to.
+        db_ready=false
         for _ in $(seq 1 30); do
-            docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
-                mariadb-admin -h 127.0.0.1 --silent ping >/dev/null 2>&1 && break
+            if docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+                mariadb-admin -h 127.0.0.1 --silent ping >/dev/null 2>&1; then
+                db_ready=true
+                break
+            fi
             sleep 1
         done
+        # Warn rather than stop: an installed env's database already exists, and
+        # the WordPress wait below gives a slow server more time to come up.
+        if [[ "$db_ready" != true ]]; then
+            echo "Warning: MariaDB did not answer within 30 seconds; creating $db_name may fail."
+        fi
         echo "Creating database $db_name..."
-        docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+        if ! docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null
+            -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null; then
+            echo "Warning: could not create database $db_name (is MYSQL_ROOT_PASSWORD in .env the one the db was set up with?)."
+        fi
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
             echo "Error: failed to start container"
