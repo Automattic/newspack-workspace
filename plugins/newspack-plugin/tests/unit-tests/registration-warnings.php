@@ -713,16 +713,24 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The script gets its data as JSON under the global it reads, so whether
-	 * reCAPTCHA is on stays a real boolean.
+	 * The script gets its data as a JSON string that it parses under the global
+	 * it reads. Whether reCAPTCHA is on stays a real boolean, and a role slug
+	 * of "__proto__" stays an ordinary key; in an object literal it would set
+	 * the object's prototype, and that role would lose its warning.
 	 */
 	public function test_script_receives_its_data() {
 		$this->sign_in_as( 'administrator' );
+		$this->add_test_role( '__proto__', 'Proto', [ 'edit_posts' => true ] );
 		Registration_Warnings::enqueue_settings_script( 'options-general.php' );
 		$inline = implode( '', array_filter( (array) wp_scripts()->get_data( 'newspack-registration-warnings', 'before' ) ) );
-		$prefix = 'window.newspackRegistrationWarnings = ';
+		$prefix = 'window.newspackRegistrationWarnings = JSON.parse( ';
+		$suffix = ' );';
 		$this->assertStringStartsWith( $prefix, $inline );
-		$data = json_decode( rtrim( substr( $inline, strlen( $prefix ) ), ';' ), true );
+		$this->assertStringEndsWith( $suffix, $inline );
+		$json = json_decode( substr( $inline, strlen( $prefix ), -strlen( $suffix ) ) );
+		$this->assertIsString( $json, 'JSON.parse() is given a string literal.' );
+		$data = json_decode( $json, true );
+		$this->assertArrayHasKey( '__proto__', $data['riskyRoles'] );
 		$this->assertFalse( $data['hasBotProtection'] );
 		$this->assertSame( 'Anyone can register as an Editor', $data['riskyRoles']['editor']['title'] );
 		$this->assertSame( 'error', $data['riskyRoles']['editor']['severity'] );
