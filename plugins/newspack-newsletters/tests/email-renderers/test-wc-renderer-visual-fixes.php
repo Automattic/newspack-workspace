@@ -309,6 +309,22 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A vertically centered column gets a valid `vertical-align: middle` (and `valign`),
+	 * not `center`, which Firefox and strict email clients treat as baseline alignment.
+	 */
+	public function test_centered_column_is_vertically_middle() {
+		$html = $this->render( '<!-- wp:columns {"verticalAlignment":"center"} --><div class="wp-block-columns are-vertically-aligned-center"><!-- wp:column {"verticalAlignment":"center"} --><div class="wp-block-column is-vertically-aligned-center"><!-- wp:paragraph --><p>Logo</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column {"verticalAlignment":"center"} --><div class="wp-block-column is-vertically-aligned-center"><!-- wp:paragraph --><p>Date</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->' );
+
+		$this->assertStringNotContainsString( 'vertical-align: center', $html );
+		preg_match_all( '/<td\b[^>]*class="block wp-block-column email-block-column"[^>]*>/', $html, $cells );
+		$this->assertCount( 2, $cells[0] );
+		foreach ( $cells[0] as $cell ) {
+			$this->assertStringContainsString( 'valign="middle"', $cell );
+			$this->assertMatchesRegularExpression( '/vertical-align:\s*middle/', $cell );
+		}
+	}
+
+	/**
 	 * The site logo renders through the override in an email.
 	 */
 	public function test_site_logo_renders_block_level_in_email() {

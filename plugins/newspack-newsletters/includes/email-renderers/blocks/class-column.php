@@ -2,7 +2,8 @@
 /**
  * Newspack override of the WC email-editor core/column renderer.
  *
- * Restores percentage column widths that the package strips to bare pixels.
+ * Restores percentage column widths that the package strips to bare pixels, and
+ * writes a valid vertical alignment for vertically centered columns.
  *
  * @package Newspack
  */
@@ -24,7 +25,20 @@ defined( 'ABSPATH' ) || exit;
  */
 class Column extends Package_Column {
 	/**
-	 * Render the column, then restore its percentage width.
+	 * Block vertical alignments mapped to their table-cell `vertical-align` value. The
+	 * package writes the block value straight into CSS, and `center` isn't a valid
+	 * `vertical-align`: Chrome drops it and falls back to `middle`, but Firefox (and
+	 * email clients that are stricter still) align the cell on its baseline, which drops
+	 * text beside a block-level image to the bottom of the row.
+	 */
+	const VERTICAL_ALIGN = [
+		'top'    => 'top',
+		'center' => 'middle',
+		'bottom' => 'bottom',
+	];
+
+	/**
+	 * Render the column, then restore its percentage width and vertical alignment.
 	 *
 	 * @param string            $block_content     Block content.
 	 * @param array             $parsed_block      Parsed block.
@@ -32,10 +46,36 @@ class Column extends Package_Column {
 	 * @return string
 	 */
 	protected function render_content( string $block_content, array $parsed_block, Rendering_Context $rendering_context ): string {
-		return self::preserve_percentage_width(
+		$valign = self::VERTICAL_ALIGN[ $parsed_block['attrs']['verticalAlignment'] ?? '' ] ?? null;
+		if ( null !== $valign ) {
+			$parsed_block['attrs']['verticalAlignment'] = $valign;
+		}
+		$html = self::preserve_percentage_width(
 			parent::render_content( $block_content, $parsed_block, $rendering_context ),
 			(string) ( $parsed_block['attrs']['width'] ?? '' )
 		);
+		return null === $valign ? $html : self::add_valign( $html, $valign );
+	}
+
+	/**
+	 * Set the `valign` attribute on the column cell, which email clients that strip CSS
+	 * still honor.
+	 *
+	 * @param string $html   Rendered column HTML.
+	 * @param string $valign `top`, `middle` or `bottom`.
+	 * @return string
+	 */
+	private static function add_valign( string $html, string $valign ): string {
+		$processor = new \WP_HTML_Tag_Processor( $html );
+		if ( $processor->next_tag(
+			[
+				'tag_name'   => 'td',
+				'class_name' => 'email-block-column',
+			]
+		) ) {
+			$processor->set_attribute( 'valign', $valign );
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**
