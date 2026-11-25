@@ -7,7 +7,7 @@ import { Button, Dropdown, __experimentalVStack as VStack, RadioControl } from '
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useMemo } from '@wordpress/element';
 import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '@wordpress/block-editor';
-import { drafts, published, pending } from '../icons';
+import { drafts, published, pending } from '@wordpress/icons';
 
 /**
  * Internal dependencies
