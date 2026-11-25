@@ -1228,26 +1228,48 @@ function newspack_sanitize_svgs() {
 }
 
 /**
- * Truncates text to a specific character length, without breaking a character.
+ * Truncates text to a specific character length, without breaking a word.
+ *
+ * Characters are counted as readers see them: a multibyte character or an HTML entity counts
+ * once, and a run of whitespace, including non-breaking spaces, counts as one space. The text is
+ * cut right after the word that holds the last allowed character. Whitespace is collapsed in the
+ * returned text whether or not it is cut, so a bio reads the same either way.
  *
  * @param string $content The text to truncate.
  * @param int    $length The character length to truncate to.
  * @param string $after Text to append after truncation. Default is '...'.
+ * @return string The text with whitespace collapsed and HTML special characters encoded, truncated
+ *                when it is over the limit. Text that is not valid UTF-8 is returned unchanged.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
-	// If content is already shorter than the truncate length, return it.
-	if ( strlen( $content ) <= $length ) {
+	$length = absint( $length );
+
+	// Count entities such as `&amp;` as the one character they display, and treat any run of
+	// whitespace, including non-breaking spaces, as a single space. The result is encoded again
+	// before it is returned, so the text stays as safe to print as the stored bio was.
+	$decoded    = html_entity_decode( (string) $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	$normalized = preg_replace( '/[\s\x{00A0}]+/u', ' ', $decoded );
+	if ( null === $normalized ) {
+		// Not valid UTF-8, so the text cannot be measured in characters.
 		return $content;
 	}
+	$normalized = trim( $normalized );
 
-	// Find the first space after the desired length.
-	$breakpoint = strpos( $content, ' ', $length );
-
-	// Make sure $breakpoint isn't returning false, and is less than length of content.
-	if ( false !== $breakpoint && $breakpoint < strlen( $content ) - 1 ) {
-		$content = substr( $content, 0, $breakpoint ) . $after;
+	if ( mb_strlen( $normalized ) <= $length ) {
+		return htmlspecialchars( $normalized, ENT_QUOTES, 'UTF-8' );
 	}
-	return $content;
+
+	// Find the first space from the last allowed character on, so the word holding it stays whole.
+	$offset     = max( 0, $length - 1 );
+	$tail       = mb_substr( $normalized, $offset );
+	$breakpoint = strpos( $tail, ' ' );
+
+	// No space left: the last allowed character is in the last word, so nothing is cut.
+	if ( false === $breakpoint ) {
+		return htmlspecialchars( $normalized, ENT_QUOTES, 'UTF-8' );
+	}
+
+	return htmlspecialchars( mb_substr( $normalized, 0, $offset ) . substr( $tail, 0, $breakpoint ), ENT_QUOTES, 'UTF-8' ) . $after;
 }
 
 /**
