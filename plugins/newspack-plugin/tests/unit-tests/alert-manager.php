@@ -53,6 +53,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		remove_all_filters( 'newspack_alert_failure_record' );
 		delete_option( Alert_Manager::FAILURE_LOG_OPTION );
 		delete_option( Alert_Manager::HEALTH_STATE_OPTION );
+		delete_option( Alert_Manager::REFUSED_PUSH_OPTION );
 		wp_clear_scheduled_hook( Alert_Manager::PATTERN_SCAN_HOOK );
 		$this->captured = [];
 	}
@@ -93,7 +94,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	/**
 	 * Test that a permanent config-level failure forwards at warning severity
 	 * (Watch). The hourly health check observes the same account state and
-	 * owns the Slack escalation, so this path no longer pages.
+	 * owns the Slack escalation, so this path does not page at once.
 	 */
 	public function test_permanent_failure_alert() {
 		$alerts = [];
@@ -186,18 +187,19 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A permanent config failure pages only where the hourly health check
-	 * isn't running, since nothing else then observes a disabled or unpaid
-	 * account, and either way a repeat within the hour reports nothing. A run
-	 * that is late but within HEALTH_STREAK_MAX_GAP still counts as running,
-	 * so a slow WP-Cron doesn't page through this path.
+	 * A permanent config failure pages at once only where the hourly health
+	 * check isn't running, since nothing else then observes a disabled or
+	 * unpaid account, and either way a repeat within the hour reports nothing.
+	 * A run that is late but within HEALTH_STREAK_MAX_GAP still counts as
+	 * running, so a slow WP-Cron doesn't page through this path. Only a report
+	 * that did not page waits for the next check.
 	 *
 	 * @dataProvider data_health_check_schedules
 	 *
 	 * @param int|null $next_run_offset   Seconds from now to the check's next run, or null when it is not scheduled.
 	 * @param string   $expected_severity Severity of the failure's hourly report.
 	 */
-	public function test_permanent_config_failure_pages_only_while_the_health_check_is_not_running( $next_run_offset, $expected_severity ) {
+	public function test_permanent_config_failure_pages_at_once_only_while_the_health_check_is_not_running( $next_run_offset, $expected_severity ) {
 		$this->set_health_check_next_run( null === $next_run_offset ? false : time() + $next_run_offset );
 		$this->capture_alerts( 'sync_permanent_failure' );
 
@@ -213,6 +215,137 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $this->captured['sync_permanent_failure'][ $expected_severity ] );
 		$this->assertCount( 1, array_merge( ...array_values( $this->captured['sync_permanent_failure'] ) ), 'A repeat within the hour reports nothing.' );
+		$this->assertSame( 'warning' === $expected_severity, false !== get_option( Alert_Manager::REFUSED_PUSH_OPTION ), 'Only a report that did not page waits for the next check.' );
+	}
+
+	/**
+	 * A push refused while the check finds nothing wrong pages on the
+	 * integration's next pass, once: the check only reads from the account,
+	 * so it cannot see a problem that blocks writes alone. The hourly limit
+	 * still holds, so a repeat within the hour waits for nothing.
+	 */
+	public function test_refused_push_pages_when_the_next_health_check_passes() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+		$refusal = [
+			'integration_id' => 'esp',
+			'user_id'        => 1,
+			'context'        => 'Reader registered',
+			'reason'         => 'ActiveCampaign REST returned status 402 for /api/3/contact/sync.',
+			'error_class'    => 'permanent_config',
+		];
+		$pass    = [
+			'integration_id'   => 'esp',
+			'integration_name' => 'Mock esp',
+		];
+
+		do_action( 'newspack_sync_permanent_failure', $refusal );
+		$this->assertCount( 0, $this->captured['sync_permanent_failure']['error'], 'The refusal waits for the next check.' );
+
+		do_action( 'newspack_integration_health_check_passed', $pass );
+		do_action( 'newspack_sync_permanent_failure', $refusal );
+		do_action( 'newspack_integration_health_check_passed', $pass );
+
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['warning'] );
+		$this->assertCount( 1, $this->captured['sync_permanent_failure']['error'], 'One refusal pages once, and a repeat within the hour adds nothing.' );
+		$page = $this->captured['sync_permanent_failure']['error'][0];
+		$this->assertStringContainsString( 'Integration "Mock esp" passes its health check', $page['message'] );
+		$this->assertStringContainsString( 'status 402 for /api/3/contact/sync', $page['message'] );
+		$this->assertSame( 'esp', $page['context']['integration_id'] );
+		$this->assertArrayHasKey( 'refused_push', $page['context'] );
+		$this->assertFalse( get_option( Alert_Manager::REFUSED_PUSH_OPTION ), 'The page clears the option.' );
+	}
+
+	/**
+	 * A push refused before a failing check is left to the health record,
+	 * which pages once on the transition to broken. A fully disabled account
+	 * fails both, and must not page twice.
+	 */
+	public function test_refused_push_does_not_page_when_the_next_health_check_fails() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+		$this->capture_alerts( 'integration_health_check_failed' );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'API Access has been disabled for this account.',
+				'error_class'    => 'permanent_config',
+			]
+		);
+		$this->break_integration( 'esp' );
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+
+		$this->assertCount( 0, $this->captured['sync_permanent_failure']['error'], 'The refused push does not page.' );
+		$this->assertCount( 1, $this->captured['integration_health_check_failed']['error'], 'The outage pages once, from the health record.' );
+		$this->assertFalse( get_option( Alert_Manager::REFUSED_PUSH_OPTION ) );
+	}
+
+	/**
+	 * A push refused while the integration has a current health record waits
+	 * for nothing: the check already sees a problem, and a pass that ends it
+	 * says nothing about the push refused during it.
+	 */
+	public function test_refused_push_with_a_current_health_record_does_not_wait_for_the_check() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+		do_action( 'newspack_integration_health_check_failed', $this->make_health_check_payload( 'esp', [ 'connection_failed' ] ) );
+
+		do_action(
+			'newspack_sync_permanent_failure',
+			[
+				'integration_id' => 'esp',
+				'user_id'        => 1,
+				'context'        => 'Reader registered',
+				'reason'         => 'Payment Required',
+				'error_class'    => 'permanent_config',
+			]
+		);
+		$this->assertFalse( get_option( Alert_Manager::REFUSED_PUSH_OPTION ) );
+
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+		$this->assertCount( 0, $this->captured['sync_permanent_failure']['error'] );
+	}
+
+	/**
+	 * A refused push older than HEALTH_STREAK_MAX_GAP is dropped without
+	 * paging: no check ran in between to say what the account was doing then.
+	 */
+	public function test_a_stale_refused_push_is_dropped_without_paging() {
+		$this->capture_alerts( 'sync_permanent_failure' );
+		update_option(
+			Alert_Manager::REFUSED_PUSH_OPTION,
+			[
+				'esp' => [
+					'refused_at' => time() - Alert_Manager::HEALTH_STREAK_MAX_GAP - 1,
+					'reason'     => 'Payment Required',
+				],
+			],
+			false
+		);
+
+		do_action(
+			'newspack_integration_health_check_passed',
+			[
+				'integration_id'   => 'esp',
+				'integration_name' => 'Mock esp',
+			]
+		);
+
+		$this->assertCount( 0, $this->captured['sync_permanent_failure']['error'] );
+		$this->assertFalse( get_option( Alert_Manager::REFUSED_PUSH_OPTION ) );
 	}
 
 	/**
