@@ -36,11 +36,12 @@ class Full_Bleed_Sections {
 	const DEFAULT_ROOT_PADDING = '24px';
 
 	/**
-	 * Default vertical padding for a background group that sets none. The email editor
-	 * canvas gives background groups this default padding, but the package render emits
-	 * zero — so a no-padding band would otherwise be tighter in the email than the editor.
+	 * Default vertical padding for a background group that sets none. The newsletter
+	 * editor pads a background group by 12px and the blocks inside it by 6px each, so
+	 * its content starts about 24px in (a header row of columns: 12 + 6 + 6). The package
+	 * render emits zero, so a no-padding band would otherwise be tighter in the email.
 	 */
-	const DEFAULT_VERTICAL_PADDING = '12px';
+	const DEFAULT_VERTICAL_PADDING = '24px';
 
 	/**
 	 * Email content width in pixels — the package `contentSize` the band content is
@@ -165,13 +166,44 @@ class Full_Bleed_Sections {
 		// Assemble: the preheader once at the top (so it wins the inbox preview slot even
 		// when the first block is a band), then a vertical stack of content-width runs and
 		// full-width band rows. A run is any string segment; a band is already full markup.
-		$out = $shell['head'] . $shell['preheader'];
-		foreach ( $segments as $segment ) {
-			$out .= 'band' === $segment[0] ? $segment[1] : $shell['open'] . $segment[1] . $shell['close'];
+		// Each run reopens the email wrapper, whose top and bottom padding belong to the
+		// edges of the email only: kept on the first and last segment, they'd otherwise
+		// add a gap above and below every band.
+		$out  = $shell['head'] . $shell['preheader'];
+		$last = count( $segments ) - 1;
+		foreach ( $segments as $index => $segment ) {
+			if ( 'band' === $segment[0] ) {
+				$out .= $segment[1];
+				continue;
+			}
+			$open = $shell['open'];
+			if ( 0 !== $index ) {
+				$open = self::zero_wrapper_padding( $open, 'padding-top' );
+			}
+			if ( $last !== $index ) {
+				$open = self::zero_wrapper_padding( $open, 'padding-bottom' );
+			}
+			$out .= $open . $segment[1] . $shell['close'];
 		}
 		$out .= $shell['tail'];
 
 		return $out;
+	}
+
+	/**
+	 * Zero one padding side on the email layout wrapper in the wrapper's opening markup.
+	 *
+	 * @param string $open Opening markup of the email wrapper.
+	 * @param string $prop `padding-top` or `padding-bottom`.
+	 * @return string
+	 */
+	private static function zero_wrapper_padding( string $open, string $prop ): string {
+		return (string) preg_replace_callback(
+			'/(<div class="email_layout_wrapper"[^>]*style=")([^"]*)"/',
+			static fn( array $m ): string => $m[1] . preg_replace( '/(^|;)\s*' . preg_quote( $prop, '/' ) . ':\s*[^;]*/', '$1 ' . $prop . ': 0', $m[2] ) . '"',
+			$open,
+			1
+		);
 	}
 
 	/**

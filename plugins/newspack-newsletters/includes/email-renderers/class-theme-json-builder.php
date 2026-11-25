@@ -49,7 +49,7 @@ class Theme_Json_Builder {
 	/**
 	 * Vertical gap between sibling blocks. The newsletter editor pads every block by 6px
 	 * top and bottom, so neighbours sit 12px apart there; the package's default is 16px.
-	 * Blocks inside a column get no gap (see Block_Normalizer::clear_column_gaps()).
+	 * Block_Normalizer adjusts it per pair of blocks (see Block_Normalizer::apply_editor_gaps()).
 	 *
 	 * @var string
 	 */

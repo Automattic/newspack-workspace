@@ -379,6 +379,44 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A spacer takes no padding in the editor, so the blocks next to it are only half a
+	 * block gap away from it.
+	 */
+	public function test_spacer_neighbours_get_half_gap() {
+		$html = $this->render( '<!-- wp:paragraph --><p>Above</p><!-- /wp:paragraph --><!-- wp:spacer {"height":"16px"} --><div style="height:16px" aria-hidden="true" class="wp-block-spacer"></div><!-- /wp:spacer --><!-- wp:paragraph --><p>Below</p><!-- /wp:paragraph -->' );
+
+		$this->assertMatchesRegularExpression( '/margin-top:\s*6px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Below/', $html, 'Expected 6px between the spacer and the next block.' );
+		$this->assertStringNotContainsString( 'margin-top: 12px', $html, 'Expected no full block gap next to the spacer.' );
+	}
+
+	/**
+	 * List items are a block gap apart, as their padding puts them in the editor.
+	 */
+	public function test_list_items_are_spaced() {
+		$html = $this->render( '<!-- wp:list --><ul class="wp-block-list"><!-- wp:list-item --><li>One</li><!-- /wp:list-item --><!-- wp:list-item --><li>Two</li><!-- /wp:list-item --></ul><!-- /wp:list -->' );
+
+		$this->assertMatchesRegularExpression( '/<li style="[^"]*margin-top:\s*12px[^"]*">Two/', $html, 'Expected the second item a block gap below the first.' );
+		$this->assertDoesNotMatchRegularExpression( '/<li style="[^"]*margin-top:\s*[1-9][^"]*">One/', $html, 'Expected no gap above the first item.' );
+	}
+
+	/**
+	 * Splitting the email around a full-width band keeps the email's top and bottom
+	 * padding at the edges of the email only, not around the band, and a band without
+	 * padding of its own gets the editor's 24px.
+	 */
+	public function test_band_adds_no_wrapper_padding() {
+		$html = $this->render( '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph --><!-- wp:group {"align":"full","style":{"color":{"background":"#f0e6d2"}}} --><div class="wp-block-group alignfull has-background" style="background-color:#f0e6d2"><!-- wp:paragraph --><p>Band</p><!-- /wp:paragraph --></div><!-- /wp:group --><!-- wp:paragraph --><p>After</p><!-- /wp:paragraph -->' );
+
+		preg_match_all( '/<div class="email_layout_wrapper"[^>]*style="([^"]*)"/', $html, $wrappers );
+		$this->assertCount( 2, $wrappers[1], 'Expected the content on either side of the band in its own wrapper.' );
+		$this->assertMatchesRegularExpression( '/padding-top:\s*24px/', $wrappers[1][0], 'Expected the top of the email to keep its padding.' );
+		$this->assertMatchesRegularExpression( '/padding-bottom:\s*0\b/', $wrappers[1][0], 'Expected no padding above the band.' );
+		$this->assertMatchesRegularExpression( '/padding-top:\s*0\b/', $wrappers[1][1], 'Expected no padding below the band.' );
+		$this->assertMatchesRegularExpression( '/padding-bottom:\s*24px/', $wrappers[1][1], 'Expected the bottom of the email to keep its padding.' );
+		$this->assertStringContainsString( 'padding-top:24px;padding-bottom:24px;', $html, 'Expected the band\'s default padding.' );
+	}
+
+	/**
 	 * The site logo renders through the override in an email.
 	 */
 	public function test_site_logo_renders_block_level_in_email() {
