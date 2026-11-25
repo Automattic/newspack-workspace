@@ -2720,59 +2720,26 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The donor scan's budget covers every donation product together, so a product
-	 * with no subscriptions, like a one-time donation product, leaves its share to
-	 * the others, whichever order the products are listed in. Split evenly, a
-	 * budget of three would read one subscription per product here and drop two
-	 * live donors.
-	 *
-	 * @dataProvider data_busy_donation_product_first
-	 *
-	 * @param bool $busy_product_first Whether the product holding the subscriptions is listed first.
+	 * The donor scan reads every donation product in one query, and its limit
+	 * counts readers, not subscriptions: a reader with a live donation on two
+	 * products takes one place, so a limit of three finds all three readers here,
+	 * whichever product each one gives on.
 	 */
-	public function test_donor_scan_budget_is_shared_across_donation_products( bool $busy_product_first ) {
-		$busy_product_id  = $this->create_donation_product();
-		$empty_product_id = $this->create_donation_product( 'simple' );
-		// Flagged donation products are listed newest first.
-		$newer_product_id = $busy_product_first ? $busy_product_id : $empty_product_id;
-		$older_product_id = $busy_product_first ? $empty_product_id : $busy_product_id;
-		$product_dates    = [
-			$newer_product_id => '2026-02-01 00:00:00',
-			$older_product_id => '2026-01-01 00:00:00',
-		];
-		foreach ( $product_dates as $product_id => $date ) {
-			wp_update_post(
-				[
-					'ID'            => $product_id,
-					'post_date'     => $date,
-					'post_date_gmt' => $date,
-				]
-			);
-		}
-		$holder_ids = [];
-		foreach ( [ 'First', 'Second', 'Third' ] as $name ) {
-			$reader_id    = $this->create_reader( $name );
-			$holder_ids[] = $reader_id;
-			$this->create_individual_subscription( $reader_id, 'active', $busy_product_id );
-		}
-		$this->assertSame( [ $newer_product_id, $older_product_id ], Subscribers_Donors::donation_product_ids(), 'The products are listed in the order this case is about.' );
+	public function test_donor_scan_limit_counts_readers_across_every_donation_product() {
+		$first_product_id  = $this->create_donation_product();
+		$second_product_id = $this->create_donation_product();
+		$both              = $this->create_reader( 'Gives On Both' );
+		$this->create_individual_subscription( $both, 'active', $first_product_id );
+		$this->create_individual_subscription( $both, 'active', $second_product_id );
+		$first_only = $this->create_reader( 'Gives On First' );
+		$this->create_individual_subscription( $first_only, 'active', $first_product_id );
+		$second_only = $this->create_reader( 'Gives On Second' );
+		$this->create_individual_subscription( $second_only, 'active', $second_product_id );
 
-		$live_ids = Subscribers_Donors::holders( count( $holder_ids ) )['live'];
+		$live_ids = Subscribers_Donors::holders( 3 )['live'];
 		sort( $live_ids );
 
-		$this->assertSame( $holder_ids, $live_ids );
-	}
-
-	/**
-	 * Both orders for the product holding the subscriptions.
-	 *
-	 * @return array[]
-	 */
-	public function data_busy_donation_product_first() {
-		return [
-			'busy product first'  => [ true ],
-			'empty product first' => [ false ],
-		];
+		$this->assertSame( self::sorted_ids( [ $both, $first_only, $second_only ] ), $live_ids );
 	}
 
 	/**
@@ -2838,51 +2805,93 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The donor scan reads live donation subscriptions first, so pending and ended
-	 * ones, however many and however old, can't use up the budget before a live one
-	 * is read. Whatever budget the live ones leave goes to the ended ones, so past
-	 * the cap it is ended holders who go missing first.
+	 * The live and the ended readers are read separately, each up to the limit, so
+	 * neither list can use up the other's room. Pending subscriptions are never
+	 * read. With no limit every reader is read.
 	 */
-	public function test_donor_scan_reads_live_subscriptions_before_the_rest() {
+	public function test_donor_scan_limits_live_and_ended_readers_separately() {
 		$donation_product_id = $this->create_donation_product();
-		$cancelled_ids       = [];
-		// Created first, so a scan that reads in ID order alone meets these first.
-		foreach ( [ 'pending', 'pending', 'cancelled', 'cancelled' ] as $index => $status ) {
-			$reader_id = $this->create_reader( 'Older ' . $index );
-			$this->create_individual_subscription( $reader_id, $status, $donation_product_id );
-			if ( 'cancelled' === $status ) {
-				$cancelled_ids[] = $reader_id;
+		$readers             = [];
+		// Pending first, so a scan that reads in ID order meets those first.
+		$statuses = [
+			'pending' => 'pending',
+			'ended'   => 'cancelled',
+			'live'    => 'active',
+		];
+		foreach ( $statuses as $bucket => $status ) {
+			for ( $i = 0; $i < 3; $i++ ) {
+				$reader_id            = $this->create_reader( ucfirst( $status ) . ' ' . $i );
+				$readers[ $bucket ][] = $reader_id;
+				$this->create_individual_subscription( $reader_id, $status, $donation_product_id );
 			}
 		}
-		$live_id = $this->create_reader( 'Newest Live' );
-		$this->create_individual_subscription( $live_id, 'active', $donation_product_id );
 
-		$holders = Subscribers_Donors::holders( 2 );
+		$capped = Subscribers_Donors::holders( 2 );
+		$all    = Subscribers_Donors::holders( 0 );
 
-		$this->assertSame( [ $live_id ], $holders['live'] );
-		$this->assertSame( [ $cancelled_ids[0] ], $holders['ended'], 'The ended scan gets only the budget the live scan left.' );
-		$this->assertSame( $cancelled_ids, Subscribers_Donors::holders( 0 )['ended'], 'With no limit every ended holder is read.' );
+		foreach ( [ 'live', 'ended' ] as $bucket ) {
+			$this->assertCount( 2, $capped[ $bucket ], sprintf( 'The %s list stops at the limit.', $bucket ) );
+			$this->assertSame( [], array_values( array_diff( $capped[ $bucket ], $readers[ $bucket ] ) ), sprintf( 'The %s list holds only %s readers.', $bucket, $bucket ) );
+			sort( $all[ $bucket ] );
+			$this->assertSame( self::sorted_ids( $readers[ $bucket ] ), $all[ $bucket ], sprintf( 'With no limit every %s reader is read.', $bucket ) );
+		}
 	}
 
 	/**
-	 * The per-chunk callback runs after each chunk of donation subscriptions is
-	 * read, in the live and the ended scan alike, so a long caller can free memory
-	 * between chunks.
+	 * The donor scan reads its readers in SQL and loads no subscription, however
+	 * many it finds, so a filter request's memory doesn't grow with the store.
 	 */
-	public function test_donor_scan_calls_back_after_each_chunk() {
+	public function test_donor_scan_loads_no_subscriptions() {
+		global $wcs_mocks_get_subscription_ids;
 		$donation_product_id = $this->create_donation_product();
-		$this->create_individual_subscription( $this->create_reader( 'Live' ), 'active', $donation_product_id );
-		$this->create_individual_subscription( $this->create_reader( 'Ended' ), 'cancelled', $donation_product_id );
-		$chunks_read = 0;
+		$live_id             = $this->create_reader( 'Live' );
+		$this->create_individual_subscription( $live_id, 'active', $donation_product_id );
+		$ended_id = $this->create_reader( 'Ended' );
+		$this->create_individual_subscription( $ended_id, 'cancelled', $donation_product_id );
 
-		Subscribers_Donors::holders(
-			0,
-			function () use ( &$chunks_read ) {
-				++$chunks_read;
-			}
+		$wcs_mocks_get_subscription_ids = [];
+		$holders                        = Subscribers_Donors::holders( 0 );
+
+		$this->assertSame( [ $live_id ], $holders['live'] );
+		$this->assertSame( [ $ended_id ], $holders['ended'] );
+		$this->assertSame( [], $wcs_mocks_get_subscription_ids, 'No subscription is loaded.' );
+	}
+
+	/**
+	 * KNOWN, ACCEPTED DIVERGENCE between the badge and the Donor filter.
+	 *
+	 * The row decides whether a subscription is a group from its own settings,
+	 * which read the first line item's product. The filter leaves out the
+	 * subscriptions on the site's group list,
+	 * Group_Subscription_Settings::get_group_subscription_ids(), which takes a
+	 * subscription with any line item on a group product. So a donation
+	 * subscription whose second line item is a group product reads Recurring on
+	 * the row, while the filter leaves it out of Recurring and lists the reader
+	 * under "Not a donor". The Subscribers wizard's Plan and Complimentary filters
+	 * share the gap; see the Subscribers_Index class docblock and
+	 * Subscribers_Donors::holders().
+	 *
+	 * This records today's behavior on both sides. If the two sides come to agree,
+	 * update this test rather than restoring the divergence.
+	 */
+	public function test_accepted_divergence_a_donation_with_a_second_group_line_item() {
+		$this->login_admin();
+		$donation_product_id = $this->create_donation_product();
+		$group_product_id    = $this->create_subscription_product( 'Team Plan', 'subscription', 0, true );
+		$reader_id           = $this->create_reader( 'Donation Plus Team' );
+		wcs_create_subscription(
+			[
+				'customer_id'    => $reader_id,
+				'status'         => 'active',
+				'billing_period' => 'month',
+				'products'       => [ $donation_product_id, $group_product_id ],
+				'items'          => array_merge( self::line_items_for( $donation_product_id ), self::line_items_for( $group_product_id ) ),
+			]
 		);
 
-		$this->assertSame( 2, $chunks_read, 'One chunk of live subscriptions and one of ended ones.' );
+		$this->assertSame( 'recurring', $this->list_row( $reader_id )['donor']['kind'], 'The row reads the first line item, a donation, so the reader is Recurring.' );
+		$this->assertSame( [], $this->filtered_ids( [ 'donor' => [ 'recurring' ] ] ), 'The filter leaves the subscription out as a group.' );
+		$this->assertSame( [ $reader_id ], $this->filtered_ids( [ 'donor' => [ 'none' ] ] ), 'So the filter lists the reader as not a donor.' );
 	}
 
 	/**

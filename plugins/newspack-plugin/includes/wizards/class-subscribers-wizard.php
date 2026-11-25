@@ -67,16 +67,6 @@ class Subscribers_Wizard extends Wizard {
 	const AVATAR_BATCH_CAP = 200;
 
 	/**
-	 * How many donation subscriptions the donor scan in
-	 * Subscribers_Donors::holders() hydrates at a time. The scan is bounded by
-	 * FILTER_INCLUDE_CAP, but WooCommerce returns fully hydrated WC_Subscription
-	 * objects, so walking the set a chunk at a time keeps peak memory at one chunk
-	 * rather than the whole cap. The other filters read their holders in SQL
-	 * through Subscribers_Index and load no subscriptions.
-	 */
-	const FILTER_SCAN_CHUNK = 500;
-
-	/**
 	 * Per-request memo of holder IDs keyed by the sorted status set they were
 	 * resolved for. See customer_ids_for_raw_statuses().
 	 *
@@ -2684,27 +2674,6 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * Load every gift recipient in a batch of subscriptions into the user cache.
-	 *
-	 * The holder lookup checks that each gift recipient's account still exists,
-	 * which would otherwise cost a query pair per gift inside the donor scan.
-	 *
-	 * Public only so the donor scan in Subscribers_Donors::holders() can call it;
-	 * it isn't meant as an API for other code.
-	 *
-	 * @param \WC_Subscription[] $subscriptions The subscriptions about to be resolved to holders.
-	 */
-	public static function prime_gift_recipients( array $subscriptions ): void {
-		if ( ! class_exists( 'WCS_Gifting' ) ) {
-			return;
-		}
-		$recipient_ids = array_filter( array_map( fn( $subscription ) => (int) \WCS_Gifting::get_recipient_user( $subscription ), $subscriptions ) );
-		if ( ! empty( $recipient_ids ) ) {
-			cache_users( array_values( array_unique( $recipient_ids ) ) );
-		}
-	}
-
-	/**
 	 * Holder IDs of subscriptions (individual, group, or managed on another
 	 * network site) on any of the named plans.
 	 *
@@ -2935,16 +2904,19 @@ class Subscribers_Wizard extends Wizard {
 	 *     subscription, live or ended, minus the `is_former_donor` flag. Recurring
 	 *     donors carry `is_donor` too, so this subtraction is what keeps them out.
 	 *
-	 * Each input is bounded. At most FILTER_INCLUDE_CAP donation subscriptions are
-	 * scanned in total, across every donation product, live ones first and ended
-	 * ones with whatever budget is left; pending, switched and trashed ones are
-	 * never read (see Subscribers_Donors::holders()). Up to the cap the live set is
-	 * exact. Past it, ended holders go missing first: a reader whose only ended
-	 * subscription wasn't scanned drops out of Former, or reads One-time if they
-	 * also carry the `is_donor` flag. Only once live donation subscriptions alone
-	 * pass the cap is a Recurring donor missing from Recurring, and because Former,
-	 * One-time and "Not a donor" are all worked out against the live set, they can
-	 * then be listed under one of those while their row reads Recurring.
+	 * Each input is bounded. Subscribers_Donors::holders() reads the live and the
+	 * ended holders in two SQL queries, across every donation product, and each
+	 * returns at most FILTER_INCLUDE_CAP distinct readers; pending, switched and
+	 * trashed subscriptions are never read. Up to the cap both lists are exact.
+	 * Past it, which readers a list leaves out is up to the database. A reader
+	 * left out of the ended list drops out of Former, and reads One-time if they
+	 * carry the `is_donor` flag, or shows under "Not a donor" if they carry no
+	 * flag. A reader left out of the live list drops out of Recurring, and because
+	 * Former, One-time and "Not a donor" are all worked out against the live set,
+	 * they can then be listed under one of those while their row reads Recurring.
+	 * Group subscriptions are left out by the site's group list rather than by
+	 * each subscription's settings, as on the row, so the two can disagree about
+	 * a donation subscription; see Subscribers_Donors::holders().
 	 *
 	 * Each flag query returns at most FILTER_INCLUDE_CAP readers, and the cap is
 	 * applied before live and ended holders are subtracted. Recurring donors carry

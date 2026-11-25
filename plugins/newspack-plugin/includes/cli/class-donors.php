@@ -90,7 +90,7 @@ class Donors {
 		// Without Subscriptions the scan finds no donation subscription, so a reader
 		// whose recurring donation ended would be flagged a donor, not a former one,
 		// and a later run would leave that flag alone.
-		if ( ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
+		if ( ! function_exists( 'wcs_get_subscription_statuses' ) ) {
 			WP_CLI::error( 'WooCommerce Subscriptions must be active to tell former donors apart.' );
 		}
 		if ( $batch_size < 1 ) {
@@ -110,15 +110,9 @@ class Donors {
 		$counted = [];
 
 		// Rules, as in Subscribers_Donors::kind(): a live donation subscription outranks
-		// an ended one, so only holders with no live one are former donors.
-		$holders = Subscribers_Donors::holders(
-			0,
-			function () {
-				// Every donation subscription is read, so clear the object cache
-				// between chunks, as the order walk below does between pages.
-				self::clear_object_cache();
-			}
-		);
+		// an ended one, so only holders with no live one are former donors. holders()
+		// reads them in SQL and loads no subscription, so it reads every one at once.
+		$holders = Subscribers_Donors::holders( 0 );
 		$live    = array_flip( $holders['live'] );
 		$checked = 0;
 		foreach ( $holders['ended'] as $user_id ) {

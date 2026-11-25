@@ -130,8 +130,16 @@ class Subscribers_Donors {
 	 *     from before the flag existed, so they land in the kind this returns.
 	 *
 	 * The live/ended split in rules 1 and 2, and the statuses that count toward no
-	 * kind, are written once, in bucket(), which holders() and scanned_statuses()
-	 * share.
+	 * kind, are written once, in bucket(), which this and scanned_statuses() share.
+	 *
+	 * One gap is accepted rather than closed. The row leaves out a group
+	 * subscription by its own settings, but holders() can't run those in SQL, so
+	 * it leaves out the site's group list instead, which reads some subscriptions
+	 * differently: one with any line item on a group product (the settings read
+	 * the first), `enabled` meta other than exactly `yes` or `no`, the two settings
+	 * filters, and a five-minute cache. For such a donation subscription the
+	 * Donor filter disagrees with this badge. See holders() and the matching note
+	 * in the Subscribers_Index class docblock.
 	 *
 	 * The client reads `donor.kind` and never re-derives it, but it has to know
 	 * the kinds: src/wizards/subscribers/donor.js holds the labels, the badge
@@ -304,76 +312,65 @@ class Subscribers_Donors {
 	 * The holders of counted donation subscriptions, as live and ended.
 	 *
 	 * Mirrors the subscriptions the row hands kind() (see
-	 * Subscribers_Wizard::get_individual_subscriptions()): each donation
-	 * subscription counts for its holder, so a gift counts for its recipient, and a
-	 * group subscription counts for no one, because the row shows it with the
-	 * reader's groups. Only the statuses scanned_statuses() lists are read, so a
-	 * pending or switched subscription, or one in the trash, counts for no one.
-	 * Each subscription read is still placed by its own status through bucket(),
-	 * as kind() reads it, in case it changed after the query found it.
+	 * Subscribers_Wizard::get_individual_subscriptions()), read in SQL through
+	 * Subscribers_Index::holder_ids(), so no subscription is loaded. Each donation
+	 * subscription counts for its holder: a gift counts for its recipient when the
+	 * recipient's account exists, as
+	 * WooCommerce_Subscriptions_Gifting::get_holder_id() decides. Only the
+	 * statuses scanned_statuses() lists are read, so a pending or switched
+	 * subscription, or one in the trash, counts for no one. Subscriptions
+	 * managed on other network sites aren't in this site's order tables, so they
+	 * never count, as on the row. A reader can be in both lists; the callers let
+	 * live outrank ended.
 	 *
-	 * Subscriptions managed on other network sites carry no product data, so they
-	 * never count, as on the row. A reader can be in both lists.
+	 * A group subscription counts for no one, because the row shows it with the
+	 * reader's groups. The row tells a group apart by the subscription's own
+	 * settings (Group_Subscription_Settings::get_subscription_settings()), which
+	 * SQL can't run, so this leaves out the site's group list instead,
+	 * Group_Subscription_Settings::get_group_subscription_ids(), as the Subscribers
+	 * wizard's Plan and Complimentary filters do. The two can read a subscription
+	 * differently: the list takes a subscription with any line item on a group
+	 * product, where the settings read the first line item's product; it matches
+	 * the subscription's `enabled` meta only when it is exactly `yes` or `no`,
+	 * where the settings read any boolean string; it applies neither settings
+	 * filter; and it is cached for five minutes. For a donation subscription the
+	 * two read differently, the Donor filter disagrees with the badge. It is the
+	 * gap the Subscribers_Index class docblock describes, accepted here as it is
+	 * there.
 	 *
-	 * The live subscriptions are read first, then the ended ones. Each read is one
-	 * SQL query across every donation product at once, so $limit is a budget for
-	 * all of them together: a product with few or no subscriptions, such as a
-	 * one-time donation product, leaves the rest to the others, whatever order the
-	 * products come in. The live read may use the whole budget, and the ended read
-	 * gets what it leaves. So up to the budget the live list is exact; past it,
-	 * ended holders go missing first, and only once there are more live donation
-	 * subscriptions than the budget does a Recurring donor go missing from `live`.
-	 * The subscriptions found are hydrated Subscribers_Wizard::FILTER_SCAN_CHUNK at
-	 * a time to keep peak memory at one chunk.
+	 * The live and the ended lists are read in two queries, each across every
+	 * donation product at once, and each holds at most $limit distinct readers.
+	 * Past the limit, which readers a list leaves out is up to the database.
 	 *
-	 * @param int           $limit    The most donation subscriptions to read across
-	 *                                all donation products, or 0 for all of them.
-	 * @param callable|null $on_chunk Called with no arguments after each chunk is
-	 *                                read, so a long-running caller can clear the
-	 *                                object cache between chunks.
+	 * @param int $limit The most readers in each list, or 0 for all of them.
 	 *
 	 * @return array{live:int[],ended:int[]} Holder user IDs.
 	 */
-	public static function holders( int $limit = 0, ?callable $on_chunk = null ): array {
-		$holders = [
+	public static function holders( int $limit = 0 ): array {
+		$holders     = [
 			'live'  => [],
 			'ended' => [],
 		];
 		$product_ids = self::donation_product_ids();
-		if ( empty( $product_ids ) || ! function_exists( 'wcs_get_subscriptions_for_product' ) || ! function_exists( 'wcs_get_subscription' ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
+		if ( empty( $product_ids ) || ! function_exists( 'wcs_get_subscription_statuses' ) ) {
 			return $holders;
 		}
-		$scanned_statuses = self::scanned_statuses();
-		$budget           = $limit;
-		foreach ( [ 'live', 'ended' ] as $scan ) {
-			if ( empty( $scanned_statuses[ $scan ] ) || ( $limit > 0 && $budget < 1 ) ) {
+		$group_ids = class_exists( 'Newspack\Group_Subscription_Settings' ) ? array_map( 'intval', Group_Subscription_Settings::get_group_subscription_ids() ) : [];
+		foreach ( self::scanned_statuses() as $bucket => $statuses ) {
+			if ( empty( $statuses ) ) {
 				continue;
 			}
-			$args = [ 'subscription_status' => $scanned_statuses[ $scan ] ];
-			if ( $limit > 0 ) {
-				$args['limit'] = $budget;
-			}
-			$subscription_ids = \wcs_get_subscriptions_for_product( $product_ids, 'ids', $args );
-			$budget          -= count( $subscription_ids );
-			foreach ( array_chunk( $subscription_ids, Subscribers_Wizard::FILTER_SCAN_CHUNK ) as $chunk ) {
-				$subscriptions = array_filter( array_map( 'wcs_get_subscription', $chunk ) );
-				Subscribers_Wizard::prime_gift_recipients( $subscriptions );
-				foreach ( $subscriptions as $subscription ) {
-					$bucket = self::bucket( $subscription->get_status() );
-					if ( '' === $bucket || ! empty( Group_Subscription_Settings::get_subscription_settings( $subscription )['enabled'] ) ) {
-						continue;
-					}
-					$holders[ $bucket ][] = WooCommerce_Subscriptions_Gifting::get_holder_id( $subscription );
-				}
-				if ( null !== $on_chunk ) {
-					$on_chunk();
-				}
-			}
+			$holders[ $bucket ] = Subscribers_Index::holder_ids(
+				[
+					'statuses'    => $statuses,
+					'product_ids' => $product_ids,
+					'exclude_ids' => $group_ids,
+				],
+				// holder_ids() always takes a limit, so "all of them" is one no store reaches.
+				$limit > 0 ? $limit : PHP_INT_MAX
+			);
 		}
-		return [
-			'live'  => array_values( array_unique( array_filter( $holders['live'] ) ) ),
-			'ended' => array_values( array_unique( array_filter( $holders['ended'] ) ) ),
-		];
+		return $holders;
 	}
 
 	/**

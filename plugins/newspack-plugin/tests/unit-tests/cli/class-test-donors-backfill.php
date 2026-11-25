@@ -48,7 +48,9 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		// The donor scan reads the mock subscriptions through the mirrored HPOS tables.
+		$wcs_mock_hpos_enabled  = true;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -64,7 +66,8 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 	 * Tear down: reset the mock stores and the donation platform.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database, $orders_database;
+		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_hpos_enabled;
+		$wcs_mock_hpos_enabled  = false;
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
@@ -295,12 +298,18 @@ class Test_Donors_Backfill extends WP_UnitTestCase {
 				$sequence[] = $entry;
 			}
 		}
-		$first = array_search( $reader_ids[0], $sequence, true );
-		$last  = array_search( $reader_ids[3], $sequence, true );
+		// The scan reads holders in SQL with no ORDER BY, so the readers can come in
+		// any order: compare the pattern of reads and clears, then the readers.
+		$is_reader = fn( $entry ) => in_array( $entry, $reader_ids, true );
+		$positions = array_keys( array_filter( $sequence, $is_reader ) );
+		$span      = array_slice( $sequence, $positions[0], end( $positions ) - $positions[0] + 1 );
 		$this->assertSame(
-			[ $reader_ids[0], $reader_ids[1], 'clear', $reader_ids[2], $reader_ids[3] ],
-			array_slice( $sequence, $first, $last - $first + 1 )
+			[ 'reader', 'reader', 'clear', 'reader', 'reader' ],
+			array_map( fn( $entry ) => $is_reader( $entry ) ? 'reader' : $entry, $span )
 		);
+		$read = array_values( array_filter( $span, $is_reader ) );
+		sort( $read );
+		$this->assertSame( $reader_ids, $read );
 	}
 
 	/**

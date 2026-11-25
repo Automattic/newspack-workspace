@@ -2127,7 +2127,10 @@ function wcs_get_product_limitation( $product ) {
 	return '' !== $limitation ? $limitation : 'no';
 }
 function wcs_get_subscription( $subscription_id ) {
-	global $subscriptions_database;
+	global $subscriptions_database, $wcs_mocks_get_subscription_ids;
+	// Every ID asked for, in order, so a test can see whether a caller loaded
+	// subscriptions. A test that reads it empties it first.
+	$wcs_mocks_get_subscription_ids[] = $subscription_id;
 	return $subscriptions_database[ $subscription_id ] ?? null;
 }
 function wcs_get_objects_property( $object, $property ) {
