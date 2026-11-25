@@ -118,10 +118,8 @@ class Newspack_UI_Icons {
 				<path d="M12 8L12 13M12 14.5L12 16M4.75 12C4.75 7.99593 7.99594 4.75 12 4.75C16.0041 4.75 19.25 7.99594 19.25 12C19.25 16.0041 16.0041 19.25 12 19.25C7.99594 19.25 4.75 16.0041 4.75 12Z" stroke-linejoin="round" />
 			</svg>',
 		'chartReport'      =>
-			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--chart-report">
-				<path d="M4.75 6C4.75 5.30964 5.30964 4.75 6 4.75H18C18.6904 4.75 19.25 5.30964 19.25 6V15C19.25 15.6904 18.6904 16.25 18 16.25H6C5.30964 16.25 4.75 15.6904 4.75 15V6Z" />
-				<path d="M10.5 16.25L8.75 19.25M13.5 16.25L15.25 19.25" stroke-linecap="round" />
-				<path d="M8.75 13V9.75M12 13V8M15.251 13V11" />
+			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--chart-report">
+				<path d="M18 4C19.1046 4 20 4.89544 20 6V15C20 16.1046 19.1046 17 18 17H14.8057L15.8975 18.8721C16.1059 19.2297 15.9855 19.6887 15.6279 19.8975C15.2703 20.1061 14.8114 19.9854 14.6025 19.6279L13.0693 17H10.9307L9.39746 19.6279C9.18873 19.9855 8.72974 20.1059 8.37207 19.8975C8.01444 19.6887 7.89391 19.2298 8.10254 18.8721L9.19434 17H6C4.89544 17 4 16.1046 4 15V6C4 4.89543 4.89543 4 6 4H18ZM6 5.5C5.72385 5.5 5.5 5.72385 5.5 6V15C5.5 15.2762 5.72384 15.5 6 15.5H18C18.2762 15.5 18.5 15.2762 18.5 15V6C18.5 5.72384 18.2762 5.5 18 5.5H6ZM9.5 13H8V9.75H9.5V13ZM12.75 13H11.25V8H12.75V13ZM16.001 13H14.501V11H16.001V13Z" />
 			</svg>',
 		'check'            =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--check">

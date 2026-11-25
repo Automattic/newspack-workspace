@@ -52,11 +52,12 @@ class Newspack_Test_UI_Icons extends WP_UnitTestCase {
 	 * Admin menu icons stay filled, because WordPress repaints menu SVGs by rewriting their fill and style attributes.
 	 */
 	public function test_admin_menu_icons_stay_filled(): void {
-		foreach ( [ 'ad', 'collections', 'curatedList', 'email', 'globe', 'newspack', 'people' ] as $name ) {
+		foreach ( [ 'ad', 'chartReport', 'collections', 'curatedList', 'email', 'globe', 'newspack', 'people' ] as $name ) {
 			$svg = \Newspack\Newspack_UI_Icons::get_svg( $name );
 			$this->assertNotEmpty( $svg, "$name is registered" );
 			$this->assertStringNotContainsString( 'stroke=', $svg, "$name has no stroke" );
 			$this->assertStringNotContainsString( 'style=', $svg, "$name has no inline style" );
+			$this->assertMatchesRegularExpression( '/\sfill="/', $svg, "$name has a fill the menu painter can recolour" );
 		}
 	}
 }
