@@ -1483,11 +1483,11 @@ class Premium_Newsletters {
 	 * Queue access checks for the readers a change of holder affects, because no
 	 * subscription event fires when a gift changes hands or a group is turned on or off.
 	 *
-	 * The reader who holds the subscription now is checked for lists to add. The
-	 * others only lose lists: a remove-only check can't re-add one they left. The
-	 * holder is the gift's recipient, or the buyer when it isn't a gift. A gift that
-	 * lost its recipient account but kept the address is still a gift, which content
-	 * gates give to no one.
+	 * Readers who hold the subscription now are checked for lists to add: the gift's
+	 * recipient, or the buyer when it isn't a gift, and the members of a group that is
+	 * turned on. The others only lose lists: a remove-only check can't re-add one they
+	 * left. A gift that lost its recipient account but kept the address is still a
+	 * gift, which content gates give to no one.
 	 *
 	 * @param int[]            $user_ids     Readers who may have gained or lost the subscription.
 	 * @param \WC_Subscription $subscription The subscription.
@@ -1495,13 +1495,15 @@ class Premium_Newsletters {
 	 * @return void
 	 */
 	public static function handle_readers_changed( $user_ids, $subscription ): void {
-		$holder_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		$readers   = WooCommerce_Subscriptions::get_subscription_readers( $subscription );
+		$holder_id = $readers['recipient'];
 		if ( ! $holder_id && ! ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) ) {
-			$holder_id = (int) $subscription->get_customer_id();
+			$holder_id = $readers['purchaser'];
 		}
 		$user_ids = array_map( 'intval', (array) $user_ids );
 		self::add_users_to_queue( array_intersect( $user_ids, [ $holder_id ] ), self::SOURCE_GIFT_RECEIVED );
-		self::add_users_to_queue( array_diff( $user_ids, [ $holder_id ] ), self::SOURCE_GIFT_REMOVED );
+		self::add_users_to_queue( array_intersect( $user_ids, $readers['members'] ), self::SOURCE_GROUP_MEMBERSHIP );
+		self::add_users_to_queue( array_diff( $user_ids, [ $holder_id ], $readers['members'] ), self::SOURCE_GIFT_REMOVED );
 	}
 
 	/**

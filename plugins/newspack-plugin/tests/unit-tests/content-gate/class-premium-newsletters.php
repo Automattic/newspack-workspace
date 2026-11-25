@@ -2348,19 +2348,39 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Turning a group on or off names its members, who hold no gift, so each gets a
-	 * check that can only take lists away.
+	 * Turning a group on gives its members a check that can add lists, as joining it
+	 * does. Turning it off gives them one that can only take lists away.
+	 *
+	 * @dataProvider data_group_toggles
+	 *
+	 * @param string $enabled         The group's enabled setting after the toggle.
+	 * @param string $expected_source The source the member is queued with.
 	 */
-	public function test_group_toggle_gives_members_a_remove_only_check() {
+	public function test_group_toggle_queues_members_by_whether_the_group_is_on( $enabled, $expected_source ) {
 		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$member_id    = $this->create_group_member();
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
 		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		Group_Subscription::update_members( $subscription, [ $member_id ] );
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', $enabled );
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
 
 		do_action( 'newspack_subscription_readers_changed', [ $member_id ], $subscription );
 
 		$this->assertSame( [ $member_id ], $this->get_queued_user_ids() );
-		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $member_id ) );
+		$this->assertSame( $expected_source, $this->get_queued_source( $member_id ) );
+	}
+
+	/**
+	 * Data provider for test_group_toggle_queues_members_by_whether_the_group_is_on().
+	 *
+	 * @return array[]
+	 */
+	public function data_group_toggles() {
+		return [
+			'turned on'  => [ 'yes', Premium_Newsletters::SOURCE_GROUP_MEMBERSHIP ],
+			'turned off' => [ 'no', Premium_Newsletters::SOURCE_GIFT_REMOVED ],
+		];
 	}
 
 	// =========================================================================

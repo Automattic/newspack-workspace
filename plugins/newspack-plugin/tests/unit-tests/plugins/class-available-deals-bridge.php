@@ -49,4 +49,22 @@ class Newspack_Test_Available_Deals_Bridge extends WP_UnitTestCase {
 
 		$this->assertSame( [ $buyer_id, $recipient_id ], Available_Deals_Query::$customer_ids );
 	}
+
+	/**
+	 * A gift changing hands fires no subscription event, so the readers it moved
+	 * between are recomputed when the holder change is announced. Group members
+	 * named alongside them own nothing, so theirs are not.
+	 */
+	public function test_holder_change_refreshes_the_readers_but_not_group_members() {
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		require_once dirname( __DIR__, 2 ) . '/mocks/available-deals-query-mock.php';
+		[ $buyer_id, $old_recipient_id, $new_recipient_id, $member_id ] = self::factory()->user->create_many( 4 );
+		$gift = wcs_create_subscription( [ 'customer_id' => $buyer_id ] );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $gift->get_id() );
+
+		do_action( 'newspack_subscription_readers_changed', [ $new_recipient_id, $old_recipient_id, $member_id ], $gift );
+
+		$this->assertSame( [ $new_recipient_id, $old_recipient_id ], Available_Deals_Query::$customer_ids );
+	}
 }

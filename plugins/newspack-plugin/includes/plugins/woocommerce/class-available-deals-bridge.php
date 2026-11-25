@@ -33,6 +33,7 @@ final class Available_Deals_Bridge {
 		$done = true;
 		add_filter( 'newspack_reader_data_read_only_keys', [ __CLASS__, 'register_read_only_key' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
+		add_action( 'newspack_subscription_readers_changed', [ __CLASS__, 'refresh_readers' ], 10, 2 );
 		add_filter( 'newspack_popups_default_criteria', [ __CLASS__, 'register_criteria' ] );
 	}
 
@@ -77,6 +78,24 @@ final class Available_Deals_Bridge {
 		$recipient_id = WooCommerce_Subscriptions::get_subscription_readers( (int) $data['subscription_id'] )['recipient'];
 		if ( $recipient_id > 0 && $recipient_id !== $user_id ) {
 			self::refresh( $recipient_id );
+		}
+	}
+
+	/**
+	 * Recompute available deals for readers a gift moved between, since no
+	 * subscription event fires when a gift changes hands. Group members own
+	 * nothing, so turning a group on or off leaves their deals as they were.
+	 *
+	 * @param int[]            $user_ids     Readers who may have gained or lost the subscription.
+	 * @param \WC_Subscription $subscription The subscription.
+	 */
+	public static function refresh_readers( $user_ids, $subscription ): void {
+		if ( ! class_exists( self::QUERY_CLASS ) ) {
+			return;
+		}
+		$member_ids = array_map( 'intval', (array) Group_Subscription::get_members( $subscription ) );
+		foreach ( array_diff( array_map( 'intval', (array) $user_ids ), $member_ids ) as $user_id ) {
+			self::refresh( $user_id );
 		}
 	}
 
