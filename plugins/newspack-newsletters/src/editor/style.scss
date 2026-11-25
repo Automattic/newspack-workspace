@@ -184,6 +184,31 @@
 				padding: 6px;
 			}
 
+			// Newspack's social-links style variants (registered in `../index.js`).
+			// The email renders them under either renderer, so the canvas shows them
+			// under either renderer too.
+			&.wp-block-social-links {
+				&.is-style-circle-black .wp-social-link {
+					background: black;
+					color: white;
+				}
+
+				&.is-style-filled-black .wp-social-link {
+					background: transparent;
+					color: black;
+				}
+
+				&.is-style-circle-white .wp-social-link {
+					background: white;
+					color: black;
+				}
+
+				&.is-style-filled-white .wp-social-link {
+					background: transparent;
+					color: white;
+				}
+			}
+
 			// Batch C canvas↔email parity. On a classic theme the canvas otherwise
 			// falls to WP-core editor defaults (common.css / block-library theme.css)
 			// plus this generic `.wp-block` inset, which under-render these blocks
