@@ -1230,29 +1230,32 @@ function newspack_sanitize_svgs() {
 /**
  * Truncates text to a specific character length, without breaking a word.
  *
- * Characters are counted as readers see them: a multibyte character counts once, and a run of
- * whitespace, including non-breaking spaces, counts as one space. The text is cut right after
- * the word that holds the last allowed character.
+ * Characters are counted as readers see them: a multibyte character or an HTML entity counts
+ * once, and a run of whitespace, including non-breaking spaces, counts as one space. The text is
+ * cut right after the word that holds the last allowed character. Whitespace is collapsed in the
+ * returned text whether or not it is cut, so a bio reads the same either way.
  *
  * @param string $content The text to truncate.
  * @param int    $length The character length to truncate to.
  * @param string $after Text to append after truncation. Default is '...'.
- * @return string The truncated text, or the original text when it needs no truncation.
+ * @return string The text with entities decoded and whitespace collapsed, truncated when it is
+ *                over the limit. Not escaped: escape it before output.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
 	$length = absint( $length );
 
-	// Treat any run of whitespace, including non-breaking spaces, as a single space.
-	$normalized = preg_replace( '/(?:[\s\x{00A0}]|&nbsp;|&#160;)+/u', ' ', (string) $content );
+	// Count entities such as `&amp;` as the one character they display, and treat any run of
+	// whitespace, including non-breaking spaces, as a single space. Callers escape the output.
+	$decoded    = html_entity_decode( (string) $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	$normalized = preg_replace( '/[\s\x{00A0}]+/u', ' ', $decoded );
 	if ( null === $normalized ) {
 		// Not valid UTF-8, so the text cannot be measured in characters.
 		return $content;
 	}
 	$normalized = trim( $normalized );
 
-	// If content is already shorter than the truncate length, return it.
 	if ( mb_strlen( $normalized ) <= $length ) {
-		return $content;
+		return $normalized;
 	}
 
 	// Find the first space from the last allowed character on, so the word holding it stays whole.
@@ -1262,7 +1265,7 @@ function newspack_truncate_text( $content, $length, $after = '...' ) {
 
 	// No space left: the last allowed character is in the last word, so nothing is cut.
 	if ( false === $breakpoint ) {
-		return $content;
+		return $normalized;
 	}
 
 	return mb_substr( $normalized, 0, $offset ) . substr( $tail, 0, $breakpoint ) . $after;
