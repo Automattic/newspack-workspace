@@ -7,6 +7,8 @@
 
 namespace Newspack\Newsletters\Email_Renderers;
 
+use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -30,6 +32,11 @@ class Block_Normalizer {
 	 * block (`2em`) at the email's 16px base font size, which is what the editor shows.
 	 */
 	const DEFAULT_COLUMNS_GAP = '32px';
+
+	/**
+	 * Blocks whose inner blocks the editor renders without padding, so they sit flush.
+	 */
+	const FLUSH_CONTAINERS = [ 'core/column', 'core/quote' ];
 
 	/**
 	 * Priority of the pass that runs after the package's preprocessing (priority 10).
@@ -72,7 +79,7 @@ class Block_Normalizer {
 		add_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		add_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
 		add_filter( 'block_parser_class', [ __CLASS__, 'block_parser_class' ], 20 );
-		add_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ] );
+		add_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ], 10 );
 		add_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'apply_editor_gaps' ], self::AFTER_PREPROCESS_PRIORITY );
 	}
 
@@ -87,7 +94,7 @@ class Block_Normalizer {
 		remove_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		remove_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
 		remove_filter( 'block_parser_class', [ __CLASS__, 'block_parser_class' ], 20 );
-		remove_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ] );
+		remove_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ], 10 );
 		remove_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'apply_editor_gaps' ], self::AFTER_PREPROCESS_PRIORITY );
 		self::$in_block_hooks_pass = false;
 	}
@@ -178,8 +185,8 @@ class Block_Normalizer {
 	 * The package puts the email's block gap above every block after the first, at any
 	 * depth. The editor instead stacks blocks flush and pads each one, so the gap between
 	 * two blocks is the sum of their paddings (see editor_padding()): a full block gap
-	 * between most, half a gap next to a spacer. Blocks inside a column get no padding
-	 * there, so they sit flush (an author byline's name and role, for example). Nested
+	 * between most, half a gap next to a spacer. Blocks inside a column or a quote get no
+	 * padding there, so they sit flush (an author byline's name and role, for example). Nested
 	 * markup (posts inserted by the Posts Inserter, an ad) is left alone: it sets its own
 	 * spacing.
 	 *
@@ -197,7 +204,8 @@ class Block_Normalizer {
 	 * Recursive step of apply_editor_gaps().
 	 *
 	 * @param array $blocks    Parsed blocks.
-	 * @param bool  $in_column Whether these blocks sit inside a column.
+	 * @param bool  $in_column Whether these blocks sit inside a column or a quote, where
+	 *                         the editor gives blocks no padding.
 	 * @return array
 	 */
 	private static function apply_gaps_in( array $blocks, bool $in_column ): array {
@@ -215,7 +223,7 @@ class Block_Normalizer {
 			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
 				$blocks[ $key ]['innerBlocks'] = self::apply_gaps_in(
 					$block['innerBlocks'],
-					$in_column || 'core/column' === ( $block['blockName'] ?? '' )
+					$in_column || in_array( $block['blockName'] ?? '', self::FLUSH_CONTAINERS, true )
 				);
 			}
 			$previous = $block;
@@ -227,13 +235,14 @@ class Block_Normalizer {
 	 * The vertical padding the editor canvas gives a block, top and bottom. Neighbours
 	 * stack flush there, so the gap between two blocks is the sum of their paddings: half
 	 * the email's block gap each, except for blocks that take none. A spacer's padding
-	 * counts toward its own height, and the Posts Inserter pads its posts itself.
+	 * counts toward its own height, the Posts Inserter pads its posts itself, and
+	 * full-width blocks are unpadded.
 	 *
 	 * @param array $block Parsed block.
 	 * @return float Padding in px.
 	 */
 	private static function editor_padding( array $block ): float {
-		if ( in_array( $block['blockName'] ?? '', [ 'core/spacer', 'newspack-newsletters/posts-inserter' ], true ) ) {
+		if ( in_array( $block['blockName'] ?? '', [ 'core/spacer', 'newspack-newsletters/posts-inserter' ], true ) || 'full' === ( $block['attrs']['align'] ?? null ) ) {
 			return 0.0;
 		}
 		return (float) Theme_Json_Builder::BLOCK_GAP / 2;
@@ -250,8 +259,9 @@ class Block_Normalizer {
 	 * The gap is turned into start-side padding on each column after the first instead.
 	 * The engine counts a column's own padding in its width, so the columns share the
 	 * row the way they do in the editor. That only holds while the padding is the gap
-	 * alone and nothing paints it: if any of those columns has its own start padding, a
-	 * background or a border, the engine's own gap handling is left to it.
+	 * alone, nothing paints it, and the engine can measure it (px or a spacing preset).
+	 * Otherwise a gap the author set is left to the engine's own handling, and the default
+	 * gap is skipped rather than widening the row.
 	 *
 	 * @param array $block Parsed block.
 	 * @return array
@@ -261,22 +271,24 @@ class Block_Normalizer {
 			return $block;
 		}
 		$block_gap = $block['attrs']['style']['spacing']['blockGap'] ?? null;
+		$author    = true;
 		if ( is_array( $block_gap ) && isset( $block_gap['left'] ) && is_string( $block_gap['left'] ) && '' !== $block_gap['left'] ) {
 			$gap = $block_gap['left'];
 		} elseif ( is_string( $block_gap ) && '' !== $block_gap ) {
 			$gap = $block_gap;
 		} else {
-			$gap = self::DEFAULT_COLUMNS_GAP;
+			$gap    = self::DEFAULT_COLUMNS_GAP;
+			$author = false;
 		}
 		if ( preg_match( '/[<>"\';{}]/', $gap ) ) {
 			return $block;
 		}
 
-		$side     = is_rtl() ? 'right' : 'left';
+		$side     = self::is_rtl_email() ? 'right' : 'left';
 		$keys     = array_slice( array_keys( $block['innerBlocks'] ), 1 );
-		$paddable = true;
+		$paddable = (bool) preg_match( '/^(?:\d+(?:\.\d+)?px|0|var:preset\|spacing\|[a-z0-9_-]+)$/i', $gap );
 		foreach ( $keys as $key ) {
-			if ( ! self::can_take_gap_padding( $block['innerBlocks'][ $key ], $side ) ) {
+			if ( $paddable && ! self::can_take_gap_padding( $block['innerBlocks'][ $key ], $side ) ) {
 				$paddable = false;
 				break;
 			}
@@ -284,8 +296,10 @@ class Block_Normalizer {
 
 		$block_gap = is_array( $block_gap ) ? $block_gap : ( is_string( $block_gap ) && '' !== $block_gap ? [ 'top' => $block_gap ] : [] );
 		if ( ! $paddable ) {
-			$block_gap['left'] = $gap;
-			$block['attrs']['style']['spacing']['blockGap'] = $block_gap;
+			if ( $author ) {
+				$block_gap['left'] = $gap;
+				$block['attrs']['style']['spacing']['blockGap'] = $block_gap;
+			}
 			return $block;
 		}
 		unset( $block_gap['left'] );
@@ -326,6 +340,17 @@ class Block_Normalizer {
 	}
 
 	/**
+	 * Whether the email reads right to left. Decided from the language the email is
+	 * rendered in, as the engine does, rather than the request's locale, which follows
+	 * the user's admin language.
+	 *
+	 * @return bool
+	 */
+	private static function is_rtl_email(): bool {
+		return ( new Rendering_Context( new \WP_Theme_JSON(), [], (string) get_bloginfo( 'language' ) ) )->is_rtl();
+	}
+
+	/**
 	 * Head styles for the email: columns stack on phones, where the editor puts no gap
 	 * beside them, so the gap padding comes off.
 	 *
@@ -333,7 +358,8 @@ class Block_Normalizer {
 	 * @return string
 	 */
 	public static function add_styles( $styles ): string {
-		return (string) $styles . '@media screen and (max-width: 660px) { .' . self::GAP_CLASS . ' { padding-left: 0 !important; padding-right: 0 !important; } }';
+		$side = self::is_rtl_email() ? 'right' : 'left';
+		return (string) $styles . '@media screen and (max-width: 660px) { .' . self::GAP_CLASS . ' { padding-' . $side . ': 0 !important; } }';
 	}
 
 	/**

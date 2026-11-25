@@ -298,6 +298,35 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/padding-left:\s*16px/', $this->render( $content ), 'Expected a 16px gap before the text column.' );
 	}
 
+	/**
+	 * Inserted posts keep the Posts Inserter's own 8px gap between their blocks, even
+	 * inside the columns of a side-by-side item, where the newsletter's own blocks get none.
+	 */
+	public function test_posts_inserter_keeps_its_gap_inside_columns() {
+		$inner   = '<div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Image</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Title</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Excerpt</p><!-- /wp:paragraph --></div><!-- /wp:column --></div>';
+		$content = serialize_block(
+			[
+				'blockName'    => 'newspack-newsletters/posts-inserter',
+				'attrs'        => [
+					'innerBlocksToInsert' => [
+						[
+							'blockName'    => 'core/columns',
+							'attrs'        => [],
+							'innerHTML'    => $inner,
+							'innerContent' => [ $inner ],
+							'innerBlocks'  => [],
+						],
+					],
+				],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$this->assertMatchesRegularExpression( '/margin-top:\s*8px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Excerpt/', $this->render( $content ) );
+	}
+
 	// ------------------------------------------------------------------
 	// Site logo (NPPD-2608)
 	// ------------------------------------------------------------------
@@ -350,21 +379,45 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/<td\b[^>]*class="[^"]*\bnewspack-columns-gap\b[^"]*"[^>]*padding-left:\s*32px/', $html, 'Expected the gap as padding on the second column\'s content cell.' );
 		$this->assertDoesNotMatchRegularExpression( '/class="block wp-block-column email-block-column"[^>]*padding-left/', $html, 'Expected no gap padding on top of the column width.' );
 		$this->assertMatchesRegularExpression( '/@media[^{]*max-width:\s*660px\)\s*\{(?:[^{}]*\{[^}]*\})*?\s*\.newspack-columns-gap\s*\{\s*padding-left:\s*0\s*!important/', $html, 'Expected the gap to come off when columns stack.' );
+		$this->assertDoesNotMatchRegularExpression( '/\.newspack-columns-gap\s*\{[^}]*padding-right/', $html, 'Expected the column\'s own end-side padding to stay on phones.' );
 	}
 
 	/**
-	 * The normalizer's columns gap rules: a single blockGap value applies to both axes,
-	 * and a column that paints its padding keeps the engine's own gap.
+	 * A single blockGap value applies to both axes, as in the editor: its horizontal part
+	 * becomes the later columns' gap padding and its vertical part stays.
 	 */
-	public function test_normalizer_columns_gap_rules() {
-		$string_gap = Block_Normalizer::normalize( parse_blocks( self::two_columns( '{"style":{"spacing":{"blockGap":"20px"}}}' ) ) );
-		$this->assertSame( [ 'top' => '20px' ], $string_gap[0]['attrs']['style']['spacing']['blockGap'], 'Expected the vertical part of a single blockGap to stay.' );
-		$this->assertSame( '20px', $string_gap[0]['innerBlocks'][1]['attrs']['style']['spacing']['padding']['left'], 'Expected a single blockGap to set the horizontal gap.' );
-		$this->assertArrayNotHasKey( 'padding', $string_gap[0]['innerBlocks'][0]['attrs']['style']['spacing'] ?? [], 'Expected the first column to get no gap.' );
+	public function test_single_block_gap_sets_both_axes() {
+		$blocks = Block_Normalizer::normalize( parse_blocks( self::two_columns( '{"style":{"spacing":{"blockGap":"20px"}}}' ) ) );
 
-		$painted = Block_Normalizer::normalize( parse_blocks( self::two_columns( '', '{"style":{"color":{"background":"#eeeeee"}}}' ) ) );
-		$this->assertSame( [ 'left' => '32px' ], $painted[0]['attrs']['style']['spacing']['blockGap'], 'Expected the engine\'s gap for a column with a background.' );
-		$this->assertArrayNotHasKey( 'spacing', $painted[0]['innerBlocks'][1]['attrs']['style'], 'Expected no gap padding on a column with a background.' );
+		$this->assertSame( [ 'top' => '20px' ], $blocks[0]['attrs']['style']['spacing']['blockGap'] );
+		$this->assertSame( '20px', $blocks[0]['innerBlocks'][1]['attrs']['style']['spacing']['padding']['left'] );
+		$this->assertArrayNotHasKey( 'padding', $blocks[0]['innerBlocks'][0]['attrs']['style']['spacing'] ?? [], 'Expected the first column to get no gap.' );
+	}
+
+	/**
+	 * A column that would paint the gap keeps a gap the author set, through the engine,
+	 * but gets no default gap: the engine adds it on top of the column widths.
+	 */
+	public function test_painted_column_gets_only_an_authored_gap() {
+		$painted = '{"style":{"color":{"background":"#eeeeee"}}}';
+
+		$default = Block_Normalizer::normalize( parse_blocks( self::two_columns( '', $painted ) ) );
+		$this->assertArrayNotHasKey( 'blockGap', $default[0]['attrs']['style']['spacing'] ?? [], 'Expected no default gap that would widen the row.' );
+		$this->assertArrayNotHasKey( 'spacing', $default[0]['innerBlocks'][1]['attrs']['style'], 'Expected no gap padding on a column with a background.' );
+
+		$authored = Block_Normalizer::normalize( parse_blocks( self::two_columns( '{"style":{"spacing":{"blockGap":{"left":"20px"}}}}', $painted ) ) );
+		$this->assertSame( [ 'left' => '20px' ], $authored[0]['attrs']['style']['spacing']['blockGap'], 'Expected the author\'s gap left to the engine.' );
+	}
+
+	/**
+	 * A gap the width calculation can't measure (anything but px or a spacing preset) is
+	 * left to the engine instead of becoming column padding.
+	 */
+	public function test_unmeasurable_gap_is_left_to_engine() {
+		$blocks = Block_Normalizer::normalize( parse_blocks( self::two_columns( '{"style":{"spacing":{"blockGap":{"left":"1.5rem"}}}}' ) ) );
+
+		$this->assertSame( [ 'left' => '1.5rem' ], $blocks[0]['attrs']['style']['spacing']['blockGap'] );
+		$this->assertArrayNotHasKey( 'padding', $blocks[0]['innerBlocks'][1]['attrs']['style']['spacing'] ?? [] );
 	}
 
 	/**
@@ -387,6 +440,17 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 
 		$this->assertMatchesRegularExpression( '/margin-top:\s*6px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Below/', $html, 'Expected 6px between the spacer and the next block.' );
 		$this->assertStringNotContainsString( 'margin-top: 12px', $html, 'Expected no full block gap next to the spacer.' );
+	}
+
+	/**
+	 * Blocks inside a quote sit flush, as the editor renders them, and a full-width block
+	 * is only half a gap from its neighbour, since the editor doesn't pad it.
+	 */
+	public function test_quote_and_full_width_gaps_match_editor() {
+		$html = $this->render( '<!-- wp:quote --><blockquote class="wp-block-quote"><!-- wp:paragraph --><p>One</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Two</p><!-- /wp:paragraph --></blockquote><!-- /wp:quote --><!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph --><!-- wp:separator {"align":"full"} --><hr class="wp-block-separator alignfull has-alpha-channel-opacity"/><!-- /wp:separator -->' );
+
+		$this->assertDoesNotMatchRegularExpression( '/margin-top:\s*[1-9]\d*px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Two/', $html, 'Expected no gap between blocks inside a quote.' );
+		$this->assertMatchesRegularExpression( '/margin-top:\s*6px/', $html, 'Expected half a gap above the full-width block.' );
 	}
 
 	/**
@@ -471,18 +535,42 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A custom gradient's stops are faded by the dim ratio, whatever their color format,
-	 * and anything that isn't a plain gradient is left out.
+	 * A custom gradient's stops are faded by the dim ratio, in hex and rgba alike.
 	 */
-	public function test_cover_custom_gradient_overlay() {
+	public function test_cover_custom_gradient_stops_are_faded() {
 		$table = '<table class="email-block-cover" style="background-image: url(\'https://example.test/a.jpg\'); background-size: cover;"><tr><td>Cover</td></tr></table>';
 
 		$html = html_entity_decode( Cover::apply_gradient_overlay( $table, 'linear-gradient(90deg,#ff0000 0%,rgba(0,0,255,0.5) 100%)', 40 ), ENT_QUOTES | ENT_HTML5 );
 		$this->assertStringContainsString( "background-image: linear-gradient(90deg,rgba(255, 0, 0, 0.4) 0%,rgba(0, 0, 255, 0.2) 100%), url('https://example.test/a.jpg')", $html );
 		$this->assertSame( $table, Cover::apply_gradient_overlay( $table, '', 40 ), 'Expected no change for an unresolved gradient.' );
+	}
 
-		$unsafe = $this->render( '<!-- wp:cover {"url":"https://example.test/a.jpg","dimRatio":50,"customGradient":"linear-gradient(red,blue);color:red"} --><div class="wp-block-cover"><img class="wp-block-cover__image-background" alt="" src="https://example.test/a.jpg"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
-		$this->assertStringNotContainsString( 'color:red', $unsafe, 'Expected an unsafe custom gradient to be dropped.' );
+	/**
+	 * Custom gradients that could break out of the style attribute, add a layer or an
+	 * image, or use stops email clients can't resolve are dropped.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public static function unusable_gradients(): array {
+		return [
+			'declaration break' => [ 'linear-gradient(red,blue);color:red', 'color:red' ],
+			'image layer'       => [ 'linear-gradient(red,red),url(//tracker.example/p.gif)', 'tracker.example' ],
+			'css variable stop' => [ 'linear-gradient(var(--wp--preset--color--accent) 0%,#ffffff 100%)', 'var(--wp--preset' ],
+		];
+	}
+
+	/**
+	 * An unusable custom gradient is dropped.
+	 *
+	 * @dataProvider unusable_gradients
+	 *
+	 * @param string $gradient Custom gradient.
+	 * @param string $leak     Text that must not reach the email.
+	 */
+	public function test_unusable_custom_gradient_is_dropped( string $gradient, string $leak ) {
+		$html = $this->render( '<!-- wp:cover {"url":"https://example.test/a.jpg","dimRatio":50,"customGradient":' . wp_json_encode( $gradient ) . '} --><div class="wp-block-cover"><img class="wp-block-cover__image-background" alt="" src="https://example.test/a.jpg"/><div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Cover</p><!-- /wp:paragraph --></div></div><!-- /wp:cover -->' );
+
+		$this->assertStringNotContainsString( $leak, html_entity_decode( $html, ENT_QUOTES | ENT_HTML5 ) );
 	}
 
 	// ------------------------------------------------------------------

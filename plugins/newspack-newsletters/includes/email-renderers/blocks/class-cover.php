@@ -61,7 +61,7 @@ class Cover extends Package_Cover {
 		if ( empty( $attrs['gradient'] ) || ! is_string( $attrs['gradient'] ) ) {
 			return null;
 		}
-		$origins = function_exists( 'wp_get_global_settings' ) ? wp_get_global_settings( [ 'color', 'gradients' ] ) : [];
+		$origins = wp_get_global_settings( [ 'color', 'gradients' ] );
 		// Later origins (theme, then custom) override earlier ones for the same slug.
 		$gradient = '';
 		foreach ( [ 'default', 'theme', 'custom' ] as $origin ) {
@@ -75,14 +75,37 @@ class Cover extends Package_Cover {
 	}
 
 	/**
-	 * Accept a CSS gradient only if it's a plain linear or radial gradient.
+	 * Accept a single linear or radial gradient whose stops are hex or `rgb()`/`rgba()`
+	 * colors, which apply_gradient_overlay() can fade (a stop given by color name keeps
+	 * full opacity). CSS variables, which email clients don't resolve, other functions
+	 * such as `url()`, and extra background layers are refused.
 	 *
 	 * @param string $gradient CSS gradient.
-	 * @return string The gradient, or '' if it isn't safe to put in a style attribute.
+	 * @return string The gradient, or '' when it doesn't qualify.
 	 */
 	private static function sanitize_gradient( string $gradient ): string {
 		$gradient = trim( $gradient );
-		return preg_match( '/^(?:repeating-)?(?:linear|radial)-gradient\([a-z0-9#%.,()\s\/-]+\)$/i', $gradient ) ? $gradient : '';
+		if ( ! preg_match( '/^(?:repeating-)?(?:linear|radial)-gradient\([a-z0-9#%.,()\s\/-]+\)$/i', $gradient ) ) {
+			return '';
+		}
+		// Every function inside the gradient must be one of the colors that can be faded.
+		preg_match_all( '/([a-z-]+)\(/i', $gradient, $functions );
+		foreach ( array_slice( $functions[1], 1 ) as $function ) {
+			if ( ! in_array( strtolower( $function ), [ 'rgb', 'rgba' ], true ) ) {
+				return '';
+			}
+		}
+		// One layer: the gradient's own parenthesis closes only at the very end.
+		$depth = 0;
+		$last  = strlen( $gradient ) - 1;
+		for ( $i = 0; $i <= $last; $i++ ) {
+			if ( '(' === $gradient[ $i ] ) {
+				++$depth;
+			} elseif ( ')' === $gradient[ $i ] && 0 === --$depth && $i !== $last ) {
+				return '';
+			}
+		}
+		return 0 === $depth ? $gradient : '';
 	}
 
 	/**
