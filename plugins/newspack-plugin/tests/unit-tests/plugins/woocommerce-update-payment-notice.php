@@ -47,6 +47,16 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$wc_memberships_membership_subscriptions   = [];
 		global $wcs_grouped_parents;
 		$wcs_grouped_parents = [];
+		require_once __DIR__ . '/../../mocks/wcs-gifting-mock.php';
+		\WCS_Gifting::$recipients = [];
+	}
+
+	/**
+	 * Clear the gift stub, whose store is shared across test classes.
+	 */
+	public function tear_down() {
+		\WCS_Gifting::$recipients = [];
+		parent::tear_down();
 	}
 
 	/**
@@ -142,6 +152,40 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 				'items'         => [ $this->make_line_item( $product_id ) ],
 			]
 		);
+	}
+
+	/**
+	 * Register an active gift of a product, bought by one reader for another.
+	 * The gift is listed among the recipient's subscriptions, as WooCommerce
+	 * Subscriptions Gifting lists it.
+	 *
+	 * @param int $purchaser_id Buyer's user ID.
+	 * @param int $recipient_id Recipient's user ID.
+	 * @param int $product_id   Product ID granted by the gift.
+	 * @return WC_Subscription
+	 */
+	private function make_active_gift( $purchaser_id, $recipient_id, $product_id ) {
+		$gift = wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => [ $product_id ],
+				'items'       => [ $this->make_line_item( $product_id ) ],
+			]
+		);
+		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
+		add_filter(
+			'wcs_get_users_subscriptions',
+			function ( $subscriptions, $user_id ) use ( $gift, $recipient_id ) {
+				if ( (int) $user_id === (int) $recipient_id ) {
+					$subscriptions[ $gift->get_id() ] = $gift;
+				}
+				return $subscriptions;
+			},
+			10,
+			2
+		);
+		return $gift;
 	}
 
 	/**
@@ -511,6 +555,72 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
 
 		$this->assertCount( 1, $this->get_notices(), 'No equivalent access — the notice must still fire.' );
+	}
+
+	/**
+	 * Another active subscription the reader holds for the same product
+	 * suppresses the notice (regression guard).
+	 */
+	public function test_no_notice_when_reader_holds_another_active_subscription_for_the_product() {
+		$customer_id = $this->make_current_customer();
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
+		wcs_create_subscription(
+			[
+				'customer_id' => $customer_id,
+				'status'      => 'active',
+				'products'    => [ $product->get_id() ],
+				'items'       => [ $this->make_line_item( $product->get_id() ) ],
+			]
+		);
+
+		$this->assertSame( [], $this->get_notices(), 'An active subscription the reader holds for the product must suppress the notice.' );
+	}
+
+	/**
+	 * An active gift the reader bought for someone else belongs to its
+	 * recipient. It gives the reader no access, so it must not hide the notice
+	 * for the reader's own lapsed subscription.
+	 */
+	public function test_notice_fires_when_the_only_active_subscription_is_a_gift_given_away() {
+		$customer_id  = $this->make_current_customer();
+		$recipient_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$product      = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
+		$this->make_active_gift( $customer_id, $recipient_id, $product->get_id() );
+
+		$notices = $this->get_notices();
+		$this->assertCount( 1, $notices, 'A gift given away must not suppress the buyer\'s own payment notice.' );
+		$this->assertStringContainsString( 'Newsroom Pro', $notices[0] );
+	}
+
+	/**
+	 * An active gift the reader received does give them the product, so it
+	 * suppresses the notice for their own lapsed subscription (regression guard).
+	 */
+	public function test_no_notice_when_reader_received_an_active_gift_for_the_product() {
+		$purchaser_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->make_current_customer();
+		$product      = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
+		$this->make_needs_payment_subscription( $recipient_id, 'on-hold', $product->get_id() );
+		$this->make_active_gift( $purchaser_id, $recipient_id, $product->get_id() );
+
+		$this->assertSame( [], $this->get_notices(), 'A gift the reader received must suppress the notice.' );
 	}
 
 	/**

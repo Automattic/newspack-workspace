@@ -11,6 +11,7 @@ use Newspack\Group_Subscription_Invite;
 use Newspack\Group_Subscription_Settings;
 
 require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 require_once dirname( __DIR__, 3 ) . '/includes/export/class-subscriptions-csv-exporter.php';
 
 /**
@@ -34,13 +35,16 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		unset( $GLOBALS['wcs_mock_orders_with_meta_query_result'] );
 		WCS_Customer_Store::$mock_user_subscription_ids = [];
 		delete_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT );
+		WCS_Gifting::$recipients = [];
 	}
 
 	/**
-	 * Remove the export files the paging tests stage under uploads.
+	 * Remove the export files the paging tests stage under uploads, and clear
+	 * the gift stub, whose store is shared across test classes.
 	 */
 	public function tear_down() {
 		newspack_test_remove_export_files();
+		WCS_Gifting::$recipients = [];
 		parent::tear_down();
 	}
 
@@ -831,6 +835,69 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		// The subscription's own columns still describe the subscription and its owner.
 		$this->assertSame( 'owner@example.test', $rows[2]['customer_email'] );
 		$this->assertNotContains( 'invitee@example.test', array_column( $rows, 'member_email' ) );
+	}
+
+	/**
+	 * A gift belongs to its recipient, so it is one row for the recipient. The
+	 * buyer pays for it but has no access through it, so they get no row.
+	 */
+	public function test_per_member_gift_is_one_row_for_its_recipient() {
+		$buyer     = $this->create_reader( 'buyer' );
+		$recipient = $this->create_reader( 'giftee' );
+		$this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $buyer,
+			]
+		);
+		WCS_Gifting::$recipients[1] = $recipient;
+
+		$rows = $this->export_per_member_page()->get_prepared_row_data();
+
+		$this->assertSame(
+			[ [ $recipient, 'gift recipient', '', 1 ] ],
+			array_map( fn( $row ) => [ $row['member_id'], $row['access_through'], $row['group_name'], $row['subscription_id'] ], $rows )
+		);
+		$this->assertSame( 'giftee@example.test', $rows[0]['member_email'] );
+		// The subscription's own columns still name the buyer as its customer.
+		$this->assertSame( 'buyer@example.test', $rows[0]['customer_email'] );
+	}
+
+	/**
+	 * A gift with no recipient account, because it was sent to an email that
+	 * has no account or the recipient's account is gone, keeps the buyer's
+	 * owner row, as before.
+	 */
+	public function test_per_member_gift_without_a_recipient_account_keeps_the_owner_row() {
+		$email_only_buyer = $this->create_reader( 'emailonly' );
+		$this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $email_only_buyer,
+			]
+		);
+		WCS_Gifting::$recipients[1] = 0;
+
+		$deleted_recipient_buyer = $this->create_reader( 'buyer' );
+		$deleted_recipient       = $this->create_reader( 'gone' );
+		wp_delete_user( $deleted_recipient );
+		$this->create_full_subscription(
+			[
+				'id'          => 2,
+				'customer_id' => $deleted_recipient_buyer,
+			]
+		);
+		WCS_Gifting::$recipients[2] = $deleted_recipient;
+
+		$rows = $this->export_per_member_page()->get_prepared_row_data();
+
+		$this->assertSame(
+			[
+				[ $email_only_buyer, 'owner', 1 ],
+				[ $deleted_recipient_buyer, 'owner', 2 ],
+			],
+			array_map( fn( $row ) => [ $row['member_id'], $row['access_through'], $row['subscription_id'] ], $rows )
+		);
 	}
 
 	/**

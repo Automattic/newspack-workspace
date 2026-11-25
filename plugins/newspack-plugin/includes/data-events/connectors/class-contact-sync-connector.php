@@ -51,6 +51,18 @@ class Contact_Sync_Connector {
 		// Hooked even without a syncable integration, so batches queued earlier still run.
 		add_action( self::SYNC_READERS_HOOK, [ __CLASS__, 'sync_readers' ], 10, 2 );
 		add_action( 'shutdown', [ __CLASS__, 'flush_reader_syncs' ] );
+		add_filter( 'newspack_action_scheduler_hook_labels', [ __CLASS__, 'register_hook_labels' ] );
+	}
+
+	/**
+	 * Register hook labels for Contact Sync Connector actions.
+	 *
+	 * @param array $labels Existing labels.
+	 * @return array
+	 */
+	public static function register_hook_labels( $labels ) {
+		$labels[ self::SYNC_READERS_HOOK ] = __( 'Contact Sync Batch', 'newspack-plugin' );
+		return $labels;
 	}
 
 	/**
