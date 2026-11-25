@@ -12,7 +12,7 @@ npm install newspack-icons
 
 ```js
 import { Icon } from '@wordpress/icons';
-import { ad, emailAd, gift } from 'newspack-icons';
+import { ad, emailAd, newspaper } from 'newspack-icons';
 
 // Use with WordPress Icon component
 <Icon icon={ ad } />
@@ -22,7 +22,6 @@ import { ad, emailAd, gift } from 'newspack-icons';
 
 - `ad` - Advertisement icon
 - `emailAd` - Email advertisement icon
-- `gift` - Gift icon
 - `newspaper` - Newspaper icon
 - And more...
 
