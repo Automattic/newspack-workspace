@@ -98,8 +98,8 @@ class Newspack_UI_Icons {
 		'account'          =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--account">
 				<path d="M8 18.0476V16C8 14.8954 8.89543 14 10 14H14C15.1046 14 16 14.8954 16 16V18.0476" />
-				<path d="M12 4.75C7.99594 4.75 4.75 7.99593 4.75 12C4.75 16.0041 7.99593 19.25 12 19.25C16.0041 19.25 19.25 16.0041 19.25 12C19.25 7.99594 16.0041 4.75 12 4.75Z" />
-				<path d="M14 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z" fill="currentColor" stroke="none" />
+				<path d="M12 4.75C7.99594 4.75 4.75 7.99593 4.75 12C4.75 16.0041 7.99593 19.25 12 19.25C16.0041 19.25 19.25 16.0041 19.25 12C19.25 7.99594 16.0041 4.75 12 4.75Z" stroke-linejoin="round" />
+				<path d="M13.75 10C13.75 10.9665 12.9665 11.75 12 11.75C11.0335 11.75 10.25 10.9665 10.25 10C10.25 9.0335 11.0335 8.25 12 8.25C12.9665 8.25 13.75 9.0335 13.75 10Z" />
 			</svg>',
 		'ad'               =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--ad">
@@ -157,12 +157,13 @@ class Newspack_UI_Icons {
 			</svg>',
 		'comments'         =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--comments">
-				<path d="M7 10.35H13A0.25 0.25 0 0 0 13.25 10.1V4A0.25 0.25 0 0 0 13 3.75H5A0.25 0.25 0 0 0 4.75 4V12.6ZM17 19.35H11A0.25 0.25 0 0 1 10.75 19.1V13A0.25 0.25 0 0 1 11 12.75H19A0.25 0.25 0 0 1 19.25 13V21.6Z" stroke-linejoin="round" />
+				<path d="M12.5 4H6C5.30964 4 4.75 4.5596 4.75 5.25V10.541V12.6662C4.75 13.1282 5.32306 13.343 5.6268 12.9948L7.76724 10.541H12.5C13.1904 10.541 13.75 9.9813 13.75 9.291V5.25C13.75 4.5596 13.1904 4 12.5 4Z" />
+				<path d="M12 13H18.5C19.1904 13 19.75 13.5596 19.75 14.25V19.541V21.6662C19.75 22.1282 19.1769 22.343 18.8732 21.9948L16.7328 19.541H12C11.3096 19.541 10.75 18.9813 10.75 18.291V14.25C10.75 13.5596 11.3096 13 12 13Z" />
 			</svg>',
 		'copy'             =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--copy">
-				<path d="M5.625 4.75H15.375C15.858 4.75 16.25 5.142 16.25 5.625V15.375C16.25 15.858 15.858 16.25 15.375 16.25H5.625C5.142 16.25 4.75 15.858 4.75 15.375V5.625C4.75 5.142 5.142 4.75 5.625 4.75Z" />
-				<path d="M19.25 8.281V17.281C19.25 18.386 18.356 19.25 17.251 19.25H6.25" />
+				<path d="M20.25 6.75V19C20.25 19.6904 19.6904 20.25 19 20.25H6.75" />
+				<path d="M3.75 5C3.75 4.30964 4.30964 3.75 5 3.75H16C16.6904 3.75 17.25 4.30964 17.25 5V16C17.25 16.6904 16.6904 17.25 16 17.25H5C4.30964 17.25 3.75 16.6904 3.75 16V5Z" />
 			</svg>',
 		'curatedList'      =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--curated-list">
@@ -214,8 +215,7 @@ class Newspack_UI_Icons {
 			</svg>',
 		'login'            =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--login">
-				<path d="M8.55 8.5V7C8.55 6.31 9.11 5.75 9.8 5.75H16.8C17.49 5.75 18.05 6.31 18.05 7V17C18.05 17.69 17.49 18.25 16.8 18.25H9.8C9.11 18.25 8.55 17.69 8.55 17V15.5" />
-				<path d="M5 12H14.5M11.5 15L14.5 12L11.5 9" />
+				<path d="M7.75 6.5V6C7.75 5.30964 8.30964 4.75 9 4.75H18C18.6904 4.75 19.25 5.30964 19.25 6V18C19.25 18.6904 18.6904 19.25 18 19.25H9C8.30964 19.25 7.75 18.6904 7.75 18V17.5M5 12H14.5M11.5 15L14.5 12L11.5 9" />
 			</svg>',
 		'logout'           =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--logout">
@@ -276,9 +276,8 @@ class Newspack_UI_Icons {
 			</svg>',
 		'unseen'           =>
 			'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill:none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="newspack-ui__svg-icon--unseen">
-				<path d="M8.55 19.8L10.6587 15.1842M13.1523 9.72929L13.8553 8.19144L16 3.5M20.0645 13C19.2118 11.2841 17.8276 9.87898 16.1272 9M3.93555 13C5.40825 10.0366 8.46631 8 12 8C12.636 8 13.2566 8.06597 13.8553 8.19144M13.1523 9.72929C12.7975 9.58156 12.4083 9.5 12 9.5C10.3431 9.5 9 10.8431 9 12.5C9 13.6747 9.67519 14.6917 10.6587 15.1842M13.1523 9.72929L10.6587 15.1842" />
+				<path d="M8 21L10.6587 15.1842M13.1523 9.72929L13.8553 8.19144L16 3.5M20.0645 13C19.2118 11.2841 17.8276 9.87898 16.1272 9M3.93555 13C5.40825 10.0366 8.46631 8 12 8C12.636 8 13.2566 8.06597 13.8553 8.19144M13.1523 9.72929C12.7975 9.58156 12.4083 9.5 12 9.5C10.3431 9.5 9 10.8431 9 12.5C9 13.6747 9.67519 14.6917 10.6587 15.1842M13.1523 9.72929L10.6587 15.1842M13.1755 15.261C14.2481 14.8037 15 13.7397 15 12.5C15 12.1819 14.9505 11.8753 14.8587 11.5876" />
 				<path d="M12 9.5C10.3431 9.5 9 10.8431 9 12.5C9 13.6747 9.67519 14.6917 10.6587 15.1842L13.1523 9.72929C12.7975 9.58156 12.4083 9.5 12 9.5Z" fill="currentColor" />
-				<path d="M12.5 16C14.2 15.8 15.5 14.3 15.5 12.5C15.5 10.7 15.3 11.1 14.9 10.6L12.4 16Z" fill="currentColor" stroke="none" />
 			</svg>',
 	);
 }

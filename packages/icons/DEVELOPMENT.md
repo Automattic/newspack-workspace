@@ -44,16 +44,14 @@ All icons in this package are designed on a **24×24 grid/viewbox**. This ensure
 
 ## Available Icons
 
-This package includes 51 custom icons:
+This package includes 47 custom icons:
 
 - `accessibility` - Accessibility icon
 - `activity` - Activity icon
 - `ad` - Advertisement icon
-- `account` - Account/user icon
 - `ai` - AI icon
 - `aiText` - AI text icon
 - `appearance` - Appearance (light and dark) icon
-- `archiveLoop` - Archive loop icon
 - `aspectLandscape` - Landscape aspect ratio icon
 - `aspectPortrait` - Portrait aspect ratio icon
 - `aspectSquare` - Square aspect ratio icon
@@ -62,7 +60,6 @@ This package includes 51 custom icons:
 - `browser` - Browser icon
 - `chartReport` - Chart report icon
 - `collections` - Collections icon
-- `comments` - Comments icon
 - `contentCarousel` - Content carousel icon
 - `contentLocked` - Content locked icon
 - `contentLoop` - Content loop icon
@@ -81,7 +78,6 @@ This package includes 51 custom icons:
 - `mergeTags` - Merge tags icon
 - `newspack` - Newspack logo icon
 - `newspaper` - Newspaper icon
-- `output` - Output icon
 - `overlayBottom` - Overlay bottom icon
 - `overlayCenter` - Overlay center icon
 - `overlayInline` - Overlay inline icon
