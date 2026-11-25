@@ -21,7 +21,7 @@ import { get } from 'lodash';
  */
 import { getServiceProvider } from '../../service-providers';
 import { isManualProvider } from '../../utils/service-provider';
-import { getSettledSendLists, validateNewsletter } from '../../newsletter-editor/utils';
+import { getSettledSendLists, saveEditedSyncedPatterns, validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
@@ -50,6 +50,7 @@ function PreviewHTML() {
 			// at mount is intentional — do not add them to deps (would cause double-fetches).
 			( async () => {
 				try {
+					await saveEditedSyncedPatterns();
 					if ( newspack_email_editor_data?.use_woo_renderer && isDirty ) {
 						await savePost();
 					}
@@ -260,7 +261,22 @@ export default compose( [
 	// `label` already carries the manual provider's "Publish" wording, so it works as the modal submit label too.
 	const modalSubmitLabel = label;
 
+	const patternSaveFailedNotice = error =>
+		createNotice(
+			'error',
+			`${ __( 'A synced pattern in this newsletter has changes that could not be saved.', 'newspack-newsletters' ) }${
+				error?.message ? ` ${ error.message }` : ''
+			}`
+		);
+
+	// Publishing sends the campaign, so a pattern that fails to save stops it.
 	const triggerCampaignSend = async () => {
+		try {
+			await saveEditedSyncedPatterns();
+		} catch ( error ) {
+			patternSaveFailedNotice( error );
+			return;
+		}
 		editPost( { status: publishStatus } );
 		await savePost();
 	};
@@ -296,11 +312,13 @@ export default compose( [
 					disabled={ isSaving }
 					onClick={ async () => {
 						try {
+							await saveEditedSyncedPatterns();
 							await savePost();
 							if ( saveDidSucceed && renderPostUpdateInfo ) {
 								setModalVisible( true );
 							}
-						} catch ( e ) {
+						} catch ( error ) {
+							patternSaveFailedNotice( error );
 							setModalVisible( false );
 						}
 					} }
@@ -340,6 +358,12 @@ export default compose( [
 		// to avoid rendering stale content. When the flag is off, preserve the
 		// original order (refresh first, then save) byte-for-byte.
 		let res;
+		try {
+			await saveEditedSyncedPatterns();
+		} catch ( error ) {
+			patternSaveFailedNotice( error );
+			return;
+		}
 		if ( newspack_email_editor_data?.use_woo_renderer ) {
 			await savePost();
 			res = await refreshEmailHtml( postId, postTitle, postContent );

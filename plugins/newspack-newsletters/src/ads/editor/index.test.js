@@ -61,6 +61,7 @@ jest.mock( '@wordpress/data', () => {
 		if ( store === 'core/editor' ) {
 			return {
 				isSavingPost: () => false,
+				getCurrentPostType: () => global.__adCurrentPostType,
 				getEditedPostAttribute: attribute => {
 					if ( 'meta' === attribute ) {
 						return global.__adMeta;
@@ -116,6 +117,26 @@ const renderSidebar = meta => {
 // matches this is treated as already carrying a UTC offset — which is what a
 // bare `Y-m-d` wrongly did.
 const WP70_HAS_TIMEZONE = /Z|[+-]\d{2}(:?\d{2})?$/;
+
+// The page is opened for an ad, and the ad is the post being edited unless a
+// test says otherwise.
+beforeEach( () => {
+	document.body.className = 'post-type-newspack_nl_ads_cpt';
+	global.__adCurrentPostType = 'newspack_nl_ads_cpt';
+} );
+
+// The sidebar's Active/Inactive toggle saves the current post's status, so it
+// must not render while "Edit original" has a synced pattern open in the ad's
+// editor page: it would unpublish the pattern.
+describe( 'Newsletter ad sidebar while a synced pattern is open', () => {
+	it( 'renders nothing', () => {
+		global.__adCurrentPostType = 'wp_block';
+
+		const { container } = renderSidebar( {} );
+
+		expect( container ).toBeEmptyDOMElement();
+	} );
+} );
 
 describe( 'Newsletter ad sidebar date pickers', () => {
 	beforeEach( () => {

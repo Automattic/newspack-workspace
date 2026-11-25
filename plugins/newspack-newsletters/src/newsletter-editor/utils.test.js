@@ -24,6 +24,9 @@ describe( 'isOpenedPostType', () => {
 	} );
 
 	it( 'does not match while the editor has no current post', () => {
+		// The class a missing post type would otherwise be looked up as.
+		document.body.classList.add( 'post-type-null' );
+
 		expect( isOpenedPostType( null ) ).toBe( false );
 	} );
 } );
