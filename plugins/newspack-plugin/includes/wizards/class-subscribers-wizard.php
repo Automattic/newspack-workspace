@@ -142,11 +142,11 @@ class Subscribers_Wizard extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html__( 'Audience Management / Subscribers', 'newspack-plugin' );
+		return esc_html__( 'Audience Management / Readers', 'newspack-plugin' );
 	}
 
 	/**
-	 * Add the Subscribers subpage under the Audience menu.
+	 * Add the Readers subpage under the Audience menu.
 	 */
 	public function add_page() {
 		if ( ! $this->is_feature_enabled() ) {
@@ -155,7 +155,7 @@ class Subscribers_Wizard extends Wizard {
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
-			esc_html__( 'Subscribers', 'newspack-plugin' ),
+			esc_html__( 'Readers', 'newspack-plugin' ),
 			$this->capability,
 			$this->slug,
 			[ $this, 'render_wizard' ]
@@ -667,7 +667,7 @@ class Subscribers_Wizard extends Wizard {
 			}
 			// One product load per variation. The bound is the site's whole
 			// subscription catalogue — every variation of every variable
-			// subscription — resolved on each render of the Subscribers tab. That is
+			// subscription — resolved on each render of the Readers tab. That is
 			// a handful of loads on a real Newspack catalogue; a site with hundreds
 			// of variations would want these batched, but capping instead would
 			// silently drop plans from the dropdown, which is the failure this
