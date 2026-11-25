@@ -618,7 +618,14 @@ MIGRATE
         if ! docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
             -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null; then
-            echo "Warning: could not create database $db_name (is MYSQL_ROOT_PASSWORD in .env the one the db was set up with?)."
+            # The client stops at the first failed statement, so this covers the GRANT
+            # too. A server that answered and still refused points at the credentials;
+            # one that never answered is already explained by the warning above.
+            if [[ "$db_ready" == true ]]; then
+                echo "Warning: could not create database $db_name or grant ${MYSQL_USER:-an empty MYSQL_USER} access to it. Check that MYSQL_ROOT_PASSWORD and MYSQL_USER in .env match the ones the db was set up with."
+            else
+                echo "Warning: could not create database $db_name or grant ${MYSQL_USER:-an empty MYSQL_USER} access to it."
+            fi
         fi
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
