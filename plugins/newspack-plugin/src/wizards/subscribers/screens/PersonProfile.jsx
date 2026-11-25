@@ -238,12 +238,12 @@ export default function PersonProfile() {
 		}
 		// The breadcrumb reflects where the profile was opened from: a person
 		// reached from a group sits under the groups tab, otherwise under
-		// Subscribers. Both crumbs stay clickable so the trail is a way back.
+		// Readers. Both crumbs stay clickable so the trail is a way back.
 		const originatedInGroups = backNav.startsWith( '#/groups' );
 		setHeaderData( {
 			backNav,
 			sectionName: [
-				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Subscribers', 'newspack-plugin' ), url: backNav },
+				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Readers', 'newspack-plugin' ), url: backNav },
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
@@ -256,7 +256,7 @@ export default function PersonProfile() {
 				subscriber.email,
 				subscriber.memberSince
 					? // translators: %s is a date.
-					  sprintf( __( 'Subscriber since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
+					  sprintf( __( 'Member since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
 					: '',
 				subscriber.signedUpOn?.name
 					? // translators: %s is the name of the network site where the reader created their account.
@@ -505,7 +505,7 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
-		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
+		const message = __( 'This reader could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
 			<LoadFailureNotice
 				message={ message }
@@ -521,11 +521,11 @@ export default function PersonProfile() {
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
 		// An empty read reports no error, so there is no server detail to quote.
-		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		let message = __( 'This reader could not be loaded.', 'newspack-plugin' );
 		if ( error ) {
 			message = sprintf(
 				/* translators: %s is an error message. */
-				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				__( 'Could not load this reader: %s', 'newspack-plugin' ),
 				error
 			);
 		}
@@ -602,7 +602,7 @@ export default function PersonProfile() {
 				<Row
 					title={ __( 'Payment methods', 'newspack-plugin' ) }
 					description={ __(
-						'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
+						'The cards on file for this reader. Each subscription charges the card set on it; the default applies to new purchases.',
 						'newspack-plugin'
 					) }
 					showDivider={ false }

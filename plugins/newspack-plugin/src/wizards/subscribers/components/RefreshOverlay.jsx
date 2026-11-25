@@ -39,7 +39,7 @@ export default function RefreshOverlay() {
  * It speaks once per refetch, not on every keystroke.
  *
  * @param {boolean} isRefreshing Whether a refetch is in flight over a shown list.
- * @param {string}  message      The count to announce, e.g. "12 subscribers".
+ * @param {string}  message      The count to announce, e.g. "12 readers".
  */
 export function useAnnounceRefresh( isRefreshing, message ) {
 	const wasRefreshing = useRef( false );

@@ -29,7 +29,7 @@ describe( 'displayStatuses', () => {
 
 	it( 'falls back to the stored status when no subscription statuses are on file', () => {
 		expect( displayStatuses( [], 'active' ) ).toEqual( [ 'active' ] );
-		// A free reader has neither, and gets no badge at all.
+		// A free reader has neither, so there is no status to show.
 		expect( displayStatuses( [], '' ) ).toEqual( [] );
 	} );
 

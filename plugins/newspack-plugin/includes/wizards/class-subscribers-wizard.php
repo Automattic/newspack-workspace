@@ -2164,7 +2164,7 @@ class Subscribers_Wizard extends Wizard {
 	 * Reduce a reader's many subscription statuses to a single subscriber-level
 	 * status, mirroring the list's badge logic: active-first, with cancelled
 	 * dropped whenever any live status remains. Empty when they have no
-	 * subscription at all (a free reader shows no status badge).
+	 * subscription at all (a free reader shows as "No subscription" in the list).
 	 *
 	 * SOURCE OF TRUTH for the status-reduction rule. The rule is:
 	 *
