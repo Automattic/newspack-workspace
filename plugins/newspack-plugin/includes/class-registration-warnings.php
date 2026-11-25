@@ -73,9 +73,11 @@ final class Registration_Warnings {
 		// JSON keeps the booleans; wp_localize_script() would turn them into strings.
 		// It goes through JSON.parse() because an object literal would treat a role
 		// slug of "__proto__" as the object's prototype and drop that role's warning.
+		// The outer encode takes the flags wp_localize_script() uses, so a custom
+		// role name holding markup can't end or reopen the script element.
 		wp_add_inline_script(
 			self::SCRIPT_HANDLE,
-			'window.newspackRegistrationWarnings = JSON.parse( ' . wp_json_encode( wp_json_encode( self::get_script_data() ) ) . ' );',
+			'window.newspackRegistrationWarnings = JSON.parse( ' . wp_json_encode( wp_json_encode( self::get_script_data() ), JSON_HEX_TAG | JSON_UNESCAPED_SLASHES ) . ' );',
 			'before'
 		);
 	}
