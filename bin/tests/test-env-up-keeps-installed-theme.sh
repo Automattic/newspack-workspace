@@ -48,7 +48,8 @@ for cmd in sudo mkcert newspack-manage-host; do
 done
 
 # The stub reads its answers from the environment:
-#   STUB_PING_FAILS  how many MariaDB pings fail before one succeeds
+#   STUB_PING_FAILS  how many TCP pings to MariaDB fail before one succeeds;
+#                    any other ping succeeds at once
 #   STUB_DB_FAILS    how many `wp db query` calls fail first, of either kind
 #   STUB_TABLES      yes when the wp_options check should find the tables
 #   STUB_INSTALL_OUT what `wp core install` prints
