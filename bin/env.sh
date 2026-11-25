@@ -656,10 +656,9 @@ MIGRATE
         for i in $(seq 1 20); do
             if docker exec "$container_name" test -f /var/www/html/wp-config.php 2>/dev/null; then
                 # Wait until the database answers before asking whether WordPress is
-                # installed. After a reboot the env container can come up while the
-                # shared db is still starting; a failed query then looks the same as
-                # missing tables, and an installed site would go down the fresh-install
-                # path below and have its theme switched.
+                # installed: a database that isn't accepting connections fails the
+                # table check below the same way missing tables do, and would send
+                # an installed site down the fresh-install path.
                 if ! docker exec "$container_name" wp --allow-root db query "SELECT 1" 2>/dev/null | grep -q 1; then
                     sleep 3
                     continue
