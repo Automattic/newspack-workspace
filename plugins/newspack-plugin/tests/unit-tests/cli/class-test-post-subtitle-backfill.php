@@ -6,6 +6,9 @@
  * what the sanitizer does to a given string — see post-subtitle-sanitizer-mock.php for
  * why a stub stands in for the real one.
  *
+ * Raw seeds wrap text in `<span>`: the stub strips the tag but keeps its text. Avoid
+ * `<script>`, `<style>` or `<iframe>`, whose text WordPress 7.2 drops along with the tag.
+ *
  * @package Newspack\Tests
  */
 
