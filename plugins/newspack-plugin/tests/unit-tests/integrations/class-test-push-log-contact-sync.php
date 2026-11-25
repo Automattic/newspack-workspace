@@ -885,6 +885,28 @@ class Test_Push_Log_Contact_Sync extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A retry pushes the keys it prepared on the first attempt, so a metadata
+	 * prefix changed during the backoff must not hide the deletion fields the
+	 * provider left out under the old prefix.
+	 */
+	public function test_a_deletion_flag_retry_reports_missing_fields_after_a_prefix_change() {
+		$this->require_action_scheduler();
+		$spy              = $this->register_deletion_spy( 'prefix-change-spy', 'flag' );
+		$old_prefix       = $spy->get_metadata_prefix();
+		$spy->push_result = new \WP_Error( 'provider_down', 'Provider down' );
+		$failures         = $this->capture_permanent_failures();
+
+		$this->delete_sample_reader();
+		$retry = $this->get_pending_retry( Contact_Sync::RETRY_DELETION_HOOK, 'prefix-change-spy' );
+		update_option( Integration::METADATA_PREFIX_OPTION_PREFIX . 'prefix-change-spy', 'CUSTOM_', false );
+		$spy->push_result = [ 'unsynced_fields' => [ $old_prefix . 'Account_Deleted' ] ];
+		Contact_Sync::execute_deletion_retry( $retry['args'] );
+
+		$this->assertCount( 1, $failures );
+		$this->assertStringContainsString( $old_prefix . 'Account_Deleted', $failures[0]['reason'] );
+	}
+
+	/**
 	 * A flag that saved both deletion fields reports nothing, whatever else
 	 * the provider left out: the deletion reached it, and an unrelated field
 	 * a full audience refuses is not a deletion problem.

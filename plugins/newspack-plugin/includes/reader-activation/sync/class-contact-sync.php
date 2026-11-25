@@ -913,8 +913,15 @@ class Contact_Sync extends Sync {
 			return [];
 		}
 		$unsynced_fields = array_values( (array) $result['unsynced_fields'] );
-		$prefix          = $integration->get_metadata_prefix();
-		$missing_flags   = array_values( array_intersect( $unsynced_fields, [ $prefix . 'Account_Deleted', $prefix . 'Membership_Status' ] ) );
+		// Matched by suffix rather than the current prefix: a retry pushes the
+		// keys it prepared first, so a prefix changed during the backoff
+		// would otherwise hide the gap.
+		$missing_flags = array_values(
+			array_filter(
+				$unsynced_fields,
+				fn( $field ) => \is_string( $field ) && ( str_ends_with( $field, 'Account_Deleted' ) || str_ends_with( $field, 'Membership_Status' ) )
+			)
+		);
 		if ( ! empty( $missing_flags ) ) {
 			/** This action is documented in schedule_deletion_retry(). */
 			do_action(
