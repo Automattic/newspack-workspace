@@ -383,6 +383,20 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	}
 
 	/**
+	 * In a right-to-left email the gap goes on the columns' right side, and the phone
+	 * rule removes it there.
+	 */
+	public function test_columns_gap_is_on_the_start_side_in_rtl() {
+		$language = static fn(): string => 'ar';
+		add_filter( 'pre_option_WPLANG', $language );
+		add_filter( 'locale', $language );
+		$html = $this->render( self::two_columns() );
+
+		$this->assertMatchesRegularExpression( '/<td\b[^>]*class="[^"]*\bnewspack-columns-gap\b[^"]*"[^>]*padding-right:\s*32px/', $html );
+		$this->assertMatchesRegularExpression( '/\.newspack-columns-gap\s*\{\s*padding-right:\s*0\s*!important/', $html );
+	}
+
+	/**
 	 * A single blockGap value applies to both axes, as in the editor: its horizontal part
 	 * becomes the later columns' gap padding and its vertical part stays.
 	 */

@@ -69,12 +69,20 @@ class Block_Normalizer {
 	private static int $depth = 0;
 
 	/**
+	 * Whether the email being rendered reads right to left, worked out once per render.
+	 *
+	 * @var bool|null
+	 */
+	private static ?bool $rtl = null;
+
+	/**
 	 * Register the render-scoped hooks. Called by Renderer_Controller::render_wc().
 	 */
 	public static function add_hooks(): void {
 		if ( self::$depth++ > 0 ) {
 			return;
 		}
+		self::$rtl = null;
 		add_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'normalize' ], self::PRIORITY );
 		add_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		add_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
@@ -97,6 +105,7 @@ class Block_Normalizer {
 		remove_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ], 10 );
 		remove_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'apply_editor_gaps' ], self::AFTER_PREPROCESS_PRIORITY );
 		self::$in_block_hooks_pass = false;
+		self::$rtl                 = null;
 	}
 
 	/**
@@ -340,24 +349,27 @@ class Block_Normalizer {
 	}
 
 	/**
-	 * Whether the email reads right to left. Decided from the language the email is
-	 * rendered in, as the engine does, rather than the request's locale, which follows
-	 * the user's admin language.
+	 * Whether the email reads right to left. Read from the same language
+	 * Renderer_Controller::render_wc() passes the engine, so the gap lands on the side
+	 * the engine pads its own column gaps.
 	 *
 	 * @return bool
 	 */
 	private static function is_rtl_email(): bool {
-		return ( new Rendering_Context( new \WP_Theme_JSON(), [], (string) get_bloginfo( 'language' ) ) )->is_rtl();
+		if ( null === self::$rtl ) {
+			self::$rtl = ( new Rendering_Context( new \WP_Theme_JSON(), [], (string) get_bloginfo( 'language' ) ) )->is_rtl();
+		}
+		return self::$rtl;
 	}
 
 	/**
 	 * Head styles for the email: columns stack on phones, where the editor puts no gap
 	 * beside them, so the gap padding comes off.
 	 *
-	 * @param string $styles Template styles.
+	 * @param mixed $styles Template styles.
 	 * @return string
 	 */
-	public static function add_styles( $styles ): string {
+	public static function add_styles( mixed $styles ): string {
 		$side = self::is_rtl_email() ? 'right' : 'left';
 		return (string) $styles . '@media screen and (max-width: 660px) { .' . self::GAP_CLASS . ' { padding-' . $side . ': 0 !important; } }';
 	}
