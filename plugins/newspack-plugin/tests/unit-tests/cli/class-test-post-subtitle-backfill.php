@@ -131,7 +131,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_sanitizes_a_raw_value_when_live() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		$output = $this->run_backfill( [ 'live' => true ] );
 
@@ -148,11 +148,11 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_dry_run_reports_without_writing() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		$output = $this->run_backfill();
 
-		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'Dry-run must not write.' );
+		$this->assertSame( '<span>alert(1)</span><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'Dry-run must not write.' );
 		$this->assertStringContainsString( '*** DRY RUN MODE', $output );
 		$this->assertStringContainsString( 'Subtitle would be sanitized for: ' . $post_id, $output );
 		$this->assertStringContainsString( '1 row(s) would change. Pass --live to write.', $output );
@@ -190,11 +190,11 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_skips_trashed_posts() {
 		$post_id = self::factory()->post->create( [ 'post_status' => 'trash' ] );
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		$output = $this->run_backfill( [ 'live' => true ] );
 
-		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ) );
+		$this->assertSame( '<span>alert(1)</span><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ) );
 		$this->assertStringContainsString( 'No posts carry a non-empty newspack_post_subtitle value.', $output );
 	}
 
@@ -207,7 +207,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_preserves_a_literal_backslash_when_live() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>x</script>C:\\Temp' );
+		$this->seed_raw_subtitle( $post_id, '<span>x</span>C:\\Temp' );
 
 		$this->run_backfill( [ 'live' => true ] );
 
@@ -227,11 +227,11 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 				'post_parent' => $parent_id,
 			]
 		);
-		$this->seed_raw_subtitle( $revision_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $revision_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		$output = $this->run_backfill( [ 'live' => true ] );
 
-		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $revision_id ) );
+		$this->assertSame( '<span>alert(1)</span><b>Bold</b> subtitle', $this->stored_subtitle( $revision_id ) );
 		$this->assertStringContainsString( 'No posts carry a non-empty newspack_post_subtitle value.', $output );
 	}
 
@@ -276,7 +276,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	public function test_sanitizes_duplicate_subtitle_rows_independently() {
 		$post_id = self::factory()->post->create();
 		$this->seed_raw_subtitle( $post_id, '<b>Already clean</b>' );
-		$this->seed_additional_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_additional_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		$output = $this->run_backfill( [ 'live' => true ] );
 
@@ -294,7 +294,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_exits_nonzero_when_a_write_fails() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		add_filter( 'update_post_metadata_by_mid', '__return_false' );
 		try {
@@ -303,7 +303,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 			remove_filter( 'update_post_metadata_by_mid', '__return_false' );
 		}
 
-		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'A failed write must not be reported as changed.' );
+		$this->assertSame( '<span>alert(1)</span><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'A failed write must not be reported as changed.' );
 		$this->assertStringContainsString( 'update_metadata_by_mid() failed for: ' . $post_id, $output );
 		$this->assertSame( 1, WP_CLI::$halt_code );
 	}
@@ -316,7 +316,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_write_sanitized_value_skips_a_row_that_changed_since_it_was_read() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		global $wpdb;
 		$meta_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -330,7 +330,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		$stale_row = (object) [
 			'meta_id'    => $meta_id,
 			'post_id'    => $post_id,
-			'meta_value' => '<script>alert(1)</script><b>Bold</b> subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			'meta_value' => '<span>alert(1)</span><b>Bold</b> subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 		];
 
 		// A save on the same row — same meta_id — lands in the gap before the write.
@@ -357,7 +357,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_backfill_reports_and_halts_on_a_concurrent_change() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle' );
+		$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle' );
 
 		// get_post_metadata_by_mid short-circuits get_metadata_by_mid() in core, so this
 		// simulates a save landing between the batch read and the write without a real
@@ -372,7 +372,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 			remove_filter( 'get_post_metadata_by_mid', $simulate_concurrent_edit );
 		}
 
-		$this->assertSame( '<script>alert(1)</script><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'The write must not run once a concurrent change is reported.' );
+		$this->assertSame( '<span>alert(1)</span><b>Bold</b> subtitle', $this->stored_subtitle( $post_id ), 'The write must not run once a concurrent change is reported.' );
 		$this->assertStringContainsString( 'Rerun to catch these: ' . $post_id, $output );
 		$this->assertStringContainsString( '0 row(s) updated; 1 left unsanitized', $output );
 		$this->assertSame( 1, WP_CLI::$halt_code );
@@ -390,7 +390,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 	 */
 	public function test_sanitizes_a_legacy_subtitle_stored_as_a_serialized_string() {
 		$post_id = self::factory()->post->create();
-		$this->seed_raw_subtitle( $post_id, serialize( '<script>alert(1)</script><b>Bold</b> subtitle' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+		$this->seed_raw_subtitle( $post_id, serialize( '<span>alert(1)</span><b>Bold</b> subtitle' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 
 		$output = $this->run_backfill( [ 'live' => true ] );
 
@@ -409,7 +409,7 @@ class Test_Post_Subtitle_Backfill extends WP_UnitTestCase {
 		for ( $i = 0; $i < 201; $i++ ) {
 			$post_id      = self::factory()->post->create();
 			$post_ids[]   = $post_id;
-			$this->seed_raw_subtitle( $post_id, '<script>alert(1)</script><b>Bold</b> subtitle ' . $i );
+			$this->seed_raw_subtitle( $post_id, '<span>alert(1)</span><b>Bold</b> subtitle ' . $i );
 		}
 
 		$output = $this->run_backfill( [ 'live' => true ] );

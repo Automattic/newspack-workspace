@@ -210,7 +210,7 @@ class ABEndTestTest extends WP_UnitTestCase_PageWithPopups {
 		$this->assertSame( 'draft', get_post_status( $ids['a'] ) );
 		foreach ( $ids as $id ) {
 			foreach ( [ Newspack_Popups_AB_Tests::META_TEST_ID, Newspack_Popups_AB_Tests::META_VARIANT, Newspack_Popups_AB_Tests::META_GOAL, Newspack_Popups_AB_Tests::META_CONTROL_SHARE ] as $key ) {
-				$this->assertSame( '', get_post_meta( $id, $key, true ), "$key on prompt $id" );
+				$this->assertFalse( metadata_exists( 'post', $id, $key ), "$key on prompt $id" );
 			}
 		}
 		$this->assertArrayNotHasKey( 't', Newspack_Popups_AB_Tests::get_tests_config() );
