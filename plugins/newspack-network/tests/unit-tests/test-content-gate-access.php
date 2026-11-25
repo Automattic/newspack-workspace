@@ -7,6 +7,7 @@
 
 use Newspack_Network\Content_Gate\Access;
 use Newspack_Network\Incoming_Events\Product_Updated;
+use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Incoming_Events\Subscription_Changed;
 use Newspack_Network\Woocommerce\Product_Admin;
 
@@ -356,6 +357,130 @@ class TestContentGateAccess extends WP_UnitTestCase {
 		} else {
 			$this->assertFalse( $result );
 		}
+	}
+
+	/**
+	 * A reader holding a subscription record on site2, for the 'premium' product there.
+	 *
+	 * @param array $extra Fields added to the stored record.
+	 * @return int User ID.
+	 */
+	private function reader_with_subscription_record( $extra = [] ) {
+		$user_id = self::factory()->user->create();
+		update_user_meta(
+			$user_id,
+			Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY,
+			[
+				'http://site2' => [
+					503 => array_merge(
+						[
+							'id'       => 503,
+							'status'   => 'active',
+							'products' => [ 200 => [ 'id' => 200 ] ],
+						],
+						$extra
+					),
+				],
+			]
+		);
+		return $user_id;
+	}
+
+	/**
+	 * A gift given to a reader on site2 grants access here, in strict mode too: the
+	 * reader's own site counts a gift they received as theirs, unlike a group seat.
+	 */
+	public function test_received_gift_grants_access_strict_or_not() {
+		$recipient = self::factory()->user->create();
+		update_user_meta(
+			$recipient,
+			Reader_Product_Changed::USER_PRODUCTS_META_KEY,
+			[
+				'http://site2' => [
+					'gift:95' => [
+						'type'     => 'gift',
+						'id'       => 95,
+						'status'   => 'active',
+						'products' => [ 200 => [ 'id' => 200 ] ],
+					],
+				],
+			]
+		);
+
+		$this->assertTrue( Access::check_network_subscriptions( false, $recipient, [ self::$local_product_premium ] ) );
+		$this->assertTrue( Access::check_network_subscriptions( false, $recipient, [ self::$local_product_premium ], true ) );
+		$this->assertSame(
+			[
+				[
+					'site' => 'http://site2',
+					'id'   => 95,
+					'type' => 'gift',
+				],
+			],
+			Access::get_network_subscription_matches( $recipient, [ self::$local_product_premium ], true )
+		);
+	}
+
+	/**
+	 * A gift that has ended grants nothing.
+	 */
+	public function test_ended_gift_grants_nothing() {
+		$recipient = self::factory()->user->create();
+		update_user_meta(
+			$recipient,
+			Reader_Product_Changed::USER_PRODUCTS_META_KEY,
+			[
+				'http://site2' => [
+					'gift:95' => [
+						'type'     => 'gift',
+						'id'       => 95,
+						'status'   => 'cancelled',
+						'products' => [ 200 => [ 'id' => 200 ] ],
+					],
+				],
+			]
+		);
+
+		$this->assertFalse( Access::check_network_subscriptions( false, $recipient, [ self::$local_product_premium ] ) );
+	}
+
+	/**
+	 * A buyer who gave the subscription away gets no access from it here and isn't
+	 * stopped from buying the product for themselves.
+	 */
+	public function test_gift_bought_for_someone_else_grants_the_buyer_nothing() {
+		$buyer = $this->reader_with_subscription_record( [ 'is_gift' => true ] );
+
+		$this->assertFalse( Access::check_network_subscriptions( false, $buyer, [ self::$local_product_premium ] ) );
+		$this->assertFalse( Access::check_network_subscriptions( false, $buyer, [ self::$local_product_premium ], true ) );
+		$this->assertFalse( Access::user_has_active_network_subscription_for_network_id( $buyer, 'premium' ) );
+	}
+
+	/**
+	 * A record from a site running an older version carries no gift flag and keeps
+	 * granting, as does one flagged as not a gift.
+	 *
+	 * @dataProvider subscription_record_without_gift_data
+	 *
+	 * @param array $extra Fields added to the stored record.
+	 */
+	public function test_subscription_record_that_is_not_a_gift_grants_access( $extra ) {
+		$owner = $this->reader_with_subscription_record( $extra );
+
+		$this->assertTrue( Access::check_network_subscriptions( false, $owner, [ self::$local_product_premium ], true ) );
+		$this->assertSame( 503, Access::user_has_active_network_subscription_for_network_id( $owner, 'premium' )['subscription']['id'] );
+	}
+
+	/**
+	 * Data provider for test_subscription_record_that_is_not_a_gift_grants_access.
+	 *
+	 * @return array
+	 */
+	public function subscription_record_without_gift_data() {
+		return [
+			'no flag (older site)' => [ [] ],
+			'flagged not a gift'   => [ [ 'is_gift' => false ] ],
+		];
 	}
 
 	/**

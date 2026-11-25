@@ -18,24 +18,28 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 	 *
 	 * @param string $email  Subscriber email.
 	 * @param string $status Status after the change.
+	 * @param array  $extra  Fields added to the event.
 	 * @return Subscription_Changed
 	 */
-	private function subscription( $email, $status = 'active' ) {
+	private function subscription( $email, $status = 'active', $extra = [] ) {
 		return new Subscription_Changed(
 			'https://a.example.test',
-			[
-				'email'        => $email,
-				'user_id'      => 3,
-				'id'           => 42,
-				'status_after' => $status,
-				'products'     => [
-					7 => [
-						'id'   => 7,
-						'name' => 'Premium',
-						'slug' => 'premium',
+			array_merge(
+				[
+					'email'        => $email,
+					'user_id'      => 3,
+					'id'           => 42,
+					'status_after' => $status,
+					'products'     => [
+						7 => [
+							'id'   => 7,
+							'name' => 'Premium',
+							'slug' => 'premium',
+						],
 					],
 				],
-			],
+				$extra
+			),
 			time()
 		);
 	}
@@ -80,6 +84,21 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 		$this->subscription( 'gone@example.test', 'cancelled' )->process_in_node();
 
 		$this->assertFalse( get_user_by( 'email', 'gone@example.test' ) );
+	}
+
+	/**
+	 * Whether the subscription is a gift is recorded with it, so the buyer's access
+	 * check can leave it out; an event from a site that doesn't send it records no gift.
+	 */
+	public function test_event_records_whether_the_subscription_is_a_gift() {
+		$buyer_id = self::factory()->user->create( [ 'user_email' => 'buyer@example.test' ] );
+		$owner_id = self::factory()->user->create( [ 'user_email' => 'owner@example.test' ] );
+
+		$this->subscription( 'buyer@example.test', 'active', [ 'is_gift' => true ] )->process_in_node();
+		$this->subscription( 'owner@example.test' )->process_in_node();
+
+		$this->assertTrue( get_user_meta( $buyer_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true )['https://a.example.test'][42]['is_gift'] ?? null );
+		$this->assertFalse( get_user_meta( $owner_id, Subscription_Changed::USER_SUBSCRIPTIONS_META_KEY, true )['https://a.example.test'][42]['is_gift'] ?? null );
 	}
 
 	/**

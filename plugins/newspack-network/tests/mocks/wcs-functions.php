@@ -20,3 +20,18 @@ if ( ! function_exists( 'wcs_get_subscription' ) ) {
 		return $GLOBALS['newspack_network_test_group']['subscriptions'][ $id ] ?? false;
 	}
 }
+
+if ( ! function_exists( 'wcs_get_orders_with_meta_query' ) ) {
+	/**
+	 * Stand-in for wcs_get_orders_with_meta_query(): records the query in
+	 * `$GLOBALS['newspack_network_test_group']['order_queries']` and returns the IDs a
+	 * test lists in `$GLOBALS['newspack_network_test_group']['order_query_ids']`.
+	 *
+	 * @param array $args Query arguments.
+	 * @return int[]
+	 */
+	function wcs_get_orders_with_meta_query( $args ) {
+		$GLOBALS['newspack_network_test_group']['order_queries'][] = $args;
+		return $GLOBALS['newspack_network_test_group']['order_query_ids'] ?? [];
+	}
+}

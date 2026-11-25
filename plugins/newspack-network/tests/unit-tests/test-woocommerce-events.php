@@ -9,6 +9,7 @@ use Newspack_Network\Woocommerce\Events;
 use Newspack_Network\Woocommerce\Product_Admin;
 
 require_once dirname( __DIR__ ) . '/mocks/wc-order-functions.php';
+require_once dirname( __DIR__ ) . '/mocks/class-wcs-gifting.php';
 
 /**
  * What subscription and order events tell the network about their products.
@@ -29,6 +30,15 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->customer_id = self::factory()->user->create( [ 'user_email' => 'customer@example.test' ] );
+		WCS_Gifting::reset();
+	}
+
+	/**
+	 * Forget any gifts.
+	 */
+	public function tear_down() {
+		WCS_Gifting::reset();
+		parent::tear_down();
 	}
 
 	/**
@@ -250,6 +260,34 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			public function get_payment_method_title() {
 				return 'Card';
 			}
+
+			/**
+			 * A subscription date; the stand-in has none.
+			 *
+			 * @param string $type Date type.
+			 * @return int
+			 */
+			public function get_date( $type ) {
+				return 0;
+			}
+
+			/**
+			 * Billing period.
+			 *
+			 * @return string
+			 */
+			public function get_billing_period() {
+				return 'month';
+			}
+
+			/**
+			 * Billing interval.
+			 *
+			 * @return int
+			 */
+			public function get_billing_interval() {
+				return 1;
+			}
 		};
 	}
 
@@ -269,6 +307,20 @@ class TestWoocommerceEvents extends WP_UnitTestCase {
 			],
 			Events::get_subscription_products( $subscription )
 		);
+	}
+
+	/**
+	 * A subscription event says whether the subscription is a gift, so other sites can
+	 * keep the buyer from reading with it. A gift still waiting for its recipient to
+	 * make an account is a gift too.
+	 */
+	public function test_subscription_event_says_whether_it_is_a_gift() {
+		WCS_Gifting::$recipients[42]       = 7;
+		WCS_Gifting::$recipient_emails[43] = 'recipient@example.test';
+
+		$this->assertTrue( Events::subscription_changed( 42, 'pending', 'active', $this->order( 42, [], 'active' ) )['is_gift'] ?? null );
+		$this->assertTrue( Events::subscription_changed( 43, 'pending', 'active', $this->order( 43, [], 'active' ) )['is_gift'] ?? null );
+		$this->assertFalse( Events::subscription_changed( 44, 'pending', 'active', $this->order( 44, [], 'active' ) )['is_gift'] ?? null );
 	}
 
 	/**

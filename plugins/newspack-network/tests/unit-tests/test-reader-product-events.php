@@ -8,6 +8,7 @@
 use Newspack_Network\Accepted_Actions;
 use Newspack_Network\Incoming_Events\Reader_Product_Changed;
 use Newspack_Network\Utils\Users;
+use Newspack_Network\Incoming_Events\Gift_Changed;
 use Newspack_Network\Incoming_Events\Group_Seat_Changed;
 use Newspack_Network\Incoming_Events\One_Time_Purchase_Changed;
 
@@ -75,6 +76,34 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A gift event, for the reader the subscription was given to.
+	 *
+	 * @param string $site   Site URL.
+	 * @param string $email  Recipient email.
+	 * @param string $status Status.
+	 * @return Gift_Changed
+	 */
+	private function gift( $site, $email, $status = 'active' ) {
+		return new Gift_Changed(
+			$site,
+			[
+				'email'        => $email,
+				'user_id'      => 4,
+				'id'           => 95,
+				'status_after' => $status,
+				'products'     => [
+					7 => [
+						'id'   => 7,
+						'name' => 'Premium',
+						'slug' => 'premium',
+					],
+				],
+			],
+			time()
+		);
+	}
+
+	/**
 	 * A seat and a purchase are recorded on the reader, keyed by site and item.
 	 */
 	public function test_events_record_products_on_the_reader() {
@@ -89,6 +118,34 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 		$this->assertSame( [ 7 ], array_keys( $records['group:90']['products'] ) );
 		$this->assertSame( 'purchase', $records['order:86']['type'] );
 		$this->assertSame( 1700000000, $records['order:86']['purchased_at'] );
+	}
+
+	/**
+	 * A gift is recorded on its recipient under its own key and type, apart from the
+	 * subscriptions the reader owns and the seats they hold.
+	 */
+	public function test_gift_event_records_the_gift_on_the_recipient() {
+		$user_id = self::factory()->user->create( [ 'user_email' => 'recipient@example.test' ] );
+
+		$this->gift( 'https://a.example.test', 'recipient@example.test', 'pending-cancel' )->process_in_node();
+
+		$this->assertSame(
+			[
+				'gift:95' => [
+					'type'     => 'gift',
+					'id'       => 95,
+					'status'   => 'pending-cancel',
+					'products' => [
+						7 => [
+							'id'   => 7,
+							'name' => 'Premium',
+							'slug' => 'premium',
+						],
+					],
+				],
+			],
+			Reader_Product_Changed::get_user_products( $user_id )['https://a.example.test']
+		);
 	}
 
 	/**
@@ -162,16 +219,17 @@ class TestReaderProductEvents extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Both actions are accepted and pulled by nodes, and each resolves to the three
+	 * Each action is accepted and pulled by nodes, and each resolves to the three
 	 * classes the hub, the nodes and the backfill load by name from the action map.
 	 */
 	public function test_actions_are_accepted_and_pulled() {
 		$actions = [
 			'newspack_node_group_seat_changed'        => 'Group_Seat_Changed',
 			'newspack_node_one_time_purchase_changed' => 'One_Time_Purchase_Changed',
+			'newspack_node_gift_changed'              => 'Gift_Changed',
 		];
 		foreach ( $actions as $action => $class ) {
-			$this->assertSame( $class, Accepted_Actions::ACTIONS[ $action ] );
+			$this->assertSame( $class, Accepted_Actions::ACTIONS[ $action ] ?? null );
 			$this->assertContains( $action, Accepted_Actions::ACTIONS_THAT_NODES_PULL );
 			$this->assertTrue( class_exists( 'Newspack_Network\\Incoming_Events\\' . $class ), $class . ' incoming event' );
 			$this->assertTrue( class_exists( 'Newspack_Network\\Hub\\Stores\\Event_Log_Items\\' . $class ), $class . ' event log item' );

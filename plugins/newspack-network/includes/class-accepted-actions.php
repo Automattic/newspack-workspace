@@ -48,6 +48,7 @@ class Accepted_Actions {
 		'newspack_network_product_updated'         => 'Product_Updated',
 		'newspack_node_group_seat_changed'         => 'Group_Seat_Changed',
 		'newspack_node_one_time_purchase_changed'  => 'One_Time_Purchase_Changed',
+		'newspack_node_gift_changed'               => 'Gift_Changed',
 	];
 
 	/**
@@ -77,5 +78,6 @@ class Accepted_Actions {
 		'newspack_network_product_updated',
 		'newspack_node_group_seat_changed',
 		'newspack_node_one_time_purchase_changed',
+		'newspack_node_gift_changed',
 	];
 }

@@ -103,12 +103,14 @@ class Subscription_Changed extends Woo_Item_Changed {
 		}
 
 		// The billing details let other sites show this subscription's dates and price
-		// without reaching back to this one.
+		// without reaching back to this one. The gift flag keeps a gift from granting its
+		// buyer access (see Access::get_user_network_active_subscriptions()).
 		$current_value[ $this->get_site() ][ $this->get_id() ] = [
 			'id'       => $this->get_id(),
 			'status'   => $this->get_status_after(),
 			'products' => $this->get_products(),
 			'billing'  => $this->get_billing(),
+			'is_gift'  => $this->is_gift(),
 		];
 
 		Debugger::log( sprintf( 'Adding meta for site %s and subscription id %d. Value: %s', $this->get_site(), $this->get_id(), wp_json_encode( $current_value, true ) ) );
@@ -182,6 +184,17 @@ class Subscription_Changed extends Woo_Item_Changed {
 			'billing_period'    => $this->data->billing_period ?? null,
 			'billing_interval'  => $this->data->billing_interval ?? null,
 		];
+	}
+
+	/**
+	 * Whether the subscription is a gift the reader bought for someone else.
+	 *
+	 * A node running an older version doesn't say, and its subscriptions read as not gifts.
+	 *
+	 * @return bool
+	 */
+	public function is_gift() {
+		return ! empty( $this->data->is_gift );
 	}
 
 	/**

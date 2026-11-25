@@ -14,17 +14,18 @@ use Newspack_Network\Utils\Users;
 
 /**
  * A reader's tie to a product on another site that isn't a subscription they own:
- * a seat on someone else's group subscription, or a paid one-time order.
+ * a gift subscription someone else bought them, a seat on someone else's group
+ * subscription, or a paid one-time order.
  *
- * Recorded per reader, keyed by site and item, in its own user meta so that
- * newspack-plugin's strict subscription check (owned subscriptions only, used by
- * access attribution) and the My Account "Other Subscriptions" tab keep seeing
- * only subscriptions the reader owns. Named for what it stores, the reader's
- * products, not for gating: campaign segmentation or anything else that cares
- * which products a reader holds across the network can read it too. A record
- * carries whatever status the origin last reported, refunds and cancellations
- * included; only an active seat or a paid order means the reader holds the
- * product (see `Content_Gate\Access`).
+ * Recorded per reader, keyed by site and item, in its own user meta so that the My
+ * Account "Other Subscriptions" tab keeps seeing only subscriptions the reader owns,
+ * and so that newspack-plugin's strict subscription check (used by access
+ * attribution) can tell these apart: it counts a gift, as the selling site does,
+ * but not a seat. Named for what it stores, the reader's products, not for gating:
+ * campaign segmentation or anything else that cares which products a reader holds
+ * across the network can read it too. A record carries whatever status the origin
+ * last reported, refunds and cancellations included; only an active gift or seat,
+ * or a paid order, means the reader holds the product (see `Content_Gate\Access`).
  */
 abstract class Reader_Product_Changed extends Abstract_Incoming_Event {
 
