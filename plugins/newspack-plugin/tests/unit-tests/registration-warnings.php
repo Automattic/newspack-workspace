@@ -717,8 +717,9 @@ class Test_Registration_Warnings extends WP_UnitTestCase {
 	 * string. Whether reCAPTCHA is on stays a real boolean, and a role slug of
 	 * "__proto__" stays an ordinary key; an object literal would set the
 	 * object's prototype instead, and that role would lose its warning. A role
-	 * name holding markup arrives intact, with no raw "<" that could end or
-	 * reopen the script element on core that doesn't escape it at print time.
+	 * name holding markup arrives intact, with no raw "<" that could close the
+	 * script element early or keep it from closing on core that doesn't escape
+	 * script tags at print time.
 	 */
 	public function test_script_receives_its_data() {
 		$this->sign_in_as( 'administrator' );
