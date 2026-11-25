@@ -8,13 +8,16 @@
 # After a reboot, `up` can reach the env before the shared database accepts
 # connections. The installed check then fails as though the tables were
 # missing, `wp core install` runs on a site that already exists, and that path
-# used to switch the site to newspack-theme. Three guards stop it, one case
+# used to switch the site to newspack-theme. Two guards stop it, one case
 # each:
-#   - `up` waits for MariaDB before creating the env database;
 #   - the installed check waits until the database answers;
 #   - newspack-theme is activated only after an install that happened.
-# The fresh-install case keeps the third guard from being satisfied by never
+# The fresh-install case keeps the second guard from being satisfied by never
 # activating the theme at all.
+#
+# The same race could leave a new env without its database, because `up` sent
+# CREATE DATABASE before MariaDB listened. The last case pins the wait for
+# MariaDB, over TCP, before the database is created.
 #
 # Each case runs the real env.sh against a stub `docker` that logs every call
 # and answers by pattern, so nothing reaches Docker, the database or
@@ -64,7 +67,7 @@ fail_first() {
 	return 1
 }
 case "$*" in
-	*"mariadb-admin"*"ping"*)
+	*"mariadb-admin -h 127.0.0.1 "*"ping"*)
 		fail_first ping "${STUB_PING_FAILS:-0}" && exit 1
 		exit 0 ;;
 	*"db query SELECT 1 FROM wp_options LIMIT 1")
@@ -187,8 +190,8 @@ create_line=$(first_call "CREATE DATABASE")
 last_ping=$(grep -nF -- "mariadb-admin" "$STUB_LOG" | tail -1 | cut -d: -f1)
 if [[ "$status" -ne 0 ]]; then
 	fail "$desc — want exit 0, got $status: $out"
-elif [[ "$(calls "mariadb-admin")" -lt 2 ]]; then
-	fail "$desc — want a failed ping then a good one, got pings at lines: ${ping_lines:-none}"
+elif [[ "$(calls "mariadb-admin")" -ne 2 ]]; then
+	fail "$desc — want one failed TCP ping then one good one, got pings at lines: ${ping_lines:-none}"
 elif [[ -z "$create_line" || "$create_line" -lt "$last_ping" ]]; then
 	fail "$desc — CREATE DATABASE (line ${create_line:-none}) ran before the last ping (line $last_ping)"
 else
