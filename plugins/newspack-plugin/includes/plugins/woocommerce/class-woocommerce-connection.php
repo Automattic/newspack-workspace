@@ -103,18 +103,12 @@ class WooCommerce_Connection {
 	}
 
 	/**
-	 * Whether a subscription's move from one status to another can change what
-	 * its readers are entitled to.
-	 *
-	 * Only a move between two statuses that both grant access, such as Active to
-	 * Pending cancel, leaves access as it was. Any other move may change it: On
-	 * hold still grants access while a payment retry is pending, so On hold to
-	 * Expired, the last step of a lapse after failed payments, ends it. A plan
-	 * switch reports the same status on both sides but may change the products, so
-	 * it counts as a change too, and so does an event with no status pair.
-	 *
-	 * The status pair can't show payment recovery, so On hold to Active after a
-	 * successful retry still counts as a change.
+	 * Whether a subscription's move from one status to another can change what its
+	 * readers are entitled to. Only a move between two statuses that both grant
+	 * access, such as Active to Pending cancel, leaves it as it was. A plan switch
+	 * keeps the status but may change the products, so the same status on both
+	 * sides counts as a change. On hold to Active after a retry counts too: the
+	 * status pair can't show payment recovery.
 	 *
 	 * @param string $before Status before the change.
 	 * @param string $after  Status after the change.

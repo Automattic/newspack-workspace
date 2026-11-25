@@ -24,22 +24,19 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 	private function subscription( $email, $status = 'active', $extra = [] ) {
 		return new Subscription_Changed(
 			'https://a.example.test',
-			array_merge(
-				[
-					'email'        => $email,
-					'user_id'      => 3,
-					'id'           => 42,
-					'status_after' => $status,
-					'products'     => [
-						7 => [
-							'id'   => 7,
-							'name' => 'Premium',
-							'slug' => 'premium',
-						],
+			[
+				'email'        => $email,
+				'user_id'      => 3,
+				'id'           => 42,
+				'status_after' => $status,
+				'products'     => [
+					7 => [
+						'id'   => 7,
+						'name' => 'Premium',
+						'slug' => 'premium',
 					],
 				],
-				$extra
-			),
+			] + $extra,
 			time()
 		);
 	}
@@ -87,8 +84,8 @@ class TestSubscriptionChangedAccount extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Whether the subscription is a gift is recorded with it, so the buyer's access
-	 * check can leave it out; an event from a site that doesn't send it records no gift.
+	 * Whether the subscription is a gift is recorded with it; an event from an older
+	 * node doesn't say, and records no gift.
 	 */
 	public function test_event_records_whether_the_subscription_is_a_gift() {
 		$buyer_id = self::factory()->user->create( [ 'user_email' => 'buyer@example.test' ] );

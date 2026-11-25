@@ -32,6 +32,14 @@ class WooCommerce_Subscriptions {
 	const PRODUCT_TYPES_ENABLED_OPTION = 'newspack_subscriptions_enabled_product_types';
 
 	/**
+	 * Gift recipients read before WCS can clear them silently: by hook, then by the
+	 * hook's subscription or user ID, then by subscription ID.
+	 *
+	 * @var array<string, array<int, array<int, int>>>
+	 */
+	private static $gift_recipients_before = [];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -67,6 +75,16 @@ class WooCommerce_Subscriptions {
 		// schedule behind. This filter runs after process_payment() and carries its
 		// result, so the schedule can follow the payment instead of preceding it.
 		add_filter( 'woocommerce_subscriptions_process_payment_for_change_method_via_pay_shortcode', [ __CLASS__, 'schedule_next_payment_after_payment_method_added' ], 10, 2 );
+
+		// Changes to who holds a subscription that no status-change event reports.
+		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
+		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
+		// WCS also clears a gift's recipient without that hook, on the edit screen
+		// (priority 50) and in trash_users_subscriptions() (`delete_user`, priority 10).
+		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'remember_gift_recipients' ], 49 );
+		add_action( 'woocommerce_process_shop_order_meta', [ __CLASS__, 'announce_cleared_gift_recipients' ], 51 );
+		add_action( 'delete_user', [ __CLASS__, 'remember_gift_recipients' ], 9 );
+		add_action( 'delete_user', [ __CLASS__, 'announce_cleared_gift_recipients' ], 11 );
 	}
 
 	/**
@@ -1211,31 +1229,94 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
-	 * Get every reader a change to a subscription can affect, as one list.
+	 * Announce the readers a gift's change of recipient moves it between. WCS fires
+	 * its hook on every save of a gift, so an unchanged recipient is skipped.
 	 *
-	 * For callers that treat all of them the same way, such as clearing a
-	 * per-reader cache. Callers that treat a gift recipient or a group member
-	 * differently use get_subscription_readers() instead.
-	 *
-	 * @param \WC_Subscription|int|mixed $subscription Subscription or ID.
-	 *
-	 * @return int[] User IDs of the purchaser, the gift recipient and the group
-	 *               members, in that order, each listed once. Empty for anything
-	 *               that isn't a subscription.
+	 * @param \WC_Subscription $subscription     The gift.
+	 * @param int              $new_recipient_id The new recipient, 0 for none.
+	 * @param int              $old_recipient_id The previous recipient, 0 for none.
 	 */
-	public static function get_subscription_reader_ids( $subscription ): array {
-		$readers    = self::get_subscription_readers( $subscription );
-		$reader_ids = array_merge( [ $readers['purchaser'], $readers['recipient'] ], $readers['members'] );
-		return array_values(
-			array_unique(
-				array_filter(
-					$reader_ids,
-					function ( $reader_id ) {
-						return $reader_id > 0;
-					}
-				)
-			)
+	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
+		if ( ! $subscription instanceof \WC_Subscription || (int) $new_recipient_id === (int) $old_recipient_id ) {
+			return;
+		}
+		// Without a recipient account the buyer stands in: they held the gift before, or may hold it now.
+		$buyer_id = (int) $subscription->get_customer_id();
+		$user_ids = array_map(
+			fn( $recipient_id ) => (int) $recipient_id > 0 ? (int) $recipient_id : $buyer_id,
+			[ $new_recipient_id, $old_recipient_id ]
 		);
+		self::announce_readers_changed( $user_ids, $subscription );
+	}
+
+	/**
+	 * Announce a group's members when it is turned on or off. They are read from the
+	 * group itself, because get_subscription_readers() stops listing them once it is off.
+	 *
+	 * @param \WC_Subscription $subscription The group subscription.
+	 * @param string[]         $changed_keys The settings that changed.
+	 */
+	public static function handle_group_settings_updated( $subscription, $changed_keys ): void {
+		if ( in_array( 'enabled', (array) $changed_keys, true ) ) {
+			self::announce_readers_changed( (array) Group_Subscription::get_members( $subscription ), $subscription );
+		}
+	}
+
+	/**
+	 * Remember the recipients of the gifts an edit-screen save or a user deletion is
+	 * about to touch: the subscription saved, or every gift the user bought or received.
+	 *
+	 * @param int $id Subscription ID, or the user's ID on `delete_user`.
+	 */
+	public static function remember_gift_recipients( $id ): void {
+		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return;
+		}
+		$subscriptions = 'delete_user' === current_action() ? \wcs_get_users_subscriptions( $id ) : [ \wcs_get_subscription( $id ) ];
+		foreach ( array_filter( $subscriptions ) as $subscription ) {
+			$recipient_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+			if ( $recipient_id ) {
+				self::$gift_recipients_before[ current_action() ][ (int) $id ][ $subscription->get_id() ] = $recipient_id;
+			}
+		}
+	}
+
+	/**
+	 * Announce each remembered gift that has since lost its recipient account.
+	 *
+	 * @param int $id Subscription ID, or the user's ID on `delete_user`.
+	 */
+	public static function announce_cleared_gift_recipients( $id ): void {
+		$recipients = self::$gift_recipients_before[ current_action() ][ (int) $id ] ?? [];
+		unset( self::$gift_recipients_before[ current_action() ][ (int) $id ] );
+		foreach ( $recipients as $subscription_id => $recipient_id ) {
+			$subscription = \wcs_get_subscription( $subscription_id );
+			if ( $subscription && ! WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) ) {
+				self::handle_gift_recipient_changed( $subscription, 0, $recipient_id );
+			}
+		}
+	}
+
+	/**
+	 * Fire `newspack_subscription_readers_changed` for the readers given.
+	 *
+	 * @param int[]            $user_ids     User IDs.
+	 * @param \WC_Subscription $subscription The subscription.
+	 */
+	private static function announce_readers_changed( array $user_ids, $subscription ): void {
+		$user_ids = array_values( array_unique( array_filter( array_map( 'intval', $user_ids ), fn( $user_id ) => $user_id > 0 ) ) );
+		if ( empty( $user_ids ) ) {
+			return;
+		}
+		/**
+		 * Fires when who holds a subscription changes in a way no subscription status
+		 * event reports: a gift's recipient changes or is cleared, or a group
+		 * subscription is turned on or off.
+		 *
+		 * @param int[]            $user_ids     Readers who may have gained or lost the subscription.
+		 * @param \WC_Subscription $subscription The subscription.
+		 */
+		\do_action( 'newspack_subscription_readers_changed', $user_ids, $subscription );
 	}
 
 	/**

@@ -66,12 +66,7 @@ final class Gate_Access_Reader_Data {
 		add_action( 'added_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'handle_group_membership_change' ], 10, 3 );
 		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'handle_memberships_changed' ] );
-
-		// No Data Event fires for handing a gift to someone else, clearing its
-		// recipient, or turning a group on or off, either.
-		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
-		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'handle_gift_recipient_cleared' ], 10, 2 );
-		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'handle_group_settings_updated' ], 10, 2 );
+		add_action( 'newspack_subscription_readers_changed', [ __CLASS__, 'handle_readers_changed' ] );
 
 		// Any write to a gate can change who passes it.
 		add_action( 'save_post_' . Content_Gate::GATE_CPT, [ __CLASS__, 'bump_gates_version' ] );
@@ -310,15 +305,14 @@ final class Gate_Access_Reader_Data {
 	 * @return bool
 	 */
 	private static function is_stale( int $user_id ): bool {
-		$stamp = get_user_meta( $user_id, self::STAMP_META_KEY, true );
-		if ( ! is_array( $stamp ) || ( $stamp['version'] ?? null ) !== self::get_gates_version() ) {
-			return true;
-		}
+		$stamp    = get_user_meta( $user_id, self::STAMP_META_KEY, true );
 		$computed = (int) ( $stamp['computed'] ?? 0 );
-		// A product's group setting changing turns every group that inherits it on or
-		// off, naming none of their members. A list computed in the same second may
-		// predate the change, so it counts as stale too.
-		return $computed < time() - DAY_IN_SECONDS || $computed <= Group_Subscription_Settings::get_products_changed_at();
+		// A product's group toggle names none of the members it affects, and a list
+		// computed in the same second may predate it.
+		return ! is_array( $stamp )
+			|| ( $stamp['version'] ?? null ) !== self::get_gates_version()
+			|| $computed < time() - DAY_IN_SECONDS
+			|| $computed <= Group_Subscription_Settings::get_products_changed_at();
 	}
 
 	/**
@@ -401,55 +395,13 @@ final class Gate_Access_Reader_Data {
 	}
 
 	/**
-	 * Mark stale the readers whose list changes when a gift's recipient does: the
-	 * new recipient gains the gift's gates, and whoever held it before loses them.
-	 * That is the earlier recipient. With none, the buyer is marked in case they
-	 * held it (an admin can turn a buyer's own subscription into a gift), which
-	 * costs one meta delete when they didn't.
+	 * Mark stale the readers a change of who holds a subscription affects.
 	 *
-	 * @param \WC_Subscription $subscription          The gifted subscription.
-	 * @param int              $recipient_id          The new recipient.
-	 * @param int              $previous_recipient_id The earlier recipient, 0 for none.
+	 * @param int[] $user_ids User IDs.
 	 */
-	public static function handle_gift_recipient_changed( $subscription, $recipient_id, $previous_recipient_id ): void {
-		self::mark_stale( (int) $recipient_id );
-		$previous_holder_id = (int) $previous_recipient_id;
-		if ( $previous_holder_id <= 0 ) {
-			$previous_holder_id = $subscription instanceof \WC_Subscription ? (int) $subscription->get_customer_id() : 0;
-		}
-		self::mark_stale( $previous_holder_id );
-	}
-
-	/**
-	 * Mark stale the readers whose list changes when a gift loses its recipient
-	 * account without WCS's recipient-changed hook (an admin cleared it, or an
-	 * account was deleted): the recipient who lost the gift, and the buyer, who
-	 * holds it once it is no longer a gift. A gift that keeps the recipient's
-	 * email is held by nobody, so marking the buyer then costs one meta delete.
-	 *
-	 * @param \WC_Subscription $subscription          The gift.
-	 * @param int              $previous_recipient_id The recipient it had before.
-	 */
-	public static function handle_gift_recipient_cleared( $subscription, $previous_recipient_id ): void {
-		self::mark_stale( (int) $previous_recipient_id );
-		self::mark_stale( $subscription instanceof \WC_Subscription ? (int) $subscription->get_customer_id() : 0 );
-	}
-
-	/**
-	 * Mark a group's members stale when the group is turned on or off. Members
-	 * hold its products only while it is on, and the change names none of them.
-	 * The owner holds their own subscription either way.
-	 *
-	 * @param \WC_Subscription $subscription The group subscription.
-	 * @param string[]         $changed_keys The settings that changed.
-	 */
-	public static function handle_group_settings_updated( $subscription, $changed_keys ): void {
-		if ( ! in_array( 'enabled', (array) $changed_keys, true ) ) {
-			return;
-		}
-		// get_members() is filterable, so treat its result as untrusted input.
-		foreach ( (array) Group_Subscription::get_members( $subscription ) as $member_id ) {
-			self::mark_stale( (int) $member_id );
+	public static function handle_readers_changed( $user_ids ): void {
+		foreach ( (array) $user_ids as $user_id ) {
+			self::mark_stale( (int) $user_id );
 		}
 	}
 

@@ -106,50 +106,92 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/*
-	 * --- Product-level changes ---
+	 * --- Turning groups on or off ---
 	 */
 
 	/**
-	 * Adding, changing or removing a product's group toggle is recorded site-wide:
-	 * groups that inherit it turn on or off without any event naming them.
-	 * WooCommerce saves product meta through the core meta functions, so the
-	 * direct post meta writes here take the same path.
+	 * Settings saves, as [ group on before, settings saved, whether its members are announced ].
+	 *
+	 * @return array[]
 	 */
-	public function test_product_group_toggle_write_records_the_change() {
-		$enabled_key  = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
-		$variation_id = self::factory()->post->create( [ 'post_type' => 'product_variation' ] );
-		$product_id   = self::factory()->post->create( [ 'post_type' => 'product' ] );
-		$writes       = [
-			'added'              => fn() => add_post_meta( $product_id, $enabled_key, 'yes' ),
-			'changed'            => fn() => update_post_meta( $product_id, $enabled_key, 'no' ),
-			'deleted'            => fn() => delete_post_meta( $product_id, $enabled_key ),
-			'added on variation' => fn() => add_post_meta( $variation_id, $enabled_key, 'yes' ),
+	public function data_group_setting_saves() {
+		return [
+			'turned off'    => [ 'yes', [ 'enabled' => false ], true ],
+			'turned on'     => [ 'no', [ 'enabled' => true ], true ],
+			'limit changed' => [ 'yes', [ 'limit' => 5 ], false ],
 		];
-
-		foreach ( $writes as $label => $write ) {
-			update_option( 'newspack_group_subscription_products_changed_at', 0 );
-			$write();
-			$this->assertGreaterThan( 0, (int) get_option( 'newspack_group_subscription_products_changed_at' ), "A product toggle write is recorded: $label." );
-		}
 	}
 
 	/**
-	 * Only a product's toggle counts. A subscription stored as a post carries the
-	 * same meta key and is covered by its own settings hook, a save that leaves
-	 * the toggle unchanged changes nothing, and other product meta is ignored.
+	 * Turning a group on or off announces its members, read from the group itself
+	 * since a group that is off lists none. Other settings announce no one.
+	 *
+	 * @dataProvider data_group_setting_saves
+	 *
+	 * @param string $enabled   The group's setting before the save.
+	 * @param array  $settings  Settings saved.
+	 * @param bool   $announced Whether the members are announced.
 	 */
-	public function test_other_meta_writes_record_no_product_change() {
-		$enabled_key     = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
-		$subscription_id = self::factory()->post->create( [ 'post_type' => 'shop_subscription' ] );
-		$product_id      = self::factory()->post->create( [ 'post_type' => 'product' ] );
-		add_post_meta( $product_id, $enabled_key, 'yes' );
-		update_option( 'newspack_group_subscription_products_changed_at', 0 );
+	public function test_group_toggle_announces_its_members( $enabled, $settings, $announced ) {
+		$subscription = $this->make_subscription_with_product( [], [ 'enabled' => $enabled ] );
+		$member_id    = self::factory()->user->create();
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		$calls = [];
+		add_action(
+			'newspack_subscription_readers_changed',
+			function ( $user_ids ) use ( &$calls ) {
+				$calls[] = $user_ids;
+			}
+		);
 
-		add_post_meta( $subscription_id, $enabled_key, 'yes' );
-		update_post_meta( $product_id, $enabled_key, 'yes' );
-		update_post_meta( $product_id, Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', 5 );
+		Group_Subscription_Settings::update_subscription_settings( $subscription, $settings );
 
-		$this->assertSame( 0, (int) get_option( 'newspack_group_subscription_products_changed_at' ) );
+		$this->assertSame( $announced ? [ [ $member_id ] ] : [], $calls );
+	}
+
+	/**
+	 * Post meta writes, as [ post type, meta key suffix, write, whether recorded ].
+	 *
+	 * @return array[]
+	 */
+	public function data_product_meta_writes() {
+		return [
+			'toggle added on variation'   => [ 'product_variation', 'enabled', 'add', true ],
+			'toggle changed'              => [ 'product', 'enabled', 'update', true ],
+			'toggle removed'              => [ 'product', 'enabled', 'delete', true ],
+			'toggle saved unchanged'      => [ 'product', 'enabled', 'same', false ],
+			'other product meta'          => [ 'product', 'limit', 'update', false ],
+			'subscription stored as post' => [ 'shop_subscription', 'enabled', 'add', false ],
+		];
+	}
+
+	/**
+	 * A write to a product's group toggle is recorded site-wide, because the groups
+	 * that inherit it turn on or off with no event naming them. Other writes are not.
+	 *
+	 * @dataProvider data_product_meta_writes
+	 *
+	 * @param string $post_type Post type written to.
+	 * @param string $key       Meta key, without the group prefix.
+	 * @param string $write     How the meta is written.
+	 * @param bool   $recorded  Whether the write is recorded.
+	 */
+	public function test_product_toggle_write_is_recorded( $post_type, $key, $write, $recorded ) {
+		$post_id  = self::factory()->post->create( [ 'post_type' => $post_type ] );
+		$meta_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . $key;
+		if ( 'add' !== $write ) {
+			add_post_meta( $post_id, $meta_key, 'yes' );
+		}
+		update_option( Group_Subscription_Settings::PRODUCTS_CHANGED_AT_OPTION, 0 );
+
+		match ( $write ) {
+			'add'    => add_post_meta( $post_id, $meta_key, 'yes' ),
+			'update' => update_post_meta( $post_id, $meta_key, 'no' ),
+			'same'   => update_post_meta( $post_id, $meta_key, 'yes' ),
+			'delete' => delete_post_meta( $post_id, $meta_key ),
+		};
+
+		$this->assertSame( $recorded, Group_Subscription_Settings::get_products_changed_at() > 0 );
 	}
 
 	/*

@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Data_Events\Connectors\Contact_Sync_Connector;
 use Newspack\WooCommerce_Connection;
 use Newspack\WooCommerce_Subscriptions_Gifting;
 
@@ -23,12 +24,11 @@ require_once NEWSPACK_ABSPATH . 'tests/mocks/wcsg-recipient-addresses-mock.php';
 class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 
 	/**
-	 * Each newspack_subscription_gift_recipient_cleared call, as
-	 * [ subscription ID, previous recipient ID ].
+	 * Each newspack_subscription_readers_changed call, as [ user IDs, subscription ID ].
 	 *
 	 * @var array[]
 	 */
-	private $cleared_recipients = [];
+	private $announced = [];
 
 	/**
 	 * Reset the gift and subscription stores so one test's data never leaks into the next.
@@ -36,11 +36,17 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		global $subscriptions_database;
-		$subscriptions_database   = [];
-		WCS_Gifting::$recipients  = [];
-		$this->cleared_recipients = [];
-		// The test case restores hooks after each test, so this never outlives it.
-		add_action( 'newspack_subscription_gift_recipient_cleared', [ $this, 'record_cleared_recipient' ], 10, 2 );
+		$subscriptions_database  = [];
+		WCS_Gifting::$recipients = [];
+		$this->announced         = [];
+		add_action(
+			'newspack_subscription_readers_changed',
+			function ( $user_ids, $subscription ) {
+				$this->announced[] = [ $user_ids, $subscription->get_id() ];
+			},
+			10,
+			2
+		);
 	}
 
 	/**
@@ -168,158 +174,92 @@ class Newspack_Test_Subscriptions_Gifting extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Record one announcement that a gift lost its recipient.
-	 *
-	 * @param \WC_Subscription $subscription          The gift.
-	 * @param int              $previous_recipient_id Its recipient before the change.
-	 */
-	public function record_cleared_recipient( $subscription, $previous_recipient_id ): void {
-		$this->assertInstanceOf( \WC_Subscription::class, $subscription, 'The action passes the subscription.' );
-		$this->cleared_recipients[] = [ $subscription->get_id(), $previous_recipient_id ];
-	}
-
-	/**
-	 * Save a subscription's edit screen with WCS's own priority-50 save in place.
-	 *
-	 * @param \WC_Subscription $subscription The subscription being saved.
-	 * @param callable         $wcs_save     Stand-in for WCS's save of the recipient field.
-	 */
-	private function save_edit_screen( $subscription, callable $wcs_save ): void {
-		add_action( 'woocommerce_process_shop_order_meta', $wcs_save, 50 );
-		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
-		remove_action( 'woocommerce_process_shop_order_meta', $wcs_save, 50 );
-	}
-
-	/**
-	 * Clearing a gift's recipient on the edit screen fires no hook in WCS, so the
-	 * plugin announces it, naming the reader who lost the gift.
-	 */
-	public function test_admin_clear_announces_the_cleared_recipient() {
-		$purchaser_id = $this->factory()->user->create();
-		$recipient_id = $this->factory()->user->create();
-		$subscription = $this->create_gift( $purchaser_id, $recipient_id );
-
-		$this->save_edit_screen(
-			$subscription,
-			function () use ( $subscription ) {
-				unset( WCS_Gifting::$recipients[ $subscription->get_id() ] );
-			}
-		);
-
-		$this->assertSame( [ [ $subscription->get_id(), $recipient_id ] ], $this->cleared_recipients );
-	}
-
-	/**
-	 * Ways an edit-screen save leaves a gift with a recipient account.
+	 * Recipient changes WCS reports, as [ previous recipient, new recipient, readers announced ].
 	 *
 	 * @return array[]
 	 */
-	public function data_saves_that_keep_a_recipient() {
+	public function data_recipient_changes() {
 		return [
-			'recipient unchanged'  => [ false ],
-			'recipient reassigned' => [ true ],
+			'reassigned'      => [ 'old', 'new', [ 'new', 'old' ] ],
+			'first recipient' => [ '', 'new', [ 'new', 'buyer' ] ],
+			'unchanged'       => [ 'old', 'old', [] ],
 		];
 	}
 
 	/**
-	 * A save that keeps or reassigns the recipient announces nothing: WCS fires its
-	 * own recipient-changed hook for a reassignment.
+	 * A change of recipient announces the new holder and the previous one, who is the
+	 * buyer when the gift had no recipient. WCS fires its hook on every save of a gift,
+	 * so an unchanged recipient announces nothing.
 	 *
-	 * @dataProvider data_saves_that_keep_a_recipient
+	 * @dataProvider data_recipient_changes
 	 *
-	 * @param bool $reassign Whether the save hands the gift to another reader.
+	 * @param string   $old      Previous recipient's key, '' for none.
+	 * @param string   $new      New recipient's key.
+	 * @param string[] $expected Keys of the readers announced.
 	 */
-	public function test_admin_save_that_keeps_a_recipient_announces_nothing( $reassign ) {
-		$purchaser_id     = $this->factory()->user->create();
-		$recipient_id     = $this->factory()->user->create();
-		$new_recipient_id = $this->factory()->user->create();
-		$subscription     = $this->create_gift( $purchaser_id, $recipient_id );
+	public function test_recipient_change_announces_both_holders( $old, $new, $expected ) {
+		$ids          = [
+			''      => 0,
+			'buyer' => $this->factory()->user->create(),
+			'old'   => $this->factory()->user->create(),
+			'new'   => $this->factory()->user->create(),
+		];
+		$subscription = $this->create_gift( $ids['buyer'], $ids[ $new ] );
 
-		$this->save_edit_screen(
-			$subscription,
-			function () use ( $subscription, $reassign, $new_recipient_id ) {
-				if ( $reassign ) {
-					WCS_Gifting::$recipients[ $subscription->get_id() ] = $new_recipient_id;
-				}
-			}
-		);
+		do_action( 'woocommerce_subscriptions_gifting_recipient_changed', $subscription, $ids[ $new ], $ids[ $old ] );
 
-		$this->assertSame( [], $this->cleared_recipients );
+		$announced = array_map( fn( $key ) => $ids[ $key ], $expected );
+		$this->assertSame( $announced ? [ [ $announced, $subscription->get_id() ] ] : [], $this->announced );
 	}
 
 	/**
-	 * Stand in for WC_Subscriptions_Manager::trash_users_subscriptions(), which runs
-	 * on delete_user at priority 10 and removes the recipient from every gift WCS
-	 * lists for the user, without firing a recipient-changed hook.
+	 * Ways WCS removes a gift's recipient without its recipient-changed hook, as
+	 * [ how, whether the recipient is removed ].
 	 *
-	 * @param int $user_id ID of the user being deleted.
+	 * @return array[]
 	 */
-	public function clear_recipients_like_wcs( $user_id ): void {
-		foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
-			if ( WCS_Gifting::is_gifted_subscription( $subscription ) ) {
-				unset( WCS_Gifting::$recipients[ $subscription->get_id() ] );
+	public function data_silent_recipient_clears() {
+		return [
+			'cleared on the edit screen' => [ 'edit', true ],
+			'kept on the edit screen'    => [ 'edit', false ],
+			'recipient deleted'          => [ 'recipient', true ],
+			'buyer deleted'              => [ 'buyer', true ],
+		];
+	}
+
+	/**
+	 * WCS removes a gift's recipient with no hook when an admin clears it on the edit
+	 * screen and when either reader is deleted, so the previous recipient and the buyer
+	 * are announced. A gift without a recipient account has nothing to announce.
+	 *
+	 * @dataProvider data_silent_recipient_clears
+	 *
+	 * @param string $how     The edit screen, or which reader is deleted.
+	 * @param bool   $removed Whether WCS removes the recipient.
+	 */
+	public function test_silent_recipient_clear_announces_previous_recipient_and_buyer( $how, $removed ) {
+		$buyer_id     = $this->factory()->user->create();
+		$recipient_id = $this->factory()->user->create();
+		$gift         = $this->create_gift( $buyer_id, $recipient_id );
+		$this->create_gift( $buyer_id, 0 );
+		// Stands in for WCS's own save (priority 50) or trash_users_subscriptions() (priority 10).
+		$wcs_clear = function () use ( $gift, $removed ) {
+			if ( $removed ) {
+				unset( WCS_Gifting::$recipients[ $gift->get_id() ] );
 			}
+		};
+
+		if ( 'edit' === $how ) {
+			add_action( 'woocommerce_process_shop_order_meta', $wcs_clear, 50 );
+			do_action( 'woocommerce_process_shop_order_meta', $gift->get_id(), $gift );
+		} else {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+			// The ESP snapshot reads the gift as an order, which the subscription mock can't stand in for.
+			remove_action( 'delete_user', [ Contact_Sync_Connector::class, 'store_user_data_before_deletion' ], 5 );
+			add_action( 'delete_user', $wcs_clear, 10 );
+			wp_delete_user( 'buyer' === $how ? $buyer_id : $recipient_id );
 		}
-	}
 
-	/**
-	 * Delete a user with WCS's priority-10 clean-up in place.
-	 *
-	 * @param int $user_id User ID.
-	 */
-	private function delete_user_like_wcs( int $user_id ): void {
-		require_once ABSPATH . 'wp-admin/includes/user.php';
-		// The ESP snapshot taken before a deletion reads a recipient's gift as an
-		// order, which the subscription mock can't stand in for. It plays no part
-		// in what these tests check.
-		remove_action( 'delete_user', [ \Newspack\Data_Events\Connectors\Contact_Sync_Connector::class, 'store_user_data_before_deletion' ], 5 );
-		add_action( 'delete_user', [ $this, 'clear_recipients_like_wcs' ], 10 );
-		wp_delete_user( $user_id );
-	}
-
-	/**
-	 * Which reader of a gift is deleted.
-	 *
-	 * @return array[]
-	 */
-	public function data_deleted_gift_readers() {
-		return [
-			'recipient deleted' => [ 'recipient' ],
-			'buyer deleted'     => [ 'buyer' ],
-		];
-	}
-
-	/**
-	 * Deleting either reader of a gift makes WCS remove its recipient with no hook,
-	 * so the plugin announces the gift's cleared recipient.
-	 *
-	 * @dataProvider data_deleted_gift_readers
-	 *
-	 * @param string $deleted Which reader is deleted.
-	 */
-	public function test_deleting_a_gift_reader_announces_the_cleared_recipient( $deleted ) {
-		$purchaser_id = $this->factory()->user->create();
-		$recipient_id = $this->factory()->user->create();
-		$subscription = $this->create_gift( $purchaser_id, $recipient_id );
-
-		$this->delete_user_like_wcs( 'buyer' === $deleted ? $purchaser_id : $recipient_id );
-
-		$this->assertSame( [ [ $subscription->get_id(), $recipient_id ] ], $this->cleared_recipients );
-	}
-
-	/**
-	 * Deleting a user announces only the gifts that lost a recipient account: not a
-	 * gift with no recipient account, and not another reader's gift.
-	 */
-	public function test_deleting_a_user_skips_gifts_without_a_recipient_account() {
-		$purchaser_id       = $this->factory()->user->create();
-		$other_purchaser_id = $this->factory()->user->create();
-		$other_recipient_id = $this->factory()->user->create();
-		$this->create_gift( $purchaser_id, 0 );
-		$this->create_gift( $other_purchaser_id, $other_recipient_id );
-
-		$this->delete_user_like_wcs( $purchaser_id );
-
-		$this->assertSame( [], $this->cleared_recipients );
+		$this->assertSame( $removed ? [ [ [ $buyer_id, $recipient_id ], $gift->get_id() ] ] : [], $this->announced );
 	}
 }

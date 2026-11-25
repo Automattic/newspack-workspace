@@ -10,11 +10,9 @@ namespace Newspack\Data_Events\Connectors;
 use Newspack\Access_Rules;
 use Newspack\Data_Events;
 use Newspack\Group_Subscription;
-use Newspack\Logger;
 use Newspack\Reader_Activation\Contact_Sync;
 use Newspack\WooCommerce_Connection;
 use Newspack\WooCommerce_Subscriptions;
-use Newspack\WooCommerce_Subscriptions_Gifting;
 use Newspack\Reader_Activation\Sync\WooCommerce as Sync_WooCommerce;
 use Newspack\Reader_Activation\Sync\Metadata as Sync_Metadata;
 use Newspack\Reader_Activation\Sync\Contact_Metadata\Content_Gate as Content_Access_Metadata;
@@ -26,45 +24,12 @@ defined( 'ABSPATH' ) || exit;
  */
 class Contact_Sync_Connector {
 	/**
-	 * Action Scheduler hook that syncs a batch of readers' contacts.
-	 */
-	const SYNC_READERS_HOOK = 'newspack_contact_sync_readers';
-
-	/**
-	 * How many readers one background action syncs, unless filtered.
-	 */
-	const SYNC_READERS_BATCH_SIZE = 25;
-
-	/**
-	 * Readers to sync in the background once the request ends, keyed by user ID,
-	 * each with the reasons they were queued.
-	 *
-	 * @var array<int, string[]>
-	 */
-	private static $queued_reader_syncs = [];
-
-	/**
 	 * Initialize hooks.
 	 */
 	public static function init_hooks() {
 		add_action( 'init', [ __CLASS__, 'register_handlers' ] );
 		// Store user data before deletion.
 		add_action( 'delete_user', [ __CLASS__, 'store_user_data_before_deletion' ], 5 );
-		// Hooked even without a syncable integration, so batches queued earlier still run.
-		add_action( self::SYNC_READERS_HOOK, [ __CLASS__, 'sync_readers' ], 10, 2 );
-		add_action( 'shutdown', [ __CLASS__, 'flush_reader_syncs' ] );
-		add_filter( 'newspack_action_scheduler_hook_labels', [ __CLASS__, 'register_hook_labels' ] );
-	}
-
-	/**
-	 * Register hook labels for Contact Sync Connector actions.
-	 *
-	 * @param array $labels Existing labels.
-	 * @return array
-	 */
-	public static function register_hook_labels( $labels ) {
-		$labels[ self::SYNC_READERS_HOOK ] = __( 'Contact Sync Batch', 'newspack-plugin' );
-		return $labels;
 	}
 
 	/**
@@ -82,8 +47,6 @@ class Contact_Sync_Connector {
 		Data_Events::register_handler( [ __CLASS__, 'order_completed' ], 'order_completed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_updated' ], 'donation_subscription_changed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_updated' ], 'product_subscription_changed' );
-		Data_Events::register_handler( [ __CLASS__, 'subscription_readers_updated' ], 'donation_subscription_changed' );
-		Data_Events::register_handler( [ __CLASS__, 'subscription_readers_updated' ], 'product_subscription_changed' );
 		Data_Events::register_handler( [ __CLASS__, 'subscription_renewal_attempt' ], 'subscription_renewal_attempt' );
 		Data_Events::register_handler( [ __CLASS__, 'newsletter_updated' ], 'newsletter_subscribed' );
 		Data_Events::register_handler( [ __CLASS__, 'newsletter_updated' ], 'newsletter_updated' );
@@ -93,10 +56,8 @@ class Contact_Sync_Connector {
 		}
 
 		// Changes to who holds a gift or a group seat that no data event reports.
+		add_action( 'newspack_subscription_readers_changed', [ __CLASS__, 'subscription_readers_changed' ], 10, 2 );
 		add_action( 'newspack_group_subscription_memberships_changed', [ __CLASS__, 'group_memberships_changed' ] );
-		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'group_settings_updated' ], 10, 2 );
-		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'gift_recipient_changed' ], 10, 3 );
-		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'gift_recipient_cleared' ], 10, 2 );
 	}
 
 	/**
@@ -168,8 +129,8 @@ class Contact_Sync_Connector {
 
 		$customer = new \WC_Customer( $data['user_id'] );
 
-		// Skip a reader with no orders who holds no active subscription: not
-		// their own, not a gift they received, and not a seat in a group.
+		// Skip a reader with no orders who holds no active subscription: their own, a
+		// gift, or a group seat.
 		if ( ! $customer->get_order_count() && empty( Access_Rules::get_active_subscription_ids( $data['user_id'], [], false, 1 ) ) ) {
 			return;
 		}
@@ -217,6 +178,20 @@ class Contact_Sync_Connector {
 			return;
 		}
 
+		// A gift's recipient holds it like the customer does. A group's members can
+		// only gain or lose Content Access, and a group can be large.
+		$subscription_id = (int) $data['subscription_id'];
+		$readers         = WooCommerce_Subscriptions::get_subscription_readers( $subscription_id );
+		if ( $readers['recipient'] && $readers['recipient'] !== $readers['purchaser'] ) {
+			Contact_Sync::sync_contact(
+				$readers['recipient'],
+				sprintf( 'RAS Gift subscription %d updated. Status changed from %s to %s', $subscription_id, $data['status_before'], $data['status_after'] )
+			);
+		}
+		if ( WooCommerce_Connection::status_change_affects_access( $data['status_before'], $data['status_after'] ) && self::is_content_access_pushed() ) {
+			self::schedule_syncs( $readers['members'], sprintf( 'RAS Group subscription %d changed', $subscription_id ) );
+		}
+
 		$order = \wcs_get_subscription( $data['subscription_id'] );
 
 		if ( ! $order instanceof \WC_Order ) {
@@ -231,49 +206,6 @@ class Contact_Sync_Connector {
 				$data['status_after']
 			)
 		);
-	}
-
-	/**
-	 * Sync the readers who hold a changed subscription without being its
-	 * customer: a gift's recipient and a group's members. The customer is synced
-	 * by subscription_updated().
-	 *
-	 * The recipient is synced like the customer. Members are synced in the
-	 * background, because a group can be large, and only when the change can
-	 * affect their access and an integration sends a Content Access field: those
-	 * are the only fields on a member's contact that a group's status reaches.
-	 *
-	 * @param int   $timestamp Timestamp of the event.
-	 * @param array $data      Data associated with the event.
-	 * @param int   $client_id ID of the client that triggered the event.
-	 */
-	public static function subscription_readers_updated( $timestamp, $data, $client_id ) {
-		if ( empty( $data['status_before'] ) || empty( $data['status_after'] ) || empty( $data['subscription_id'] ) ) {
-			return;
-		}
-
-		$subscription_id = (int) $data['subscription_id'];
-		$status_before   = (string) $data['status_before'];
-		$status_after    = (string) $data['status_after'];
-		$readers         = WooCommerce_Subscriptions::get_subscription_readers( $subscription_id );
-
-		if ( $readers['recipient'] && $readers['recipient'] !== $readers['purchaser'] ) {
-			Contact_Sync::sync_contact(
-				$readers['recipient'],
-				sprintf( 'RAS Gift subscription %d updated. Status changed from %s to %s', $subscription_id, $status_before, $status_after )
-			);
-		}
-
-		if (
-			! empty( $readers['members'] )
-			&& WooCommerce_Connection::status_change_affects_access( $status_before, $status_after )
-			&& self::is_content_access_pushed()
-		) {
-			self::queue_reader_syncs(
-				$readers['members'],
-				sprintf( 'RAS Group subscription %d updated. Status changed from %s to %s', $subscription_id, $status_before, $status_after )
-			);
-		}
 	}
 
 	/**
@@ -292,211 +224,70 @@ class Contact_Sync_Connector {
 		* When a renewal happens, it triggers two syncs to the ESP, one setting the subscription as on hold, and a
 		* second one setting it back to active. This sometimes creates a race condition on the ESP side.
 		* This third request will make sure the ESP always has the correct and most up to date data about the reader.
-		* A gift's recipient got the same two syncs, so they get the third one too.
 		*/
-		$context = sprintf(
-			// Translators: %d is the subscription ID and %s is the customer's email address.
-			'RAS Woo subscription %d for %s renewed.',
-			$data['subscription_id'],
-			$data['email']
+		Contact_Sync::schedule_sync(
+			$data['user_id'],
+			sprintf(
+				// Translators: %d is the subscription ID and %s is the customer's email address.
+				'RAS Woo subscription %d for %s renewed.',
+				$data['subscription_id'],
+				$data['email']
+			),
+			120 // Schedule an ESP sync in 2 minutes.
 		);
-		$subscription = function_exists( 'wcs_get_subscription' ) ? \wcs_get_subscription( (int) $data['subscription_id'] ) : null;
-		$recipient_id = $subscription instanceof \WC_Subscription ? WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription ) : 0;
-
-		foreach ( array_unique( array_filter( [ (int) $data['user_id'], $recipient_id ] ) ) as $user_id ) {
-			Contact_Sync::schedule_sync( $user_id, $context, 120 ); // Schedule an ESP sync in 2 minutes.
+		// A gift's recipient got the same two syncs, so they get the third one too.
+		$recipient_id = WooCommerce_Subscriptions::get_subscription_readers( (int) $data['subscription_id'] )['recipient'];
+		if ( $recipient_id && $recipient_id !== (int) $data['user_id'] ) {
+			Contact_Sync::schedule_sync( $recipient_id, sprintf( 'RAS Gift subscription %d renewed.', $data['subscription_id'] ), 120 );
 		}
 	}
 
 	/**
-	 * Queue an ESP sync for a reader who joined or left a group subscription,
-	 * which can change their Content Access.
+	 * Sync the readers a gift or group moved. A group's members only when Content
+	 * Access is sent: it holds the only fields of theirs a toggle changes.
+	 *
+	 * @param int[]            $user_ids     Readers who may have gained or lost the subscription.
+	 * @param \WC_Subscription $subscription The subscription.
+	 */
+	public static function subscription_readers_changed( $user_ids, $subscription ) {
+		$members = self::is_content_access_pushed() ? [] : (array) Group_Subscription::get_members( $subscription );
+		self::schedule_syncs( array_diff( (array) $user_ids, $members ), sprintf( 'RAS Subscription %d readers changed', $subscription->get_id() ) );
+	}
+
+	/**
+	 * Sync a reader who joined or left a group, which can change their Content Access.
 	 *
 	 * @param int $user_id The reader.
 	 */
 	public static function group_memberships_changed( $user_id ) {
-		if ( ! self::is_content_access_pushed() ) {
-			return;
+		if ( self::is_content_access_pushed() ) {
+			self::schedule_syncs( [ $user_id ], 'RAS Group subscription membership changed' );
 		}
-		self::queue_reader_syncs( [ (int) $user_id ], 'RAS Group subscription membership changed' );
 	}
 
 	/**
-	 * Queue an ESP sync for every member of a group that was turned on or off,
-	 * which gives or takes away their access.
-	 *
-	 * Members are read straight from the group: once it is off, the shared reader
-	 * lookup no longer lists them, and they are the readers who just lost access.
-	 *
-	 * @param \WC_Subscription $subscription The group subscription.
-	 * @param string[]         $changed_keys The group settings that changed.
-	 */
-	public static function group_settings_updated( $subscription, $changed_keys ) {
-		if ( ! in_array( 'enabled', (array) $changed_keys, true ) || ! self::is_content_access_pushed() ) {
-			return;
-		}
-		$subscription_id = $subscription instanceof \WC_Subscription ? $subscription->get_id() : (int) $subscription;
-		self::queue_reader_syncs(
-			array_map( 'intval', (array) Group_Subscription::get_members( $subscription ) ),
-			sprintf( 'RAS Group subscription %d turned on or off', $subscription_id )
-		);
-	}
-
-	/**
-	 * Whether an integration sends any of the Content Access fields. A group
-	 * change can alter all three (access, its source, and the group's name), and
-	 * an integration may send any one of them without the others.
+	 * Whether an integration sends any of the Content Access fields.
 	 *
 	 * @return bool
 	 */
 	private static function is_content_access_pushed() {
-		foreach ( array_keys( Content_Access_Metadata::get_fields() ) as $field ) {
-			if ( Sync_Metadata::is_field_push_enabled( $field ) ) {
-				return true;
-			}
-		}
-		return false;
+		return (bool) array_filter( array_keys( Content_Access_Metadata::get_fields() ), [ Sync_Metadata::class, 'is_field_push_enabled' ] );
 	}
 
 	/**
-	 * Schedule an ESP sync for the readers a gift's change of recipient moves it
-	 * between. A gift with no recipient account before was held by its buyer.
-	 *
-	 * Scheduled rather than synced now, because WCS fires this while it saves the
-	 * subscription. It fires on every save of a gift, so a save that keeps the
-	 * recipient schedules nothing.
-	 *
-	 * @param \WC_Subscription $subscription          The gift.
-	 * @param int              $recipient_id          The new recipient.
-	 * @param int              $previous_recipient_id The previous recipient, 0 for none.
-	 */
-	public static function gift_recipient_changed( $subscription, $recipient_id, $previous_recipient_id ) {
-		$recipient_id       = (int) $recipient_id;
-		$previous_holder_id = (int) $previous_recipient_id;
-		if ( ! $subscription instanceof \WC_Subscription || $recipient_id === $previous_holder_id ) {
-			return;
-		}
-		if ( $previous_holder_id <= 0 ) {
-			$previous_holder_id = (int) $subscription->get_customer_id();
-		}
-		$context = sprintf( 'RAS Gift subscription %d changed recipient.', $subscription->get_id() );
-		foreach ( array_unique( array_filter( [ $recipient_id, $previous_holder_id ] ) ) as $user_id ) {
-			Contact_Sync::schedule_sync( $user_id, $context, 0 );
-		}
-	}
-
-	/**
-	 * Schedule an ESP sync for a gift's former recipient and its buyer after the
-	 * gift lost its recipient account without WCS's recipient-changed hook.
-	 *
-	 * @param \WC_Subscription $subscription          The gift.
-	 * @param int              $previous_recipient_id The recipient it had before.
-	 */
-	public static function gift_recipient_cleared( $subscription, $previous_recipient_id ) {
-		if ( ! $subscription instanceof \WC_Subscription ) {
-			return;
-		}
-		$context = sprintf( 'RAS Gift subscription %d lost its recipient.', $subscription->get_id() );
-		foreach ( array_unique( array_filter( [ (int) $previous_recipient_id, (int) $subscription->get_customer_id() ] ) ) as $user_id ) {
-			Contact_Sync::schedule_sync( $user_id, $context, 0 );
-		}
-	}
-
-	/**
-	 * Queue readers for a background ESP sync once the request ends.
-	 *
-	 * Each reader is queued once per request, with every reason given, so a
-	 * renewal that puts a group on hold and back again syncs each member once.
+	 * Schedule a background ESP sync per reader on Contact_Sync's own hook, unless
+	 * an identical one is pending. A context naming only the subscription lets a
+	 * renewal's on-hold and active events share one.
 	 *
 	 * @param int[]  $user_ids Readers to sync.
 	 * @param string $context  Why they need syncing.
 	 */
-	public static function queue_reader_syncs( array $user_ids, string $context ): void {
-		foreach ( $user_ids as $user_id ) {
-			$user_id = (int) $user_id;
-			if ( $user_id <= 0 ) {
-				continue;
-			}
-			if ( ! in_array( $context, self::$queued_reader_syncs[ $user_id ] ?? [], true ) ) {
-				self::$queued_reader_syncs[ $user_id ][] = $context;
-			}
-		}
-		// Queued during shutdown, possibly after the flush ran: flush now instead.
-		if ( did_action( 'shutdown' ) ) {
-			self::flush_reader_syncs();
-		}
-	}
-
-	/**
-	 * Hand the queued readers to Action Scheduler in batches, one action per
-	 * batch. Runs at shutdown.
-	 *
-	 * Without Action Scheduler, one batch is synced now and the rest only logged,
-	 * so a large group can't hold up the request.
-	 */
-	public static function flush_reader_syncs(): void {
-		if ( empty( self::$queued_reader_syncs ) ) {
-			return;
-		}
-		$queued                    = self::$queued_reader_syncs;
-		self::$queued_reader_syncs = [];
-
-		// Readers queued for the same reasons share batches.
-		$user_ids_by_context = [];
-		foreach ( $queued as $user_id => $contexts ) {
-			$user_ids_by_context[ implode( '; ', $contexts ) ][] = $user_id;
-		}
-
-		/**
-		 * Filters how many readers one background ESP sync action handles.
-		 *
-		 * @param int $batch_size Readers per action. Default 25.
-		 */
-		$batch_size = max( 1, (int) apply_filters( 'newspack_contact_sync_readers_batch_size', self::SYNC_READERS_BATCH_SIZE ) );
-
-		if ( ! function_exists( 'as_enqueue_async_action' ) ) {
-			$unsynced = 0;
-			$budget   = $batch_size;
-			foreach ( $user_ids_by_context as $context => $user_ids ) {
-				$batch     = array_slice( $user_ids, 0, $budget );
-				$budget   -= count( $batch );
-				$unsynced += count( $user_ids ) - count( $batch );
-				self::sync_readers( $batch, (string) $context );
-			}
-			if ( $unsynced ) {
-				Logger::log(
-					sprintf( 'Action Scheduler is unavailable, so %d readers were not synced to the ESP.', $unsynced ),
-					'NEWSPACK-CONTACT-SYNC',
-					'error'
-				);
-			}
-			return;
-		}
-
-		foreach ( $user_ids_by_context as $context => $user_ids ) {
-			foreach ( array_chunk( $user_ids, $batch_size ) as $batch ) {
-				$args = [ $batch, (string) $context ];
-				// Action Scheduler's own uniqueness ignores the arguments, so it would
-				// drop every batch after the first. Skip only an identical pending one.
-				if ( ! \as_has_scheduled_action( self::SYNC_READERS_HOOK, $args, 'newspack' ) ) {
-					\as_enqueue_async_action( self::SYNC_READERS_HOOK, $args, 'newspack' );
-				}
-			}
-		}
-	}
-
-	/**
-	 * Sync a batch of readers' contacts. Readers deleted since the batch was
-	 * queued are skipped.
-	 *
-	 * @param int[]  $user_ids Readers to sync.
-	 * @param string $context  Why they need syncing.
-	 */
-	public static function sync_readers( $user_ids, $context = '' ): void {
-		foreach ( (array) $user_ids as $user_id ) {
-			$user_id = (int) $user_id;
-			if ( $user_id > 0 && \get_userdata( $user_id ) ) {
-				Contact_Sync::sync_contact( $user_id, (string) $context );
+	private static function schedule_syncs( array $user_ids, string $context ): void {
+		foreach ( array_unique( array_filter( array_map( 'intval', $user_ids ) ) ) as $user_id ) {
+			$args = [ $user_id, $context ];
+			// Not AS's $unique flag, which ignores the arguments and would keep only the first reader.
+			if ( ! \as_has_scheduled_action( 'newspack_scheduled_esp_sync', $args, 'newspack' ) ) {
+				\as_enqueue_async_action( 'newspack_scheduled_esp_sync', $args, 'newspack' );
 			}
 		}
 	}

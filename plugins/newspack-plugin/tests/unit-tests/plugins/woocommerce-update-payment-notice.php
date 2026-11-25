@@ -155,40 +155,6 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Register an active gift of a product, bought by one reader for another.
-	 * The gift is listed among the recipient's subscriptions, as WooCommerce
-	 * Subscriptions Gifting lists it.
-	 *
-	 * @param int $purchaser_id Buyer's user ID.
-	 * @param int $recipient_id Recipient's user ID.
-	 * @param int $product_id   Product ID granted by the gift.
-	 * @return WC_Subscription
-	 */
-	private function make_active_gift( $purchaser_id, $recipient_id, $product_id ) {
-		$gift = wcs_create_subscription(
-			[
-				'customer_id' => $purchaser_id,
-				'status'      => 'active',
-				'products'    => [ $product_id ],
-				'items'       => [ $this->make_line_item( $product_id ) ],
-			]
-		);
-		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
-		add_filter(
-			'wcs_get_users_subscriptions',
-			function ( $subscriptions, $user_id ) use ( $gift, $recipient_id ) {
-				if ( (int) $user_id === (int) $recipient_id ) {
-					$subscriptions[ $gift->get_id() ] = $gift;
-				}
-				return $subscriptions;
-			},
-			10,
-			2
-		);
-		return $gift;
-	}
-
-	/**
 	 * Statuses that must NOT produce a notice even when needs_payment() is true.
 	 *
 	 * @return array<string,array{0:string}>
@@ -558,69 +524,46 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Another active subscription the reader holds for the same product
-	 * suppresses the notice (regression guard).
+	 * Another active subscription of the product, as [ who it belongs to, whether the notice shows ].
+	 *
+	 * @return array[]
 	 */
-	public function test_no_notice_when_reader_holds_another_active_subscription_for_the_product() {
+	public function data_other_active_subscriptions() {
+		return [
+			'the reader\'s own'           => [ 'own', false ],
+			'a gift the reader received'  => [ 'received', false ],
+			'a gift the reader gave away' => [ 'given', true ],
+		];
+	}
+
+	/**
+	 * Another active subscription of the product hides the notice only when the
+	 * reader holds it: a gift they gave away gives them no access.
+	 *
+	 * @dataProvider data_other_active_subscriptions
+	 *
+	 * @param string $kind  Whose subscription it is.
+	 * @param bool   $shows Whether the notice shows.
+	 */
+	public function test_other_active_subscription_hides_the_notice_only_when_held( $kind, $shows ) {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product(
+		$other_id    = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$product_id  = wc_create_mock_product( [ 'id' => 4242 ] )->get_id();
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product_id );
+		$active = wcs_create_subscription(
 			[
-				'id'   => 4242,
-				'name' => 'Newsroom Pro',
-			]
-		);
-		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
-		wcs_create_subscription(
-			[
-				'customer_id' => $customer_id,
+				'customer_id' => 'received' === $kind ? $other_id : $customer_id,
 				'status'      => 'active',
-				'products'    => [ $product->get_id() ],
-				'items'       => [ $this->make_line_item( $product->get_id() ) ],
+				'items'       => [ $this->make_line_item( $product_id ) ],
 			]
 		);
+		if ( 'own' !== $kind ) {
+			$recipient_id = 'received' === $kind ? $customer_id : $other_id;
+			\WCS_Gifting::$recipients[ $active->get_id() ] = $recipient_id;
+			add_filter( 'wcs_get_users_subscriptions', fn( $subs, $user_id ) => (int) $user_id === $recipient_id ? $subs + [ $active->get_id() => $active ] : $subs, 10, 2 );
+		}
 
-		$this->assertSame( [], $this->get_notices(), 'An active subscription the reader holds for the product must suppress the notice.' );
-	}
-
-	/**
-	 * An active gift the reader bought for someone else belongs to its
-	 * recipient. It gives the reader no access, so it must not hide the notice
-	 * for the reader's own lapsed subscription.
-	 */
-	public function test_notice_fires_when_the_only_active_subscription_is_a_gift_given_away() {
-		$customer_id  = $this->make_current_customer();
-		$recipient_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$product      = wc_create_mock_product(
-			[
-				'id'   => 4242,
-				'name' => 'Newsroom Pro',
-			]
-		);
-		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
-		$this->make_active_gift( $customer_id, $recipient_id, $product->get_id() );
-
-		$notices = $this->get_notices();
-		$this->assertCount( 1, $notices, 'A gift given away must not suppress the buyer\'s own payment notice.' );
-		$this->assertStringContainsString( 'Newsroom Pro', $notices[0] );
-	}
-
-	/**
-	 * An active gift the reader received does give them the product, so it
-	 * suppresses the notice for their own lapsed subscription (regression guard).
-	 */
-	public function test_no_notice_when_reader_received_an_active_gift_for_the_product() {
-		$purchaser_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$recipient_id = $this->make_current_customer();
-		$product      = wc_create_mock_product(
-			[
-				'id'   => 4242,
-				'name' => 'Newsroom Pro',
-			]
-		);
-		$this->make_needs_payment_subscription( $recipient_id, 'on-hold', $product->get_id() );
-		$this->make_active_gift( $purchaser_id, $recipient_id, $product->get_id() );
-
-		$this->assertSame( [], $this->get_notices(), 'A gift the reader received must suppress the notice.' );
+		$this->assertCount( $shows ? 1 : 0, $this->get_notices() );
 	}
 
 	/**

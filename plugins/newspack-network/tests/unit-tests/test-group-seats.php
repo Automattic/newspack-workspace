@@ -10,6 +10,7 @@ use Newspack_Network\Woocommerce_Subscriptions\Group_Seats;
 require_once dirname( __DIR__ ) . '/mocks/class-group-subscription.php';
 require_once dirname( __DIR__ ) . '/mocks/class-group-subscription-settings.php';
 require_once dirname( __DIR__ ) . '/mocks/wcs-functions.php';
+require_once dirname( __DIR__ ) . '/mocks/class-wcs-gifting.php';
 
 /**
  * How a site reports changes to the seats on its group subscriptions.
@@ -237,5 +238,73 @@ class TestGroupSeats extends WP_UnitTestCase {
 		$this->assertSame( 90, $data['id'] );
 		$this->assertSame( 'member@example.test', $data['email'] );
 		$this->assertSame( [], $data['products'] );
+	}
+
+	/**
+	 * Report what's queued, and the status each reported seat carries.
+	 *
+	 * @return array User ID => status.
+	 */
+	private function reported_statuses() {
+		Group_Seats::dispatch_queued();
+		$statuses = [];
+		foreach ( $this->reported as list( $user_id, $subscription_id ) ) {
+			$statuses[ $user_id ] = Group_Seats::get_event_data( $user_id, $subscription_id )['status_after'];
+		}
+		return $statuses;
+	}
+
+	/**
+	 * A gift's status change reports its recipient's seat, carrying the gift's status
+	 * even though the subscription isn't an enabled group.
+	 */
+	public function test_gift_status_change_reports_the_recipients_seat() {
+		$recipient = self::factory()->user->create();
+		$GLOBALS['newspack_network_test_group']['subscriptions'][90] = $this->subscription( 'pending-cancel' );
+		$GLOBALS['newspack_network_test_group']['settings'][90]      = [ 'enabled' => false ];
+		$GLOBALS['newspack_network_test_group']['recipients'][90]    = $recipient;
+
+		do_action( 'woocommerce_subscription_status_changed', 90, 'active', 'pending-cancel', null );
+
+		$this->assertSame( [ $recipient => 'pending-cancel' ], $this->reported_statuses() );
+	}
+
+	/**
+	 * Of the readers newspack-plugin reports for a gift, the current recipient's seat
+	 * is active and the other's (a moved gift's old recipient, or a cleared gift's
+	 * previous recipient and buyer) is cancelled.
+	 *
+	 * @dataProvider recipient_change_data
+	 *
+	 * @param string|null $meta Recipient meta after the change; null when it's the second reader.
+	 */
+	public function test_readers_changed_reports_each_readers_seat( $meta ) {
+		$first  = self::factory()->user->create();
+		$second = self::factory()->user->create();
+		$GLOBALS['newspack_network_test_group']['subscriptions'][90] = $this->subscription( 'active' );
+		$GLOBALS['newspack_network_test_group']['recipients'][90]    = $meta ?? $second;
+
+		do_action( 'newspack_subscription_readers_changed', [ $first, $second ], $this->subscription( 'active' ) );
+
+		$this->assertSame(
+			[
+				$first  => 'cancelled',
+				$second => null === $meta ? 'active' : 'cancelled',
+			],
+			$this->reported_statuses()
+		);
+	}
+
+	/**
+	 * Data provider for test_readers_changed_reports_each_readers_seat.
+	 *
+	 * @return array
+	 */
+	public function recipient_change_data() {
+		return [
+			'moved to the second reader' => [ null ],
+			'cleared to empty'           => [ '' ],
+			'cleared to zero'            => [ '0' ],
+		];
 	}
 }

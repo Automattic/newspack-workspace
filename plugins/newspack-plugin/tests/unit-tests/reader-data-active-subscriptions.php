@@ -438,6 +438,20 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A product's group toggle names none of the members it affects, so a list
+	 * computed no later than the last toggle is stale.
+	 */
+	public function test_stamp_from_before_a_product_group_toggle_is_stale() {
+		$owner_id = $this->create_reader();
+		$computed = time() - 60;
+		update_user_meta( $owner_id, Active_Subscriptions_Reader_Data::STAMP_META_KEY, $computed );
+		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+
+		update_option( Group_Subscription_Settings::PRODUCTS_CHANGED_AT_OPTION, $computed );
+		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $owner_id ) );
+	}
+
+	/**
 	 * Marking a reader stale drops the stamp, so their next page view recomputes.
 	 */
 	public function test_mark_stale_deletes_the_stamp() {
@@ -817,67 +831,6 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Clearing a gift's recipient (in the admin, or by deleting an account) fires
-	 * Newspack's own announcement instead of the WCS hook. The previous recipient
-	 * loses the product, and the buyer, who holds a subscription that is no longer
-	 * a gift, gains it, on their next view.
-	 */
-	public function test_clearing_a_gift_recipient_marks_them_and_the_buyer_stale() {
-		$buyer_id     = $this->create_reader();
-		$recipient_id = $this->create_reader();
-		$gift         = $this->create_gifted_subscription( $buyer_id, $recipient_id, 101 );
-		foreach ( [ $buyer_id, $recipient_id ] as $user_id ) {
-			Active_Subscriptions_Reader_Data::refresh( $user_id );
-		}
-		$this->assertSame( [ 101 ], $this->stored_products( $recipient_id ) );
-
-		unset( \WCS_Gifting::$recipients[ $gift->get_id() ] );
-		do_action( 'newspack_subscription_gift_recipient_cleared', $gift, $recipient_id );
-
-		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $recipient_id ) );
-		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $buyer_id ) );
-		$this->view_page_as( $recipient_id );
-		$this->view_page_as( $buyer_id );
-		$this->assertSame( [], $this->stored_products( $recipient_id ) );
-		$this->assertSame( [ 101 ], $this->stored_products( $buyer_id ) );
-	}
-
-	/**
-	 * A group that doesn't set its own on/off state follows its product's.
-	 * Turning group subscriptions off for the product names no group or member,
-	 * so every list computed before the change goes stale.
-	 */
-	public function test_turning_a_products_groups_off_marks_earlier_lists_stale() {
-		$enabled_key = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled';
-		$product_id  = $this->factory->post->create( [ 'post_type' => 'product' ] );
-		add_post_meta( $product_id, $enabled_key, 'yes' );
-		$product   = wc_create_mock_product(
-			[
-				'id'   => $product_id,
-				'type' => 'subscription',
-				'meta' => [ $enabled_key => 'yes' ],
-			]
-		);
-		$owner_id  = $this->create_reader();
-		$member_id = $this->create_reader();
-		$group     = $this->create_subscription( $owner_id, $product_id );
-		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
-		// Lists computed from here on postdate the product's last change.
-		update_option( 'newspack_group_subscription_products_changed_at', time() - MINUTE_IN_SECONDS );
-		$this->view_page_as( $member_id );
-		$this->assertSame( [ $product_id ], $this->stored_products( $member_id ), 'The group inherits the product setting.' );
-		$this->assertFalse( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
-
-		// What WooCommerce_Products::save_custom_product_options() writes when the box is unchecked.
-		$product->update_meta_data( $enabled_key, 'no' );
-		update_post_meta( $product_id, $enabled_key, 'no' );
-
-		$this->assertTrue( Active_Subscriptions_Reader_Data::is_stale( $member_id ) );
-		$this->view_page_as( $member_id );
-		$this->assertSame( [], $this->stored_products( $member_id ) );
-	}
-
-	/**
 	 * Turning a group off or on fires no subscription event either. Its members
 	 * hold the product only while it is on, so each is marked stale and the next
 	 * view settles them. The owner holds their own subscription either way.
@@ -984,7 +937,7 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 	/**
 	 * A list more than a day old is recomputed on the next view. This is what
 	 * catches a change no hook reports, such as a subscription edited in the
-	 * database.
+	 * database or a gift's recipient being cleared.
 	 */
 	public function test_day_old_stamp_is_recomputed_on_page_view() {
 		$owner_id     = $this->create_reader();

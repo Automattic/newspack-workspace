@@ -14,10 +14,8 @@ require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
 require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 
 /**
- * A subscription change recomputes the deals of the readers who hold it.
- *
- * Each test runs in its own process: the engine stand-in can't be undeclared,
- * and would switch the bridge on for every later test.
+ * Runs in its own process: the engine stand-in can't be undeclared, and would
+ * switch the bridge on for every later test.
  *
  * @group Dynamic_Pricing
  * @runTestsInSeparateProcesses
@@ -26,69 +24,29 @@ require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
 class Newspack_Test_Available_Deals_Bridge extends WP_UnitTestCase {
 
 	/**
-	 * Load the engine stand-in and clear its record. The mock subscription store
-	 * is set here because an isolated process loads the mocks inside a function,
-	 * where their file-scope globals stay local.
+	 * A subscription event names its buyer. A gift's recipient holds it, so their
+	 * deals are recomputed too; a group's members own nothing, so theirs are not.
 	 */
-	public function set_up() {
-		parent::set_up();
+	public function test_subscription_event_refreshes_the_gift_recipient_only() {
 		global $subscriptions_database;
 		$subscriptions_database = [];
 		require_once dirname( __DIR__, 2 ) . '/mocks/available-deals-query-mock.php';
-		Available_Deals_Query::$customer_ids = [];
-		\WCS_Gifting::$recipients            = [];
-	}
-
-	/**
-	 * A gift's status change names its buyer. The recipient holds the gift, so
-	 * their deals are recomputed too.
-	 */
-	public function test_subscription_event_refreshes_the_gift_recipient() {
-		$buyer_id     = self::factory()->user->create();
-		$recipient_id = self::factory()->user->create();
-		$gift         = wcs_create_subscription(
+		[ $buyer_id, $recipient_id, $member_id ] = self::factory()->user->create_many( 3 );
+		$gift = wcs_create_subscription(
 			[
 				'customer_id' => $buyer_id,
-				'status'      => 'cancelled',
-			]
-		);
-		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
-
-		Available_Deals_Bridge::refresh_on_event(
-			time(),
-			[
-				'user_id'         => $buyer_id,
-				'subscription_id' => $gift->get_id(),
-			]
-		);
-
-		$this->assertSame( [ $buyer_id, $recipient_id ], Available_Deals_Query::$customer_ids );
-	}
-
-	/**
-	 * Deals follow the reader's own subscriptions, so a group's members are left
-	 * alone: a group can have hundreds, and none of them owns the subscription.
-	 */
-	public function test_subscription_event_leaves_group_members_alone() {
-		$owner_id  = self::factory()->user->create();
-		$member_id = self::factory()->user->create();
-		$group     = wcs_create_subscription(
-			[
-				'customer_id' => $owner_id,
-				'status'      => 'cancelled',
 				'meta'        => [ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' => 'yes' ],
 			]
 		);
-		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		\WCS_Gifting::$recipients = [ $gift->get_id() => $recipient_id ];
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $gift->get_id() );
+		$data = [
+			'user_id'         => $buyer_id,
+			'subscription_id' => $gift->get_id(),
+		];
 
-		Available_Deals_Bridge::refresh_on_event(
-			time(),
-			[
-				'user_id'         => $owner_id,
-				'subscription_id' => $group->get_id(),
-			]
-		);
+		Available_Deals_Bridge::refresh_on_event( time(), $data );
 
-		$this->assertSame( [ $owner_id ], Available_Deals_Query::$customer_ids );
+		$this->assertSame( [ $buyer_id, $recipient_id ], Available_Deals_Query::$customer_ids );
 	}
 }

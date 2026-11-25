@@ -57,16 +57,9 @@ class Group_Subscription_Settings {
 
 	/**
 	 * Option holding when a product's group subscription toggle last changed, as a
-	 * Unix timestamp. Groups with no setting of their own follow their product's,
-	 * so reader data computed before then may count members of a group that is
-	 * now off, or miss members of one now on.
+	 * Unix timestamp. Groups inherit it, so reader data computed earlier may be stale.
 	 */
 	const PRODUCTS_CHANGED_AT_OPTION = 'newspack_group_subscription_products_changed_at';
-
-	/**
-	 * Post types whose group subscription toggle groups can inherit.
-	 */
-	const PRODUCT_POST_TYPES = [ 'product', 'product_variation' ];
 
 	/**
 	 * Initialize hooks and filters.
@@ -101,8 +94,7 @@ class Group_Subscription_Settings {
 		// Clear group subscription IDs cache when product group settings change.
 		\add_action( 'woocommerce_process_product_meta', [ __CLASS__, 'maybe_clear_cache_on_product_save' ] );
 
-		// Record when a product's group toggle changes, which turns inheriting groups
-		// on or off with no event naming them.
+		// A product's group toggle turns inheriting groups on or off with no event naming them.
 		\add_action( 'added_post_meta', [ __CLASS__, 'maybe_record_product_change' ], 10, 3 );
 		\add_action( 'updated_post_meta', [ __CLASS__, 'maybe_record_product_change' ], 10, 3 );
 		\add_action( 'deleted_post_meta', [ __CLASS__, 'maybe_record_product_change' ], 10, 3 );
@@ -1436,24 +1428,18 @@ class Group_Subscription_Settings {
 	}
 
 	/**
-	 * Record the time when a product's group subscription toggle is added, changed
-	 * or removed.
-	 *
-	 * WooCommerce saves product meta through add_metadata(),
-	 * update_metadata_by_mid() and delete_metadata_by_mid(), which fire these core
-	 * hooks just as a direct update_post_meta() does. Core fires
-	 * `updated_post_meta` only when the stored value changed, so a product save
-	 * that leaves the toggle alone records nothing. The key is checked before the
-	 * post type because these hooks fire for every post meta write on the site.
-	 * Subscriptions stored as posts carry the same key; their changes fire
-	 * `newspack_group_subscription_settings_updated` instead.
+	 * Record when a product's group subscription toggle is added, changed or removed.
+	 * Core fires `updated_post_meta` only for a changed value, so a save that leaves
+	 * the toggle alone records nothing. Subscriptions stored as posts carry the same
+	 * key but announce their changes with `newspack_group_subscription_settings_updated`.
 	 *
 	 * @param int|int[] $meta_ids Meta ID(s).
 	 * @param int       $post_id  Post ID.
 	 * @param string    $meta_key Meta key.
 	 */
 	public static function maybe_record_product_change( $meta_ids, $post_id, $meta_key ) {
-		if ( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' !== $meta_key || ! in_array( \get_post_type( $post_id ), self::PRODUCT_POST_TYPES, true ) ) {
+		// The key first: these hooks fire for every post meta write on the site.
+		if ( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' !== $meta_key || ! in_array( \get_post_type( $post_id ), [ 'product', 'product_variation' ], true ) ) {
 			return;
 		}
 		// Autoloaded: reader data reads it on every logged-in page view.

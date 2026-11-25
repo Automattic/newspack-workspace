@@ -166,13 +166,8 @@ class Premium_Newsletters {
 		add_action( 'added_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 		add_action( 'deleted_user_meta', [ __CLASS__, 'maybe_enqueue_group_membership_check' ], 10, 3 );
 
-		// Handing a gift to another reader fires no subscription event, so the hook
-		// WCS Gifting fires is the only trigger for both readers. It fires whenever
-		// WCS sets a gift's recipient, not only on a hand-off: see the handler.
-		add_action( 'woocommerce_subscriptions_gifting_recipient_changed', [ __CLASS__, 'handle_gift_recipient_changed' ], 10, 3 );
-		// WCS removes a recipient with no hook when an admin clears it or an account
-		// is deleted. WooCommerce_Subscriptions_Gifting announces those instead.
-		add_action( 'newspack_subscription_gift_recipient_cleared', [ __CLASS__, 'handle_gift_recipient_cleared' ], 10, 2 );
+		// Nor does handing a gift to another reader, or turning a group on or off.
+		add_action( 'newspack_subscription_readers_changed', [ __CLASS__, 'handle_readers_changed' ], 10, 2 );
 
 		// Clean up the queue option on plugin deactivation.
 		add_action( 'newspack_deactivation', [ __CLASS__, 'unschedule_access_check_event' ] );
@@ -1454,9 +1449,8 @@ class Premium_Newsletters {
 	 *
 	 * @param array $data Data associated with the event.
 	 *
-	 * @return int[] Member user IDs, leaving out the owner and a gift recipient, who
-	 *               are checked on their own. Empty when the event names no enabled
-	 *               group subscription.
+	 * @return int[] Member user IDs, leaving out the owner and a gift recipient. Empty
+	 *               when the event names no enabled group subscription.
 	 */
 	private static function get_group_member_ids( $data ) {
 		if ( empty( $data['subscription_id'] ) ) {
@@ -1474,9 +1468,8 @@ class Premium_Newsletters {
 	 *
 	 * @param array $data Data associated with the event.
 	 *
-	 * @return int The recipient's user ID, or 0 when the event names no gifted
-	 *             subscription, the gift has no recipient account (none yet, or
-	 *             it was deleted), or its recipient is the user the event names.
+	 * @return int The recipient's user ID, or 0 when the event names no gift with a
+	 *             recipient account, or its recipient is the user the event names.
 	 */
 	private static function get_gift_recipient_id( array $data ): int {
 		if ( empty( $data['subscription_id'] ) ) {
@@ -1488,79 +1481,27 @@ class Premium_Newsletters {
 
 	/**
 	 * Queue access checks for the readers a change of holder affects, because no
-	 * subscription event fires when an admin reassigns a gift.
+	 * subscription event fires when a gift changes hands or a group is turned on or off.
 	 *
-	 * The holder is the recipient, or the buyer when the subscription isn't a
-	 * gift. The new holder is checked for lists to add. The previous one only loses
-	 * lists: a remove-only check can't re-add one they left. With no previous
-	 * recipient, that check goes to the buyer, since an admin may have just given
-	 * the buyer's subscription a recipient.
+	 * The reader who holds the subscription now is checked for lists to add. The
+	 * others only lose lists: a remove-only check can't re-add one they left. The
+	 * holder is the gift's recipient, or the buyer when it isn't a gift. A gift that
+	 * lost its recipient account but kept the address is still a gift, which content
+	 * gates give to no one.
 	 *
-	 * A gift bought at checkout keeps its recipient's email address when an admin
-	 * clears the recipient, so WCS still counts it as a gift and content gates give
-	 * it to no one. Only a gift with no address, one an admin created on the edit
-	 * screen, goes back to its buyer.
-	 *
-	 * WCS fires this hook every time it saves a gift's recipient, changed or not:
-	 * when the gift's parent order or a switch order is marked processing or
-	 * completed, and when an admin reassigns the gift. Renewal orders never fire
-	 * it. Because one order can fire it more than once with the same reader, an
-	 * unchanged holder is skipped: a recheck could let auto-signup re-add a list
-	 * they left. Clearing a recipient on the edit screen or deleting an account
-	 * fires no hook; handle_gift_recipient_cleared() calls this with no new
-	 * recipient instead.
-	 *
-	 * @param \WC_Subscription $subscription     The subscription.
-	 * @param int              $new_recipient_id The new recipient's user ID, or 0 if none.
-	 * @param int              $old_recipient_id The previous recipient's user ID, or 0 if none.
+	 * @param int[]            $user_ids     Readers who may have gained or lost the subscription.
+	 * @param \WC_Subscription $subscription The subscription.
 	 *
 	 * @return void
 	 */
-	public static function handle_gift_recipient_changed( $subscription, $new_recipient_id, $old_recipient_id ): void {
-		$new_recipient_id = (int) $new_recipient_id;
-		$old_recipient_id = (int) $old_recipient_id;
-		$buyer_id         = (int) $subscription->get_customer_id();
-		if ( $new_recipient_id > 0 ) {
-			$new_holder_id = $new_recipient_id;
-		} elseif ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
-			// Unlike WooCommerce_Subscriptions_Gifting::get_holder_id(), which gives
-			// such a gift to the buyer: content gates give it to no one.
-			$new_holder_id = 0;
-		} else {
-			$new_holder_id = $buyer_id;
+	public static function handle_readers_changed( $user_ids, $subscription ): void {
+		$holder_id = WooCommerce_Subscriptions_Gifting::get_recipient_id( $subscription );
+		if ( ! $holder_id && ! ( class_exists( 'WCS_Gifting' ) && \WCS_Gifting::is_gifted_subscription( $subscription ) ) ) {
+			$holder_id = (int) $subscription->get_customer_id();
 		}
-		$previous_holder_id = $old_recipient_id > 0 ? $old_recipient_id : $buyer_id;
-		if ( $new_holder_id === $previous_holder_id ) {
-			return;
-		}
-		if ( $new_holder_id > 0 ) {
-			self::add_user_to_queue( $new_holder_id, self::SOURCE_GIFT_RECEIVED );
-		}
-		if ( $previous_holder_id > 0 ) {
-			self::add_user_to_queue( $previous_holder_id, self::SOURCE_GIFT_REMOVED );
-		}
-	}
-
-	/**
-	 * Recheck a gift's readers when it loses its recipient without the hook WCS
-	 * fires for a change of recipient.
-	 *
-	 * WCS removes the recipient with no hook when an admin clears it on the edit
-	 * screen, and when the recipient's or the buyer's account is deleted, so without
-	 * this the former recipient would keep the gift's lists and a buyer who gets the
-	 * subscription back would never be checked. WooCommerce_Subscriptions_Gifting
-	 * announces those removals.
-	 *
-	 * @param \WC_Subscription $subscription          The gift.
-	 * @param int              $previous_recipient_id The recipient it had before.
-	 *
-	 * @return void
-	 */
-	public static function handle_gift_recipient_cleared( $subscription, $previous_recipient_id ): void {
-		if ( ! $subscription instanceof \WC_Subscription ) {
-			return;
-		}
-		self::handle_gift_recipient_changed( $subscription, 0, (int) $previous_recipient_id );
+		$user_ids = array_map( 'intval', (array) $user_ids );
+		self::add_users_to_queue( array_intersect( $user_ids, [ $holder_id ] ), self::SOURCE_GIFT_RECEIVED );
+		self::add_users_to_queue( array_diff( $user_ids, [ $holder_id ] ), self::SOURCE_GIFT_REMOVED );
 	}
 
 	/**
@@ -1627,9 +1568,7 @@ class Premium_Newsletters {
 
 	/**
 	 * Whether a subscription event can change what its readers are entitled to.
-	 *
-	 * See WooCommerce_Connection::status_change_affects_access() for which status
-	 * moves count. An event with no status pair counts as a change.
+	 * See WooCommerce_Connection::status_change_affects_access().
 	 *
 	 * @param array $data Data associated with the event.
 	 *

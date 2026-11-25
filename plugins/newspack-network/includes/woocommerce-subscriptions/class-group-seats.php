@@ -21,6 +21,9 @@ use Newspack_Network\Woocommerce\Events as Woo_Events;
  * a group, deleting a user), so the meta itself is watched. A deleted user is gone by
  * the end of the request, so the member's email is kept when the seat is queued and
  * the seat is reported as cancelled.
+ *
+ * A gift subscription's recipient holds a seat on it too, read through WooCommerce
+ * Subscriptions' gifting class.
  */
 class Group_Seats {
 
@@ -67,6 +70,7 @@ class Group_Seats {
 		add_action( 'delete_user_meta', [ __CLASS__, 'queue_from_meta_ids' ], 10, 3 );
 		add_action( 'woocommerce_subscription_status_changed', [ __CLASS__, 'queue_subscription_members' ] );
 		add_action( 'newspack_group_subscription_settings_updated', [ __CLASS__, 'queue_from_settings' ], 10, 2 );
+		add_action( 'newspack_subscription_readers_changed', [ __CLASS__, 'queue_readers' ], 10, 2 );
 		add_action( 'set_user_role', [ __CLASS__, 'queue_user_seats' ] );
 		add_action( 'add_user_role', [ __CLASS__, 'queue_user_seats' ] );
 		add_action( 'remove_user_role', [ __CLASS__, 'queue_user_seats' ] );
@@ -159,6 +163,18 @@ class Group_Seats {
 	}
 
 	/**
+	 * Queue the readers newspack-plugin says gained or lost a seat or gift on a subscription.
+	 *
+	 * @param int[]                $user_ids     User IDs.
+	 * @param \WC_Subscription|int $subscription Subscription.
+	 */
+	public static function queue_readers( $user_ids, $subscription ) {
+		foreach ( (array) $user_ids as $user_id ) {
+			self::queue( $user_id, is_object( $subscription ) ? $subscription->get_id() : $subscription );
+		}
+	}
+
+	/**
 	 * Queue a seat, keeping the member's email in case the account goes before the seat is reported.
 	 *
 	 * @param int   $user_id         Member user ID.
@@ -246,6 +262,8 @@ class Group_Seats {
 			&& ! empty( $settings['enabled'] )
 			&& in_array( $subscription_id, array_map( 'absint', get_user_meta( $user_id, self::MEMBER_META_KEY, false ) ), true )
 			&& \Newspack\Group_Subscription::is_eligible_member( $user_id );
+		// A gift's current recipient holds a seat whatever the group settings say.
+		$seat_active = $seat_active || ( $user && self::get_gift_recipient_id( $subscription ) === $user_id );
 		return self::build_event_data( $email, $user_id, $subscription, $seat_active );
 	}
 
@@ -259,7 +277,7 @@ class Group_Seats {
 	 * @param string $email        Member email.
 	 * @param int    $user_id      Member user ID.
 	 * @param object $subscription The group subscription.
-	 * @param bool   $seat_active  Whether the member still holds an eligible seat on an enabled group.
+	 * @param bool   $seat_active  Whether the member still holds an eligible seat on an enabled group, or the gift.
 	 * @return array
 	 */
 	public static function build_event_data( $email, $user_id, $subscription, $seat_active ) {
@@ -274,7 +292,8 @@ class Group_Seats {
 
 	/**
 	 * IDs of the users holding a seat on a subscription, from the meta itself
-	 * (see MEMBER_META_KEY for why not newspack-plugin's `get_members()`).
+	 * (see MEMBER_META_KEY for why not newspack-plugin's `get_members()`), plus a
+	 * gift's recipient.
 	 *
 	 * Keep `fields => 'ID'`: newspack-plugin's `get_members()` runs the same SQL, and
 	 * WordPress caches user queries by their SQL alone, so a different `fields` shape
@@ -284,7 +303,7 @@ class Group_Seats {
 	 * @return int[]
 	 */
 	public static function get_member_ids( $subscription_id ) {
-		return array_map(
+		$member_ids = array_map(
 			'intval',
 			get_users(
 				[
@@ -299,5 +318,27 @@ class Group_Seats {
 				]
 			)
 		);
+		$recipient_id = self::get_gift_recipient_id( $subscription_id );
+		if ( $recipient_id && ! in_array( $recipient_id, $member_ids, true ) ) {
+			$member_ids[] = $recipient_id;
+		}
+		return $member_ids;
+	}
+
+	/**
+	 * The recipient of a gift subscription, read through WooCommerce Subscriptions only,
+	 * which works whether or not newspack-plugin is active.
+	 *
+	 * @param \WC_Subscription|int $subscription Subscription or its ID.
+	 * @return int 0 when it isn't a gift or its recipient has no account.
+	 */
+	private static function get_gift_recipient_id( $subscription ) {
+		if ( ! class_exists( 'WCS_Gifting' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return 0;
+		}
+		$subscription = is_object( $subscription ) ? $subscription : wcs_get_subscription( $subscription );
+		$recipient_id = $subscription ? \WCS_Gifting::get_recipient_user( $subscription ) : '';
+		// The meta can be '' or '0' on a subscription that was never a gift.
+		return is_numeric( $recipient_id ) ? absint( $recipient_id ) : 0;
 	}
 }

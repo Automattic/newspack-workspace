@@ -9,9 +9,7 @@ use Newspack\Access_Rules;
 use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
-
-require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
-require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
+use Newspack\Member_Body_Class;
 
 /**
  * Member_Body_Class test case.
@@ -128,7 +126,6 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_all_filters( 'newspack_reader_activation_enabled' );
-		\WCS_Gifting::$recipients = [];
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -521,154 +518,30 @@ class Newspack_Test_Member_Body_Class extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A gift's status change re-checks its recipient, whose access follows the
-	 * buyer's subscription.
+	 * A status change re-checks a gift's recipient and a group's members as well as the
+	 * customer, and a change of holder or of group membership re-checks the readers it names.
 	 */
-	public function test_subscription_status_change_clears_the_gift_recipients_result() {
-		$this->make_gate();
-		$buyer_id     = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$recipient_id = $this->reader_id;
-		$gift         = wcs_create_subscription(
-			[
-				'customer_id' => $buyer_id,
-				'status'      => 'active',
-			]
-		);
-		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
-		self::$admitted                               = [ $recipient_id ];
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $recipient_id ) );
+	public function test_reader_changes_clear_cached_results() {
+		require_once dirname( __DIR__, 2 ) . '/mocks/wc-mocks.php';
+		require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
+		global $subscriptions_database;
+		$subscriptions_database = [];
+		[ $recipient_id, $member_id, $holder_id, $joiner_id ] = self::factory()->user->create_many( 4 );
+		$subscription = wcs_create_subscription( [ 'customer_id' => $this->reader_id ] );
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+		$user_ids = [ $this->reader_id, $recipient_id, $member_id, $holder_id, $joiner_id ];
+		foreach ( $user_ids as $user_id ) {
+			wp_cache_set( $user_id, 'yes', Member_Body_Class::CACHE_GROUP );
+		}
 
-		self::$admitted = [];
-		wp_set_current_user( 0 );
-		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscription_status_updated', $gift, 'on-hold', 'active' );
+		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscription_status_updated', $subscription, 'on-hold', 'active' );
+		$this->fire_with_only_member_body_class_listening( 'newspack_subscription_readers_changed', [ $holder_id ], $subscription );
+		$this->fire_with_only_member_body_class_listening( 'newspack_group_subscription_memberships_changed', $joiner_id );
+		\WCS_Gifting::$recipients = [];
 
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $recipient_id ) );
-	}
-
-	/**
-	 * A group subscription's status change re-checks its members, whose access
-	 * follows the owner's subscription.
-	 */
-	public function test_subscription_status_change_clears_group_members_results() {
-		$this->make_gate();
-		$owner_id  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$member_id = $this->reader_id;
-		$group     = wcs_create_subscription(
-			[
-				'customer_id' => $owner_id,
-				'status'      => 'active',
-				'meta'        => [ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' => 'yes' ],
-			]
-		);
-		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
-		self::$admitted = [ $member_id ];
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $member_id ) );
-
-		self::$admitted = [];
-		wp_set_current_user( 0 );
-		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscription_status_updated', $group, 'on-hold', 'active' );
-
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $member_id ) );
-	}
-
-	/**
-	 * Joining a group re-checks the new member at once.
-	 */
-	public function test_joining_a_group_clears_the_members_result() {
-		$this->make_gate();
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $this->reader_id ) );
-
-		self::$admitted = [ $this->reader_id ];
-		wp_set_current_user( 0 );
-		$this->fire_with_only_member_body_class_listening( 'newspack_group_subscription_memberships_changed', $this->reader_id, [ 123 ], [] );
-
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $this->reader_id ) );
-	}
-
-	/**
-	 * Handing a gift to someone else re-checks both recipients.
-	 */
-	public function test_reassigning_a_gift_clears_both_recipients_results() {
-		$this->make_gate();
-		$old_id = $this->reader_id;
-		$new_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$gift   = wcs_create_subscription(
-			[
-				'customer_id' => self::factory()->user->create( [ 'role' => 'subscriber' ] ),
-				'status'      => 'active',
-			]
-		);
-		self::$admitted = [ $old_id ];
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $old_id ) );
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $new_id ) );
-
-		self::$admitted = [ $new_id ];
-		wp_set_current_user( 0 );
-		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscriptions_gifting_recipient_changed', $gift, $new_id, $old_id );
-
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $old_id ) );
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $new_id ) );
-	}
-
-	/**
-	 * A subscription that becomes a gift was the buyer's own until then. The hook
-	 * reports no earlier recipient, so the buyer is re-checked.
-	 */
-	public function test_gifting_a_buyers_own_subscription_clears_the_buyers_result() {
-		$this->make_gate();
-		$buyer_id = $this->reader_id;
-		$gift     = wcs_create_subscription(
-			[
-				'customer_id' => $buyer_id,
-				'status'      => 'active',
-			]
-		);
-		self::$admitted = [ $buyer_id ];
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $buyer_id ) );
-
-		self::$admitted = [];
-		wp_set_current_user( 0 );
-		$recipient_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$this->fire_with_only_member_body_class_listening( 'woocommerce_subscriptions_gifting_recipient_changed', $gift, $recipient_id, 0 );
-
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $buyer_id ) );
-	}
-
-	/**
-	 * Clearing a gift's recipient re-checks them and the buyer, who holds a
-	 * subscription that is no longer a gift.
-	 */
-	public function test_clearing_a_gift_recipient_clears_their_and_the_buyers_results() {
-		$this->make_gate();
-		$recipient_id = $this->reader_id;
-		$buyer_id     = self::factory()->user->create( [ 'role' => 'subscriber' ] );
-		$gift         = wcs_create_subscription(
-			[
-				'customer_id' => $buyer_id,
-				'status'      => 'active',
-			]
-		);
-		self::$admitted = [ $recipient_id ];
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $recipient_id ) );
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $buyer_id ) );
-
-		self::$admitted = [ $buyer_id ];
-		wp_set_current_user( 0 );
-		$this->fire_with_only_member_body_class_listening( 'newspack_subscription_gift_recipient_cleared', $gift, $recipient_id );
-
-		$this->assertNotContains( self::MEMBER_CLASS, $this->body_classes_as( $recipient_id ) );
-		$this->assertContains( self::MEMBER_CLASS, $this->body_classes_as( $buyer_id ) );
-	}
-
-	/**
-	 * Body classes for a request by the given reader.
-	 *
-	 * @param int $user_id User ID.
-	 * @return string[]
-	 */
-	private function body_classes_as( $user_id ) {
-		wp_set_current_user( $user_id );
-		return $this->body_classes();
+		$this->assertSame( array_fill( 0, 5, false ), array_map( fn( $user_id ) => wp_cache_get( $user_id, Member_Body_Class::CACHE_GROUP ), $user_ids ) );
 	}
 
 	/**

@@ -60,10 +60,8 @@ final class Available_Deals_Bridge {
 	}
 
 	/**
-	 * Data-event handler: recompute available deals for the event's user. A
-	 * subscription event names the purchaser only, so a gift's recipient, who
-	 * holds the gift, is recomputed too. Group members are not: none of them owns
-	 * the subscription, and a group can have hundreds.
+	 * Data-event handler: recompute available deals for the event's user, and for
+	 * a gift's recipient, who holds it. Group members own nothing, so they are left out.
 	 *
 	 * @param int   $timestamp Event timestamp.
 	 * @param array $data      Event data (carries user_id, and subscription_id for subscription events).

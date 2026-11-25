@@ -11,6 +11,7 @@ use Newspack_Network\Woocommerce_Subscriptions\Group_Seats;
 require_once dirname( __DIR__ ) . '/mocks/class-group-subscription.php';
 require_once dirname( __DIR__ ) . '/mocks/class-group-subscription-settings.php';
 require_once dirname( __DIR__ ) . '/mocks/wcs-functions.php';
+require_once dirname( __DIR__ ) . '/mocks/class-wcs-gifting.php';
 
 /**
  * What the seat backfill sends for seats whose group is gone.
@@ -77,5 +78,29 @@ class TestGroupSeatBackfiller extends WP_UnitTestCase {
 		add_user_meta( $member, Group_Seats::MEMBER_META_KEY, 90 );
 
 		$this->assertSame( [], $this->events() );
+	}
+
+	/**
+	 * A gifted subscription is listed, and its recipient's seat sent as active and
+	 * stamped with the subscription's creation date.
+	 */
+	public function test_gift_recipients_seat_is_sent() {
+		$recipient    = self::factory()->user->create( [ 'user_email' => 'recipient@example.test' ] );
+		$subscription = $this->getMockBuilder( stdClass::class )->addMethods( [ 'get_id', 'get_status', 'get_items', 'get_date_created' ] )->getMock();
+		$subscription->method( 'get_id' )->willReturn( 95 );
+		$subscription->method( 'get_status' )->willReturn( 'active' );
+		$subscription->method( 'get_items' )->willReturn( [] );
+		$subscription->method( 'get_date_created' )->willReturn( new DateTime( '@1700000000' ) );
+		$GLOBALS['newspack_network_test_group']['subscriptions'][95] = $subscription;
+		$GLOBALS['newspack_network_test_group']['recipients'][95]    = $recipient;
+		$GLOBALS['newspack_network_test_group']['order_query_ids']   = [ 95 ];
+
+		$events = $this->events();
+
+		$this->assertSame( '_recipient_user', $GLOBALS['newspack_network_test_group']['order_queries'][0]['meta_query'][0]['key'] ?? null );
+		$this->assertCount( 1, $events );
+		$this->assertSame( 'recipient@example.test', $events[0]->get_email() );
+		$this->assertSame( 'active', $events[0]->get_status_after() );
+		$this->assertSame( 1700000000, $events[0]->get_timestamp() );
 	}
 }

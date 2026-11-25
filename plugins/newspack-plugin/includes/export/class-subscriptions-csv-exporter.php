@@ -437,10 +437,8 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * An owner whose account was deleted has no access and gets no row; the
 	 * subscription still appears through its members, if it has any.
 	 *
-	 * A gift's row goes to its recipient instead of the owner: the buyer pays
-	 * for it but has no access through it. A gift with no recipient account
-	 * (sent to an email that has none, or the account is gone) keeps the
-	 * owner's row.
+	 * A gift's row goes to its recipient: the buyer pays but has no access
+	 * through it. A gift with no recipient account keeps the owner's row.
 	 *
 	 * The Access Through values are fixed English strings rather than
 	 * translations, so spreadsheet filters and formulas built on them work on
