@@ -131,14 +131,15 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 	 * Create the ActiveCampaign campaign for a newsletter and return the
 	 * `public` value sent to ActiveCampaign.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int  $post_id Post ID.
+	 * @param bool $is_test Whether to create the campaign as a test send does.
 	 *
 	 * @return int
 	 */
-	private function create_campaign_public_flag( $post_id ) {
+	private function create_campaign_public_flag( $post_id, $is_test = false ) {
 		$create_campaign_method = new ReflectionMethod( Newspack_Newsletters_Active_Campaign::class, 'create_campaign' );
 		$create_campaign_method->setAccessible( true );
-		$result = $create_campaign_method->invoke( Newspack_Newsletters_Active_Campaign::instance(), get_post( $post_id ) );
+		$result = $create_campaign_method->invoke( Newspack_Newsletters_Active_Campaign::instance(), get_post( $post_id ), '', $is_test );
 		$this->assertNotWPError( $result );
 		$this->assertNotNull( $this->campaign_create_body, 'A campaign must be created.' );
 		return $this->campaign_create_body['public'];
@@ -189,6 +190,28 @@ class ActiveCampaignPublicCampaignTest extends WP_UnitTestCase {
 
 		$this->assertSame( (bool) $expected_public, Newspack_Newsletters_Active_Campaign::is_public_campaign( $post_id ) );
 		$this->assertSame( $expected_public, $this->create_campaign_public_flag( $post_id ) );
+	}
+
+	/**
+	 * A test send's campaign stays out of the archive, however the newsletter
+	 * and the site are set. Its draft would otherwise become a public campaign
+	 * if someone sent it from ActiveCampaign.
+	 *
+	 * @dataProvider archive_visibility_cases
+	 *
+	 * @param string|null $site_default    Site-wide option value, or null for unset.
+	 * @param bool        $is_public_on_web Whether the newsletter is "Email and web".
+	 * @param string      $choice          The newsletter's own choice.
+	 */
+	public function test_test_send_campaign_is_never_public( $site_default, $is_public_on_web, $choice ) {
+		if ( null !== $site_default ) {
+			update_option( Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_OPTION, $site_default );
+		}
+		$post_id = $this->create_newsletter();
+		update_post_meta( $post_id, 'is_public', $is_public_on_web );
+		update_post_meta( $post_id, Newspack_Newsletters_Active_Campaign::ARCHIVE_VISIBILITY_META, $choice );
+
+		$this->assertSame( 0, $this->create_campaign_public_flag( $post_id, true ) );
 	}
 
 	/**

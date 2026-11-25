@@ -1779,7 +1779,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 *
 	 * @param WP_Post $post          Post to create campaign for.
 	 * @param string  $campaign_name Optional custom title for this campaign.
-	 * @param bool    $is_test       Whether this campaign is a disposable test send. Test sends deliver via `action=test` with explicit recipient emails, so the campaign's segmentid is never used — segment validation is skipped to let publishers test newsletters that reference a deleted-but-still-saved segment.
+	 * @param bool    $is_test       Whether this campaign is a disposable test send. Test sends deliver via `action=test` with explicit recipient emails, so the campaign's segmentid is never used — segment validation is skipped to let publishers test newsletters that reference a deleted-but-still-saved segment. A test campaign is also always created private, whatever the newsletter's archive visibility.
 	 *
 	 * @return array|WP_Error Campaign data or error.
 	 */
@@ -1853,7 +1853,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$campaign_data = [
 			'type'                                  => 'single',
 			'status'                                => 0, // 0 = Draft; 1 = Scheduled.
-			'public'                                => (int) self::is_public_campaign( $post->ID ),
+			'public'                                => (int) ( ! $is_test && self::is_public_campaign( $post->ID ) ), // A test campaign stays a draft in ActiveCampaign; kept private so sending that draft from there can't put it in the archive.
 			'name'                                  => $campaign_name,
 			'fromname'                              => $from_name,
 			'fromemail'                             => $from_email,
