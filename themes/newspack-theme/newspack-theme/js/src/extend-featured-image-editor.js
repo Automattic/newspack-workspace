@@ -44,7 +44,6 @@ class RadioCustom extends Component {
 					},
 					{ label: __( 'Hidden', 'newspack-theme' ), value: 'hidden' },
 				] }
-				__nextHasNoMarginBottom
 				onChange={ value => {
 					this.setState( { value } );
 					updateFeaturedImagePosition( value, meta );
