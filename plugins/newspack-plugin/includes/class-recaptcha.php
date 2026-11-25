@@ -38,6 +38,10 @@ final class Recaptcha {
 
 		// Verify reCAPTCHA when adding new payment method.
 		\add_filter( 'woocommerce_add_payment_method_form_is_valid', [ __CLASS__, 'verify_recaptcha_on_add_payment_method' ] );
+
+		// Protect WooCommerce's My Account registration form.
+		\add_action( 'woocommerce_register_form', [ __CLASS__, 'render_woocommerce_registration_fields' ] );
+		\add_filter( 'woocommerce_process_registration_errors', [ __CLASS__, 'verify_woocommerce_registration' ] );
 	}
 
 	/**
@@ -607,6 +611,144 @@ final class Recaptcha {
 			return false;
 		}
 		return $is_valid;
+	}
+
+	/**
+	 * Mark WooCommerce's registration form for the reCAPTCHA client and show Google's notice.
+	 *
+	 * Runs inside the form. The client attaches to forms with a
+	 * data-newspack-recaptcha attribute, whose value is the v3 action name.
+	 * WooCommerce's own form tag has a hook for attributes, but the copy that
+	 * Teams for WooCommerce Memberships shows on its join-team page does not;
+	 * both fire this action. The client's stylesheet hides Google's badge, which
+	 * Google allows only when this notice is shown instead.
+	 *
+	 * On v3 the client fetches a token only once the form has been on screen
+	 * briefly, so a reader who submits sooner would be refused. The form holds
+	 * such a submission while it asks Google for a token, then sends it once,
+	 * through the same button so WooCommerce still sees `register`; clicks made
+	 * during the hold wait with it. If Google returns no token, or none arrives
+	 * within five seconds, it sends the form anyway, and the server refuses it.
+	 * Tokens expire after two minutes and the client refreshes only the field it
+	 * created, so when the hold adds the field itself it refreshes that token
+	 * every 30 seconds too. A form whose resend is stopped, by validation or by
+	 * a script that sends it later, then still goes out with a live token.
+	 * Remove this hold once the client holds early v3 submissions itself
+	 * (NPPM-3947), or both would send the form.
+	 *
+	 * v2 is left to the client, which holds a submission until the challenge
+	 * passes, but only once its widget has rendered; a submission made before
+	 * then is refused.
+	 */
+	public static function render_woocommerce_registration_fields() {
+		if ( ! self::can_use_captcha() ) {
+			return;
+		}
+		\wp_print_inline_script_tag( "document.currentScript.closest( 'form' ).setAttribute( 'data-newspack-recaptcha', 'woocommerce_register' );" );
+		if ( self::can_use_captcha( 'v3' ) ) {
+			$hold_script = <<<'JS'
+( function ( form, siteKey ) {
+	var pending = false;
+	var replaying = false;
+	form.addEventListener( 'submit', function ( event ) {
+		if ( replaying ) {
+			return;
+		}
+		if ( pending ) {
+			event.preventDefault();
+			return;
+		}
+		var field = form.querySelector( 'input[name="g-recaptcha-response"]' );
+		if ( field && field.value ) {
+			return;
+		}
+		event.preventDefault();
+		pending = true;
+		var done = false;
+		var submitter = event.submitter || form.querySelector( '[type="submit"][name="register"]' );
+		var release = function ( token ) {
+			if ( done ) {
+				return;
+			}
+			done = true;
+			pending = false;
+			if ( token ) {
+				field = form.querySelector( 'input[name="g-recaptcha-response"]' );
+				if ( ! field ) {
+					field = document.createElement( 'input' );
+					field.type = 'hidden';
+					field.name = 'g-recaptcha-response';
+					form.appendChild( field );
+					var added = field;
+					setInterval( function () {
+						window.grecaptcha.execute( siteKey, { action: 'woocommerce_register' } ).then( function ( fresh ) {
+							added.value = fresh;
+						}, function () {} );
+					}, 30000 );
+				}
+				field.value = token;
+			}
+			replaying = true;
+			try {
+				form.requestSubmit( submitter );
+			} finally {
+				replaying = false;
+			}
+		};
+		setTimeout( release, 5000 );
+		( function ask() {
+			if ( done ) {
+				return;
+			}
+			if ( ! window.grecaptcha || ! window.grecaptcha.ready ) {
+				setTimeout( ask, 100 );
+				return;
+			}
+			window.grecaptcha.ready( function () {
+				if ( done ) {
+					return;
+				}
+				window.grecaptcha.execute( siteKey, { action: 'woocommerce_register' } ).then( release, function () {
+					release();
+				} );
+			} );
+		} )();
+	} );
+} )( document.currentScript.closest( 'form' ), %s );
+JS;
+			\wp_print_inline_script_tag( sprintf( $hold_script, \wp_json_encode( self::get_site_key() ) ) );
+		}
+		?>
+		<p class="newspack-recaptcha-terms"><?php echo \wp_kses_post( self::get_terms_text() ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Refuse a My Account registration without a valid reCAPTCHA response.
+	 *
+	 * WooCommerce's handler creates an account for any submission that carries
+	 * the form's nonce, whatever the "registration open" setting and Reader
+	 * Activation say, so every submission is checked while reCAPTCHA is on. The
+	 * handler applies this filter before it creates the account or sends its
+	 * email. Newspack's own sign-up and checkout create customers through
+	 * wc_create_new_customer(), which doesn't apply it, so they keep their own
+	 * checks.
+	 *
+	 * @param \WP_Error $errors Errors WooCommerce and other plugins found in the submission.
+	 *
+	 * @return \WP_Error The same errors, plus the reCAPTCHA error if verification failed.
+	 */
+	public static function verify_woocommerce_registration( $errors ) {
+		$url                   = \home_url( \add_query_arg( null, null ) );
+		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', self::can_use_captcha(), $url, 'woocommerce_register' );
+		if ( ! $should_verify_captcha ) {
+			return $errors;
+		}
+		$check = self::verify_captcha();
+		if ( \is_wp_error( $check ) ) {
+			$errors->add( $check->get_error_code(), $check->get_error_message() );
+		}
+		return $errors;
 	}
 }
 
