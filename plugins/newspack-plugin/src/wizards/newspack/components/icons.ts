@@ -11,6 +11,7 @@ import {
 	currencyDollar,
 	envelope,
 	formatListBullets,
+	gift,
 	globe,
 	help,
 	lock,
@@ -30,7 +31,7 @@ import {
 /**
  * Internal dependencies
  */
-import { ad, chartReport, emailAd, gift } from '../../../../packages/icons';
+import { ad, chartReport, emailAd } from '../../../../packages/icons';
 
 /**
  * Export Dashboard Icons
@@ -42,6 +43,7 @@ export const icons = {
 	currencyDollar,
 	envelope,
 	formatListBullets,
+	gift,
 	globe,
 	help,
 	lock,
@@ -60,7 +62,6 @@ export const icons = {
 	ad,
 	chartReport,
 	emailAd,
-	gift,
 };
 
 export default icons;
