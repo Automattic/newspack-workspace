@@ -113,7 +113,10 @@ services:
       ## X-Forwarded-Proto, which the site reads to build its https URLs. The
       ## proxy would replace that header with its own. Trusting it adds nothing
       ## new: Apache took these headers from any local client before the proxy
-      ## sat in front of it.
+      ## sat in front of it. One difference remains: the proxy adds X-Real-Ip
+      ## with its own peer address to a request that has none, so code that
+      ## prefers that header over X-Forwarded-For sees a Docker address for a
+      ## tunnel that sends only the latter.
       - --entrypoints.web.forwardedheaders.insecure=true
       - --entrypoints.websecure.address=:443
       ## Traefik otherwise reports its version and the machine's public address

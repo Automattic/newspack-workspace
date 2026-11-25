@@ -123,8 +123,8 @@ domain_for_env() {
     grep 'WP_DOMAIN=' "$1" | head -1 | sed 's/.*WP_DOMAIN=//'
 }
 
-# An env's container name. Docker rejects dashes nowhere, but the name doubles
-# as a database-safe identifier elsewhere, so dashes become underscores.
+# An env's container name, as `n env create` writes it into the env's compose
+# file. The proxy's routes dial this name, so the two have to agree.
 env_container_name() {
     echo "newspack_env_$1" | tr '-' '_'
 }
@@ -238,7 +238,7 @@ write_proxy_route() {
 # starts, so the directory it mounts is there and is the user's. Docker would
 # otherwise create it as root on Linux.
 sync_proxy_routes() {
-    local f name domain route
+    local f name domain route claimed=" "
     main_proxy_route | write_proxy_route "$PROXY_ROUTES_DIR/main.yml" || return 1
     for f in "$NABSPATH"/docker-compose.env-*.yml; do
         [[ -f "$f" ]] || continue
@@ -247,6 +247,15 @@ sync_proxy_routes() {
         name="${name%.yml}"
         domain=$(domain_for_env "$f")
         [[ -n "$domain" ]] || continue
+        # `n env create` refuses a domain that is taken, but envs older than
+        # that check can share one. The proxy can send a name to one place, so
+        # the first env keeps it and the other gets no route.
+        if [[ "$claimed" == *" $domain "* ]]; then
+            echo "Warning: environment '$name' uses the domain $domain, which another environment already has. It gets no proxy route. Recreate it with another --domain." >&2
+            rm -f "$(proxy_route_file "$name")"
+            continue
+        fi
+        claimed="$claimed$domain "
         env_proxy_route "$name" "$domain" | write_proxy_route "$(proxy_route_file "$name")" || return 1
     done
     for route in "$PROXY_ROUTES_DIR"/env-*.yml; do
@@ -279,17 +288,25 @@ hosts_ip_for() {
 # Uses the passwordless wrapper when it is installed, sudo when there is a
 # terminal to ask on, and otherwise prints what to change. Returns 0 when the
 # file ends up right, 1 when it still needs a change by hand.
+#
+# Only a line that maps this domain alone is replaced. One that lists other
+# names too was written by hand, and removing it would take those names with
+# it, so it is reported instead.
 point_host_at_proxy() {
-    local domain="$1" current stale_line
+    local domain="$1" current stale_line shared_line=""
     current=$(hosts_ip_for "$domain")
     [[ "$current" == "$ENV_PROXY_IP" ]] && return 0
-    if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
+    if [[ -n "$current" ]] && ! awk -v d="$domain" -v ip="$current" '$1 == ip && NF == 2 && $2 == d { alone = 1 } END { exit !alone }' /etc/hosts 2>/dev/null; then
+        shared_line=1
+    fi
+    if [[ -n "$shared_line" ]]; then
+        : # Left for the warning below.
+    elif command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
         [[ -n "$current" ]] && sudo newspack-manage-host host-remove "$domain"
         sudo newspack-manage-host host-add "$ENV_PROXY_IP" "$domain"
     elif [ -t 0 ] && [ -t 1 ]; then
         echo "Pointing $domain at $ENV_PROXY_IP in /etc/hosts (requires sudo)..."
         if [[ -n "$current" ]]; then
-            # Only a line that maps this domain alone is ours to remove.
             stale_line="^[[:space:]]*${current//./\\.}[[:space:]]+${domain//./\\.}[[:space:]]*$"
             { sudo sed -i '' -E "/${stale_line}/d" /etc/hosts 2>/dev/null || \
                 sudo sed -i -E "/${stale_line}/d" /etc/hosts; }
@@ -360,9 +377,9 @@ drop_legacy_env_ports() {
     local generated='^      - "127\.0\.0\.[0-9]+:(80:80|443:443)"[[:space:]]*$'
     local header='^    ports:[[:space:]]*$'
     # The block runs until the next line that is not indented deeper than its
-    # key. Comments and blank lines inside it stay with it: ending the block at
-    # one would drop the key and leave a hand-added port below it stranded
-    # under whatever came before.
+    # key. Blank lines and comments stay with it at any indentation: ending the
+    # block at one would drop the key and leave a hand-added port below it
+    # stranded in whatever list came before.
     # The pattern travels through the environment: awk -v would eat its backslashes.
     GENERATED_PORT_LINE="$generated" awk '
         function flush_ports(   i) {
@@ -374,7 +391,7 @@ drop_legacy_env_ports() {
             entries = 0
         }
         /^    ports:[[:space:]]*$/ { flush_ports(); in_ports = 1; ports_line = $0; next }
-        in_ports && ($0 ~ /^[[:space:]]*$/ || $0 ~ /^     /) {
+        in_ports && ($0 ~ /^[[:space:]]*$/ || $0 ~ /^[[:space:]]*#/ || $0 ~ /^     /) {
             if ($0 ~ ENVIRON["GENERATED_PORT_LINE"]) next
             keep[++kept] = $0
             if ($0 ~ /^[[:space:]]*-[[:space:]]/) entries++

@@ -158,7 +158,9 @@ start() {
             domain=$(domain_for_env "$f")
             # An env still addressed by its loopback IP has no name to resolve.
             [[ -n "$domain" && "$domain" != "$(legacy_env_ip "$f")" ]] || continue
-            point_host_at_proxy "$domain"
+            # A hosts line that could not be fixed is reported, not fatal: the
+            # stack is up either way.
+            point_host_at_proxy "$domain" || true
         done
     fi
 }

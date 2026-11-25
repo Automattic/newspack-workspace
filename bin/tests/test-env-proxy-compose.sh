@@ -143,6 +143,16 @@ if [[ -e "$PROXY_ROUTES_DIR/env-gone.yml" ]]; then
 else
 	ok "the route of an env that no longer exists is removed"
 fi
+# Two envs made before `n env create` refused a taken domain. The proxy can send
+# a name to one container, so only one of them may have the route.
+legacy_file > "$NABSPATH/docker-compose.env-twin.yml"
+sync_warning=$(sync_proxy_routes 2>&1 >/dev/null)
+assert_contains "$sync_warning" "demo.test" "a domain claimed by two envs is reported"
+if [[ -e "$PROXY_ROUTES_DIR/env-demo.yml" && ! -e "$PROXY_ROUTES_DIR/env-twin.yml" ]]; then
+	ok "and routed to one of them only"
+else
+	fail "and routed to one of them only"
+fi
 rm -f "$NABSPATH"/docker-compose.env-*.yml
 
 echo "legacy_env_ip:"
@@ -174,6 +184,13 @@ assert_eq "$(legacy_env_ip "$WORK/custom.yml")" "" "while the generated 80/443 l
 legacy_file $'      # Xdebug\n      - "127.0.0.1:9003:9003"' > "$WORK/commented.yml"
 drop_legacy_env_ports "$WORK/commented.yml"
 assert_eq "$(grep -A2 '^    ports:' "$WORK/commented.yml")" $'    ports:\n      # Xdebug\n      - "127.0.0.1:9003:9003"' "a comment in the block stays with the hand-added port under the ports key"
+# The same for a comment that is not indented with the entries, at the key's
+# own depth or at the margin.
+for comment in '    # Xdebug' '# Xdebug'; do
+	legacy_file "$comment"$'\n      - "127.0.0.1:9003:9003"' > "$WORK/outdented.yml"
+	drop_legacy_env_ports "$WORK/outdented.yml"
+	assert_eq "$(grep -A2 '^    ports:' "$WORK/outdented.yml")" $'    ports:\n'"$comment"$'\n      - "127.0.0.1:9003:9003"' "a comment written as '$comment' does not end the ports block"
+done
 
 # An editor that leaves trailing whitespace must not strand the env on its old address.
 legacy_file | sed 's/:443:443"$/:443:443"  /' > "$WORK/trailing.yml"

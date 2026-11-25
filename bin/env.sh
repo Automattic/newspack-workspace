@@ -31,8 +31,16 @@ ip_for_env() {
 #
 # Args: domain, address to connect to.
 env_cert_served() {
-    local escaped="${1//./\\.}"
-    openssl s_client -connect "${2}:443" -servername "$1" </dev/null 2>/dev/null \
+    local escaped="${1//./\\.}" limit=()
+    # s_client waits forever on a peer that accepts the connection and never
+    # speaks TLS, so it runs under a time limit where the system has a way to
+    # set one.
+    if command -v timeout >/dev/null 2>&1; then
+        limit=(timeout 5)
+    elif command -v perl >/dev/null 2>&1; then
+        limit=(perl -e 'alarm shift; exec @ARGV' 5)
+    fi
+    "${limit[@]}" openssl s_client -connect "${2}:443" -servername "$1" </dev/null 2>/dev/null \
         | openssl x509 -noout -text 2>/dev/null \
         | grep -Eq "DNS:${escaped}(,|[[:space:]]|$)"
 }
@@ -161,7 +169,7 @@ each_worktree_in_env() {
 # The container's state as docker reports it, or "stopped" when it has none.
 env_status() {
     local container_name status
-    container_name=$(echo "newspack_env_$1" | tr '-' '_')
+    container_name=$(env_container_name "$1")
     if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
         echo "$status"
     else
@@ -346,8 +354,15 @@ case $1 in
         # from it, and two envs given one domain would both claim it.
         new_domain=$(printf '%s' "${domain:-${env_name}.test}" | tr '[:upper:]' '[:lower:]')
         domain_owner=""
+        # The main site answers at WP_DOMAIN, which .env can change from localhost.
+        main_domain=$( (
+            set -a
+            source "$NABSPATH/default.env"
+            [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
+            printf '%s' "${WP_DOMAIN:-localhost}"
+        ) 2>/dev/null | tr '[:upper:]' '[:lower:]')
         case "$new_domain" in
-            localhost|manager.com) domain_owner="the main container" ;;
+            localhost|manager.com|"$main_domain") domain_owner="the main container" ;;
         esac
         for site_dir in "$NABSPATH"/additional-sites-html/*/; do
             [[ -d "$site_dir" ]] || continue
@@ -406,7 +421,7 @@ case $1 in
             domain="${env_name}.test"
         fi
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
-        container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
+        container_name=$(env_container_name "$env_name")
         db_name=$(db_name_for_env "$env_name")
         # Create isolated html directory.
         mkdir -p "$NABSPATH/envs/${env_name}/html"
@@ -523,7 +538,7 @@ YAML
             echo "Error: environment '$env_name' not found. Run: n env create $env_name ..."
             exit 1
         fi
-        container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
+        container_name=$(env_container_name "$env_name")
         db_name=$(db_name_for_env "$env_name")
         domain=$(domain_for_env "$compose_file")
         ip=$(ip_for_env "$compose_file")
@@ -786,7 +801,7 @@ MIGRATE
         fi
         reject_extra_args "$@"
         validate_env_name "$env_name"
-        container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
+        container_name=$(env_container_name "$env_name")
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
         ;;
@@ -808,7 +823,7 @@ MIGRATE
         done
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
-        container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
+        container_name=$(env_container_name "$env_name")
         db_name=$(db_name_for_env "$env_name")
         test_db_name=$(test_db_name_for_env "$env_name")
         # Read domain, IP, and worktrees before removing compose file.
