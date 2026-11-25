@@ -50,6 +50,21 @@ class Nested_Blocks {
 	private static array $variables_maps = [];
 
 	/**
+	 * Number of nested renders currently parsing their markup.
+	 *
+	 * @var int
+	 */
+	private static int $parsing = 0;
+
+	/**
+	 * Whether the blocks being parsed are nested markup rather than the newsletter's own
+	 * content. Nested content (inserted posts, an ad) sets its own spacing.
+	 */
+	public static function is_parsing(): bool {
+		return self::$parsing > 0;
+	}
+
+	/**
 	 * Forget the cached theme variables. Called at the start of each render, so a change
 	 * to a newsletter's theme is picked up.
 	 */
@@ -66,7 +81,13 @@ class Nested_Blocks {
 	 * @return string Rendered email HTML.
 	 */
 	public static function render( string $markup, ?string $width = null ): string {
-		$blocks = self::strip_root_padding( parse_blocks( $markup ) );
+		++self::$parsing;
+		try {
+			$parsed = parse_blocks( $markup );
+		} finally {
+			--self::$parsing;
+		}
+		$blocks = self::strip_root_padding( $parsed );
 		if ( null !== $width && '' !== $width && class_exists( Blocks_Width_Preprocessor::class ) ) {
 			$blocks = self::clear_computed_column_widths( $blocks, self::parse_as_saved( $markup ) );
 			$blocks = ( new Blocks_Width_Preprocessor() )->preprocess(

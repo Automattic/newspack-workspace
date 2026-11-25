@@ -162,7 +162,9 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 			. '</div><!-- /wp:column --><!-- wp:column {"width":"50%"} --><div class="wp-block-column" style="flex-basis:50%"><!-- wp:paragraph --><p>Side</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->'
 		);
 
-		$this->assertSame( 2, substr_count( $html, 'width="153"' ), 'Expected the ad\'s two columns to split its 306px.' );
+		// 306px less the 32px gap, split in two; the second column carries the gap.
+		$this->assertStringContainsString( 'width="137"', $html, 'Expected the ad\'s first column to take half of its 306px, less the gap.' );
+		$this->assertStringContainsString( 'width="169"', $html, 'Expected the ad\'s second column to add the gap to its half.' );
 	}
 
 	/**
@@ -205,14 +207,15 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 
 	/**
 	 * Columns in a full-width band with zero side padding are sized to the content
-	 * column (306px each), not to the full email width (330px each).
+	 * column (290px each, with the 32px gap), not to the full email width (330px each).
 	 */
 	public function test_columns_in_zero_padding_band_fit_content_column() {
 		$columns = '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>A</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>B</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->';
 		$html    = $this->render( '<!-- wp:group {"align":"full","style":{"color":{"background":"#fafafa"},"spacing":{"padding":{"top":"40px","right":"0px","bottom":"40px","left":"0px"}}}} --><div class="wp-block-group alignfull has-background" style="background-color:#fafafa;padding-top:40px;padding-right:0px;padding-bottom:40px;padding-left:0px">' . $columns . '</div><!-- /wp:group -->' );
 
 		$this->assertStringNotContainsString( 'width="330"', $html, 'Expected no column sized to half the full email width.' );
-		$this->assertSame( 2, substr_count( $html, 'width="306"' ), 'Expected both columns sized to half the 612px content column.' );
+		$this->assertStringContainsString( 'width="290"', $html, 'Expected the first column to take half the 612px content column, less the gap.' );
+		$this->assertStringContainsString( 'width="322"', $html, 'Expected the second column to add the gap to its half.' );
 	}
 
 	/**
@@ -260,7 +263,7 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 	public function test_wp71_button_width_is_rendered() {
 		$html = $this->render( '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"style":{"dimensions":{"width":"50%"}}} --><div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="https://example.test">Half</a></div><!-- /wp:button --></div><!-- /wp:buttons -->' );
 
-		$this->assertMatchesRegularExpression( '/class="layout-flex-item" style="[^"]*width:\s*298px/', $html, 'Expected the button cell to take half the 612px content width.' );
+		$this->assertMatchesRegularExpression( '/class="layout-flex-item" style="[^"]*width:\s*300px/', $html, 'Expected the button cell to take half the 612px content width, less half the 12px gap.' );
 	}
 
 	// ------------------------------------------------------------------
@@ -322,6 +325,57 @@ class Test_WC_Renderer_Visual_Fixes extends WP_UnitTestCase {
 			$this->assertStringContainsString( 'valign="middle"', $cell );
 			$this->assertMatchesRegularExpression( '/vertical-align:\s*middle/', $cell );
 		}
+	}
+
+	/**
+	 * Two-column markup with one paragraph per column (or two in the first).
+	 *
+	 * @param string $columns_attrs JSON attributes for the columns block.
+	 * @param string $second_attrs  JSON attributes for the second column.
+	 * @return string
+	 */
+	private static function two_columns( string $columns_attrs = '', string $second_attrs = '' ): string {
+		return '<!-- wp:columns' . ( $columns_attrs ? ' ' . $columns_attrs : '' ) . ' --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Name</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Role</p><!-- /wp:paragraph --></div><!-- /wp:column --><!-- wp:column' . ( $second_attrs ? ' ' . $second_attrs : '' ) . ' --><div class="wp-block-column"><!-- wp:paragraph --><p>B</p><!-- /wp:paragraph --></div><!-- /wp:column --></div><!-- /wp:columns -->';
+	}
+
+	/**
+	 * Columns get the editor's default 32px gap, carried by the second column's padding
+	 * so the row still fits the 612px content column, and dropped on phones.
+	 */
+	public function test_columns_get_editor_gap_without_widening() {
+		$html = $this->render( self::two_columns() );
+
+		$this->assertStringContainsString( 'width="290"', $html, 'Expected the first column to take half the row less the gap.' );
+		$this->assertStringContainsString( 'width="322"', $html, 'Expected the second column to include the gap.' );
+		$this->assertMatchesRegularExpression( '/<td\b[^>]*class="[^"]*\bnewspack-columns-gap\b[^"]*"[^>]*padding-left:\s*32px/', $html, 'Expected the gap as padding on the second column\'s content cell.' );
+		$this->assertDoesNotMatchRegularExpression( '/class="block wp-block-column email-block-column"[^>]*padding-left/', $html, 'Expected no gap padding on top of the column width.' );
+		$this->assertMatchesRegularExpression( '/@media[^{]*max-width:\s*660px\)\s*\{(?:[^{}]*\{[^}]*\})*?\s*\.newspack-columns-gap\s*\{\s*padding-left:\s*0\s*!important/', $html, 'Expected the gap to come off when columns stack.' );
+	}
+
+	/**
+	 * The normalizer's columns gap rules: a single blockGap value applies to both axes,
+	 * and a column that paints its padding keeps the engine's own gap.
+	 */
+	public function test_normalizer_columns_gap_rules() {
+		$string_gap = Block_Normalizer::normalize( parse_blocks( self::two_columns( '{"style":{"spacing":{"blockGap":"20px"}}}' ) ) );
+		$this->assertSame( [ 'top' => '20px' ], $string_gap[0]['attrs']['style']['spacing']['blockGap'], 'Expected the vertical part of a single blockGap to stay.' );
+		$this->assertSame( '20px', $string_gap[0]['innerBlocks'][1]['attrs']['style']['spacing']['padding']['left'], 'Expected a single blockGap to set the horizontal gap.' );
+		$this->assertArrayNotHasKey( 'padding', $string_gap[0]['innerBlocks'][0]['attrs']['style']['spacing'] ?? [], 'Expected the first column to get no gap.' );
+
+		$painted = Block_Normalizer::normalize( parse_blocks( self::two_columns( '', '{"style":{"color":{"background":"#eeeeee"}}}' ) ) );
+		$this->assertSame( [ 'left' => '32px' ], $painted[0]['attrs']['style']['spacing']['blockGap'], 'Expected the engine\'s gap for a column with a background.' );
+		$this->assertArrayNotHasKey( 'spacing', $painted[0]['innerBlocks'][1]['attrs']['style'], 'Expected no gap padding on a column with a background.' );
+	}
+
+	/**
+	 * Sibling blocks are 12px apart, as the editor's block padding puts them, except
+	 * inside a column, where the editor gives them no padding.
+	 */
+	public function test_block_gap_matches_editor() {
+		$html = $this->render( '<!-- wp:paragraph --><p>First</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Second</p><!-- /wp:paragraph -->' . self::two_columns() );
+
+		$this->assertMatchesRegularExpression( '/margin-top:\s*12px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Second/', $html, 'Expected 12px between top-level blocks.' );
+		$this->assertDoesNotMatchRegularExpression( '/margin-top:\s*\d+px;?"><table[^>]*>\s*<tbody>\s*<tr>\s*<td[^>]*>\s*<p[^>]*>Role/', $html, 'Expected no gap between blocks inside a column.' );
 	}
 
 	/**

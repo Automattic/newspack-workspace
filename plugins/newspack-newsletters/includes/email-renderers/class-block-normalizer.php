@@ -26,6 +26,27 @@ class Block_Normalizer {
 	const PRIORITY = 5;
 
 	/**
+	 * Gap between columns when the block sets none: core's default for the columns
+	 * block (`2em`) at the email's 16px base font size, which is what the editor shows.
+	 */
+	const DEFAULT_COLUMNS_GAP = '32px';
+
+	/**
+	 * Priority of the pass that runs after the package's preprocessing (priority 10).
+	 */
+	const AFTER_PREPROCESS_PRIORITY = 20;
+
+	/**
+	 * Column attribute marking padding that carries the columns gap (see add_columns_gap()).
+	 */
+	const GAP_ATTR = 'newspackColumnsGap';
+
+	/**
+	 * Class on the column cell whose padding carries the columns gap.
+	 */
+	const GAP_CLASS = 'newspack-columns-gap';
+
+	/**
 	 * Whether core's block-hooks pass over `the_content` is running.
 	 *
 	 * @var bool
@@ -51,6 +72,8 @@ class Block_Normalizer {
 		add_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		add_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
 		add_filter( 'block_parser_class', [ __CLASS__, 'block_parser_class' ], 20 );
+		add_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ] );
+		add_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'clear_column_gaps' ], self::AFTER_PREPROCESS_PRIORITY );
 	}
 
 	/**
@@ -64,6 +87,8 @@ class Block_Normalizer {
 		remove_filter( 'the_content', [ __CLASS__, 'start_block_hooks_pass' ], 7 );
 		remove_filter( 'the_content', [ __CLASS__, 'end_block_hooks_pass' ], 8 );
 		remove_filter( 'block_parser_class', [ __CLASS__, 'block_parser_class' ], 20 );
+		remove_filter( 'woocommerce_email_renderer_styles', [ __CLASS__, 'add_styles' ] );
+		remove_filter( 'woocommerce_email_blocks_renderer_parsed_blocks', [ __CLASS__, 'clear_column_gaps' ], self::AFTER_PREPROCESS_PRIORITY );
 		self::$in_block_hooks_pass = false;
 	}
 
@@ -138,12 +163,153 @@ class Block_Normalizer {
 				continue;
 			}
 			$block = self::map_button_width( $block );
+			$block = self::add_columns_gap( $block );
 			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
 				$block['innerBlocks'] = self::normalize_recursive( $block['innerBlocks'] );
 			}
 			$blocks[ $key ] = $block;
 		}
 		return $blocks;
+	}
+
+	/**
+	 * Remove the block gap from blocks inside a column.
+	 *
+	 * The package puts the email's block gap above every block after the first, at any
+	 * depth. The newsletter editor gives blocks inside a column no padding, so they sit
+	 * flush there (an author byline's name and role, for example). Nested markup (posts
+	 * inserted by the Posts Inserter, an ad) is left alone: it sets its own spacing.
+	 *
+	 * @param mixed $blocks Parsed blocks, after the package's preprocessing.
+	 * @return mixed
+	 */
+	public static function clear_column_gaps( mixed $blocks ): mixed {
+		if ( ! is_array( $blocks ) || Nested_Blocks::is_parsing() ) {
+			return $blocks;
+		}
+		return self::clear_gaps_in( $blocks, false );
+	}
+
+	/**
+	 * Recursive step of clear_column_gaps().
+	 *
+	 * @param array $blocks    Parsed blocks.
+	 * @param bool  $in_column Whether these blocks sit inside a column.
+	 * @return array
+	 */
+	private static function clear_gaps_in( array $blocks, bool $in_column ): array {
+		foreach ( $blocks as $key => $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+			if ( $in_column ) {
+				unset( $blocks[ $key ]['email_attrs']['margin-top'] );
+			}
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$blocks[ $key ]['innerBlocks'] = self::clear_gaps_in(
+					$block['innerBlocks'],
+					$in_column || 'core/column' === ( $block['blockName'] ?? '' )
+				);
+			}
+		}
+		return $blocks;
+	}
+
+	/**
+	 * Give a columns block the horizontal gap the editor shows, without widening it.
+	 *
+	 * The editor (and the front end) falls back to core's default gap between columns,
+	 * and a single blockGap value applies to both axes there. The engine only adds a gap
+	 * when `blockGap.left` is set, and then as padding on top of the column widths it has
+	 * already computed, so the row ends up wider than the email by the gaps.
+	 *
+	 * The gap is turned into start-side padding on each column after the first instead.
+	 * The engine counts a column's own padding in its width, so the columns share the
+	 * row the way they do in the editor. That only holds while the padding is the gap
+	 * alone and nothing paints it: if any of those columns has its own start padding, a
+	 * background or a border, the engine's own gap handling is left to it.
+	 *
+	 * @param array $block Parsed block.
+	 * @return array
+	 */
+	private static function add_columns_gap( array $block ): array {
+		if ( 'core/columns' !== ( $block['blockName'] ?? '' ) || empty( $block['innerBlocks'] ) || ! is_array( $block['innerBlocks'] ) ) {
+			return $block;
+		}
+		$block_gap = $block['attrs']['style']['spacing']['blockGap'] ?? null;
+		if ( is_array( $block_gap ) && isset( $block_gap['left'] ) && is_string( $block_gap['left'] ) && '' !== $block_gap['left'] ) {
+			$gap = $block_gap['left'];
+		} elseif ( is_string( $block_gap ) && '' !== $block_gap ) {
+			$gap = $block_gap;
+		} else {
+			$gap = self::DEFAULT_COLUMNS_GAP;
+		}
+		if ( preg_match( '/[<>"\';{}]/', $gap ) ) {
+			return $block;
+		}
+
+		$side     = is_rtl() ? 'right' : 'left';
+		$keys     = array_slice( array_keys( $block['innerBlocks'] ), 1 );
+		$paddable = true;
+		foreach ( $keys as $key ) {
+			if ( ! self::can_take_gap_padding( $block['innerBlocks'][ $key ], $side ) ) {
+				$paddable = false;
+				break;
+			}
+		}
+
+		$block_gap = is_array( $block_gap ) ? $block_gap : ( is_string( $block_gap ) && '' !== $block_gap ? [ 'top' => $block_gap ] : [] );
+		if ( ! $paddable ) {
+			$block_gap['left'] = $gap;
+			$block['attrs']['style']['spacing']['blockGap'] = $block_gap;
+			return $block;
+		}
+		unset( $block_gap['left'] );
+		if ( empty( $block_gap ) ) {
+			unset( $block['attrs']['style']['spacing']['blockGap'] );
+		} else {
+			$block['attrs']['style']['spacing']['blockGap'] = $block_gap;
+		}
+		foreach ( $keys as $key ) {
+			$block['innerBlocks'][ $key ]['attrs']['style']['spacing']['padding'][ $side ] = $gap;
+			$block['innerBlocks'][ $key ]['attrs'][ self::GAP_ATTR ]                      = true;
+		}
+		return $block;
+	}
+
+	/**
+	 * Whether a column's start padding can carry the gap: it has none of its own, and
+	 * no background or border that would paint the gap.
+	 *
+	 * @param mixed  $column Parsed column block.
+	 * @param string $side   `left` or `right`.
+	 * @return bool
+	 */
+	private static function can_take_gap_padding( mixed $column, string $side ): bool {
+		if ( ! is_array( $column ) || 'core/column' !== ( $column['blockName'] ?? '' ) ) {
+			return false;
+		}
+		$attrs = $column['attrs'] ?? [];
+		$style = $attrs['style'] ?? [];
+		return ! isset( $style['spacing']['padding'][ $side ] )
+			&& empty( $attrs['backgroundColor'] )
+			&& empty( $attrs['gradient'] )
+			&& empty( $attrs['borderColor'] )
+			&& empty( $style['color']['background'] )
+			&& empty( $style['color']['gradient'] )
+			&& empty( $style['background'] )
+			&& empty( $style['border'] );
+	}
+
+	/**
+	 * Head styles for the email: columns stack on phones, where the editor puts no gap
+	 * beside them, so the gap padding comes off.
+	 *
+	 * @param string $styles Template styles.
+	 * @return string
+	 */
+	public static function add_styles( $styles ): string {
+		return (string) $styles . '@media screen and (max-width: 660px) { .' . self::GAP_CLASS . ' { padding-left: 0 !important; padding-right: 0 !important; } }';
 	}
 
 	/**

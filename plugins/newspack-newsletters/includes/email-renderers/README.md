@@ -87,13 +87,17 @@ Translates a newsletter's configured theme into a theme.json array. **Read-only.
 | `fontSizes` presets | Newspack font-size scale; **fluid typography off** (fixed px in email) |
 | `spacingSizes` presets | Newspack spacing scale (`var:preset|spacing|*` resolves) |
 | `color.palette` | `NEWSPACK_NEWSLETTERS_PALETTE_META` option — **omitted when empty** (an empty palette would wipe the editor's default presets on merge) |
+| `spacing.blockGap` | Fixed `12px` (`Theme_Json_Builder::BLOCK_GAP`): the newsletter editor pads each block 6px top and bottom, so siblings sit 12px apart. The package default is 16px. Blocks inside a column get none (see `Block_Normalizer`). |
 | `elements.link` | Fixed: underlined, `color: inherit` — links follow the surrounding text, as in the editor canvas. A block's own link color still wins. `render_wc()` then removes the underline from links that wrap an image. |
 
 ### `Block_Normalizer` — `class-block-normalizer.php`
 Render-scoped hooks (`add_hooks()` / `remove_hooks()`, called by `render_wc()`) that rewrite parsed blocks before the package preprocesses them, on `woocommerce_email_blocks_renderer_parsed_blocks` at priority 5:
 
-- **Render-time block supports.** The engine renders from saved markup and attributes, so anything WordPress only works out in `render_block` is lost. A survey of the allowed blocks (NPPD-2188) found one that matters in email: a WordPress 7.1 button's `style.dimensions.width`, mapped onto the `width` attribute the engine sizes buttons from. (Per-block link colors and column gaps already survive; row/flex group layouts are not supported by the engine at all.)
+- **Render-time block supports.** The engine renders from saved markup and attributes, so anything WordPress only works out in `render_block` is lost. A survey of the allowed blocks (NPPD-2188) found one that matters in email: a WordPress 7.1 button's `style.dimensions.width`, mapped onto the `width` attribute the engine sizes buttons from. (Per-block link colors already survive; row/flex group layouts are not supported by the engine at all.)
+- **Columns gap.** Columns without a horizontal gap get core's default (`2em`, 32px), as in the editor. Any columns gap is turned into start padding on each column after the first, because the engine counts a column's own padding in its width but adds a `blockGap.left` on top of it (which overflows the row). The padded cell is tagged `newspack-columns-gap`, and a phone media rule removes the padding once the columns stack. A column with its own start padding, a background or a border keeps the engine's gap handling.
 - **Top-level full-width groups.** Zero side padding is dropped, so the engine hands the email gutter to the children as it does when no padding is set; a group that draws nothing (no background or border) also loses its full alignment. This keeps the content in the content column, as in the editor.
+
+A second pass at priority 20, after the package's preprocessing, removes the block gap from blocks inside a column: the editor gives them no padding, so an author byline's name and role sit flush. Nested markup (`Nested_Blocks`) is skipped, since it sets its own spacing.
 
 It also makes core's block-hooks pass on `the_content` (priority 8) use core's plain parser. That pass parses and re-serializes the content; through the engine's parser the widths it computes would be written into block attributes and override the correct ones in the real render.
 

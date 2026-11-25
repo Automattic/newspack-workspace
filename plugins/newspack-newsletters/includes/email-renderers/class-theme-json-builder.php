@@ -47,6 +47,15 @@ class Theme_Json_Builder {
 	const DEFAULT_BODY_FONT = 'Georgia, serif';
 
 	/**
+	 * Vertical gap between sibling blocks. The newsletter editor pads every block by 6px
+	 * top and bottom, so neighbours sit 12px apart there; the package's default is 16px.
+	 * Blocks inside a column get no gap (see Block_Normalizer::clear_column_gaps()).
+	 *
+	 * @var string
+	 */
+	const BLOCK_GAP = '12px';
+
+	/**
 	 * Build a theme.json-shaped array for a newsletter.
 	 *
 	 * @param \WP_Post $post Newsletter post.
@@ -87,6 +96,9 @@ class Theme_Json_Builder {
 			],
 			'typography' => [
 				'fontFamily' => $body_font,
+			],
+			'spacing'    => [
+				'blockGap' => self::BLOCK_GAP,
 			],
 			'elements'   => [
 				'heading' => [

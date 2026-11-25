@@ -13,6 +13,7 @@ namespace Newspack\Newsletters\Email_Renderers\Blocks;
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Abstract_Block_Renderer;
 use Newspack\Newsletters\Email_Renderers\Nested_Blocks;
+use Newspack\Newsletters\Email_Renderers\Theme_Json_Builder;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -48,7 +49,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 
 	/**
 	 * Vertical gap between meta blocks within a post item (title, subtitle, date,
-	 * excerpt, continue-reading). Matches the MJML look — tighter than the package's 16px.
+	 * excerpt, continue-reading). Matches the editor preview's 8px, tighter than the email's block gap.
 	 */
 	const META_GAP = '8px';
 
@@ -76,7 +77,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 *    (forcing #000 would clobber it). Skips image-wrapping anchors and any
 	 *    anchor already carrying a style attribute (no duplicate). The CSS inliner
 	 *    preserves existing inline styles, so this wins.
-	 * 2. Block spacing: collapse the package's 16px gap to META_GAP.
+	 * 2. Block spacing: collapse the email's block gap to META_GAP.
 	 *
 	 * @param string $html Rendered posts-inserter HTML.
 	 * @return string
@@ -87,7 +88,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			'<a$1 style="text-decoration: underline; color: inherit;">',
 			$html
 		);
-		return (string) preg_replace( '/margin-top:\s*16px/i', 'margin-top: ' . self::META_GAP, $html );
+		return (string) preg_replace( '/margin-top:\s*' . preg_quote( Theme_Json_Builder::BLOCK_GAP, '/' ) . '/i', 'margin-top: ' . self::META_GAP, $html );
 	}
 
 	/**

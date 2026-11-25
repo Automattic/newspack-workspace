@@ -12,6 +12,7 @@ namespace Newspack\Newsletters\Email_Renderers\Blocks;
 
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Column as Package_Column;
+use Newspack\Newsletters\Email_Renderers\Block_Normalizer;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -54,7 +55,30 @@ class Column extends Package_Column {
 			parent::render_content( $block_content, $parsed_block, $rendering_context ),
 			(string) ( $parsed_block['attrs']['width'] ?? '' )
 		);
+		if ( ! empty( $parsed_block['attrs'][ Block_Normalizer::GAP_ATTR ] ) ) {
+			$html = self::mark_gap_padding( $html );
+		}
 		return null === $valign ? $html : self::add_valign( $html, $valign );
+	}
+
+	/**
+	 * Tag the cell that holds the column's padding when that padding carries the
+	 * columns gap, so the email's phone styles can drop it once columns stack.
+	 *
+	 * @param string $html Rendered column HTML.
+	 * @return string
+	 */
+	private static function mark_gap_padding( string $html ): string {
+		$processor = new \WP_HTML_Tag_Processor( $html );
+		if ( $processor->next_tag(
+			[
+				'tag_name'   => 'table',
+				'class_name' => 'email-block-column-content',
+			]
+		) && $processor->next_tag( 'td' ) ) {
+			$processor->add_class( Block_Normalizer::GAP_CLASS );
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**
