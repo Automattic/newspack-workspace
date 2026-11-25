@@ -84,8 +84,9 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$this->reset_restriction_cache();
 		// The gifting stub's recipient map is static and shared with other test files.
 		\WCS_Gifting::$recipients = [];
-		global $orders_database;
-		$orders_database = [];
+		global $orders_database, $subscriptions_database;
+		$orders_database        = [];
+		$subscriptions_database = [];
 		\Newspack_Newsletters_Contacts::reset_calls();
 		\Newspack_Newsletters_Subscription::reset_calls();
 		$prop = new \ReflectionProperty( Premium_Newsletters::class, 'restricted_lists' );
@@ -2343,6 +2344,117 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
 
 		$this->assertSame( [], $this->get_queued_user_ids(), 'A save that keeps the recipient queues no one.' );
+	}
+
+	/**
+	 * Stand in for WC_Subscriptions_Manager::trash_users_subscriptions(), which runs
+	 * on delete_user at priority 10 and removes the recipient from every gift WCS
+	 * lists for the user, without firing a recipient-changed hook.
+	 *
+	 * @param int $user_id ID of the user being deleted.
+	 */
+	public function clear_recipients_like_wcs( $user_id ): void {
+		foreach ( wcs_get_users_subscriptions( (int) $user_id ) as $subscription ) {
+			if ( \WCS_Gifting::is_gifted_subscription( $subscription ) ) {
+				unset( \WCS_Gifting::$recipients[ $subscription->get_id() ] );
+			}
+		}
+	}
+
+	/**
+	 * Delete a user with WCS's priority-10 clean-up in place.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	private function delete_user_like_wcs( int $user_id ): void {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		// The ESP snapshot taken before a deletion reads a recipient's gift as an
+		// order, which the subscription mock can't stand in for. It plays no part
+		// in what these tests check.
+		remove_action( 'delete_user', [ \Newspack\Data_Events\Connectors\Contact_Sync_Connector::class, 'store_user_data_before_deletion' ], 5 );
+		add_action( 'delete_user', [ $this, 'clear_recipients_like_wcs' ], 10 );
+		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * Deleting a gift's recipient makes WCS hand the subscription back to its
+	 * buyer, so the buyer is checked for lists to add.
+	 */
+	public function test_deleting_a_gift_recipient_checks_the_buyer() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		$this->delete_user_like_wcs( $recipient_id );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $purchaser_id ), 'The buyer, who holds the subscription again, is checked for lists to add.' );
+	}
+
+	/**
+	 * Deleting a gift's buyer makes WCS remove the gift's recipient, so the
+	 * recipient is checked for lists to remove.
+	 */
+	public function test_deleting_a_gift_buyer_checks_the_recipient_for_removal() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		$this->delete_user_like_wcs( $purchaser_id );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $recipient_id ), 'The former recipient is checked for lists to remove only.' );
+	}
+
+	/**
+	 * A gift whose recipient account is gone gives no one else's access a check:
+	 * only the buyer the event names is queued.
+	 */
+	public function test_gift_event_skips_a_recipient_whose_account_is_gone() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, 987654321, [ 100 ] );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $purchaser_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			],
+			null
+		);
+
+		$this->assertSame( [ $purchaser_id ], $this->get_queued_user_ids() );
+	}
+
+	/**
+	 * A group that was switched off keeps its member rows, but its members don't
+	 * share the subscription, so an event for it checks only the owner.
+	 */
+	public function test_disabled_group_event_skips_its_leftover_members() {
+		$owner_id     = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$member_id    = $this->create_group_member();
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_group_subscription( $owner_id, [ 100 ] );
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'no' );
+		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+		delete_option( Premium_Newsletters::QUEUE_OPTION );
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'cancelled',
+			],
+			null
+		);
+
+		$this->assertSame( [ $owner_id ], $this->get_queued_user_ids() );
 	}
 
 	// =========================================================================

@@ -1211,6 +1211,34 @@ class WooCommerce_Subscriptions {
 	}
 
 	/**
+	 * Get every reader a change to a subscription can affect, as one list.
+	 *
+	 * For callers that treat all of them the same way, such as clearing a
+	 * per-reader cache. Callers that treat a gift recipient or a group member
+	 * differently use get_subscription_readers() instead.
+	 *
+	 * @param \WC_Subscription|int|mixed $subscription Subscription or ID.
+	 *
+	 * @return int[] User IDs of the purchaser, the gift recipient and the group
+	 *               members, in that order, each listed once. Empty for anything
+	 *               that isn't a subscription.
+	 */
+	public static function get_subscription_reader_ids( $subscription ): array {
+		$readers    = self::get_subscription_readers( $subscription );
+		$reader_ids = array_merge( [ $readers['purchaser'], $readers['recipient'] ], $readers['members'] );
+		return array_values(
+			array_unique(
+				array_filter(
+					$reader_ids,
+					function ( $reader_id ) {
+						return $reader_id > 0;
+					}
+				)
+			)
+		);
+	}
+
+	/**
 	 * Get the user's active subscription for a product (simple, grouped, or variable).
 	 *
 	 * @param \WC_Product $product Product.
