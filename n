@@ -133,11 +133,11 @@ start() {
     up_log=$(mktemp "${TMPDIR:-/tmp}/n-start.XXXXXX")
     docker compose "${compose_files[@]}" up -d 2>&1 | tee "$up_log"
     if [[ "${PIPESTATUS[0]}" -ne 0 ]]; then
-        # A port already in use points at an isolated env from before the proxy,
-        # still running and publishing 443 itself. Stop those and try once more.
-        # Any other failure, a missing image for one, is no reason to stop
-        # anyone's env.
-        if ! grep -qE 'address already in use|port is already allocated' "$up_log" \
+        # Port 80 or 443 already in use points at an isolated env from before the
+        # proxy, still running and publishing them itself. Stop those and try once
+        # more. Any other failure is no reason to stop anyone's env: a missing
+        # image, or another service's port being taken.
+        if ! grep -E 'address already in use|port is already allocated' "$up_log" | grep -qE ':(80|443)([^0-9]|$)' \
             || ! stop_legacy_env_publishers \
             || ! docker compose "${compose_files[@]}" up -d; then
             rm -f "$up_log"
