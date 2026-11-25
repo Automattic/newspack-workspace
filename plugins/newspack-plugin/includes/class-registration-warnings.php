@@ -190,15 +190,15 @@ final class Registration_Warnings {
 
 	/**
 	 * Site Health check, while anyone can sign up with a role that can edit
-	 * posts: Recommended for a role that can only write posts for review,
-	 * Critical for one that can publish or upload files.
+	 * posts: Critical when the warning is red, Recommended when it is yellow
+	 * (see get_role_severity()).
 	 *
 	 * @return array Site Health test result.
 	 */
 	public static function site_health_role_test() {
 		$is_open = self::is_open();
 		$result  = [
-			'label'       => $is_open ? __( "New accounts get a role that can't edit posts", 'newspack-plugin' ) : __( 'No one can sign up with the New User Default Role', 'newspack-plugin' ),
+			'label'       => $is_open ? __( "New accounts get a role that can't edit posts", 'newspack-plugin' ) : __( "WordPress's registration form is closed", 'newspack-plugin' ),
 			'status'      => 'good',
 			'badge'       => self::get_site_health_badge(),
 			'description' => $is_open ? '<p>' . esc_html__( "Accounts created through WordPress's registration form can't edit posts.", 'newspack-plugin' ) . '</p>' : self::get_closed_description(),
@@ -225,7 +225,7 @@ final class Registration_Warnings {
 	public static function site_health_bot_protection_test() {
 		$is_open = self::is_open();
 		$result  = [
-			'label'       => $is_open ? __( 'Sign-ups are protected by reCAPTCHA', 'newspack-plugin' ) : __( "Bots can't sign up through the registration form", 'newspack-plugin' ),
+			'label'       => $is_open ? __( 'Sign-ups are protected by reCAPTCHA', 'newspack-plugin' ) : __( "Bots can't sign up through WordPress's registration form", 'newspack-plugin' ),
 			'status'      => 'good',
 			'badge'       => self::get_site_health_badge(),
 			'description' => $is_open ? '<p>' . esc_html__( "Bots can't create accounts through WordPress's registration form.", 'newspack-plugin' ) . '</p>' : self::get_closed_description(),
@@ -372,27 +372,22 @@ final class Registration_Warnings {
 	}
 
 	/**
-	 * How serious open registration is with a role that can edit posts:
-	 * "warning" (yellow) when the role can only write posts for review, "error"
-	 * (red) when it can publish or upload files. Core roles go by their slug,
-	 * as their copy does; a custom role goes by its capabilities.
+	 * How serious open registration is with a role that can edit posts. Author,
+	 * Editor and Administrator are always "error" (red), as their copy is
+	 * fixed. Any other role, Contributor included, is "error" when it can
+	 * publish posts or upload files and "warning" (yellow) otherwise, so a site
+	 * that has given Contributors more rights gets the red warning.
 	 *
 	 * @param string $role Role slug.
 	 * @return string "warning" or "error".
 	 */
 	private static function get_role_severity( $role ) {
-		switch ( $role ) {
-			case 'contributor':
-				return 'warning';
-			case 'author':
-			case 'editor':
-			case 'administrator':
-				return 'error';
-			default:
-				$role_object = get_role( $role );
-				$can_publish = $role_object && ( $role_object->has_cap( 'publish_posts' ) || $role_object->has_cap( 'upload_files' ) );
-				return $can_publish ? 'error' : 'warning';
+		if ( in_array( $role, [ 'author', 'editor', 'administrator' ], true ) ) {
+			return 'error';
 		}
+		$role_object = get_role( $role );
+		$can_publish = $role_object && ( $role_object->has_cap( 'publish_posts' ) || $role_object->has_cap( 'upload_files' ) );
+		return $can_publish ? 'error' : 'warning';
 	}
 
 	/**
@@ -445,7 +440,8 @@ final class Registration_Warnings {
 	 * What a role lets its holder do, in one sentence.
 	 *
 	 * @param string $role     Role slug.
-	 * @param string $severity The role's severity, which words a custom role's sentence.
+	 * @param string $severity The role's severity, which words the sentence for
+	 *                         Contributor and custom roles.
 	 * @return string
 	 */
 	private static function get_role_sentence( $role, $severity ) {
@@ -456,13 +452,13 @@ final class Registration_Warnings {
 				return __( 'Editors can publish and change any post.', 'newspack-plugin' );
 			case 'author':
 				return __( 'Authors can publish posts without approval and upload files.', 'newspack-plugin' );
-			case 'contributor':
-				return __( 'Contributors can write posts for review.', 'newspack-plugin' );
-			default:
-				return 'warning' === $severity
-					? __( 'This role can write posts.', 'newspack-plugin' )
-					: __( 'This role can publish posts or upload files.', 'newspack-plugin' );
 		}
+		if ( 'error' === $severity ) {
+			return __( 'This role can publish posts or upload files.', 'newspack-plugin' );
+		}
+		return 'contributor' === $role
+			? __( 'Contributors can write posts for review.', 'newspack-plugin' )
+			: __( 'This role can write posts.', 'newspack-plugin' );
 	}
 
 	/**
