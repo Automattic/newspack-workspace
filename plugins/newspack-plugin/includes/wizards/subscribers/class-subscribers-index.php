@@ -49,11 +49,20 @@ defined( 'ABSPATH' ) || exit;
 final class Subscribers_Index {
 
 	/**
+	 * The owner's name as the group list shows it: the display name, else the
+	 * email, else the username. Imported customers can have a blank or
+	 * whitespace display name. Subscribers_Wizard::person_name() is the PHP side
+	 * of this expression; the two must agree, or the list sorts by one name and
+	 * shows another.
+	 */
+	const OWNER_NAME_SQL = "COALESCE( NULLIF( TRIM( u.display_name ), '' ), NULLIF( u.user_email, '' ), u.user_login )";
+
+	/**
 	 * Columns the group list can sort on, mapped to their SQL expressions.
 	 */
 	const ORDERBY = [
 		'name'      => 'g.name',
-		'owner'     => 'u.display_name',
+		'owner'     => self::OWNER_NAME_SQL,
 		'createdAt' => 'g.created',
 	];
 
@@ -251,7 +260,7 @@ final class Subscribers_Index {
 	 * @param array $where {
 	 *     Optional filters. Every one given must match.
 	 *
-	 *     @type string   $search        Substring of the group name, product name, owner name or owner email.
+	 *     @type string   $search        Substring of the group name, product name, owner name (see OWNER_NAME_SQL) or owner email.
 	 *     @type string[] $statuses      Mapped statuses: active, pending, on-hold, cancelled.
 	 *     @type string[] $products      Exact product names, compared trimmed.
 	 *     @type string[] $names         Exact group names, compared trimmed.
@@ -268,7 +277,7 @@ final class Subscribers_Index {
 		$search = trim( (string) ( $where['search'] ?? '' ) );
 		if ( '' !== $search ) {
 			$like      = '%' . $wpdb->esc_like( $search ) . '%';
-			$clauses[] = $wpdb->prepare( '( g.name LIKE %s OR g.product LIKE %s OR u.display_name LIKE %s OR u.user_email LIKE %s )', $like, $like, $like, $like );
+			$clauses[] = $wpdb->prepare( '( g.name LIKE %s OR g.product LIKE %s OR ' . self::OWNER_NAME_SQL . ' LIKE %s OR u.user_email LIKE %s )', $like, $like, $like, $like ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- A constant SQL expression.
 		}
 		$columns = [
 			'statuses'   => 'g.mapped_status',

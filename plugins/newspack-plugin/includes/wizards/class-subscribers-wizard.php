@@ -724,6 +724,26 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * The name a group screen shows for a person: the display name, else the
+	 * email, else the username, so an owner or member is never shown blank.
+	 * Subscribers_Index::OWNER_NAME_SQL sorts and searches the group list by the
+	 * same name.
+	 *
+	 * @param \WP_User $user The person.
+	 *
+	 * @return string
+	 */
+	private static function person_name( \WP_User $user ): string {
+		// Spaces only, as MySQL's TRIM() strips, so the shown name and the SQL sort agree.
+		foreach ( [ trim( $user->display_name, ' ' ), $user->user_email ] as $name ) {
+			if ( '' !== $name ) {
+				return $name;
+			}
+		}
+		return $user->user_login;
+	}
+
+	/**
 	 * Shape a group subscription for the admin group list.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
@@ -742,7 +762,7 @@ class Subscribers_Wizard extends Wizard {
 			'ownerId'     => $owner_id,
 			'owner'       => $owner ? [
 				'id'      => $owner_id,
-				'name'    => $owner->display_name,
+				'name'    => self::person_name( $owner ),
 				'email'   => $owner->user_email,
 				// The owner's name links to the person, not to the subscription —
 				// see the group list's `editUrl` for the subscription itself.
@@ -889,7 +909,7 @@ class Subscribers_Wizard extends Wizard {
 			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
 			$entries[] = [
 				'id'       => $user_id,
-				'name'     => $user->display_name,
+				'name'     => self::person_name( $user ),
 				'email'    => $user->user_email,
 				'role'     => $role,
 				// The owner holds no membership record, so they have no join date.

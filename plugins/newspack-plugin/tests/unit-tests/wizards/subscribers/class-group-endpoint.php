@@ -226,6 +226,27 @@ class Test_Subscribers_Wizard_Group_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An owner with a blank display name goes by their email in the group header
+	 * and in the member list.
+	 */
+	public function test_owner_without_display_name_goes_by_email() {
+		global $wpdb;
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+
+		$owner_id = $this->create_reader_user();
+		// Written straight to the table: wp_insert_user() fills a blank display name from the login.
+		$wpdb->update( $wpdb->users, [ 'display_name' => ' ' ], [ 'ID' => $owner_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+		clean_user_cache( $owner_id );
+		$group = $this->create_group_subscription( $owner_id, 5 );
+
+		$data  = $this->dispatch( $group->get_id() )->get_data();
+		$email = get_userdata( $owner_id )->user_email;
+
+		$this->assertSame( $email, $data['owner']['name'] );
+		$this->assertSame( $email, $data['memberList'][0]['name'] );
+	}
+
+	/**
 	 * Pending email invitations are surfaced, with expired ones flagged rather than
 	 * dropped — an admin needs to see a lapsed invite in order to resend or cancel it.
 	 */
