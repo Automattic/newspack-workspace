@@ -11,7 +11,7 @@ import {
 	PanelColorSettings,
 	useBlockProps,
 } from '@wordpress/block-editor';
-import { createBlock } from '@wordpress/blocks';
+import { createBlock, getBlockType as getRegisteredBlockType } from '@wordpress/blocks';
 import {
 	BaseControl,
 	Button,
@@ -57,6 +57,22 @@ let debouncedFetchPosts;
  */
 const MAX_EDITOR_ITEMS = 100;
 
+/**
+ * Before WP 7.2, InnerBlocks only reads the template from props.
+ * Core List has a settings template from 7.2 on, so it marks support.
+ * TODO: Remove once WP 7.2 is released, and the plugin's minimum WordPress version is updated to 7.2.
+ *
+ * @param {string} name Block name.
+ * @return {Object} InnerBlocks template props, empty on WP 7.2+.
+ */
+const getLegacyTemplateProps = name => {
+	if ( getRegisteredBlockType( 'core/list' )?.template ) {
+		return {};
+	}
+	const { template, templateInsertUpdatesSelection } = getRegisteredBlockType( name );
+	return { template, templateInsertUpdatesSelection };
+};
+
 const CuratedListEditorComponent = ( {
 	attributes,
 	canUseMapBlock,
@@ -64,6 +80,7 @@ const CuratedListEditorComponent = ( {
 	innerBlocks,
 	insertBlocks,
 	isSelected,
+	name,
 	removeBlocks,
 	selectBlock,
 	selectedBlock,
@@ -601,8 +618,7 @@ const CuratedListEditorComponent = ( {
 					) }
 					<InnerBlocks
 						allowedBlocks={ [ 'jetpack/map', 'newspack-listings/list-container' ] }
-						template={ [ [ 'newspack-listings/list-container' ] ] } // Start with an empty list only.
-						templateInsertUpdatesSelection={ false }
+						{ ...getLegacyTemplateProps( name ) }
 						renderAppender={ () => null } // We want to discourage editors from adding blocks in this top-level wrapper, but we can't lock the template because we still need to be able to programmatically add or remove map blocks.
 					/>
 					{

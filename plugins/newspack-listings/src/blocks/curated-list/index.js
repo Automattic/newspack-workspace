@@ -33,6 +33,8 @@ export const registerCuratedListBlock = () => {
 
 		attributes,
 
+		template: [ [ 'newspack-listings/list-container' ] ], // Start with an empty list only.
+		templateInsertUpdatesSelection: false,
 		edit: CuratedListEditor,
 		save: () => <InnerBlocks.Content />, // also uses view.php
 	} );
