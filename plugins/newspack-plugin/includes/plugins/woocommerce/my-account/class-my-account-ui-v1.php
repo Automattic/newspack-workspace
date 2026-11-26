@@ -59,6 +59,7 @@ class My_Account_UI_V1 {
 		\add_action( 'woocommerce_my_account_my_orders_column_order-status', [ __CLASS__, 'render_order_status_column' ] );
 		\add_action( 'woocommerce_my_account_my_orders_column_order-number', [ __CLASS__, 'render_order_number_column' ] );
 		\add_action( 'woocommerce_my_account_my_orders_column_order-actions', [ __CLASS__, 'render_order_actions_column' ] );
+		\add_action( 'woocommerce_account_content', [ __CLASS__, 'cancel_order_modal' ], 20 );
 	}
 
 	/**
@@ -1645,6 +1646,36 @@ class My_Account_UI_V1 {
 			$actions['cancel'] = $cancel_action;
 		}
 		return $actions;
+	}
+
+	/**
+	 * Render the modal that confirms cancelling an order, on the Orders list and the
+	 * order page. Its confirm button gets the clicked "Cancel order" link's URL from
+	 * the my-account script, so one modal serves every order on the page.
+	 */
+	public static function cancel_order_modal(): void {
+		if ( ! \is_user_logged_in() || ! in_array( \WC()->query->get_current_endpoint(), [ 'orders', 'view-order' ], true ) ) {
+			return;
+		}
+		Newspack_UI::generate_modal(
+			[
+				'id'      => 'confirm-order-cancellation',
+				'title'   => __( 'Cancel order', 'newspack-plugin' ),
+				'content' => '<p>' . \esc_html__( 'The order will be cancelled and can no longer be paid. This cannot be undone.', 'newspack-plugin' ) . '</p>',
+				'actions' => [
+					'confirm' => [
+						'label' => __( 'Cancel order', 'newspack-plugin' ),
+						'type'  => 'destructive',
+						'url'   => '#',
+					],
+					'cancel'  => [
+						'label'  => __( 'Keep order', 'newspack-plugin' ),
+						'type'   => 'outline',
+						'action' => 'close',
+					],
+				],
+			]
+		);
 	}
 
 	/**
