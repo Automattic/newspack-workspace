@@ -895,7 +895,8 @@ class API {
 			);
 		}
 
-		$term = wp_insert_term( $name, 'newspack_story_budget' );
+		// REST parameters arrive unslashed, but wp_insert_term() strips a level of slashes.
+		$term = wp_insert_term( wp_slash( $name ), 'newspack_story_budget' );
 
 		if ( is_wp_error( $term ) ) {
 			return $term;
@@ -1031,13 +1032,16 @@ class API {
 					$updated_slug = wp_unique_term_slug( $updated_slug, $budget->term );
 				}
 
+				// REST parameters arrive unslashed, but wp_update_term() strips a level of slashes.
 				wp_update_term(
 					$budget->term->term_id,
 					Budgets::TAXONOMY,
-					[
-						'name' => $updated_name,
-						'slug' => $updated_slug,
-					]
+					wp_slash(
+						[
+							'name' => $updated_name,
+							'slug' => $updated_slug,
+						]
+					)
 				);
 				$budget->term->name = $updated_name;
 				$budget->term->slug = $updated_slug;
