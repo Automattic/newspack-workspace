@@ -90,14 +90,28 @@ final class Settings {
 	 * @param array           $settings Settings to sanitize.
 	 * @param WP_REST_Request $request  Full details about the request.
 	 *
-	 * @return array Sanitized settings.
+	 * @return array|\WP_Error Sanitized settings, or an error if a setting is invalid.
 	 */
 	public static function api_sanitize_settings( $settings, $request ) {
 		$section            = (string) $request['section'];
 		$sanitized_settings = [];
 		foreach ( $settings as $key => $value ) {
 			$config = self::get_setting_config( $section, $key );
+			/**
+			 * Sanitize callbacks run before the permission callback, so this
+			 * endpoint receives arbitrary unauthenticated input. Reject keys
+			 * that aren't registered for the section instead of calling
+			 * settype() with a null type, which throws a ValueError.
+			 */
+			if ( empty( $config ) ) {
+				return new \WP_Error( 'newspack_ads_invalid_setting_update', __( 'Invalid setting.', 'newspack-ads' ) );
+			}
 			if ( isset( $config['options'] ) && isset( $config['multiple'] ) && true === $config['multiple'] ) {
+				// array_map() throws a TypeError on a non-array value.
+				if ( ! is_array( $value ) ) {
+					// translators: %s is the description of the option.
+					return new \WP_Error( 'newspack_ads_invalid_setting_update', sprintf( __( 'Value for "%s" should be an array.', 'newspack-ads' ), $config['description'] ) );
+				}
 				$value = array_map(
 					function ( $value ) use ( $config ) {
 						settype( $value, $config['type'] );
