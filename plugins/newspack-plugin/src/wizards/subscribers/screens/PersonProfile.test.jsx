@@ -16,7 +16,7 @@
 /**
  * External dependencies
  */
-import { render, act, screen, fireEvent } from '@testing-library/react';
+import { render, act, screen, fireEvent, cleanup } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -63,6 +63,8 @@ jest.mock( '../../../../packages/components/src', () => ( {
 		Header: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
 		Content: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
 	},
+	StatusBadge: ( { children } ) => require( 'react' ).createElement( 'span', null, children ),
+	TableCard: ( { children, after } ) => require( 'react' ).createElement( 'div', null, children, after || null ),
 	Waiting: () => null,
 	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
 } ) );
@@ -668,5 +670,95 @@ describe( 'a subscription on this site', () => {
 		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
 
 		expect( screen.getByRole( 'heading', { name: 'Payment methods' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'the numbers on a card', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	/** The value of the card row with this label. */
+	const rowValue = label => screen.getByText( label ).nextElementSibling;
+
+	it( 'shows the subscription number and links its latest order', async () => {
+		await renderCards(
+			profile( {
+				subscriptions: [
+					subscription( { number: '1001', lastOrder: { number: '2002', editUrl: '/wp-admin/post.php?post=2002&action=edit' } } ),
+				],
+			} )
+		);
+
+		expect( screen.getByRole( 'link', { name: '#1001' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=31&action=edit' );
+		expect( screen.getByRole( 'link', { name: '#2002' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=2002&action=edit' );
+	} );
+
+	it( 'shows a group card its numbers, and leaves out the latest order the server sends no member', async () => {
+		const group = {
+			id: 5,
+			number: '5',
+			plan: 'Team plan',
+			status: 'active',
+			members: 2,
+			seatLimit: 5,
+			createdAt: '2026-01-01',
+			lastOrder: { number: '6', editUrl: '/wp-admin/post.php?post=6&action=edit' },
+		};
+		await renderCards( profile( { groups: [ { ...group, role: 'owner' } ], subscriptions: [] } ) );
+		expect( rowValue( 'Subscription number' ) ).toHaveTextContent( '#5' );
+		expect( screen.getByRole( 'link', { name: '#6' } ) ).toBeInTheDocument();
+
+		cleanup();
+		await renderCards(
+			profile( { groups: [ { ...group, role: 'member', lastOrder: null, owner: { name: 'Olive Owner' } } ], subscriptions: [] } )
+		);
+		expect( rowValue( 'Subscription number' ) ).toHaveTextContent( '#5' );
+		expect( screen.queryByText( 'Latest order' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'the Donations section', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	const donation = overrides => ( {
+		id: 40,
+		number: '40',
+		editUrl: '/wp-admin/post.php?post=40&action=edit',
+		date: '2026-03-01',
+		amount: 25,
+		currency: 'USD',
+		status: 'completed',
+		...overrides,
+	} );
+
+	it( 'lists one-time donations beside the subscriptions, each linked to its order', async () => {
+		await renderCards(
+			profile( {
+				donations: [ donation( { refunded: 10 } ), donation( { id: 41, number: '41', status: 'refunded', refunded: 25 } ) ],
+				donationsMore: false,
+			} )
+		);
+
+		expect( screen.getByRole( 'heading', { name: 'Donations' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: '#40' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=40&action=edit' );
+		expect( screen.getByText( 'Refunded' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( '$25.00' ) ).toHaveLength( 2 );
+		expect( screen.getAllByText( '$10.00 refunded' ) ).toHaveLength( 1 );
+		expect( screen.queryByText( /most recent/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'says it lists the most recent only when the reader has older ones', async () => {
+		await renderCards( profile( { donations: [ donation(), donation( { id: 41, number: '41' } ) ], donationsMore: true } ) );
+
+		expect( screen.getByText( 'Showing the 2 most recent one-time donations.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'is left out for a reader who never donated once', async () => {
+		await renderCards( profile( { donations: [], donationsMore: false } ) );
+
+		expect( screen.queryByRole( 'heading', { name: 'Donations' } ) ).not.toBeInTheDocument();
 	} );
 } );

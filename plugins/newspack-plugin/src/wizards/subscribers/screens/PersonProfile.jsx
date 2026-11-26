@@ -38,11 +38,12 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Router, SplitSection, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Router, SplitSection, StatusBadge, TableCard, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
@@ -59,7 +60,7 @@ import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments'
 import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
-import { billingText, fmtDate, orDash, paymentRows } from '../format';
+import { billingText, fmtCurrency, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
@@ -131,6 +132,73 @@ const seatsSubline = group => {
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
+
+/**
+ * An order's number as WooCommerce shows it, e.g. "#1234", linked to the order
+ * when its edit screen is known.
+ *
+ * @param {Object} order         An order reference.
+ * @param {string} order.number  The order number.
+ * @param {string} order.editUrl The order's edit screen.
+ * @return {JSX.Element|string} The number, linked or plain.
+ */
+const orderNumber = ( { number, editUrl } ) => ( editUrl ? <a href={ editUrl }>{ `#${ number }` }</a> : `#${ number }` );
+
+/**
+ * The rows that name a subscription by number, so the admin can follow a case
+ * across WooCommerce, the payment processor and email: the subscription's own
+ * number, and its latest order. The server sends the latest order only on the
+ * card of the reader who pays, never on a gift's or a group member's.
+ *
+ * @param {Object} entry A subscription or group entry.
+ * @return {Array} Card rows.
+ */
+const numberRows = entry => [
+	...( entry.number
+		? [ { label: __( 'Subscription number', 'newspack-plugin' ), value: orderNumber( { number: entry.number, editUrl: entry.editUrl } ) } ]
+		: [] ),
+	...( entry.lastOrder ? [ { label: __( 'Latest order', 'newspack-plugin' ), value: orderNumber( entry.lastOrder ) } ] : [] ),
+];
+
+/**
+ * The order statuses a listed donation can be in besides paid, on the shared
+ * status vocabulary. A paid order reads as the plain fact of the donation, so
+ * only these carry a badge. A refund is finished, with nothing left to act on,
+ * so it takes a neutral tone.
+ */
+const DONATION_STATUS_BADGES = {
+	processing: { status: 'progress', label: __( 'Processing', 'newspack-plugin' ) },
+	refunded: { status: 'ended', tone: 'neutral', label: __( 'Refunded', 'newspack-plugin' ) },
+};
+
+/**
+ * A donation's amount, with what was refunded on a line below when a partial
+ * refund left the order paid. A fully refunded order says so in its badge instead.
+ *
+ * @param {Object} donation          A donation entry.
+ * @param {number} donation.amount   The order total.
+ * @param {number} donation.refunded The part of it refunded.
+ * @param {string} donation.currency ISO 4217 currency code.
+ * @param {string} donation.status   The order status.
+ * @return {JSX.Element|string} The amount.
+ */
+const donationAmount = ( { amount, refunded, currency, status } ) => {
+	const total = orDash( fmtCurrency( amount, currency ) );
+	if ( 'refunded' === status || ! ( refunded > 0 ) ) {
+		return total;
+	}
+	return (
+		<>
+			{ total }
+			<div className="newspack-subscribers__muted">
+				{
+					// translators: %s: the part of the donation that was refunded.
+					sprintf( __( '%s refunded', 'newspack-plugin' ), fmtCurrency( refunded, currency ) )
+				}
+			</div>
+		</>
+	);
+};
 
 /**
  * The "View subscription" item that leads a card's "more" menu: a link to the
@@ -286,6 +354,7 @@ export default function PersonProfile() {
 						{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( group.createdAt ) ) },
 						{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( group ) },
 						...paymentRows( group ),
+						...numberRows( group ),
 				  ]
 				: [
 						{ label: __( 'Joined', 'newspack-plugin' ), value: orDash( fmtDate( group.joinedAt ) ) },
@@ -293,6 +362,7 @@ export default function PersonProfile() {
 							label: __( 'Owner', 'newspack-plugin' ),
 							value: group.owner?.name || __( 'Unknown', 'newspack-plugin' ),
 						},
+						...numberRows( group ),
 				  ];
 			const href = groupDetailHref( group );
 			return {
@@ -474,6 +544,7 @@ export default function PersonProfile() {
 										},
 								  ]
 								: [] ),
+							...numberRows( subscription ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.
@@ -493,6 +564,8 @@ export default function PersonProfile() {
 	const collapsedCards = foldCancelled ? liveCards : cards;
 	const hiddenCount = cards.length - collapsedCards.length;
 	const visibleCards = showCancelled ? cards : collapsedCards;
+	// Readers who never gave a one-time donation see no Donations section at all.
+	const hasDonations = ( subscriber?.donations || [] ).length > 0;
 
 	if ( loading ) {
 		return (
@@ -551,7 +624,7 @@ export default function PersonProfile() {
 					headerNode
 				) }
 
-			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ shouldShowPaymentMethods( subscriber ) }>
+			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ hasDonations || shouldShowPaymentMethods( subscriber ) }>
 				<VStack spacing={ 4 }>
 					{ 0 === cards.length && (
 						<Card __experimentalCoreCard className="newspack-subscribers__card">
@@ -597,6 +670,65 @@ export default function PersonProfile() {
 					) }
 				</VStack>
 			</Row>
+
+			{ hasDonations && (
+				<Row
+					title={ __( 'Donations', 'newspack-plugin' ) }
+					description={ __( 'One-time donations. Recurring donations are subscriptions, listed above.', 'newspack-plugin' ) }
+					showDivider={ shouldShowPaymentMethods( subscriber ) }
+				>
+					<TableCard
+						className="newspack-subscribers__donations-card"
+						after={
+							subscriber.donationsMore && (
+								<p className="newspack-subscribers__muted">
+									{ sprintf(
+										// translators: %d: the number of donations listed.
+										_n(
+											'Showing the %d most recent one-time donation.',
+											'Showing the %d most recent one-time donations.',
+											subscriber.donations.length,
+											'newspack-plugin'
+										),
+										subscriber.donations.length
+									) }
+								</p>
+							)
+						}
+					>
+						<table className="newspack-subscribers__donations">
+							<thead>
+								<tr>
+									<th scope="col">{ __( 'Date', 'newspack-plugin' ) }</th>
+									<th scope="col">{ __( 'Amount', 'newspack-plugin' ) }</th>
+									<th scope="col">{ __( 'Order', 'newspack-plugin' ) }</th>
+								</tr>
+							</thead>
+							<tbody>
+								{ subscriber.donations.map( donation => {
+									const badge = DONATION_STATUS_BADGES[ donation.status ];
+									return (
+										<tr key={ donation.id }>
+											<td>{ orDash( fmtDate( donation.date ) ) }</td>
+											<td>{ donationAmount( donation ) }</td>
+											<td>
+												<Stack direction="row" gap="sm" align="center">
+													<span>{ orderNumber( donation ) }</span>
+													{ badge && (
+														<StatusBadge status={ badge.status } tone={ badge.tone }>
+															{ badge.label }
+														</StatusBadge>
+													) }
+												</Stack>
+											</td>
+										</tr>
+									);
+								} ) }
+							</tbody>
+						</table>
+					</TableCard>
+				</Row>
+			) }
 
 			{ shouldShowPaymentMethods( subscriber ) && (
 				<Row

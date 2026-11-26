@@ -35,7 +35,7 @@ import { useRetryFocus } from '../use-retry-focus';
 import { useGroups } from '../data/use-groups';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { STATUS_INDICATORS, STATUS_LABELS } from '../status';
-import { GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
+import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupCountLabel, groupLoadFailedLabel } from '../labels';
 import { SubscriptionLink } from '../links';
 
 const FIT_COLUMNS = [ 'status' ];
@@ -51,7 +51,7 @@ const DEFAULT_VIEW = {
 	// `product` is visible by default because it is the only place a group's
 	// subscription is reachable — see the owner field below for why the title
 	// cell can't carry that link.
-	fields: [ 'status', 'product', 'members', 'createdAt' ],
+	fields: [ 'name', 'status', 'product', 'members', 'createdAt' ],
 	// Hide cancelled groups by default: they add noise with little value.
 	// Clearing the Status filter brings them back.
 	filters: [ { field: 'status', operator: 'isNot', value: 'cancelled' } ],
@@ -90,8 +90,7 @@ export default function GroupList() {
 				enableGlobalSearch: true,
 				getValue: ( { item } ) => item.owner?.name || '',
 				// Owners tell groups apart where group names repeat, so the owner leads.
-				// The group's name sits under it only when it was renamed: an unnamed
-				// group takes its subscription's name, which the next column shows.
+				// The group's own name is in the `name` column.
 				//
 				// This is the DataViews title field, which ColumnPrimary wraps in an
 				// ItemClickWrapper: a role="button" whose own Enter/Space handler fires
@@ -110,9 +109,19 @@ export default function GroupList() {
 								</Badge>
 							) }
 						</HStack>
-						{ item.plan && item.plan !== item.product && <div className="newspack-subscribers__muted">{ item.plan }</div> }
 					</div>
 				),
+				enableSorting: true,
+			},
+			{
+				id: 'name',
+				// The site's own word for a group, e.g. "Team".
+				label: GROUP_LABEL,
+				enableGlobalSearch: true,
+				// The group's custom name, else its subscription's name: the value the
+				// endpoint sorts and searches by.
+				getValue: ( { item } ) => item.plan || '',
+				render: ( { item } ) => <span>{ item.plan || '—' }</span>,
 				enableSorting: true,
 			},
 			{

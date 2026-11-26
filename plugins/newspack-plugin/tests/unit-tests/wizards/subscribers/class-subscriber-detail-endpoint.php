@@ -1163,6 +1163,212 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
+	 * Every card carries the number WooCommerce shows for its subscription, which a
+	 * numbering plugin can make differ from the ID. Cards about the reader who pays
+	 * also carry the subscription's latest order; a gift's orders and a group's
+	 * orders belong to the purchaser and the owner, so those cards leave it out.
+	 */
+	public function test_cards_carry_the_subscription_number_and_the_payers_latest_order() {
+		$this->login_admin();
+		$reader_id    = $this->create_reader( 'Numbered' );
+		$other_id     = $this->create_reader( 'Payer' );
+		$order        = function ( int $customer_id, array $extra = [] ) {
+			return new WC_Order(
+				array_merge(
+					[
+						'customer_id' => $customer_id,
+						'status'      => 'completed',
+					],
+					$extra
+				)
+			);
+		};
+		$with_orders  = function ( $subscription, array $related_orders ) {
+			$subscription->data['related_orders'] = $related_orders;
+			return $subscription;
+		};
+		$parent       = $order( $reader_id );
+		$renewal      = $order( $reader_id, [ 'order_number' => 'R-77' ] );
+		$with_orders(
+			wcs_create_subscription(
+				array_merge(
+					[
+						'customer_id'  => $reader_id,
+						'order_number' => 'S-1001',
+					],
+					$this->billing_fixture( 'active' )
+				)
+			),
+			[
+				'renewal' => [ $renewal ],
+				'parent'  => [ $parent ],
+			]
+		);
+		$group_order = $order( $reader_id, [ 'order_number' => 'G-5' ] );
+		$with_orders( $this->create_group_subscription( $reader_id ), [ 'parent' => [ $group_order ] ] );
+		$joined_group = $with_orders( $this->create_group_subscription( $other_id ), [ 'parent' => [ $order( $other_id ) ] ] );
+		$this->add_member( $reader_id, $joined_group, time() );
+		$with_orders( $this->create_gifted_subscription( $other_id, $reader_id ), [ 'parent' => [ $order( $other_id ) ] ] );
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+		$own        = $subscriber['subscriptions'][0];
+		$gift       = $subscriber['subscriptions'][1];
+		$groups     = array_column( $subscriber['groups'], null, 'role' );
+
+		$this->assertSame( 'S-1001', $own['number'] );
+		$this->assertSame(
+			[
+				'number'  => 'R-77',
+				'editUrl' => $renewal->get_edit_order_url(),
+			],
+			$own['lastOrder'],
+			'The latest order is the newest of the parent and renewals.'
+		);
+		$this->assertSame( (string) $groups['owner']['id'], $groups['owner']['number'] );
+		$this->assertSame( 'G-5', $groups['owner']['lastOrder']['number'], 'The owner pays for the group.' );
+		$this->assertSame( (string) $joined_group->get_id(), $groups['member']['number'] );
+		$this->assertNull( $groups['member']['lastOrder'], 'A member does not pay for the group.' );
+		$this->assertNotNull( $gift['giftedBy'] );
+		$this->assertNull( $gift['lastOrder'], 'A gift recipient does not pay for the gift.' );
+	}
+
+	/**
+	 * Create an order on a product for one reader.
+	 *
+	 * @param int    $customer_id The reader.
+	 * @param string $status      Order status.
+	 * @param int    $product_id  The product on its one line item.
+	 * @param string $created     GMT creation datetime.
+	 * @param array  $extra       Further order data.
+	 *
+	 * @return WC_Order
+	 */
+	private function create_product_order( int $customer_id, string $status, int $product_id, string $created, array $extra = [] ): WC_Order {
+		return new WC_Order(
+			array_merge(
+				[
+					'customer_id'  => $customer_id,
+					'status'       => $status,
+					'total'        => 25,
+					'currency'     => 'USD',
+					'date_created' => $created,
+					'items'        => [ new WC_Order_Item_Product( [ 'product_id' => $product_id ] ) ],
+				],
+				$extra
+			)
+		);
+	}
+
+	/**
+	 * A product flagged as a donation.
+	 *
+	 * @return int The product ID.
+	 */
+	private function create_donation_product(): int {
+		$product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $product_id, \Newspack\WooCommerce_Products::DONATION_FLAG_META_KEY, 'yes' );
+		\Newspack\Donations::reset_flagged_donation_product_ids_cache();
+		return $product_id;
+	}
+
+	/**
+	 * One-time donations are orders, not subscriptions, so the profile lists them
+	 * on their own: paid or refunded orders on a donation product that no
+	 * subscription of the reader owns. A recurring donation's orders belong to its
+	 * subscription card, and an unpaid attempt is not a donation.
+	 */
+	public function test_lists_the_readers_one_time_donations() {
+		$this->login_admin();
+		$reader_id           = $this->create_reader( 'Donor' );
+		$other_reader_id     = $this->create_reader( 'Someone else' );
+		$donation_product_id = $this->create_donation_product();
+
+		$older  = $this->create_product_order(
+			$reader_id,
+			'completed',
+			$donation_product_id,
+			'2026-03-01 09:00:00',
+			[
+				'order_number'   => 'D-1',
+				'total_refunded' => 10,
+			] 
+		);
+		$refund = $this->create_product_order( $reader_id, 'refunded', $donation_product_id, '2026-04-01 09:00:00' );
+		$newest = $this->create_product_order( $reader_id, 'processing', $donation_product_id, '2026-05-01 09:00:00' );
+		$this->create_product_order( $reader_id, 'failed', $donation_product_id, '2026-05-02 09:00:00' );
+		$this->create_product_order( $reader_id, 'completed', self::factory()->post->create( [ 'post_type' => 'product' ] ), '2026-05-03 09:00:00' );
+		$this->create_product_order( $other_reader_id, 'completed', $donation_product_id, '2026-05-04 09:00:00' );
+		$recurring_parent = $this->create_product_order( $reader_id, 'completed', $donation_product_id, '2026-05-05 09:00:00' );
+		wcs_create_subscription(
+			array_merge(
+				[
+					'customer_id'    => $reader_id,
+					'related_orders' => [ 'parent' => [ $recurring_parent ] ],
+				],
+				$this->billing_fixture( 'active' )
+			)
+		);
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+		$donations  = $subscriber['donations'];
+
+		$this->assertSame(
+			[ (string) $newest->get_id(), (string) $refund->get_id(), 'D-1' ],
+			array_column( $donations, 'number' ),
+			'Newest first; failed, non-donation, another reader\'s and recurring orders are left out.'
+		);
+		$this->assertSame(
+			[
+				'id'       => $older->get_id(),
+				'number'   => 'D-1',
+				'editUrl'  => $older->get_edit_order_url(),
+				'date'     => '2026-03-01',
+				'amount'   => 25.0,
+				'refunded' => 10.0,
+				'currency' => 'USD',
+				'status'   => 'completed',
+			],
+			$donations[2]
+		);
+		$this->assertFalse( $subscriber['donationsMore'] );
+	}
+
+	/**
+	 * The profile lists the newest donations only, and says when there are older
+	 * ones, so a long-time donor's profile stays short.
+	 */
+	public function test_lists_at_most_the_newest_donations_and_flags_older_ones() {
+		$this->login_admin();
+		$reader_id           = $this->create_reader( 'Frequent donor' );
+		$donation_product_id = $this->create_donation_product();
+		$limit               = Newspack\Subscribers_Wizard::PROFILE_DONATIONS_LIMIT;
+		for ( $day = 1; $day <= $limit + 1; $day++ ) {
+			$this->create_product_order( $reader_id, 'completed', $donation_product_id, sprintf( '2026-01-%02d 09:00:00', $day ) );
+		}
+
+		$subscriber = $this->dispatch( $reader_id )->get_data();
+
+		$this->assertCount( $limit, $subscriber['donations'] );
+		$this->assertSame( sprintf( '2026-01-%02d', $limit + 1 ), $subscriber['donations'][0]['date'] );
+		$this->assertTrue( $subscriber['donationsMore'] );
+	}
+
+	/**
+	 * The list reads every row's subscriptions but never shows donations, so it
+	 * does not pay for the order scan.
+	 */
+	public function test_list_rows_carry_no_donations() {
+		$this->login_admin();
+		$this->create_reader( 'Listed donor' );
+
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-subscribers/subscribers' );
+		$request->set_param( 'search', 'Listed donor' );
+		$items = rest_get_server()->dispatch( $request )->get_data()['items'];
+
+		$this->assertArrayNotHasKey( 'donations', $items[0] );
+	}
+
+	/**
 	 * The sorted key list of an associative array, for exact-shape assertions.
 	 *
 	 * @param array $array The array.
