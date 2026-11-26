@@ -418,6 +418,11 @@ class Co_Authors_Plus {
 			$author_slug = preg_replace( '/^cap-/', '', $guest_term->slug );
 
 			// If the linked user can't take this exact nicename, the guest author's posts end up under someone else's byline, or under none.
+			// wp_insert_user() cleans a nicename with these two calls before saving it.
+			if ( sanitize_title( sanitize_user( $author_slug, true ) ) !== $author_slug ) {
+				WP_CLI::warning( sprintf( 'Skipping guest author %d: WordPress would change its slug %s when saving it as a nicename.', $guest_author->ID, $author_slug ) );
+				continue;
+			}
 			if ( mb_strlen( $author_slug ) > 50 ) {
 				WP_CLI::warning( sprintf( 'Skipping guest author %d: its slug %s is longer than the 50 characters a user nicename allows.', $guest_author->ID, $author_slug ) );
 				continue;
@@ -544,15 +549,24 @@ class Co_Authors_Plus {
 		}
 
 		if ( self::$verbose ) {
+			$verb = self::$live ? 'Update' : 'Would update';
 			if ( '' !== $display_name ) {
-				WP_CLI::log( sprintf( 'Update display_name to %s.', $display_name ) );
+				WP_CLI::log( sprintf( '%s display_name to %s.', $verb, $display_name ) );
 			}
-			WP_CLI::log( sprintf( 'Update user_nicename to %s.', $author_slug ) );
+			WP_CLI::log( sprintf( '%s user_nicename to %s.', $verb, $author_slug ) );
 		}
 		if ( self::$live ) {
 			$result = wp_update_user( wp_slash( $user_data ) );
 			if ( is_wp_error( $result ) ) {
-				WP_CLI::warning( sprintf( 'Could not update user #%d: %s', $user_id, $result->get_error_message() ) );
+				WP_CLI::warning(
+					sprintf(
+						'Could not update user #%d: %s Not saved: nicename %s, display name %s.',
+						$user_id,
+						$result->get_error_message(),
+						$author_slug,
+						'' !== $display_name ? $display_name : '(unchanged)'
+					)
+				);
 				return false;
 			}
 		}

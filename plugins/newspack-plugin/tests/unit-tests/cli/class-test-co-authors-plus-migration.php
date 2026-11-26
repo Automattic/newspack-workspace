@@ -188,12 +188,28 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		}
 	}
 
+	public function test_verbose_linked_dry_run_does_not_read_as_a_change() {
+		self::factory()->user->create( [ 'user_login' => 'linked123' ] );
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$this->create_guest_author( 'jane-doe', [ 'linked_account' => 'linked123' ] );
+
+		$this->migrate( [ 'verbose' => true ] );
+
+		$logs = implode( "\n", WP_CLI::$logs );
+		$this->assertStringContainsString( 'Would update display_name to Guest jane-doe.', $logs );
+		$this->assertStringContainsString( 'Would update user_nicename to jane-doe.', $logs );
+	}
+
 	public function unusable_slugs() {
 		return [
 			'held by another user, live run' => [ 'jane-doe', true, [ 'live' => true ] ],
 			'held by another user, dry run'  => [ 'jane-doe', true, [] ],
 			'over 50 characters, live run'   => [ str_repeat( 'long-', 11 ), false, [ 'live' => true ] ],
 			'over 50 characters, dry run'    => [ str_repeat( 'long-', 11 ), false, [] ],
+			// Slugs as Co-Authors Plus stores them for non-Latin logins.
+			'non-Latin, live run'            => [ sanitize_title( 'анна' ), false, [ 'live' => true ] ],
+			'partly non-Latin, live run'     => [ sanitize_title( 'anna-п' ), false, [ 'live' => true ] ],
+			'partly non-Latin, dry run'      => [ sanitize_title( 'anna-п' ), false, [] ],
 		];
 	}
 
@@ -213,7 +229,7 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		if ( $held_by_another_user ) {
 			self::factory()->user->create( [ 'user_nicename' => $slug ] );
 		}
-		$term_id         = wp_insert_term( $slug, 'author', [ 'slug' => 'cap-' . $slug ] )['term_id'];
+		$term_id         = wp_insert_term( rawurldecode( $slug ), 'author', [ 'slug' => 'cap-' . $slug ] )['term_id'];
 		$guest_author_id = $this->create_guest_author( $slug, [ 'linked_account' => 'linked123' ] );
 
 		$this->migrate( $args );
@@ -236,7 +252,10 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 
 		$this->migrate( [ 'live' => true ] );
 
-		$this->assertStringContainsString( 'Could not update user', implode( "\n", WP_CLI::$warnings ) );
+		$warnings = implode( "\n", WP_CLI::$warnings );
+		$this->assertStringContainsString( 'Could not update user', $warnings );
+		$this->assertStringContainsString( 'nicename jane-doe', $warnings );
+		$this->assertStringContainsString( 'display name Guest jane-doe', $warnings );
 	}
 
 	public function test_live_run_backs_up_the_linked_user_name_and_nicename() {
