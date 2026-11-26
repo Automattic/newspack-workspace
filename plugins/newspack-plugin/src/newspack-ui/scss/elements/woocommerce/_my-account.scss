@@ -194,6 +194,12 @@
 	table.woocommerce-orders-table {
 		@include mixins.body-table;
 
+		// The Orders list holds dates, amounts and order numbers, which read badly when
+		// the classic theme's tables break them mid-word to fit the actions column.
+		&.account-orders-table :is(th, td) {
+			word-break: normal;
+		}
+
 		th,
 		td {
 			padding-inline: 0 var(--newspack-ui-spacer-3);
@@ -296,6 +302,21 @@
 			.newspack-ui__button + .newspack-ui__button {
 				margin-inline-start: var(--newspack-ui-spacer-1);
 			}
+
+			// An open row menu sits above the next rows' action cells.
+			&:has(.newspack-ui__dropdown.active) {
+				z-index: 2;
+			}
+
+			// The menu opens toward the table, from the end of its last column.
+			.newspack-my-account__order-actions .newspack-ui__dropdown__content {
+				inset-inline: auto 0;
+			}
+		}
+
+		// The row menus are icon buttons, so the column's heading is for screen readers only.
+		.woocommerce-orders-table__header-order-actions > span {
+			@include mixins.visually-hidden;
 		}
 
 		&:not(:has(.woocommerce-orders-table__cell-order-actions :is(a, button))) .woocommerce-orders-table__header-order-actions,
@@ -398,6 +419,25 @@
 				flex-basis: 100%;
 				order: 6;
 				padding-top: var(--newspack-ui-spacer-1);
+			}
+
+			// An order's row menu sits at the end of the row, before the chevron, so it adds no line.
+			tbody tr:has(.newspack-my-account__order-actions) {
+				padding-inline-end: calc(var(--newspack-ui-spacer-6) * 2 + var(--newspack-ui-spacer-1));
+			}
+
+			// A row with no menu of its own keeps no empty line for one.
+			.woocommerce-orders-table__cell-order-actions:not(:has(*)) {
+				display: none;
+			}
+
+			.woocommerce-orders-table__cell-order-actions:has(> .newspack-my-account__order-actions) {
+				flex-basis: auto;
+				inset-inline-end: var(--newspack-ui-spacer-6);
+				padding: 0;
+				position: absolute;
+				top: 50%;
+				translate: 0 -50%;
 			}
 		}
 	}

@@ -277,18 +277,54 @@ class Newspack_Test_My_Account_Status extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Orders table has no actions column.
+	 * The Orders table's actions cell is a menu of the order's actions, such as an
+	 * invoice download a plugin adds, with Cancel last. View and Pay stay out of it,
+	 * because the order number links to the order and the status cell has "Pay now",
+	 * so an order whose only action is Pay gets no menu.
 	 */
-	public function test_orders_columns_drop_actions() {
-		$columns = My_Account_UI_V1::orders_columns(
+	public function test_order_actions_column_menu() {
+
+		$order = new WC_Order(
 			[
-				'order-number'  => 'Order',
-				'order-status'  => 'Status',
-				'order-actions' => 'Actions',
+				'status' => 'pending',
+				'total'  => 15,
 			]
 		);
 
-		$this->assertSame( [ 'order-number', 'order-status' ], array_keys( $columns ) );
+		ob_start();
+		My_Account_UI_V1::render_order_actions_column( $order );
+		$this->assertSame( '', trim( ob_get_clean() ) );
+
+		$add_actions = function ( $actions ) {
+			return $actions + [
+				'view'    => [
+					'url'  => 'https://example.test/view-order/',
+					'name' => 'View',
+				],
+				'cancel'  => [
+					'url'  => 'https://example.test/cancel-order/',
+					'name' => 'Cancel',
+				],
+				'invoice' => [
+					'url'        => 'https://example.test/invoice/',
+					'name'       => 'Invoice',
+					'aria-label' => 'Download the invoice for this order',
+				],
+			];
+		};
+		add_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
+		ob_start();
+		My_Account_UI_V1::render_order_actions_column( $order );
+		$html = ob_get_clean();
+		remove_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
+
+		$this->assertStringContainsString( 'newspack-ui__dropdown__toggle', $html );
+		$this->assertStringContainsString( 'href="https://example.test/invoice/" aria-label="Download the invoice for this order">Invoice</a>', $html );
+		$this->assertStringContainsString( '>Cancel order</a>', $html );
+		$this->assertStringContainsString( 'href="https://example.test/cancel-order/"', $html );
+		$this->assertLessThan( strpos( $html, '>Cancel order</a>' ), strpos( $html, '>Invoice</a>' ), 'Invoice comes before Cancel order.' );
+		$this->assertStringNotContainsString( 'view-order', $html );
+		$this->assertStringNotContainsString( 'order-pay', $html );
 	}
 
 	/**
