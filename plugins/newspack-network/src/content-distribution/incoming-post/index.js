@@ -28,16 +28,18 @@ function IncomingPost() {
 	const { createNotice } = useDispatch( 'core/notices' );
 	const { lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
 	const { openGeneralSidebar } = useDispatch( 'core/edit-post' );
+	const { receiveEntityRecords } = useDispatch( 'core' );
 	const [ isUnLinkedToggling, setIsUnLinkedToggling ] = useState( false );
 	const [ isUnLinked, setIsUnLinked ] = useState( false );
 	const [ hasInitializedSidebar, setHasInitializedSidebar ] = useState( false );
 	const [ showConfirmDialog, setShowConfirmDialog ] = useState( false );
 
-	const { postId, areMetaBoxesInitialized } = useSelect( select => {
-		const { getCurrentPostId } = select( 'core/editor' );
+	const { postId, postType, areMetaBoxesInitialized } = useSelect( select => {
+		const { getCurrentPostId, getCurrentPostType } = select( 'core/editor' );
 		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } = select( 'core/edit-post' );
 		return {
 			postId: getCurrentPostId(),
+			postType: getCurrentPostType(),
 			areMetaBoxesInitialized: _areMetaBoxesInitialized(),
 		};
 	} );
@@ -93,6 +95,13 @@ function IncomingPost() {
 		} )
 			.then( data => {
 				setIsUnLinked( data.unlinked );
+				// On WordPress 7.2+ the sidebar fields lock on the post's unlinked state (see
+				// linked-fields.js), so the editor's copy has to carry the new value. Receiving it
+				// as saved, not as an edit, keeps it out of the next save.
+				const record = wp.data.select( 'core' ).getEntityRecord( 'postType', postType, postId );
+				if ( record ) {
+					receiveEntityRecords( 'postType', postType, [ { ...record, newspack_network_unlinked: data.unlinked } ], undefined, false );
+				}
 			} )
 			.catch( error => createNotice( 'error', error.message ) );
 	};
