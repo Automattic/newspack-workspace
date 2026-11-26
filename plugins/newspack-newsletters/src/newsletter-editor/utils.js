@@ -13,6 +13,11 @@ import { getServiceProvider } from '../service-providers';
 import { LAYOUT_CPT_SLUG } from '../utils/consts';
 import { isManualProvider } from '../utils/service-provider';
 
+// Kept in their own modules so the ad editor can use them without bundling the
+// service providers this file imports.
+export { isOpenedPostType, useIsEditingOpenedPost } from '../utils/opened-post';
+export { saveEditedSyncedPatterns } from '../utils/synced-patterns';
+
 /**
  * Is the current editor session editing a layout post?
  *

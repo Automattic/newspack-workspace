@@ -11,6 +11,7 @@ import { ToggleControl, TextControl, DatePicker, Notice, RadioControl, RangeCont
 import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
 import { SelectControl } from 'newspack-components';
 import AdPlacements from '../../components/ad-placements';
+import { useIsEditingOpenedPost } from '../../utils/opened-post';
 
 // Strip the read-only counters from ad saves: the editor round-trips the full
 // meta object, and a stale counter value would trip their `auth_callback`.
@@ -363,7 +364,12 @@ function AdEdit() {
 	);
 }
 
+// The Active/Inactive toggle saves the current post's status. While a synced
+// pattern is open through "Edit original" that post is the pattern, and a
+// pattern that is not published drops out of every email that uses it.
+const AdEditPlugin = () => ( useIsEditingOpenedPost() ? <AdEdit /> : null );
+
 registerPlugin( 'newspack-newsletters-sidebar', {
-	render: AdEdit,
+	render: AdEditPlugin,
 	icon: null,
 } );
