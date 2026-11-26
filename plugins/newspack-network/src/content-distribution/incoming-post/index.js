@@ -27,7 +27,8 @@ const unlinked = newspack_network_incoming_post.unlinked;
 // Sidebar fields a linked post takes from its origin. The stylesheet's overlay can't
 // lock them, because their markup changes between WordPress versions, so they are
 // removed from the editor instead. A removed panel stays removed until the editor
-// reloads, which is why unlinking reloads the page.
+// reloads, which is why unlinking reloads the page, or asks the user to when there are
+// unsaved edits.
 const LINKED_PANELS = [ 'post-excerpt', 'discussion-panel', 'featured-image' ];
 
 function IncomingPost() {
@@ -131,7 +132,8 @@ function IncomingPost() {
 						setIsUnLinkedToggling( false );
 						return;
 					}
-					// Unsaved edits stay the editor's to save or discard, so leave the reload to them.
+					// Unsaved edits are the user's to save or discard, so leave the reload to them.
+					// Autosave is unlocked now, so a draft may still keep them.
 					if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
 						setIsUnLinkedToggling( false );
 						createNotice(
@@ -140,7 +142,15 @@ function IncomingPost() {
 								'Reload the page to edit the excerpt, discussion and featured image. Save first to keep your unsaved changes.',
 								'newspack-network'
 							),
-							{ id: 'newspack-network-unlinked-reload' }
+							{
+								id: 'newspack-network-unlinked-reload',
+								actions: [
+									{
+										label: __( 'Reload', 'newspack-network' ),
+										onClick: () => window.location.reload(),
+									},
+								],
+							}
 						);
 						return;
 					}
