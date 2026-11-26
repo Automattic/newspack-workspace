@@ -16,6 +16,11 @@
 		}
 	}
 
+	.wp-block-search__input {
+		border-radius: var(--wp--custom--border--radius-large);
+		width: auto;
+	}
+
 	&__button-outside {
 		.wp-block-search__button {
 			margin-left: var(--wp--preset--spacing--15);

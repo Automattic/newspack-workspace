@@ -59,6 +59,7 @@ class Group_Subscription_Invite {
 	const SOURCE_MY_ACCOUNT = 'my_account';
 	const SOURCE_API        = 'api';
 	const SOURCE_MIGRATION  = 'migration';
+	const SOURCE_BULK       = 'bulk';
 	const SOURCE_OTHER      = 'other';
 
 	/**
@@ -450,6 +451,47 @@ class Group_Subscription_Invite {
 	}
 
 	/**
+	 * Re-attribute the invite links one person minted to another, keeping their keys.
+	 *
+	 * A legacy per-manager link validates only while its creator manages the group, so a
+	 * link minted by an owner who steps down would otherwise stop working. Moving it to the
+	 * new owner keeps it live. When the new owner already holds a legacy link of their own,
+	 * the moved key takes the subscription-wide slot instead, if that is free. When both are
+	 * taken, which needs a subscription holding both storage shapes at once, the key stays
+	 * with its creator and stops working once they no longer manage the group. The
+	 * current-shape link already belongs to the subscription, so only its `created_by` changes.
+	 *
+	 * Changes the meta in memory; the caller saves the subscription.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 * @param int              $from_user_id The user the links are attributed to.
+	 * @param int              $to_user_id   The user to attribute them to.
+	 */
+	public static function reassign_link_invites( \WC_Subscription $subscription, int $from_user_id, int $to_user_id ): void {
+		$stored = $subscription->get_meta( self::LINK_META, true );
+		if ( ! $from_user_id || ! is_array( $stored ) || empty( $stored ) ) {
+			return;
+		}
+		$has_current_link = array_key_exists( 'key', $stored );
+		if ( $has_current_link && (int) ( $stored['created_by'] ?? 0 ) === $from_user_id ) {
+			$stored['created_by'] = $to_user_id;
+		}
+		if ( isset( $stored[ $from_user_id ] ) && is_array( $stored[ $from_user_id ] ) ) {
+			$legacy_entry = $stored[ $from_user_id ];
+			if ( ! isset( $stored[ $to_user_id ] ) ) {
+				unset( $stored[ $from_user_id ] );
+				$stored[ $to_user_id ] = $legacy_entry;
+			} elseif ( ! $has_current_link && ! empty( $legacy_entry['key'] ) ) {
+				unset( $stored[ $from_user_id ] );
+				$stored['key']        = $legacy_entry['key'];
+				$stored['created_at'] = $legacy_entry['created_at'] ?? time();
+				$stored['created_by'] = $to_user_id;
+			}
+		}
+		$subscription->update_meta_data( self::LINK_META, $stored );
+	}
+
+	/**
 	 * Delete a subscription's invite link.
 	 *
 	 * `$is_store_admin` is the one way in without a manager to act as. The link belongs to the
@@ -666,7 +708,8 @@ class Group_Subscription_Invite {
 		/**
 		 * Fires once for each new invitation to a single address, after it is stored
 		 * and, when it is emailed, after the send. It fires even when the email fails,
-		 * because the invite is stored and can be resent.
+		 * because the invite is stored and can be resent. A bulk list fires it once for
+		 * each address it invites.
 		 *
 		 * This replaces WooCommerce Memberships for Teams'
 		 * `wc_memberships_for_teams_invitation_created` for code that reacted to new
@@ -687,14 +730,24 @@ class Group_Subscription_Invite {
 		 * @param int              $inviter_id   The user who sent the invite, or 0 when unknown.
 		 *                                       Always 0 for `migration`: Teams already reported
 		 *                                       that invitation with its sender.
-		 * @param string           $source       Where the invite came from (the SOURCE_* constants):
-		 *                                       `my_account` (the group's My Account page, including
-		 *                                       its resend button), `api` (the REST `/invite` route,
-		 *                                       used by the Subscribers wizard and the subscription
-		 *                                       edit screen, and open to group managers too),
-		 *                                       `migration` (a Teams invitation link followed after
-		 *                                       the move off Teams), or `other` (a caller that
-		 *                                       doesn't say). Treat any other value like `other`.
+		 * @param string           $source       Where the invite came from (the SOURCE_* constants).
+		 *                                       The value names the code path, not the screen or how
+		 *                                       many addresses came in, so buttons with the same
+		 *                                       label can report different values on My Account and
+		 *                                       in the wizard:
+		 *                                       `my_account` (the invite and resend forms on the
+		 *                                       group's My Account page, handled by
+		 *                                       Group_Subscription_MyAccount::handle_invite_member()),
+		 *                                       `api` (the REST `/invite` route, called by the
+		 *                                       subscription edit screen and by the Subscribers
+		 *                                       wizard when it resends an invite or adds an address
+		 *                                       that has no account yet; group managers may call it
+		 *                                       too), `migration` (a Teams invitation link followed
+		 *                                       after the move off Teams), `bulk` (the REST
+		 *                                       `/invite-bulk` route, called by the bulk invite
+		 *                                       dialog on My Account and the wizard's email invite
+		 *                                       dialog), or `other` (a caller that doesn't say).
+		 *                                       Treat any other value like `other`.
 		 * @param bool             $email_sent   Whether the invitation email went out. False for
 		 *                                       `migration`, since the Teams link doesn't email
 		 *                                       the invite it creates.

@@ -42,11 +42,12 @@ import {
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Router, SplitSection, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
+import { worthCollapsing } from '../../../../packages/components/src/cell-list/collapse';
 import SubscriptionCard from '../components/SubscriptionCard';
 import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
 import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
@@ -66,7 +67,7 @@ import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
-// Cancelled subscriptions are folded away behind a "View more" toggle whenever
+// Cancelled subscriptions are folded away behind a "Show N more" toggle whenever
 // the reader still holds a live plan — a past cancellation next to a current
 // plan is history, not status. A fully churned reader keeps everything visible,
 // since hiding it would leave the profile looking empty. This mirrors the
@@ -95,10 +96,10 @@ const giftPayerName = subscription => ( subscription.giftedBy ? subscription.gif
 function Row( { title, description, children, showDivider = true } ) {
 	return (
 		<>
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader title={ title } description={ description } heading={ 2 } noMargin />
-				<div>{ children }</div>
-			</Grid>
+			<SplitSection.Root>
+				<SplitSection.Header title={ title } description={ description } />
+				<SplitSection.Content>{ children }</SplitSection.Content>
+			</SplitSection.Root>
 			{ showDivider && <Divider alignment="full-width" variant="tertiary" /> }
 		</>
 	);
@@ -237,12 +238,12 @@ export default function PersonProfile() {
 		}
 		// The breadcrumb reflects where the profile was opened from: a person
 		// reached from a group sits under the groups tab, otherwise under
-		// Subscribers. Both crumbs stay clickable so the trail is a way back.
+		// Readers. Both crumbs stay clickable so the trail is a way back.
 		const originatedInGroups = backNav.startsWith( '#/groups' );
 		setHeaderData( {
 			backNav,
 			sectionName: [
-				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Subscribers', 'newspack-plugin' ), url: backNav },
+				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Readers', 'newspack-plugin' ), url: backNav },
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
@@ -255,7 +256,7 @@ export default function PersonProfile() {
 				subscriber.email,
 				subscriber.memberSince
 					? // translators: %s is a date.
-					  sprintf( __( 'Subscriber since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
+					  sprintf( __( 'Member since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
 					: '',
 				subscriber.signedUpOn?.name
 					? // translators: %s is the name of the network site where the reader created their account.
@@ -488,7 +489,8 @@ export default function PersonProfile() {
 	}, [ subscriber ] );
 
 	const liveCards = useMemo( () => cards.filter( card => 'cancelled' !== card.status ), [ cards ] );
-	const collapsedCards = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 ? liveCards : cards;
+	const foldCancelled = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 && worthCollapsing( cards.length - liveCards.length );
+	const collapsedCards = foldCancelled ? liveCards : cards;
 	const hiddenCount = cards.length - collapsedCards.length;
 	const visibleCards = showCancelled ? cards : collapsedCards;
 
@@ -503,7 +505,7 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
-		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
+		const message = __( 'This reader could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
 			<LoadFailureNotice
 				message={ message }
@@ -519,11 +521,11 @@ export default function PersonProfile() {
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
 		// An empty read reports no error, so there is no server detail to quote.
-		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		let message = __( 'This reader could not be loaded.', 'newspack-plugin' );
 		if ( error ) {
 			message = sprintf(
 				/* translators: %s is an error message. */
-				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				__( 'Could not load this reader: %s', 'newspack-plugin' ),
 				error
 			);
 		}
@@ -549,7 +551,7 @@ export default function PersonProfile() {
 					headerNode
 				) }
 
-			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) }>
+			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ shouldShowPaymentMethods( subscriber ) }>
 				<VStack spacing={ 4 }>
 					{ 0 === cards.length && (
 						<Card __experimentalCoreCard className="newspack-subscribers__card">
@@ -564,9 +566,9 @@ export default function PersonProfile() {
 								onClick={ () => setShowCancelled( value => ! value ) }
 								aria-expanded={ showCancelled }
 								// When collapsed, the accessible name extends the visible
-								// "View N more" with what it reveals (WCAG 2.5.3 wants the
+								// "Show N more" with what it reveals (WCAG 2.5.3 wants the
 								// visible label to be a substring of the accessible name).
-								// When expanded, the visible "View less" is unambiguous on
+								// When expanded, the visible "Show less" is unambiguous on
 								// its own, so no override — the visible text is the name.
 								aria-label={
 									showCancelled
@@ -574,8 +576,8 @@ export default function PersonProfile() {
 										: sprintf(
 												// translators: %d is the number of hidden cancelled subscriptions.
 												_n(
-													'View %d more cancelled subscription',
-													'View %d more cancelled subscriptions',
+													'Show %d more cancelled subscription',
+													'Show %d more cancelled subscriptions',
 													hiddenCount,
 													'newspack-plugin'
 												),
@@ -584,9 +586,12 @@ export default function PersonProfile() {
 								}
 							>
 								{ showCancelled
-									? __( 'View less', 'newspack-plugin' )
-									: // translators: %d is the number of hidden cancelled subscriptions.
-									  sprintf( __( 'View %d more', 'newspack-plugin' ), hiddenCount ) }
+									? __( 'Show less', 'newspack-plugin' )
+									: sprintf(
+											// translators: %d is the number of hidden cancelled subscriptions.
+											_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
+											hiddenCount
+									  ) }
 							</Button>
 						</HStack>
 					) }
@@ -597,7 +602,7 @@ export default function PersonProfile() {
 				<Row
 					title={ __( 'Payment methods', 'newspack-plugin' ) }
 					description={ __(
-						'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
+						'The cards on file for this reader. Each subscription charges the card set on it; the default applies to new purchases.',
 						'newspack-plugin'
 					) }
 					showDivider={ false }

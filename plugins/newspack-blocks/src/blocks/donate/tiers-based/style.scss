@@ -1,5 +1,6 @@
 @use "newspack-colors" as np-colors;
 @use "newspack-motion" as motion;
+@use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
 .wpbnbd--tiers-based {
@@ -11,7 +12,7 @@
 			border-radius: 0;
 			background: none;
 			&--active {
-				border-color: np-colors.$neutral-300;
+				border-color: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			}
 		}
 		&__tiers {
@@ -52,9 +53,12 @@
 							height: 8px;
 							width: 36px;
 							border-radius: 50px;
-							background: np-colors.$neutral-300;
+							background: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 							margin: 0 5px;
 							transition: background-color motion.$duration-color motion.$ease-color;
+							&.is-active {
+								background: var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900}));
+							}
 						}
 					}
 				}
@@ -73,11 +77,11 @@
 				margin-left: 10px;
 				margin-right: 10px;
 				padding: 19px 14px;
-				background: np-colors.$neutral-000;
-				border: 1px solid np-colors.$neutral-300;
+				background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+				border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 				border-radius: 5px;
 				&--recommended {
-					border: 2px solid np-colors.$neutral-900;
+					border: 2px solid var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 				}
 			}
 			&__top {
@@ -94,8 +98,8 @@
 				height: 17px;
 				padding: 2px 7px;
 				margin: 0;
-				background-color: np-colors.$neutral-600;
-				color: np-colors.$neutral-000;
+				background-color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
+				color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 				border-radius: 2px;
 				font-size: 11px;
 			}
@@ -104,12 +108,41 @@
 			}
 			button[type="submit"],
 			.submit-button {
-				border-radius: 3px;
-				border: 2px solid;
-				font-size: 14px;
-				line-height: 1;
-				padding: 10px 16px;
 				margin-bottom: 16px;
+
+				&:where(:not(.wp-element-button)) {
+					border-radius: 3px;
+					border: 2px solid;
+					font-size: 14px;
+					line-height: 1;
+					padding: 10px 16px;
+				}
+
+				&.wpbnbd__tiers__outline {
+					background: var(--wp--preset--color--base, #{np-colors.$neutral-000});
+					border: 1px solid currentcolor;
+					color: var(--wp--custom--button--outline, var(--newspack-ui-color-mark, var(--wp--preset--color--accent, #{np-colors.$neutral-900})));
+					padding: calc(var(--wp--custom--spacing--25, 0.75rem) - 1px) calc(var(--wp--custom--spacing--35, 1.25rem) - 1px);
+
+					@include motion.hover {
+						&:hover {
+							background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill, 7%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+						}
+					}
+
+					&:active:where(:not(:has([contenteditable="true"]))) {
+						background: color-mix(in oklab, currentcolor var(--wp--custom--state--fill-hover, 13%), var(--wp--preset--color--base, #{np-colors.$neutral-000}));
+					}
+
+					&:focus-visible {
+						@include mixins.focus-edge( currentcolor, $halo: var(--wp--custom--focus--color, #{mixins.$focus-color}) );
+						transition:
+							background-color motion.$duration-color motion.$ease-color,
+							color motion.$duration-color motion.$ease-color,
+							opacity motion.$duration-color motion.$ease-color,
+							transform motion.$duration-press motion.$ease-out;
+					}
+				}
 			}
 			&__description {
 				flex: 1;
@@ -121,7 +154,7 @@
 				background: none;
 				padding: 0;
 				margin-bottom: 13px;
-				color: np-colors.$neutral-600;
+				color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 				transition: color motion.$duration-color motion.$ease-color;
 				span {
 					text-decoration: underline;
@@ -132,12 +165,12 @@
 
 				@include motion.hover {
 					&:hover {
-						color: np-colors.$neutral-900;
+						color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 					}
 				}
 
 				&:active {
-					color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-pressed, 75%), transparent);
+					color: color-mix(in oklab, var(--newspack-ui-color-text, #{np-colors.$neutral-900}) var(--newspack-ui-color-mix-pressed, 75%), transparent);
 				}
 			}
 			&__tier-tile {
@@ -145,7 +178,7 @@
 				justify-content: space-between;
 				margin-bottom: 17px;
 				padding: 5px 14px 16px;
-				border: 2px solid np-colors.$neutral-900;
+				border: 2px solid var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 				border-radius: 4px;
 				h2 {
 					font-size: 0.8em;

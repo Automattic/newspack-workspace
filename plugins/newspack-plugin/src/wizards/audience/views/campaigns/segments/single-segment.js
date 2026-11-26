@@ -25,10 +25,10 @@ import { decodeEntities } from '@wordpress/html-entities';
 import {
 	CategoryAutocomplete,
 	Divider,
-	Grid,
 	Router,
 	SectionHeader,
 	Settings,
+	SplitSection,
 	hooks,
 	useUnsavedChangesDialog,
 } from '../../../../../../packages/components/src';
@@ -389,14 +389,13 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 					noMargin
 					title={ isNew ? __( 'Add Segment', 'newspack-plugin' ) : __( 'Edit Segment', 'newspack-plugin' ) }
 				/>
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader
+				<SplitSection.Root>
+					<SplitSection.Header
 						heading={ 3 }
-						noMargin
 						title={ __( 'Details', 'newspack-plugin' ) }
 						description={ __( 'Name this segment and choose whether it’s in use.', 'newspack-plugin' ) }
 					/>
-					<Stack direction="column" gap="xl">
+					<SplitSection.Content>
 						<TextControl
 							placeholder={ __( 'Untitled Segment', 'newspack-plugin' ) }
 							value={ name }
@@ -418,8 +417,8 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 							<ToggleGroupControlOption value="enabled" label={ __( 'Enabled', 'newspack-plugin' ) } />
 							<ToggleGroupControlOption value="disabled" label={ __( 'Disabled', 'newspack-plugin' ) } />
 						</ToggleGroupControl>
-					</Stack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 				{ criteriaCategories.map( ( { id, title, description, notification } ) => {
 					const categoryCriteria = allCriteria.filter( criteria => criteria.category === id );
 					if ( 'integrations' === id && ! categoryCriteria.length ) {
@@ -428,21 +427,20 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch, ...screenProps
 					return (
 						<Fragment key={ id }>
 							<Divider alignment="full-width" variant="tertiary" />
-							<Grid columns={ 2 } gutter={ 32 } noMargin>
-								<Stack direction="column" gap="lg">
-									<SectionHeader heading={ 3 } noMargin title={ title } description={ description } />
+							<SplitSection.Root>
+								<SplitSection.Header heading={ 3 } title={ title } description={ description }>
 									{ notification && (
 										<Notice status="info" isDismissible={ false } spokenMessage="">
 											{ notification }
 										</Notice>
 									) }
-								</Stack>
-								<Stack direction="column" gap="xl" className="newspack-settings__card newspack-campaigns-wizard-segments__fields">
+								</SplitSection.Header>
+								<SplitSection.Content className="newspack-settings__card newspack-campaigns-wizard-segments__fields">
 									{ categoryCriteria.map( criteria => (
 										<Fragment key={ criteria.id }>{ getCriteriaInput( criteria ) }</Fragment>
 									) ) }
-								</Stack>
-							</Grid>
+								</SplitSection.Content>
+							</SplitSection.Root>
 						</Fragment>
 					);
 				} ) }

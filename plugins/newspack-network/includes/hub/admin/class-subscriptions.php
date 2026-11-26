@@ -76,9 +76,7 @@ class Subscriptions extends Woo {
 					echo '-';
 					break;
 				}
-				echo esc_html(
-					gmdate( get_option( 'date_format' ), strtotime( $value ) )
-				);
+				echo esc_html( self::format_gmt_date( $value ) );
 				break;
 			case 'subscription':
 				self::print_link( $item->get_edit_link(), $item->get_title() );

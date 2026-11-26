@@ -8,12 +8,12 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { __, sprintf } from '@wordpress/i18n';
 import { people, plus } from '@wordpress/icons';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, CardListRow, DataViews, EmptyState, Router } from '../../../../../../packages/components/src';
+import { Button, CardListRow, DataViews, Router } from '../../../../../../packages/components/src';
 import { segmentDescriptionItems, splitCriteriaMessage } from '../utils';
 import SegmentsScreen from './screen';
 import SegmentsPriority from './segments-priority';
@@ -152,7 +152,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 	];
 
 	return (
-		<SegmentsScreen { ...screenProps } headerActions={ headerActions }>
+		<SegmentsScreen { ...screenProps } headerActions={ segments.length ? headerActions : undefined }>
 			{ error && (
 				<Notice className="newspack-campaigns-wizard-segments__notice" status="error" onRemove={ () => setError( null ) }>
 					{ error }
@@ -230,18 +230,20 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, ...screenProps }
 					</Stack>
 				</>
 			) : (
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ people }
-						title={ __( 'No segments yet', 'newspack-plugin' ) }
-						description={ __( 'Group readers by what they do, then show them the right prompts.', 'newspack-plugin' ) }
-					/>
-					<EmptyState.Actions>
-						<Button variant="primary" href="#/segments/new">
-							{ __( 'Add Segment', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ people } />
+						<EmptyState.Title>{ __( 'No segments yet', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __( 'Group readers by what they do, then show them the right prompts.', 'newspack-plugin' ) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button variant="primary" href="#/segments/new">
+								{ __( 'Add Segment', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			) }
 		</SegmentsScreen>
 	);

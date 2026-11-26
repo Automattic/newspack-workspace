@@ -48,10 +48,13 @@ final class Core {
 	 */
 	public function __construct() {
 		add_action( 'init', [ __CLASS__, 'init' ] );
+		add_action( 'wp_loaded', [ __CLASS__, 'maybe_flush_rewrite_rules' ] );
 		add_filter( 'newspack_ads_should_show_ads', [ __CLASS__, 'suppress_ads' ], 10, 2 );
 		add_filter( 'newspack_ads_ad_targeting', [ __CLASS__, 'ad_targeting' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'ensure_only_sponsors' ] );
 		add_filter( 'newspack_blocks_articles_allowed_post_types', [ __CLASS__, 'allow_in_articles_endpoint' ], 10, 1 );
+		add_filter( 'wpseo_sitemap_exclude_taxonomy', [ __CLASS__, 'yoast_exclude_from_sitemap' ], 10, 2 );
+		add_filter( 'wpseo_indexable_excluded_taxonomies', [ __CLASS__, 'yoast_exclude_from_indexables' ] );
 	}
 
 	/**
@@ -124,6 +127,19 @@ final class Core {
 		self::register_meta();
 		self::register_tax();
 		self::create_shadow_relationship();
+	}
+
+	/**
+	 * Flush rewrite rules once, so a stored sponsor archive rule is dropped
+	 * and /newspack_spnsrs_tax/<slug>/ returns a 404 instead of the homepage.
+	 * Runs on `wp_loaded` so the option is only set once the flush has happened.
+	 */
+	public static function maybe_flush_rewrite_rules() {
+		$option_name = 'newspack_sponsors_has_flushed_tax_rewrite_rules';
+		if ( ! get_option( $option_name ) ) {
+			flush_rewrite_rules( false ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
+			update_option( $option_name, true );
+		}
 	}
 
 	/**
@@ -355,20 +371,25 @@ final class Core {
 			'archives'              => __( 'Sponsors', 'newspack-sponsors' ),
 		];
 
+		// `public` is true so the Content Loop, Carousel and RSS feed filters list
+		// sponsors. Sponsor terms have no front-end archive, so they are not
+		// publicly queryable and get no rewrite rule.
 		$tax_args = [
-			'capabilities'  => [
+			'capabilities'       => [
 				'manage_terms' => '',
 				'edit_terms'   => '',
 				'delete_terms' => '',
 			],
-			'hierarchical'  => true,
-			'labels'        => $labels,
-			'public'        => true,
-			'rewrite'       => [ 'slug' => self::NEWSPACK_SPONSORS_TAX ],
-			'show_in_menu'  => false,
-			'show_in_rest'  => true,
-			'show_tagcloud' => false,
-			'show_ui'       => true,
+			'hierarchical'       => true,
+			'labels'             => $labels,
+			'public'             => true,
+			'publicly_queryable' => false,
+			'rewrite'            => false,
+			'show_in_menu'       => false,
+			'show_in_nav_menus'  => false,
+			'show_in_rest'       => true,
+			'show_tagcloud'      => false,
+			'show_ui'            => true,
 		];
 
 		$post_types = apply_filters(
@@ -377,6 +398,29 @@ final class Core {
 		);
 
 		register_taxonomy( self::NEWSPACK_SPONSORS_TAX, $post_types, $tax_args );
+	}
+
+	/**
+	 * Keep sponsor terms out of Yoast's XML sitemap. Yoast lists every public
+	 * taxonomy, and sponsor terms have no archive to link to.
+	 *
+	 * @param bool   $exclude  Whether to exclude the taxonomy.
+	 * @param string $taxonomy Taxonomy name.
+	 * @return bool
+	 */
+	public static function yoast_exclude_from_sitemap( $exclude, $taxonomy ) {
+		return self::NEWSPACK_SPONSORS_TAX === $taxonomy ? true : $exclude;
+	}
+
+	/**
+	 * Keep sponsor terms out of Yoast's indexables, which also feed its llms.txt.
+	 *
+	 * @param array $taxonomies Excluded taxonomy names.
+	 * @return array
+	 */
+	public static function yoast_exclude_from_indexables( $taxonomies ) {
+		$taxonomies[] = self::NEWSPACK_SPONSORS_TAX;
+		return $taxonomies;
 	}
 
 	/**

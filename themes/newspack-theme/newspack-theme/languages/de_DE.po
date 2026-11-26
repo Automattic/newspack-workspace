@@ -69,7 +69,7 @@ msgstr "Weiter"
 #: classes/class-newspack-walker-comment.php:50
 #, php-format
 msgid "%s <span class=\"screen-reader-text says\">says:</span>"
-msgstr "%s <span class=\"Screen-Reader-Text sagt\">sagt:</span>"
+msgstr "%s <span class=\"screen-reader-text says\">sagt:</span>"
 
 #: classes/class-newspack-walker-comment.php:62
 msgid "Article author"
@@ -384,8 +384,8 @@ msgid ""
 "<span class=\"meta-nav\">Published in</span><br><span class=\"post-"
 "title\">%title</span>"
 msgstr ""
-"<span class=\"meta-nav\">veröffentlicht in</span><br><span class=\"post-"
-"title\" >%titel</span>"
+"<span class=\"meta-nav\">Veröffentlicht in</span><br><span class=\"post-"
+"title\">%title</span>"
 
 #. translators: %s: WordPress version used by current site.
 #: inc/back-compat.php:38 inc/back-compat.php:53 inc/back-compat.php:74

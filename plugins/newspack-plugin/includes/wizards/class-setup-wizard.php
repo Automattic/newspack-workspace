@@ -211,7 +211,6 @@ class Setup_Wizard extends Wizard {
 		$required_plugins_slugs = [
 			'akismet',
 			'jetpack',
-			'pwa',
 			'wordpress-seo',
 			'google-site-kit',
 			'newspack-blocks',
@@ -430,8 +429,8 @@ class Setup_Wizard extends Wizard {
 			}
 		}
 
-		// Append PWA display mode option.
-		$theme_mods['pwa_display_mode'] = get_option( 'newspack_pwa_display_mode', 'minimal-ui' );
+		// Web app display mode is an option, not a theme mod, so the manifest keeps it when the theme changes.
+		$theme_mods['pwa_display_mode'] = Web_App_Manifest::get_display_mode();
 
 		// Append post content fallback image option.
 		$theme_mods['post_content_fallback_image'] = get_option( Default_Image::OPTION_NAME, null );
@@ -452,8 +451,7 @@ class Setup_Wizard extends Wizard {
 				'theme_mods'        => $theme_mods,
 				'homepage_patterns' => Starter_Content::get_homepage_patterns(),
 				'etc'               => [
-					'post_count'     => wp_count_posts()->publish,
-					'has_pwa_plugin' => defined( 'PWA_PLUGIN_FILE' ),
+					'post_count' => wp_count_posts()->publish,
 				],
 			]
 		);
@@ -515,7 +513,7 @@ class Setup_Wizard extends Wizard {
 				continue;
 			}
 
-			// PWA display mode is an option, not a theme mod.
+			// Web app display mode is an option, not a theme mod.
 			if ( 'pwa_display_mode' === $key ) {
 				update_option( 'newspack_pwa_display_mode', $value );
 				continue;
@@ -722,6 +720,10 @@ class Setup_Wizard extends Wizard {
 	 * @param array $theme_mods An array of theme mods.
 	 */
 	public function sanitize_theme_mods( $theme_mods ) {
+		// PWA passes the stored display mode straight into its manifest, so only a mode a manifest can declare is saved.
+		if ( is_array( $theme_mods ) && array_key_exists( 'pwa_display_mode', $theme_mods ) && ! in_array( $theme_mods['pwa_display_mode'], Web_App_Manifest::DISPLAY_MODES, true ) ) {
+			unset( $theme_mods['pwa_display_mode'] );
+		}
 		return $theme_mods;
 	}
 }

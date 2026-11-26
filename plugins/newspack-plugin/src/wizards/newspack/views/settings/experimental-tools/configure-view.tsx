@@ -17,8 +17,16 @@ import { Stack, Text } from '@wordpress/ui';
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
-import { CollapsibleGroup, Divider, Grid, SectionHeader, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import {
+	CollapsibleGroup,
+	Divider,
+	SectionHeader,
+	SplitSection,
+	useConfirmDialog,
+	useUnsavedChangesDialog,
+} from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
+import { formatSiteDateTime } from '../../../../../../packages/components/src/dataviews/format-date';
 import type { SaveNotice, Tool, ToolField } from './types';
 
 interface LogEntry {
@@ -66,7 +74,7 @@ function LogsField( { field }: { field: ToolField } ) {
 					title={ sprintf(
 						/* translators: 1: request date and time, 2: model name, 3: response time in seconds. */
 						__( '%1$s · %2$s · %3$ss', 'newspack-plugin' ),
-						new Date( log.datetime.replace( ' ', 'T' ) + 'Z' ).toLocaleString(),
+						formatSiteDateTime( `${ log.datetime.replace( ' ', 'T' ) }Z` ),
 						log.settings?.model ?? __( 'Unknown model', 'newspack-plugin' ),
 						String( log.response_time )
 					) }
@@ -463,19 +471,10 @@ export default function ConfigureView( {
 							{ section.content }
 						</Stack>
 					) : (
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader
-								noMargin
-								fullWidthText
-								heading={ 2 }
-								backNav={ section.backNav }
-								title={ section.title }
-								description={ section.description }
-							/>
-							<Stack direction="column" gap="xl">
-								{ section.content }
-							</Stack>
-						</Grid>
+						<SplitSection.Root>
+							<SplitSection.Header backNav={ section.backNav } title={ section.title } description={ section.description } />
+							<SplitSection.Content>{ section.content }</SplitSection.Content>
+						</SplitSection.Root>
 					) }
 				</Fragment>
 			) ) }

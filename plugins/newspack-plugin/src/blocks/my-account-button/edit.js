@@ -3,7 +3,6 @@
  */
 /* globals newspack_blocks */
 import classnames from 'classnames';
-import { account as icon } from '../../../packages/icons';
 
 /**
  * WordPress dependencies
@@ -23,6 +22,7 @@ import {
 	/* eslint-enable @wordpress/no-unsafe-wp-apis */
 } from '@wordpress/block-editor';
 import { ToolbarButton, ToolbarGroup } from '@wordpress/components';
+import { commentAuthorAvatar as icon } from '@wordpress/icons';
 
 function MyAccountButtonEdit( { attributes, setAttributes } ) {
 	const { signedInLabel, signedOutLabel, style, className: blockClassName } = attributes;

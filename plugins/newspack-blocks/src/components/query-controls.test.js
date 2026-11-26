@@ -1,7 +1,13 @@
 /**
+ * External dependencies
+ */
+import { render, waitFor } from '@testing-library/react';
+
+/**
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import { getQueryArgs } from '@wordpress/url';
 
 /**
  * Internal dependencies
@@ -52,5 +58,55 @@ describe( 'fetchSavedPosts', () => {
 	it( 'asks for nothing when nothing is saved', async () => {
 		await expect( fetchSavedPosts( [], [] ) ).resolves.toEqual( [] );
 		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
+} );
+
+describe( 'Static mode lookups', () => {
+	beforeAll( () => {
+		window.newspack_blocks_data = {
+			posts_rest_url: 'https://example.test/wp-json/newspack-blocks/v1/newspack-blocks-posts',
+			specific_posts_rest_url: 'https://example.test/wp-json/newspack-blocks/v1/newspack-blocks-specific-posts',
+		};
+	} );
+
+	it( 'asks for the statuses ticked on the block, so drafts can be found and reloaded', async () => {
+		apiFetch.mockClear();
+		apiFetch.mockResolvedValue( [] );
+		const controls = new QueryControls( { postType: 'post', includedPostStatuses: [ 'publish', 'draft' ] } );
+
+		await controls.fetchPostSuggestions( 'Alpha' );
+		await controls.fetchSavedPosts( [ 11 ] );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+		apiFetch.mock.calls.forEach( ( [ { url } ] ) => {
+			expect( getQueryArgs( url ).includedPostStatuses ).toEqual( [ 'publish', 'draft' ] );
+		} );
+	} );
+
+	it( 'passes the status of each post to the token field, to tell same-title posts apart', async () => {
+		const controls = new QueryControls( { postType: 'post' } );
+
+		apiFetch.mockResolvedValue( [ { id: 11, title: 'Alpha', post_status: 'draft' } ] );
+		await expect( controls.fetchPostSuggestions( 'Alpha' ) ).resolves.toEqual( [ { value: 11, label: 'Alpha', clashNote: 'Draft' } ] );
+
+		apiFetch.mockResolvedValue( [ { id: 11, title: { rendered: 'Alpha' }, post_status: 'future' } ] );
+		await expect( controls.fetchSavedPosts( [ 11 ] ) ).resolves.toEqual( [ { value: 11, label: 'Alpha', clashNote: 'Scheduled' } ] );
+	} );
+
+	// Ticking Draft after a draft was selected must turn its "Unavailable content" token back into a title.
+	it( 'reloads the saved content when the statuses change', async () => {
+		apiFetch.mockClear();
+		apiFetch.mockResolvedValue( [] );
+		const controlsWith = includedPostStatuses => (
+			<QueryControls specificMode postType="post" specificPosts={ [ 11 ] } includedPostStatuses={ includedPostStatuses } />
+		);
+
+		const { rerender } = render( controlsWith( [ 'publish' ] ) );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 1 ) );
+
+		rerender( controlsWith( [ 'publish', 'draft' ] ) );
+		await waitFor( () => expect( apiFetch ).toHaveBeenCalledTimes( 2 ) );
+
+		expect( getQueryArgs( apiFetch.mock.calls[ 1 ][ 0 ].url ).includedPostStatuses ).toEqual( [ 'publish', 'draft' ] );
 	} );
 } );

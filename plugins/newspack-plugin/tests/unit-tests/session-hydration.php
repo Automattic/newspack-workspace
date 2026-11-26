@@ -32,6 +32,7 @@ class Newspack_Test_Session_Hydration extends WP_UnitTestCase {
 	 * Clean up after each test.
 	 */
 	public function tear_down() {
+		unset( $_SERVER['HTTP_ORIGIN'] );
 		parent::tear_down();
 		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
 		unset( $_COOKIE[ NEWSPACK_CLIENT_ID_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -106,6 +107,7 @@ class Newspack_Test_Session_Hydration extends WP_UnitTestCase {
 		$data = $response->get_data();
 		$this->assertArrayHasKey( 'nonce', $data );
 		$this->assertNotEmpty( $data['nonce'] );
+		$this->assertSame( $user_id, $data['user_id'] );
 
 		// Transient should be deleted (one-time use).
 		$this->assertFalse( get_transient( Session_Hydration::get_transient_key( self::$test_cid ) ) );
@@ -196,5 +198,46 @@ class Newspack_Test_Session_Hydration extends WP_UnitTestCase {
 		unset( $_COOKIE[ NEWSPACK_CLIENT_ID_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->clear_auth_cookie();
 		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * Other sites can read REST responses, so a request from one must get no nonce
+	 * and must not consume the one-time binding. The page's own origin still works.
+	 */
+	public function test_hydration_endpoint_only_answers_allowed_origins() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		update_user_meta( $user_id, Reader_Activation::READER, true );
+		$_COOKIE[ NEWSPACK_CLIENT_ID_COOKIE_NAME ] = self::$test_cid; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		Session_Hydration::bind_cid( $user_id );
+		$this->set_auth_cookie( $user_id );
+		$request = new WP_REST_Request( 'GET', '/newspack/v1/reader/session' );
+
+		$_SERVER['HTTP_ORIGIN'] = 'https://another-site.test';
+		$this->assertSame( 403, rest_do_request( $request )->get_status() );
+
+		$_SERVER['HTTP_ORIGIN'] = home_url();
+		$this->assertSame( 200, rest_do_request( $request )->get_status() );
+
+		unset( $_COOKIE[ NEWSPACK_CLIENT_ID_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->clear_auth_cookie();
+	}
+
+	/**
+	 * The nonce action has no logged-out handler, so a visitor without a session
+	 * gets no nonce.
+	 */
+	public function test_nonce_action_is_logged_in_only() {
+		$this->assertNotFalse( has_action( 'wp_ajax_newspack_reader_nonce' ) );
+		$this->assertFalse( has_action( 'wp_ajax_nopriv_newspack_reader_nonce' ) );
+	}
+
+	/**
+	 * The page config names its reader, for the nonce check to compare against.
+	 */
+	public function test_page_config_names_the_reader() {
+		$user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+
+		$this->assertSame( $user_id, \Newspack\Reader_Data::get_config()['user_id'] );
 	}
 }

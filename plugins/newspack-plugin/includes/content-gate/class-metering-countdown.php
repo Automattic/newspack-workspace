@@ -38,13 +38,18 @@ class Metering_Countdown {
 	public static function get_default_settings() {
 		$primary_product = Subscriptions_Tiers::get_primary_subscription_tier_product();
 		return [
-			'enabled'        => false,
-			'style'          => 'light',
-			'cta_label'      => __( 'Subscribe now and get unlimited access.', 'newspack-plugin' ),
-			'button_label'   => __( 'Subscribe now', 'newspack-plugin' ),
-			'cta_type'       => 'product',
-			'cta_product_id' => $primary_product ? $primary_product->get_id() : 0,
-			'cta_url'        => '',
+			'enabled'           => false,
+			'style'             => 'light',
+			'cta_label'         => __( 'Subscribe now and get unlimited access.', 'newspack-plugin' ),
+			'button_label'      => __( 'Subscribe now', 'newspack-plugin' ),
+			'cta_type'          => 'product',
+			'cta_product_id'    => $primary_product ? $primary_product->get_id() : 0,
+			'cta_url'           => '',
+			'bg_color'          => '',
+			'button_color'      => '',
+			'text_color'        => '',
+			'button_text_color' => '',
+			'shadow'            => true,
 		];
 	}
 
@@ -80,8 +85,14 @@ class Metering_Countdown {
 			// translators: %s is the setting key.
 			return new \WP_Error( 'newspack_countdown_banner_invalid_setting', sprintf( __( 'Invalid setting key: %s.', 'newspack-plugin' ), $key ) );
 		}
-		if ( $key === 'style' && ! in_array( $value, [ 'light', 'dark' ], true ) ) {
-			return $default_settings[ $key ];
+		if ( $key === 'style' ) {
+			return Content_Banner_Style::sanitize_style( $value );
+		}
+		if ( in_array( $key, [ 'bg_color', 'button_color', 'text_color', 'button_text_color' ], true ) ) {
+			return Content_Banner_Style::sanitize_color( $value );
+		}
+		if ( $key === 'shadow' ) {
+			return (int) filter_var( $value, FILTER_VALIDATE_BOOLEAN );
 		}
 		if ( $key === 'cta_type' && ! in_array( $value, [ 'product', 'url' ], true ) ) {
 			return $default_settings[ $key ];
@@ -165,14 +176,14 @@ class Metering_Countdown {
 		}
 		$settings     = self::get_settings();
 		$button_label = $settings['button_label'];
-		$button_class = 'dark' === $settings['style'] ? 'newspack-ui__button--primary-light' : 'newspack-ui__button--primary';
+		$button_class = Content_Banner_Style::get_button_class( Content_Banner_Style::get_render_style( $settings['style'] ) );
 
 		$cta_type = $settings['cta_type'];
 		if ( $cta_type === 'url' ) {
 			$cta_url = $settings['cta_url'];
 			if ( $cta_url ) {
 				?>
-				<a href="<?php echo esc_url( $cta_url ); ?>" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></a>
+				<a href="<?php echo esc_url( $cta_url ); ?>" class="newspack-ui__button <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></a>
 				<?php
 				return;
 			}
@@ -194,7 +205,7 @@ class Metering_Countdown {
 					<input type="hidden" name="newspack_checkout" value="1" />
 					<input type="hidden" name="modal_checkout" value="1" />
 					<input type="hidden" name="product_id" value="<?php echo esc_attr( $product->get_id() ); ?>" />
-					<button type="submit" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></button>
+					<button type="submit" class="newspack-ui__button <?php echo esc_attr( $button_class ); ?>"><?php echo esc_html( $button_label ); ?></button>
 				</form>
 			</div>
 			<?php
@@ -210,9 +221,15 @@ class Metering_Countdown {
 		if ( ! self::is_enabled() ) {
 			return;
 		}
-		$settings    = self::get_settings();
-		$style_class = sprintf( 'is-style-%s', $settings['style'] );
-		$classes     = [ $style_class ];
+		$settings     = self::get_settings();
+		$style        = Content_Banner_Style::get_render_style( $settings['style'] );
+		$inline_style = Content_Banner_Style::get_inline_style( $style, $settings['bg_color'], $settings['button_color'], $settings['text_color'], $settings['button_text_color'], $settings['style'] );
+		$classes      = array_filter(
+			[
+				sprintf( 'is-style-%s', $style ),
+				Content_Banner_Style::get_shadow_class( $style, (bool) $settings['shadow'], $settings['style'] ),
+			]
+		);
 		$total_views = Metering::get_total_metered_views( \is_user_logged_in() );
 		if ( false === $total_views ) {
 			return;
@@ -225,7 +242,7 @@ class Metering_Countdown {
 		$registered_count  = $metering_settings['count'];
 		?>
 		<div class="newspack-ui">
-			<div class="banner newspack-countdown-banner__cta <?php echo esc_attr( implode( ' ', $classes ) ); ?>">
+			<div class="banner newspack-countdown-banner__cta <?php echo esc_attr( implode( ' ', $classes ) ); ?>"<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
 				<div class="wrapper newspack-countdown-banner__cta__content">
 					<div class="newspack-countdown-banner__cta__content__wrapper">
 						<span class="newspack-countdown-banner__cta__content__countdown newspack-ui__font--s">

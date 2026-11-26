@@ -1,15 +1,32 @@
-import { getColorForContrast } from './utils';
+import { getColorForContrast, getMinimumDonation, usesSiteButtonStyle } from './utils';
+
+describe( 'getMinimumDonation', () => {
+	it.each( [
+		[ 1200, 1200 ],
+		[ '1200', 1200 ],
+		[ '12.5', 12.5 ],
+		[ 0, 0 ],
+	] )( 'reads %p as the minimum %p', ( value, expected ) => {
+		expect( getMinimumDonation( value ) ).toBe( expected );
+	} );
+
+	// An unset minimum leaves the block following the site-wide one. A number
+	// must never count as unset, or the block's own minimum is dropped.
+	it.each( [ undefined, null, '', 'abc' ] )( 'treats %p as no minimum', value => {
+		expect( getMinimumDonation( value ) ).toBeUndefined();
+	} );
+} );
 
 describe( 'getColorForContrast', () => {
 	// Must stay in parity with Newspack_Blocks::get_color_for_contrast(), which
-	// runs the same APCA math and WCAG floor (see tests/test-color-contrast.php).
+	// runs the same APCA math (see tests/test-color-contrast.php).
 	it.each( [
 		[ '#000000', '#ffffff' ],
 		[ '#ffffff', '#000000' ],
 		[ '#f0f0f0', '#000000' ],
 		[ '#ffcc00', '#000000' ],
-		// APCA picks white (4.22:1), only black reaches 4.5:1, so the WCAG floor flips it.
-		[ '#178f15', '#000000' ],
+		// White reads better by APCA (Lc 74 against 36) though only black reaches 4.5:1.
+		[ '#178f15', '#ffffff' ],
 		[ '#3366cc', '#ffffff' ],
 		[ '#dd3333', '#ffffff' ],
 		[ '#fff', '#000000' ],
@@ -17,13 +34,13 @@ describe( 'getColorForContrast', () => {
 		[ 'not-a-color', '#000000' ],
 		// Parity cases shared with the PHP fixture table.
 		[ '3366cc', '#ffffff' ],
-		[ '178f15', '#000000' ],
+		[ '178f15', '#ffffff' ],
 		[ '', '#000000' ],
 		[ '#33333380', '#ffffff' ],
 		[ '#FFCC00', '#000000' ],
-		[ ' #178f15 ', '#000000' ],
-		// APCA picks white (3.79:1), only black reaches 4.5:1, so the WCAG floor flips it.
-		[ '#e65100', '#000000' ],
+		[ ' #178f15 ', '#ffffff' ],
+		// White reads better by APCA (Lc 70 against 40) though only black reaches 4.5:1.
+		[ '#e65100', '#ffffff' ],
 	] )( 'picks readable text for %s', ( background, expected ) => {
 		expect( getColorForContrast( background ) ).toBe( expected );
 	} );
@@ -35,5 +52,25 @@ describe( 'getColorForContrast', () => {
 	it( 'expands 3-digit hex the same as 6-digit hex', () => {
 		expect( getColorForContrast( '#36c' ) ).toBe( getColorForContrast( '#3366cc' ) );
 		expect( getColorForContrast( '#fff' ) ).toBe( getColorForContrast( '#ffffff' ) );
+	} );
+} );
+
+describe( 'usesSiteButtonStyle', () => {
+	it( 'is true for the default color on a block theme, ignoring case', () => {
+		expect( usesSiteButtonStyle( '#dd3333', true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '#DD3333', true ) ).toBe( true );
+	} );
+
+	it( 'treats a cleared or missing color like the default', () => {
+		expect( usesSiteButtonStyle( undefined, true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '', true ) ).toBe( true );
+	} );
+
+	it( 'is false for a picked color', () => {
+		expect( usesSiteButtonStyle( '#6c6c6c', true ) ).toBe( false );
+	} );
+
+	it( 'is false off a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', false ) ).toBe( false );
 	} );
 } );

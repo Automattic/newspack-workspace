@@ -168,7 +168,7 @@ log_info "Starting environment (this installs WordPress and seeds assets)..."
 # `n env up` only adds /etc/hosts entries interactively; the e2e suite is usually
 # driven non-interactively, so add it here via the passwordless helper if present.
 if [[ "$domain" == *.test || "$domain" == *.local ]] && ! grep -q "[[:space:]]${domain}$" /etc/hosts 2>/dev/null; then
-    ip=$(grep -o '127\.0\.0\.[0-9]*' "$compose_file" | head -1)
+    ip="$ENV_PROXY_IP"
     if command -v newspack-manage-host >/dev/null 2>&1; then
         sudo newspack-manage-host host-add "$ip" "$domain" \
             && log_info "Added $domain -> $ip to /etc/hosts"

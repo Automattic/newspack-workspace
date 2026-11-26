@@ -438,7 +438,7 @@
 }
 
 .overlay-mask {
-	background-color: rgba(0, 0, 0, 0.5);
+	background-color: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, rgba(0, 0, 0, 0.5)));
 	content: "";
 	inset: 0;
 	position: fixed;

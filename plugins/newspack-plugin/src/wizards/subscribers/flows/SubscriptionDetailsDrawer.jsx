@@ -30,7 +30,7 @@ import { Button, Divider } from '../../../../packages/components/src';
 import { CardRow } from '../components/SubscriptionCard';
 import { billingText, fmtDate, orDash, paymentRows } from '../format';
 import { STATUS_LABELS, STATUS_BADGE_INTENT } from '../status';
-import { seatCountText } from './capacity';
+import { pendingInvites, pendingInvitesText, seatCountText } from './capacity';
 
 export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose } ) {
 	const billing = group.billing || {};
@@ -79,6 +79,9 @@ export default function SubscriptionDetailsDrawer( { group, onViewOwner, onClose
 						) }
 					</CardRow>
 					<CardRow label={ __( 'Seats', 'newspack-plugin' ) }>{ seatCountText( group ) }</CardRow>
+					{ pendingInvites( group ) > 0 && (
+						<CardRow label={ __( 'Invitations', 'newspack-plugin' ) }>{ pendingInvitesText( group ) }</CardRow>
+					) }
 					<Divider marginTop={ 0 } marginBottom={ 0 } />
 					<CardRow label={ __( 'First subscribed', 'newspack-plugin' ) }>{ orDash( fmtDate( billing.startDate ) ) }</CardRow>
 					<CardRow label={ __( 'Billing', 'newspack-plugin' ) }>{ billingText( billing ) }</CardRow>

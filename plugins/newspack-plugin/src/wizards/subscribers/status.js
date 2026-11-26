@@ -7,6 +7,11 @@
  */
 import { __ } from '@wordpress/i18n';
 
+/**
+ * Internal dependencies.
+ */
+import { statusBadgeIntent } from '../../../packages/components/src/status-badge';
+
 export const STATUS_LABELS = {
 	active: __( 'Active', 'newspack-plugin' ),
 	pending: __( 'Pending', 'newspack-plugin' ),
@@ -23,16 +28,12 @@ export const STATUS_INDICATORS = {
 	cancelled: 'cancelled',
 };
 
-// The profile card and the person header still badge a single status, where an
-// attention marker is what a badge is for.
+// The badge colors for the headers and subscription cards, which take an intent
+// rather than a component. Derived so they always match StatusBadge in the lists.
 /** @type {Record< string, import('../../../packages/components/src/types').BadgeIntent >} */
-export const STATUS_BADGE_INTENT = {
-	active: 'stable',
-	// "Pending" is queued work rather than an idle state, hence low, not informational.
-	pending: 'low',
-	'on-hold': 'medium',
-	cancelled: 'high',
-};
+export const STATUS_BADGE_INTENT = Object.fromEntries(
+	Object.entries( STATUS_INDICATORS ).map( ( [ status, name ] ) => [ status, statusBadgeIntent( name ) ] )
+);
 
 // Active first, then pending, then on-hold, then cancelled.
 export const STATUS_RANK = { active: 0, pending: 1, 'on-hold': 2, cancelled: 3 };

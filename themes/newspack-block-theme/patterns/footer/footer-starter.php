@@ -20,7 +20,7 @@
 <div class="wp-block-group is-footer has-base-color has-contrast-background-color has-text-color has-background has-link-color" style="margin-top:var(--wp--preset--spacing--80);padding-top:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50)"><!-- wp:group {"metadata":{"name":"<?php esc_html_e( 'Credits', 'newspack-block-theme' ); ?>"},"align":"wide","className":"is-credits","style":{"spacing":{"blockGap":"var:preset|spacing|20"}},"fontSize":"x-small","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
 <div class="wp-block-group alignwide is-credits has-x-small-font-size"><!-- wp:newspack/copyright {"showSiteTitle":true} /-->
 
-<!-- wp:paragraph {"lock":{"move":true,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
+<!-- wp:paragraph {"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
 <p class="powered-by"><a href="https://newspack.com"><?php esc_html_e( 'Powered by Newspack', 'newspack-block-theme' ); ?></a></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>
@@ -32,7 +32,7 @@
 <div class="wp-block-group is-footer has-base-color has-contrast-background-color has-text-color has-background has-link-color" style="margin-top:var(--wp--preset--spacing--80);padding-top:var(--wp--preset--spacing--50);padding-bottom:var(--wp--preset--spacing--50)"><!-- wp:group {"metadata":{"name":"<?php esc_html_e( 'Credits', 'newspack-block-theme' ); ?>"},"align":"wide","className":"is-credits","style":{"spacing":{"blockGap":"var:preset|spacing|20"}},"fontSize":"x-small","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
 <div class="wp-block-group alignwide is-credits has-x-small-font-size"><!-- wp:newspack/copyright {"showSiteTitle":true} /-->
 
-<!-- wp:paragraph {"lock":{"move":true,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
+<!-- wp:paragraph {"metadata":{"name":"<?php esc_html_e( 'Powered By', 'newspack-block-theme' ); ?>"},"className":"powered-by"} -->
 <p class="powered-by"><a href="https://newspack.com"><?php esc_html_e( 'Powered by Newspack', 'newspack-block-theme' ); ?></a></p>
 <!-- /wp:paragraph --></div>
 <!-- /wp:group --></div>

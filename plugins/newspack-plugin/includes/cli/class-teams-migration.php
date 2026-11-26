@@ -1005,7 +1005,8 @@ class Teams_Migration {
 	 * setting already reserves one (see map_product_max_members_to_group_limit()). For
 	 * variable subscriptions, both the parent product and each subscription variation are
 	 * updated so the setting is available at whichever level WooCommerce Subscriptions
-	 * resolves the product ID.
+	 * resolves the product ID. Each variation's limit comes from its own "Maximum member
+	 * count", as Teams enforces it: a variation with none is unlimited, whatever the parent holds.
 	 *
 	 * A product sold with Teams' per-member pricing is switched to per-seat group
 	 * pricing, and its minimum and maximum member counts become its minimum and maximum
@@ -1076,60 +1077,77 @@ class Teams_Migration {
 				continue;
 			}
 
-			$max_members = (int) $product->get_meta( '_wc_memberships_for_teams_max_member_count', true );
-			// Match migrate-teams: the group limit counts the owner, so add their seat
-			// unless "Owners must be members" already reserves one on the product.
-			$limit = self::map_product_max_members_to_group_limit( $max_members );
-
 			// Teams keeps the pricing mode on the parent product only.
 			$per_member = 'per_member' === $product->get_meta( '_wc_memberships_for_teams_pricing', true );
 
-			// Collect the IDs to update: always the parent; plus any
+			// Collect the products to update: always the parent; plus any
 			// subscription_variation children for variable subscriptions.
-			$ids_to_update = [ $product_id ];
+			$products_to_update = [ $product_id => $product ];
 			if ( $product->is_type( 'variable-subscription' ) || $product->is_type( 'variable' ) ) {
 				foreach ( $product->get_children() as $variation_id ) {
 					$variation = \wc_get_product( $variation_id );
 					if ( $variation && $variation->is_type( 'subscription_variation' ) ) {
-						$ids_to_update[] = $variation_id;
+						$products_to_update[ $variation_id ] = $variation;
 					}
 				}
 			}
 
-			if ( ! $dry_run ) {
-				foreach ( $ids_to_update as $id ) {
-					$p = \wc_get_product( $id );
-					if ( ! $p ) {
-						continue;
-					}
-					$p->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
-					$p->update_meta_data( '_newspack_group_subscription_limit', $limit );
-					if ( $per_member ) {
-						// Teams reads the member counts off each product, variations included,
-						// so each one maps its own.
-						$seats = self::map_product_member_counts_to_seats(
-							(int) $p->get_meta( '_wc_memberships_for_teams_min_member_count', true ),
-							(int) $p->get_meta( '_wc_memberships_for_teams_max_member_count', true )
-						);
-						$p->update_meta_data( '_newspack_group_subscription_pricing_mode', Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
-						$p->update_meta_data( '_newspack_group_subscription_min_seats', $seats['min'] );
-						$p->update_meta_data( '_newspack_group_subscription_max_seats', $seats['max'] );
-					}
-					$p->save();
+			$pricing          = $per_member ? 'per seat' : 'per group';
+			$parent_label     = '';
+			$variation_limits = [];
+			foreach ( $products_to_update as $id => $p ) {
+				// Teams reads the member counts off the purchased product, which for a variable
+				// product is the variation, with no parent fallback: a blank maximum is unlimited.
+				$max_members = (int) $p->get_meta( '_wc_memberships_for_teams_max_member_count', true );
+				// Match migrate-teams: the group limit counts the owner, so add their seat
+				// unless "Owners must be members" already reserves one on the product.
+				$limit = self::map_product_max_members_to_group_limit( $max_members );
+				$seats = self::map_product_member_counts_to_seats(
+					(int) $p->get_meta( '_wc_memberships_for_teams_min_member_count', true ),
+					$max_members
+				);
+				// A per-seat group's capacity is the seats bought, capped by the maximum, so that is the figure to check.
+				$cap   = $per_member ? $seats['max'] : $limit;
+				$label = 0 === $cap ? 'Unlimited' : $cap;
+
+				if ( $id === $product_id ) {
+					$parent_label = $label;
+				} else {
+					$variation_limits[] = sprintf( '%d=%s', $id, $label );
 				}
+				$summary[] = [
+					'product_id'   => $id,
+					'parent_id'    => $id === $product_id ? '' : $product_id,
+					'product_name' => $p->get_name(),
+					'pricing'      => $pricing,
+					'limit'        => $label,
+				];
+
+				if ( $dry_run ) {
+					continue;
+				}
+				$p->update_meta_data( '_newspack_group_subscription_enabled', 'yes' );
+				$p->update_meta_data( '_newspack_group_subscription_limit', $limit );
+				if ( $per_member ) {
+					$p->update_meta_data( '_newspack_group_subscription_pricing_mode', Group_Subscription_Settings::PRICING_MODE_PER_SEAT );
+					$p->update_meta_data( '_newspack_group_subscription_min_seats', $seats['min'] );
+					$p->update_meta_data( '_newspack_group_subscription_max_seats', $seats['max'] );
+				}
+				$p->save();
 			}
 
-			$variation_count = count( $ids_to_update ) - 1;
-			$pricing = $per_member ? 'per seat' : 'per group';
-			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, pricing=%s, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', $pricing, 0 === $limit ? 'Unlimited' : $limit, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
-
-			$summary[] = [
-				'product_id'   => $product_id,
-				'product_name' => $product->get_name(),
-				'pricing'      => $pricing,
-				'limit'        => 0 === $limit ? 'Unlimited' : $limit,
-				'variations'   => $variation_count,
-			];
+			WP_CLI::success(
+				sprintf(
+					'Product %d ("%s"): %s enabled=yes, pricing=%s, %s=%s%s.',
+					$product_id,
+					$product->get_name(),
+					$dry_run ? 'would set' : 'set',
+					$pricing,
+					$per_member ? 'max seats' : 'limit',
+					$parent_label,
+					$variation_limits ? sprintf( '; variations: %s', implode( ', ', $variation_limits ) ) : ''
+				)
+			);
 
 			// Free the per-request object cache so memory stays bounded across a large
 			// product list.
@@ -1146,19 +1164,20 @@ class Teams_Migration {
 			'table',
 			array_map(
 				fn( $row ) => [
-					'Product'    => $row['product_id'],
-					'Name'       => $row['product_name'],
-					'Pricing'    => $row['pricing'],
-					'Limit'      => $row['limit'],
-					'Variations' => $row['variations'],
+					'Product'           => $row['product_id'],
+					'Parent'            => $row['parent_id'],
+					'Name'              => $row['product_name'],
+					'Pricing'           => $row['pricing'],
+					'Limit / max seats' => $row['limit'],
 				],
 				$summary
 			),
-			[ 'Product', 'Name', 'Pricing', 'Limit', 'Variations' ]
+			[ 'Product', 'Parent', 'Name', 'Pricing', 'Limit / max seats' ]
 		);
 
+		$parent_count = count( array_filter( $summary, fn( $row ) => '' === $row['parent_id'] ) );
 		WP_CLI::line( '' );
-		WP_CLI::success( sprintf( 'Done. %d product(s) %s.', count( $summary ), $dry_run ? 'would be updated' : 'updated' ) );
+		WP_CLI::success( sprintf( 'Done. %d product(s) and %d variation(s) %s.', $parent_count, count( $summary ) - $parent_count, $dry_run ? 'would be updated' : 'updated' ) );
 	}
 
 	/**

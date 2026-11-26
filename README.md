@@ -334,8 +334,9 @@ n worktree remove <plugin> <branch> # Remove a worktree
 n env create <name> --worktree <repo>:<branch> [--worktree ...] [--port <port>]
 n env up <name> [--build]           # Start the environment (--build installs deps)
 n env down <name>                   # Stop the environment
-n env destroy <name>                # Stop and remove the environment
+n env destroy <name> [--keep-branch]  # Stop and remove the environment (--keep-branch keeps its branches)
 n env list                          # List all environments and their status
+n env which [name] [--porcelain]    # The env serving this worktree: status, URL, worktrees, login
 ```
 
 You can override multiple plugins in a single environment:
@@ -364,7 +365,7 @@ n worktree remove newspack-plugin fix/my-feature
 
 ### Passwordless networking setup (macOS)
 
-Isolated environments need loopback IP aliases and `/etc/hosts` entries, both of which require `sudo`. This is a problem for non-interactive processes (e.g. AI agents) that can't enter a password.
+Isolated environments need an `/etc/hosts` entry for their domain, which requires `sudo`. This is a problem for non-interactive processes (e.g. AI agents) that can't enter a password.
 
 Run the one-time setup script to allow these specific operations without a password:
 

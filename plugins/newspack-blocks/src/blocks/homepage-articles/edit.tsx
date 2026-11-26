@@ -17,7 +17,7 @@ import classNames from 'classnames';
 /**
  * Newspack dependencies
  */
-import { aspectLandscape, aspectPortrait, aspectSquare } from 'newspack-icons';
+import { aspectPortrait, aspectSquare } from 'newspack-icons';
 
 /**
  * WordPress dependencies
@@ -41,7 +41,18 @@ import {
 import { withDispatch, withSelect } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import { decodeEntities } from '@wordpress/html-entities';
-import { fullscreen, grid, image, list, postFeaturedImage, pullLeft, pullRight, sidesAll, textColor as typeScaleIcon } from '@wordpress/icons';
+import {
+	aspectRatio,
+	fullscreen,
+	grid,
+	image,
+	list,
+	postFeaturedImage,
+	pullLeft,
+	pullRight,
+	sidesAll,
+	textColor as typeScaleIcon,
+} from '@wordpress/icons';
 
 let IS_SUBTITLE_SUPPORTED_IN_THEME: boolean;
 if ( typeof window === 'object' && window.newspack_blocks_data && window.newspack_blocks_data.post_subtitle ) {
@@ -310,6 +321,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						customTaxonomyExclusions={ customTaxonomyExclusions }
 						onCustomTaxonomyExclusionsChange={ handleAttributeChange( 'customTaxonomyExclusions' ) }
 						postType={ postType }
+						includedPostStatuses={ attributes.includedPostStatuses }
 						allowDedupeCurrentValue={ ! attributes.deduplicate }
 						onAllowDedupeChange={ ( value: boolean ) => setAttributes( { deduplicate: ! value } ) }
 					/>
@@ -657,7 +669,7 @@ class Edit extends Component< HomepageArticlesProps > {
 
 		const blockControlsImageShape = [
 			{
-				icon: aspectLandscape,
+				icon: aspectRatio,
 				title: __( 'Landscape image shape', 'newspack-blocks' ),
 				isActive: imageShape === 'landscape',
 				onClick: () => setAttributes( { imageShape: 'landscape' } ),

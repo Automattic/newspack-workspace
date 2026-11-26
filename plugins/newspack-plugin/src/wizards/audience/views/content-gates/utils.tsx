@@ -378,7 +378,7 @@ export const getAutoSignupOptions = ( siteAutoSignup?: boolean ): Array< { label
 	];
 };
 
-// "paid" uses the same test as the card's Paid Access column, which reads N/A for a
+// "paid" uses the same test as the card's Paid Access column, which shows a dash for a
 // gate whose paid access is switched on with no rules and no meter.
 const GATE_FILTERS: Record< 'status' | 'access', Record< string, ( gate: Gate ) => boolean > > = {
 	status: {

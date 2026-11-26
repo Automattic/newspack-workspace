@@ -24,6 +24,25 @@ final class Core {
 		\add_filter( 'body_class', [ __CLASS__, 'body_class' ] );
 		\add_filter( 'block_type_metadata', [ __CLASS__, 'block_variations' ] );
 		\add_filter( 'default_template_types', [ __CLASS__, 'register_newsletter_template_types' ] );
+		\add_filter( 'default_wp_template_part_areas', [ __CLASS__, 'register_sidebar_area' ] );
+	}
+
+	/**
+	 * Adds a Sidebar template part area, so sidebars are grouped in the Site Editor and
+	 * anything listing template parts by area (such as per-brand sidebars) can offer only sidebars.
+	 *
+	 * @param array $areas Template part areas.
+	 * @return array
+	 */
+	public static function register_sidebar_area( $areas ) {
+		$areas[] = [
+			'area'        => 'sidebar',
+			'label'       => \esc_html__( 'Sidebar', 'newspack-block-theme' ),
+			'description' => \esc_html__( 'Sidebars hold content shown next to a post, such as on the Sidebar Layout post template.', 'newspack-block-theme' ),
+			'icon'        => 'sidebar',
+			'area_tag'    => 'aside',
+		];
+		return $areas;
 	}
 
 	/**
@@ -34,13 +53,14 @@ final class Core {
 	 * @return void
 	 */
 	public static function theme_support() {
-		// Enqueue editor styles.
-		\add_editor_style( 'style.css' );
+		// Enqueue editor styles. Loaded from dist/ because a child theme's style.css would replace a root style.css here.
+		\add_editor_style( 'dist/style.css' );
 
 		// Make theme available for translation.
 		\load_theme_textdomain( 'newspack-block-theme' );
 
 		\add_theme_support( 'post-subtitle' );
+		\add_theme_support( 'newspack-ui-theme-style' );
 	}
 
 	/**
@@ -54,9 +74,9 @@ final class Core {
 		// Register theme stylesheet.
 		\wp_register_style(
 			'newspack_block_theme-style',
-			\get_stylesheet_directory_uri() . '/style.css',
+			\get_parent_theme_file_uri( 'style.css' ),
 			array(),
-			\wp_get_theme()->get( 'Version' )
+			\wp_get_theme( \get_template() )->get( 'Version' )
 		);
 
 		// Enqueue theme stylesheet.
@@ -71,7 +91,7 @@ final class Core {
 			return;
 		}
 		// Enqueue editor JavaScript.
-		wp_enqueue_script( 'editor-script', get_theme_file_uri( '/dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme()->get( 'Version' ), true );
+		wp_enqueue_script( 'editor-script', get_parent_theme_file_uri( 'dist/editor.js' ), array( 'wp-blocks', 'wp-dom' ), wp_get_theme( get_template() )->get( 'Version' ), true );
 	}
 
 	/**

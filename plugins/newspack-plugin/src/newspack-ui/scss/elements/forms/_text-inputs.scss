@@ -27,7 +27,7 @@
 		box-sizing: border-box;
 		color: var(--newspack-ui-color-text);
 		display: block;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-control);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		min-height: var(--newspack-ui-spacer-9);
@@ -64,17 +64,45 @@
 		}
 	}
 
+	input[type="text"],
+	input[type="email"],
+	input[type="url"],
+	input[type="password"],
+	input[type="search"],
+	input[type="number"],
+	input[type="tel"],
+	textarea {
+		background-color: var(--newspack-ui-field-bg);
+		border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border));
+		border-radius: var(--newspack-ui-field-radius);
+		border-width: var(--newspack-ui-field-border-width);
+		color: var(--newspack-ui-field-ink);
+		font-family: var(--newspack-ui-field-font-family);
+
+		&::placeholder {
+			color: var(--newspack-ui-field-ink-subtle, var(--newspack-ui-color-text-subtle));
+		}
+
+		@media ( prefers-contrast: more ) {
+			border-color: var(--newspack-ui-color-input-border);
+		}
+	}
+
 	textarea {
 		min-height: calc(var(--newspack-ui-spacer-9) * 2);
 	}
 
 	&__currency-input {
-		border: 1px solid var(--newspack-ui-color-input-border);
-		border-radius: var(--newspack-ui-radius-control);
+		border: var(--newspack-ui-field-border-width) solid var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border));
+		border-radius: var(--newspack-ui-field-radius);
 		display: grid;
 		grid-template-columns: calc(var(--newspack-ui-spacer-9) - 2px) 1fr;
 		overflow: hidden;
 		transition: border-color var(--newspack-ui-duration-color) ease, box-shadow var(--newspack-ui-duration-color) ease;
+
+		@media ( prefers-contrast: more ) {
+			border-color: var(--newspack-ui-color-input-border);
+		}
 
 		@media ( hover: hover ) and ( pointer: fine ) {
 			&:hover:not(:has(input:disabled), :focus-within) {
