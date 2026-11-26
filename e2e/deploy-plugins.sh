@@ -26,6 +26,14 @@
 #                       Default: htdocs.
 #   E2E_BUILD_ROOT      Monorepo root holding plugins/ and themes/. Default: the
 #                       directory above this script.
+#
+# The caller must build each plugin deploy-ready first: the asset build (dist/)
+# AND production Composer deps (vendor/, via `composer install --no-dev`) for
+# plugins that ship them - a plugin that loads vendor/autoload.php fatals on the
+# target without it. This script refuses to ship a plugin missing either.
+#
+# DEPLOY_SET / E2E_DEPLOY_SET values are trusted (CI-controlled): they interpolate
+# into the remote shell command, so this is not a place for untrusted input.
 
 set -euo pipefail
 
@@ -90,37 +98,52 @@ deploy_one() {
     echo "ERROR: $name source not found at $src_dir" >&2
     exit 1
   fi
-  if [ ! -e "$src_dir/$marker" ]; then
-    echo "ERROR: $name looks unbuilt - missing $marker under $src_dir. Build the plugins before deploying." >&2
+  # Reject an unbuilt plugin: the asset-build marker must exist and, when it's a
+  # directory, be non-empty (an empty dist/ is unbuilt, not built).
+  if [ ! -e "$src_dir/$marker" ] || { [ -d "$src_dir/$marker" ] && [ -z "$(ls -A "$src_dir/$marker" 2>/dev/null)" ]; }; then
+    echo "ERROR: $name looks unbuilt - missing or empty $marker under $src_dir. Build the plugins before deploying." >&2
+    exit 1
+  fi
+  # A plugin with a composer.json loads vendor/autoload.php at runtime; shipping it
+  # without vendor/ would fatal on the target. Require production deps to be present.
+  if [ -f "$src_dir/composer.json" ] && [ ! -f "$src_dir/vendor/autoload.php" ]; then
+    echo "ERROR: $name has composer.json but no vendor/autoload.php - run 'composer install --no-dev' before deploying." >&2
     exit 1
   fi
 
   echo "==> Deploying $name -> wp-content/$dest/$name"
 
-  # Tar the built directory locally (recursive sftp is far slower), stream it to
-  # the target, then swap it in. The swap detects whether the current entry is a
-  # managed symlink or a real directory and backs it up accordingly, so a later
-  # run (or a manual revert) can restore the original.
-  tar -C "$src_dir/.." -cf - "$(basename "$src_dir")" | gzip \
+  local src_base; src_base="$(basename "$src_dir")"
+
+  # Tar the built dir locally (recursive sftp is far slower), excluding dev-only
+  # dirs that have no business on the target, and stream it over. The swap then
+  # stages and verifies the new copy BEFORE displacing the live one, backs the
+  # live one up under /tmp (outside wp-content, so WordPress doesn't list the
+  # backup as an extra plugin), and preserves the original managed symlink across
+  # re-runs. A trap clears the staging artifacts on any exit; the stdin redirect
+  # keeps this command-only ssh from inheriting the script's stdin.
+  tar -C "$src_dir/.." --exclude=node_modules --exclude=.git -cf - "$src_base" | gzip \
     | remote_exec "cat > /tmp/e2e-deploy-$name.tgz"
 
   remote_exec "
     set -e
-    WP=\"\$HOME/$REMOTE_WP_PATH\"
-    D=\"\$WP/wp-content/$dest\"
+    trap 'rm -rf \"/tmp/e2e-deploy-$name.d\" \"/tmp/e2e-deploy-$name.tgz\"' EXIT
+    D=\"\$HOME/$REMOTE_WP_PATH/wp-content/$dest\"
     N='$name'
-    rm -rf \"/tmp/e2e-deploy-\$N.d\"
-    mkdir -p \"/tmp/e2e-deploy-\$N.d\"
-    tar -C \"/tmp/e2e-deploy-\$N.d\" -xzf \"/tmp/e2e-deploy-\$N.tgz\"
+    STAGE='/tmp/e2e-deploy-$name.d'
+    rm -rf \"\$STAGE\"; mkdir -p \"\$STAGE\"
+    tar -C \"\$STAGE\" -xzf '/tmp/e2e-deploy-$name.tgz'
+    NEW=\"\$STAGE/$src_base\"
+    [ -d \"\$NEW\" ] || { echo \"ERROR: $name: extracted dir \$NEW missing\" >&2; exit 1; }
     cd \"\$D\"
     if [ -L \"\$N\" ]; then
-      rm -f \"\$N--symlink\"; mv \"\$N\" \"\$N--symlink\"
+      [ -e '/tmp/e2e-deploy-$name.orig' ] || cp -P \"\$N\" '/tmp/e2e-deploy-$name.orig'
+      rm -f \"\$N\"
     elif [ -d \"\$N\" ]; then
-      rm -rf \"\$N--previous\"; mv \"\$N\" \"\$N--previous\"
+      rm -rf '/tmp/e2e-deploy-$name.prev'; mv \"\$N\" '/tmp/e2e-deploy-$name.prev'
     fi
-    mv \"/tmp/e2e-deploy-\$N.d/\$N\" \"\$D/\$N\"
-    rm -rf \"/tmp/e2e-deploy-\$N.d\" \"/tmp/e2e-deploy-\$N.tgz\"
-  "
+    mv \"\$NEW\" \"\$D/\$N\"
+  " </dev/null
 }
 
 echo "==> Deploying candidate build from $BUILD_ROOT to the target site"

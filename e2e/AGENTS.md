@@ -94,9 +94,12 @@ before provisioning:
 
 1. Trigger on the PR's **target branch** (TeamCity's Pull Requests build feature
    filters by target branch); build the PR's merge commit.
-2. Build the plugins, then run `e2e/deploy-plugins.sh` to push them onto the
-   branch's site over the same `E2E_SSH_*` channel. It swaps each plugin/theme in
-   place, backing up the managed symlink it replaces.
+2. Build the plugins deploy-ready — the asset build **and** `composer install
+   --no-dev` for plugins that ship a `vendor/` — then run `e2e/deploy-plugins.sh`
+   to push them onto the branch's site over the same `E2E_SSH_*` channel. It swaps
+   each plugin/theme in place (staging and verifying the new copy before displacing
+   the live one), and refuses to ship a plugin whose asset build or `vendor/` is
+   missing.
 3. `USE_SETUP=true npm run test:setup` — `setupSite` provisions from scratch against
    the deployed code, then the suite runs.
 4. Report the result to the PR as a status check (Commit Status Publisher).
