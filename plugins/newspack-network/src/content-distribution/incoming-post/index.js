@@ -133,7 +133,7 @@ function IncomingPost() {
 						return;
 					}
 					// Unsaved edits are the user's to save or discard, so leave the reload to them.
-					// Autosave is unlocked now, so a draft may still keep them.
+					// Autosave is unlocked now, so an autosave may still keep them.
 					if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
 						setIsUnLinkedToggling( false );
 						createNotice(
