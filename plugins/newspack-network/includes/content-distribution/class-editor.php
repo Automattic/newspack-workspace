@@ -85,7 +85,8 @@ class Editor {
 	 *
 	 * The field is read-only. Unlinking or relinking has to go through Incoming_Post, because a
 	 * relink re-runs the sync from the origin. Post meta would not do: the editor sends every
-	 * registered meta key back with any meta edit, so a key no one may write fails those saves.
+	 * registered meta key back with any meta edit, so a key no one may write fails those saves
+	 * on posts that never stored it.
 	 */
 	public static function register_unlinked_field(): void {
 		if ( ! function_exists( 'wp_update_entity_fields' ) ) {
@@ -96,7 +97,7 @@ class Editor {
 				$post_type,
 				'newspack_network_unlinked',
 				[
-					'get_callback' => function ( $post ) {
+					'get_callback' => function ( array $post ): bool {
 						return (bool) get_post_meta( $post['id'], Incoming_Post::UNLINKED_META, true );
 					},
 					'schema'       => [

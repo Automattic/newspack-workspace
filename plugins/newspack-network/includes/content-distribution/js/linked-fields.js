@@ -6,8 +6,8 @@
  * Editor::lock_linked_fields()). It replaces the stylesheet overlay, which can't target
  * 7.2's sidebar markup and never stopped the keyboard.
  *
- * The lock follows the linked state stored with the post, which the incoming-post script
- * updates on unlink, so the fields unlock without a reload.
+ * The lock follows the post's unlinked state, which the incoming-post script refreshes in
+ * the editor on unlink, so the fields unlock without a reload.
  *
  * This file is served as is, not built, so it uses the editor's globals.
  */
