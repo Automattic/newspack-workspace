@@ -44,7 +44,11 @@ class Test_Subscriber_Only_Products_API extends \WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = new \WP_REST_Server(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		do_action( 'rest_api_init', $wp_rest_server );
-		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		// WooCommerce grants administrators `manage_woocommerce` on install, and the
+		// routes require it; the mocks don't install WooCommerce.
+		$administrator = $this->factory->user->create_and_get( [ 'role' => 'administrator' ] );
+		$administrator->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $administrator->ID );
 	}
 
 	/**
@@ -54,6 +58,7 @@ class Test_Subscriber_Only_Products_API extends \WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		delete_option( Subscriber_Only_Products::OPTION_NAME );
+		delete_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME );
 		wp_set_current_user( 0 );
 		parent::tear_down();
 	}
@@ -72,6 +77,52 @@ class Test_Subscriber_Only_Products_API extends \WP_UnitTestCase {
 	 */
 	public function test_saving_with_active_enforces_the_restriction() {
 		$this->assertTrue( $this->save_restriction( [ 'active' => true ] )['active'] );
+	}
+
+	/**
+	 * A settings payload naming one setting leaves the others as they are, and
+	 * a redirect is refused unless it names a published page.
+	 */
+	public function test_settings_merge_partial_payloads_and_need_a_redirect_page() {
+		$page_id = $this->factory->post->create( [ 'post_type' => 'page' ] );
+		Subscriber_Only_Products::update_settings(
+			[
+				'product_page'     => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT,
+				'redirect_page_id' => $page_id,
+			]
+		);
+
+		$response = $this->save_settings( [ 'hide_from_product_lists' => true ] );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			[
+				'hide_from_product_lists' => true,
+				'product_page'            => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT,
+				'redirect_page_id'        => $page_id,
+			],
+			Subscriber_Only_Products::get_settings()
+		);
+
+		$post_id = $this->factory->post->create();
+		$this->assertSame( 400, $this->save_settings( [ 'redirect_page_id' => $post_id ] )->get_status(), 'A post is not a page.' );
+		$this->assertSame( 400, $this->save_settings( [ 'redirect_page_id' => 0 ] )->get_status() );
+		$this->assertSame( $page_id, Subscriber_Only_Products::get_settings()['redirect_page_id'], 'A refused save changes nothing.' );
+
+		$this->save_settings( [ 'product_page' => Subscriber_Only_Products::PRODUCT_PAGE_HIDE ] );
+		$this->assertSame( 0, Subscriber_Only_Products::get_settings()['redirect_page_id'], 'Only a redirect keeps a page.' );
+	}
+
+	/**
+	 * POST the restriction settings.
+	 *
+	 * @param array $params Request params.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function save_settings( $params ) {
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-audience-subscriptions/restriction-settings' );
+		$request->set_body_params( $params );
+		return rest_get_server()->dispatch( $request );
 	}
 
 	/**

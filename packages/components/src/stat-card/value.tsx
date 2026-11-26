@@ -19,7 +19,7 @@ import type { StatCardValueProps, StatCardValueVariant } from './types';
 const variants: StatCardValueVariant[] = [ 'figure', 'text' ];
 
 const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
-	{ value, valueLabel, variant = 'figure', suffix, className, ...props },
+	{ value, valueLabel, variant = 'figure', unit, suffix, className, ...props },
 	ref
 ) {
 	const { labels } = useStatCardContext();
@@ -57,13 +57,17 @@ const Value = forwardRef< HTMLSpanElement, StatCardValueProps >( function Value(
 		</span>
 	);
 
-	if ( ! suffix ) {
+	// A unit with no figure to count would read as the figure itself.
+	const shownUnit = isNull ? null : unit;
+
+	if ( ! shownUnit && ! suffix ) {
 		return figure;
 	}
 
 	return (
 		<Stack direction="row" align="baseline" gap="sm" className="newspack-stat-card__figure">
 			{ figure }
+			{ shownUnit && <span className="newspack-stat-card__unit">{ shownUnit }</span> }
 			{ suffix }
 		</Stack>
 	);

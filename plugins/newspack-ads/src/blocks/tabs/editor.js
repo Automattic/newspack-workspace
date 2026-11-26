@@ -3,12 +3,12 @@
  */
 import { InnerBlocks } from '@wordpress/block-editor';
 import { __ } from '@wordpress/i18n';
+import { tabs as icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { registerBlock } from '../utils/register-block';
-import { tabs as icon } from '../utils/icons';
 import edit from './edit';
 import metadata from './block.json';
 
@@ -28,6 +28,8 @@ const tabs = {
 			src: icon,
 			foreground: '#406ebc',
 		},
+		template: [ [ 'newspack/tabs-item', { header: '' }, [ [ 'core/paragraph', {} ] ] ] ],
+		templateInsertUpdatesSelection: true,
 		edit,
 		save: () => <InnerBlocks.Content />,
 	},

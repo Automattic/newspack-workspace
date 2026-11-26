@@ -667,17 +667,19 @@ final class Newspack_Newsletters_Editor {
 		}
 
 		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
-			$provider = Newspack_Newsletters::get_service_provider();
-			wp_localize_script(
-				'newspack-newsletters-editor',
-				'newspack_newsletters_data',
-				[
-					'is_service_provider_configured' => Newspack_Newsletters::is_service_provider_configured(),
-					'service_provider'               => Newspack_Newsletters::service_provider(),
-					'user_test_emails'               => self::get_current_user_test_emails(),
-					'labels'                         => $provider ? $provider::get_labels() : [],
-				]
-			);
+			$provider    = Newspack_Newsletters::get_service_provider();
+			$editor_data = [
+				'is_service_provider_configured' => Newspack_Newsletters::is_service_provider_configured(),
+				'service_provider'               => Newspack_Newsletters::service_provider(),
+				'user_test_emails'               => self::get_current_user_test_emails(),
+				'labels'                         => $provider ? $provider::get_labels() : [],
+			];
+			if ( 'active_campaign' === Newspack_Newsletters::service_provider() ) {
+				// The editor shows a newsletter's default archive visibility before
+				// anyone overrides it, which depends on this site-wide setting.
+				$editor_data['active_campaign_archive_visibility'] = Newspack_Newsletters_Active_Campaign::get_archive_visibility_default();
+			}
+			wp_localize_script( 'newspack-newsletters-editor', 'newspack_newsletters_data', $editor_data );
 			wp_register_style(
 				'newspack-newsletters-newsletter-editor',
 				plugins_url( '../dist/newsletterEditor.css', __FILE__ ),

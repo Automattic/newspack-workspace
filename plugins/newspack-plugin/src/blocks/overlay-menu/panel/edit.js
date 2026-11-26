@@ -200,7 +200,7 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 			{ /* Scrim — outside block wrapper so it covers the full editor canvas. */ }
 			{ isPreviewOpen && (
 				<div
-					className="overlay-menu__scrim alignfull"
+					className="overlay-menu__scrim overlay-menu__scrim--open alignfull"
 					style={ overlayColor ? { background: overlayColor } : {} }
 					onClick={ () => togglePreview( false ) }
 					aria-hidden="true"

@@ -55,7 +55,7 @@ class Subscriber_Only_Products_API {
 	 * @return bool
 	 */
 	public static function permissions_check() {
-		return current_user_can( 'manage_options' );
+		return current_user_can( Audience_Subscriptions::CAPABILITY );
 	}
 
 	/**
@@ -112,10 +112,19 @@ class Subscriber_Only_Products_API {
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_update_settings' ],
 				'permission_callback' => [ __CLASS__, 'permissions_check' ],
+				// Undefaulted, so a payload naming one setting leaves the others as
+				// they are.
 				'args'                => [
 					'hide_from_product_lists' => [
-						'type'    => 'boolean',
-						'default' => false,
+						'type' => 'boolean',
+					],
+					'product_page'            => [
+						'type' => 'string',
+						'enum' => [ Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT, Subscriber_Only_Products::PRODUCT_PAGE_HIDE, Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT ],
+					],
+					'redirect_page_id'        => [
+						'type'    => 'integer',
+						'minimum' => 0,
 					],
 				],
 			]
@@ -148,6 +157,11 @@ class Subscriber_Only_Products_API {
 				'enum'    => [ Product_Targeting::TARGETING_PRODUCTS, Product_Targeting::TARGETING_CATEGORY, Product_Targeting::TARGETING_ALL ],
 				'default' => Product_Targeting::TARGETING_PRODUCTS,
 			],
+			'restriction_type'         => [
+				'type'    => 'string',
+				'enum'    => [ Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE, Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ],
+				'default' => Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE,
+			],
 			// Deliberately undefaulted, so an absent `active` reaches
 			// sanitize_base_rule() as absent and lands on its fail-safe: a partial
 			// payload leaves the rule paused rather than silently gating purchases.
@@ -163,9 +177,11 @@ class Subscriber_Only_Products_API {
 	 * @return \WP_REST_Response
 	 */
 	public static function api_get_rules() {
+		$rules = Subscriber_Only_Products::get_rules();
 		return rest_ensure_response(
 			[
-				'restrictions' => Subscriber_Only_Products::get_rules(),
+				'restrictions' => $rules,
+				'names'        => Subscriber_Commerce::get_rule_names( $rules ),
 				'settings'     => Subscriber_Only_Products::get_settings(),
 			]
 		);
@@ -192,6 +208,7 @@ class Subscriber_Only_Products_API {
 			'product_ids'              => $request->get_param( 'product_ids' ),
 			'category_ids'             => $request->get_param( 'category_ids' ),
 			'excluded_product_ids'     => $request->get_param( 'excluded_product_ids' ),
+			'restriction_type'         => $request->get_param( 'restriction_type' ),
 			'active'                   => $request->get_param( 'active' ),
 		];
 
@@ -218,10 +235,22 @@ class Subscriber_Only_Products_API {
 	 *
 	 * @param \WP_REST_Request $request The request.
 	 *
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function api_update_settings( $request ) {
-		Subscriber_Only_Products::update_settings( [ 'hide_from_product_lists' => $request->get_param( 'hide_from_product_lists' ) ] );
+		$settings = Subscriber_Only_Products::get_settings();
+		foreach ( array_keys( $settings ) as $key ) {
+			if ( null !== $request->get_param( $key ) ) {
+				$settings[ $key ] = $request->get_param( $key );
+			}
+		}
+		if ( Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT === $settings['product_page'] ) {
+			$page_id = absint( $settings['redirect_page_id'] );
+			if ( ! $page_id || 'page' !== get_post_type( $page_id ) || 'publish' !== get_post_status( $page_id ) ) {
+				return new \WP_Error( 'newspack_restriction_invalid_redirect_page', __( 'Choose a published page to redirect to.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+		}
+		Subscriber_Only_Products::update_settings( $settings );
 		return self::api_get_rules();
 	}
 }

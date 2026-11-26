@@ -38,15 +38,17 @@ import {
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Divider, Grid, Router, SectionHeader, Waiting } from '../../../../packages/components/src';
+import { Button, Card, Divider, Router, SplitSection, StatusBadge, TableCard, Waiting } from '../../../../packages/components/src';
 import './style.scss';
 import LoadFailureNotice from '../components/LoadFailureNotice';
 import { useRetryFocus } from '../use-retry-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
+import { worthCollapsing } from '../../../../packages/components/src/cell-list/collapse';
 import SubscriptionCard from '../components/SubscriptionCard';
 import PaymentMethodsList, { cardLabel } from '../components/PaymentMethodsList';
 import ChangePaymentMethodFlow from '../flows/ChangePaymentMethodFlow';
@@ -58,14 +60,15 @@ import { usePaymentActions, canChangePaymentMethod } from '../data/use-payments'
 import { useSubscriptionActions } from '../data/use-subscription-actions';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { useWizardNode } from '../use-portals';
-import { billingText, fmtDate, orDash, paymentRows } from '../format';
+import { billingText, fmtCurrency, fmtDate, orDash, paymentRows } from '../format';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, groupViewLabel } from '../labels';
 import { groupDetailHref, isInternalHashPath } from '../links';
 import { STATUS_LABELS, STATUS_BADGE_INTENT, statusRank, displayStatuses } from '../status';
+import { isNetworkSubscription, shouldShowPaymentMethods } from '../network';
 
 const { useParams, useLocation } = Router;
 
-// Cancelled subscriptions are folded away behind a "View more" toggle whenever
+// Cancelled subscriptions are folded away behind a "Show N more" toggle whenever
 // the reader still holds a live plan — a past cancellation next to a current
 // plan is history, not status. A fully churned reader keeps everything visible,
 // since hiding it would leave the profile looking empty. This mirrors the
@@ -94,10 +97,10 @@ const giftPayerName = subscription => ( subscription.giftedBy ? subscription.gif
 function Row( { title, description, children, showDivider = true } ) {
 	return (
 		<>
-			<Grid columns={ 2 } gutter={ 32 }>
-				<SectionHeader title={ title } description={ description } heading={ 2 } noMargin />
-				<div>{ children }</div>
-			</Grid>
+			<SplitSection.Root>
+				<SplitSection.Header title={ title } description={ description } />
+				<SplitSection.Content>{ children }</SplitSection.Content>
+			</SplitSection.Root>
 			{ showDivider && <Divider alignment="full-width" variant="tertiary" /> }
 		</>
 	);
@@ -129,6 +132,73 @@ const seatsSubline = group => {
  * @return {Array} Badge descriptors for SubscriptionCard.
  */
 const statusBadges = status => ( STATUS_LABELS[ status ] ? [ { label: STATUS_LABELS[ status ], intent: STATUS_BADGE_INTENT[ status ] } ] : [] );
+
+/**
+ * An order's number as WooCommerce shows it, e.g. "#1234", linked to the order
+ * when its edit screen is known.
+ *
+ * @param {Object} order         An order reference.
+ * @param {string} order.number  The order number.
+ * @param {string} order.editUrl The order's edit screen.
+ * @return {JSX.Element|string} The number, linked or plain.
+ */
+const orderNumber = ( { number, editUrl } ) => ( editUrl ? <a href={ editUrl }>{ `#${ number }` }</a> : `#${ number }` );
+
+/**
+ * The rows that name a subscription by number, so the admin can follow a case
+ * across WooCommerce, the payment processor and email: the subscription's own
+ * number, and its latest order. The server sends the latest order only on the
+ * card of the reader who pays, never on a gift's or a group member's.
+ *
+ * @param {Object} entry A subscription or group entry.
+ * @return {Array} Card rows.
+ */
+const numberRows = entry => [
+	...( entry.number
+		? [ { label: __( 'Subscription number', 'newspack-plugin' ), value: orderNumber( { number: entry.number, editUrl: entry.editUrl } ) } ]
+		: [] ),
+	...( entry.lastOrder ? [ { label: __( 'Latest order', 'newspack-plugin' ), value: orderNumber( entry.lastOrder ) } ] : [] ),
+];
+
+/**
+ * The order statuses a listed donation can be in besides paid, on the shared
+ * status vocabulary. A paid order reads as the plain fact of the donation, so
+ * only these carry a badge. A refund is finished, with nothing left to act on,
+ * so it takes a neutral tone.
+ */
+const DONATION_STATUS_BADGES = {
+	processing: { status: 'progress', label: __( 'Processing', 'newspack-plugin' ) },
+	refunded: { status: 'ended', tone: 'neutral', label: __( 'Refunded', 'newspack-plugin' ) },
+};
+
+/**
+ * A donation's amount, with what was refunded on a line below when a partial
+ * refund left the order paid. A fully refunded order says so in its badge instead.
+ *
+ * @param {Object} donation          A donation entry.
+ * @param {number} donation.amount   The order total.
+ * @param {number} donation.refunded The part of it refunded.
+ * @param {string} donation.currency ISO 4217 currency code.
+ * @param {string} donation.status   The order status.
+ * @return {JSX.Element|string} The amount.
+ */
+const donationAmount = ( { amount, refunded, currency, status } ) => {
+	const total = orDash( fmtCurrency( amount, currency ) );
+	if ( 'refunded' === status || ! ( refunded > 0 ) ) {
+		return total;
+	}
+	return (
+		<>
+			{ total }
+			<div className="newspack-subscribers__muted">
+				{
+					// translators: %s: the part of the donation that was refunded.
+					sprintf( __( '%s refunded', 'newspack-plugin' ), fmtCurrency( refunded, currency ) )
+				}
+			</div>
+		</>
+	);
+};
 
 /**
  * The "View subscription" item that leads a card's "more" menu: a link to the
@@ -236,12 +306,12 @@ export default function PersonProfile() {
 		}
 		// The breadcrumb reflects where the profile was opened from: a person
 		// reached from a group sits under the groups tab, otherwise under
-		// Subscribers. Both crumbs stay clickable so the trail is a way back.
+		// Readers. Both crumbs stay clickable so the trail is a way back.
 		const originatedInGroups = backNav.startsWith( '#/groups' );
 		setHeaderData( {
 			backNav,
 			sectionName: [
-				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Subscribers', 'newspack-plugin' ), url: backNav },
+				{ label: originatedInGroups ? GROUP_LABEL_PLURAL : __( 'Readers', 'newspack-plugin' ), url: backNav },
 				{ label: subscriber.name },
 			],
 			sectionTitle: subscriber.name,
@@ -254,7 +324,11 @@ export default function PersonProfile() {
 				subscriber.email,
 				subscriber.memberSince
 					? // translators: %s is a date.
-					  sprintf( __( 'Subscriber since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
+					  sprintf( __( 'Member since %s', 'newspack-plugin' ), fmtDate( subscriber.memberSince ) )
+					: '',
+				subscriber.signedUpOn?.name
+					? // translators: %s is the name of the network site where the reader created their account.
+					  sprintf( __( 'Signed up on %s', 'newspack-plugin' ), subscriber.signedUpOn.name )
 					: '',
 			]
 				.filter( Boolean )
@@ -280,6 +354,7 @@ export default function PersonProfile() {
 						{ label: __( 'First subscribed', 'newspack-plugin' ), value: orDash( fmtDate( group.createdAt ) ) },
 						{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( group ) },
 						...paymentRows( group ),
+						...numberRows( group ),
 				  ]
 				: [
 						{ label: __( 'Joined', 'newspack-plugin' ), value: orDash( fmtDate( group.joinedAt ) ) },
@@ -287,6 +362,7 @@ export default function PersonProfile() {
 							label: __( 'Owner', 'newspack-plugin' ),
 							value: group.owner?.name || __( 'Unknown', 'newspack-plugin' ),
 						},
+						...numberRows( group ),
 				  ];
 			const href = groupDetailHref( group );
 			return {
@@ -314,6 +390,69 @@ export default function PersonProfile() {
 
 		const individualCards = ( subscriber.subscriptions || [] ).map( subscription => {
 			const name = subscription.plan || __( '(Subscription)', 'newspack-plugin' );
+
+			// A subscription another network site manages is read-only here, and this
+			// branch returns before any local menu or flow is built. Its ID belongs to
+			// the other site; the write endpoints resolve an ID against this site's own
+			// subscriptions, so a remote ID must never reach `setModal` or a request.
+			// Nothing below runs for it. The key carries the site as well as the ID:
+			// an ID is unique within a site, so a local #500 and a remote #500 coexist.
+			if ( isNetworkSubscription( subscription ) ) {
+				const { editUrl, managedOn } = subscription;
+				const cardKey = `subscription-${ managedOn.url || managedOn.name }-${ subscription.id }`;
+				// The site is named once, under the title, so the title is the plan alone.
+				const title = subscription.planName || name;
+				// Subscriptions the network recorded before it kept billing details have
+				// none, so their cards say where they are managed and nothing more.
+				const hasBilling = Number.isFinite( subscription.amount ) || Boolean( subscription.startDate );
+				return {
+					key: cardKey,
+					status: subscription.status,
+					date: subscription.startDate,
+					node: (
+						<SubscriptionCard
+							key={ cardKey }
+							title={ title }
+							titleHref={ editUrl || undefined }
+							// translators: %s is a subscription/plan name.
+							titleLabel={ editUrl ? sprintf( __( 'View subscription: %s', 'newspack-plugin' ), name ) : undefined }
+							badges={ statusBadges( subscription.status ) }
+							// translators: %s is the name of the network site that manages the subscription.
+							subline={ sprintf( __( 'Managed on %s', 'newspack-plugin' ), managedOn.name ) }
+							rows={
+								hasBilling
+									? [
+											{
+												label: __( 'First subscribed', 'newspack-plugin' ),
+												value: orDash( fmtDate( subscription.startDate ) ),
+											},
+											{ label: __( 'Billing', 'newspack-plugin' ), value: billingText( subscription ) },
+											...paymentRows( subscription ),
+									  ]
+									: []
+							}
+							// A link out, so with no URL there is nothing to put in the menu.
+							actions={
+								editUrl
+									? [
+											{
+												key: 'view',
+												// translators: %s is the name of the network site that manages the subscription.
+												label: sprintf( __( 'View on %s', 'newspack-plugin' ), managedOn.name ),
+												// translators: 1: the name of the network site that manages the subscription, 2: a subscription/plan name.
+												ariaLabel: sprintf( __( 'View on %1$s: %2$s', 'newspack-plugin' ), managedOn.name, title ),
+												href: editUrl,
+											},
+									  ]
+									: []
+							}
+							// translators: %s is a subscription/plan name.
+							actionsLabel={ sprintf( __( 'Subscription actions: %s', 'newspack-plugin' ), name ) }
+						/>
+					),
+				};
+			}
+
 			const isActive = 'active' === subscription.status;
 			const isLive = isActive || 'on-hold' === subscription.status;
 			const giftedByName = giftPayerName( subscription );
@@ -405,6 +544,7 @@ export default function PersonProfile() {
 										},
 								  ]
 								: [] ),
+							...numberRows( subscription ),
 						] }
 						actions={ menuActions }
 						// translators: %s is a subscription/plan name.
@@ -420,9 +560,12 @@ export default function PersonProfile() {
 	}, [ subscriber ] );
 
 	const liveCards = useMemo( () => cards.filter( card => 'cancelled' !== card.status ), [ cards ] );
-	const collapsedCards = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 ? liveCards : cards;
+	const foldCancelled = HIDE_CANCELLED_WHEN_LIVE && liveCards.length > 0 && worthCollapsing( cards.length - liveCards.length );
+	const collapsedCards = foldCancelled ? liveCards : cards;
 	const hiddenCount = cards.length - collapsedCards.length;
 	const visibleCards = showCancelled ? cards : collapsedCards;
+	// Readers who never gave a one-time donation see no Donations section at all.
+	const hasDonations = ( subscriber?.donations || [] ).length > 0;
 
 	if ( loading ) {
 		return (
@@ -435,7 +578,7 @@ export default function PersonProfile() {
 	// A person who does not exist is a dead end, so it gets a plain statement and
 	// a way back — not a Retry button that can never succeed.
 	if ( notFound ) {
-		const message = __( 'This subscriber could not be found. They may have been deleted.', 'newspack-plugin' );
+		const message = __( 'This reader could not be found. They may have been deleted.', 'newspack-plugin' );
 		return (
 			<LoadFailureNotice
 				message={ message }
@@ -451,11 +594,11 @@ export default function PersonProfile() {
 	// A failed read must not read as "this person has no subscriptions".
 	if ( error || ! subscriber ) {
 		// An empty read reports no error, so there is no server detail to quote.
-		let message = __( 'This subscriber could not be loaded.', 'newspack-plugin' );
+		let message = __( 'This reader could not be loaded.', 'newspack-plugin' );
 		if ( error ) {
 			message = sprintf(
 				/* translators: %s is an error message. */
-				__( 'Could not load this subscriber: %s', 'newspack-plugin' ),
+				__( 'Could not load this reader: %s', 'newspack-plugin' ),
 				error
 			);
 		}
@@ -481,7 +624,7 @@ export default function PersonProfile() {
 					headerNode
 				) }
 
-			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) }>
+			<Row title={ __( 'Subscriptions', 'newspack-plugin' ) } showDivider={ hasDonations || shouldShowPaymentMethods( subscriber ) }>
 				<VStack spacing={ 4 }>
 					{ 0 === cards.length && (
 						<Card __experimentalCoreCard className="newspack-subscribers__card">
@@ -496,9 +639,9 @@ export default function PersonProfile() {
 								onClick={ () => setShowCancelled( value => ! value ) }
 								aria-expanded={ showCancelled }
 								// When collapsed, the accessible name extends the visible
-								// "View N more" with what it reveals (WCAG 2.5.3 wants the
+								// "Show N more" with what it reveals (WCAG 2.5.3 wants the
 								// visible label to be a substring of the accessible name).
-								// When expanded, the visible "View less" is unambiguous on
+								// When expanded, the visible "Show less" is unambiguous on
 								// its own, so no override — the visible text is the name.
 								aria-label={
 									showCancelled
@@ -506,8 +649,8 @@ export default function PersonProfile() {
 										: sprintf(
 												// translators: %d is the number of hidden cancelled subscriptions.
 												_n(
-													'View %d more cancelled subscription',
-													'View %d more cancelled subscriptions',
+													'Show %d more cancelled subscription',
+													'Show %d more cancelled subscriptions',
 													hiddenCount,
 													'newspack-plugin'
 												),
@@ -516,25 +659,93 @@ export default function PersonProfile() {
 								}
 							>
 								{ showCancelled
-									? __( 'View less', 'newspack-plugin' )
-									: // translators: %d is the number of hidden cancelled subscriptions.
-									  sprintf( __( 'View %d more', 'newspack-plugin' ), hiddenCount ) }
+									? __( 'Show less', 'newspack-plugin' )
+									: sprintf(
+											// translators: %d is the number of hidden cancelled subscriptions.
+											_n( 'Show %d more', 'Show %d more', hiddenCount, 'newspack-plugin' ),
+											hiddenCount
+									  ) }
 							</Button>
 						</HStack>
 					) }
 				</VStack>
 			</Row>
 
-			<Row
-				title={ __( 'Payment methods', 'newspack-plugin' ) }
-				description={ __(
-					'The cards on file for this subscriber. Each subscription charges the card set on it; the default applies to new purchases.',
-					'newspack-plugin'
-				) }
-				showDivider={ false }
-			>
-				<PaymentMethodsList paymentMethods={ subscriber.paymentMethods || [] } onMakeDefault={ makeDefault } focusCardId={ promotedCardId } />
-			</Row>
+			{ hasDonations && (
+				<Row
+					title={ __( 'Donations', 'newspack-plugin' ) }
+					description={ __( 'One-time donations. Recurring donations are subscriptions, listed above.', 'newspack-plugin' ) }
+					showDivider={ shouldShowPaymentMethods( subscriber ) }
+				>
+					<TableCard
+						className="newspack-subscribers__donations-card"
+						after={
+							subscriber.donationsMore && (
+								<p className="newspack-subscribers__muted">
+									{ sprintf(
+										// translators: %d: the number of donations listed.
+										_n(
+											'Showing the %d most recent one-time donation.',
+											'Showing the %d most recent one-time donations.',
+											subscriber.donations.length,
+											'newspack-plugin'
+										),
+										subscriber.donations.length
+									) }
+								</p>
+							)
+						}
+					>
+						<table className="newspack-subscribers__donations">
+							<thead>
+								<tr>
+									<th scope="col">{ __( 'Date', 'newspack-plugin' ) }</th>
+									<th scope="col">{ __( 'Amount', 'newspack-plugin' ) }</th>
+									<th scope="col">{ __( 'Order', 'newspack-plugin' ) }</th>
+								</tr>
+							</thead>
+							<tbody>
+								{ subscriber.donations.map( donation => {
+									const badge = DONATION_STATUS_BADGES[ donation.status ];
+									return (
+										<tr key={ donation.id }>
+											<td>{ orDash( fmtDate( donation.date ) ) }</td>
+											<td>{ donationAmount( donation ) }</td>
+											<td>
+												<Stack direction="row" gap="sm" align="center">
+													<span>{ orderNumber( donation ) }</span>
+													{ badge && (
+														<StatusBadge status={ badge.status } tone={ badge.tone }>
+															{ badge.label }
+														</StatusBadge>
+													) }
+												</Stack>
+											</td>
+										</tr>
+									);
+								} ) }
+							</tbody>
+						</table>
+					</TableCard>
+				</Row>
+			) }
+
+			{ shouldShowPaymentMethods( subscriber ) && (
+				<Row
+					title={ __( 'Payment methods', 'newspack-plugin' ) }
+					description={ __(
+						'The cards on file for this reader. Each subscription charges the card set on it; the default applies to new purchases.',
+						'newspack-plugin'
+					) }
+					showDivider={ false }
+				>
+					<PaymentMethodsList
+						paymentMethods={ subscriber.paymentMethods || [] }
+						onMakeDefault={ makeDefault }
+						focusCardId={ promotedCardId }
+					/>
+				</Row>
+			) }
 
 			{ 'payment' === modal?.kind && (
 				<ChangePaymentMethodFlow

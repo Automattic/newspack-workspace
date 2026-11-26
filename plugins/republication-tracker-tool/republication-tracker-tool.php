@@ -6,7 +6,7 @@
  * Author URI:      https://labs.inn.org
  * Text Domain:     republication-tracker-tool
  * Domain Path:     /languages
- * Version:         2.9.6
+ * Version:         2.9.9
  * Requires PHP:    8.1
  *
  * @package         Republication_Tracker_Tool
@@ -36,6 +36,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/compatibility-newspack-bylines.p
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-button-block.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republish-pattern.php';
+require plugin_dir_path( __FILE__ ) . 'includes/class-jetpack-sharing.php';
 require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
@@ -273,6 +274,61 @@ final class Republication_Tracker_Tool {
 	}
 
 	/**
+	 * Whether a republish button may be offered for a post: the post is
+	 * republishable, its type is allowed, and it is not hidden from republication.
+	 *
+	 * @param \WP_Post $post The post object.
+	 * @return bool
+	 */
+	public static function can_offer_republish( \WP_Post $post ): bool {
+		if ( ! self::is_post_republishable( $post ) ) {
+			return false;
+		}
+
+		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
+		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
+			return false;
+		}
+
+		$hide = apply_filters(
+			'hide_republication_widget',
+			get_post_meta( $post->ID, 'republication-tracker-tool-hide-widget', true ),
+			$post
+		);
+		return true != $hide; // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual
+	}
+
+	/**
+	 * Whether the republish modal renders with newspack-ui, the reader-facing
+	 * design system newspack-plugin provides. Without it the modal keeps the
+	 * plugin's own markup and styles.
+	 *
+	 * @return bool
+	 */
+	public static function use_newspack_ui(): bool {
+		/**
+		 * Filters whether the republish modal renders with newspack-ui.
+		 *
+		 * Return false to keep the plugin's own modal markup and styles.
+		 *
+		 * @param bool $use_newspack_ui Whether newspack-ui is used. Defaults to whether newspack-plugin provides it.
+		 */
+		return (bool) apply_filters( 'republication_tracker_tool_use_newspack_ui', class_exists( '\Newspack\Newspack_UI' ) );
+	}
+
+	/**
+	 * Enqueue the republish modal styles: newspack-ui plus the few rules it has
+	 * no component for, or the plugin's own stylesheet.
+	 */
+	public static function enqueue_modal_style(): void {
+		if ( self::use_newspack_ui() ) {
+			wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/newspack-ui.css', [ 'newspack-ui' ], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/newspack-ui.css' ) );
+			return;
+		}
+		wp_enqueue_style( 'republication-tracker-tool-css', REPUBLICATION_TRACKER_TOOL_URL . 'assets/widget.css', [], filemtime( REPUBLICATION_TRACKER_TOOL_PATH . 'assets/widget.css' ) );
+	}
+
+	/**
 	 * Create tracking pixel HTML markup.
 	 *
 	 * @param int $post_id ID of the post to track.
@@ -363,8 +419,13 @@ final class Republication_Tracker_Tool {
 		$site_icon_markup = '';
 		$site_icon_url    = get_site_icon_url( 150 );
 		if ( ! empty( $site_icon_url ) ) {
+			// A Visual-mode paste into the block editor drops `style` but keeps `width` and
+			// `height`, so those keep the icon small in a republished story. A non-breaking
+			// space gives the gap, since a margin in `style` would be dropped with it. `style`
+			// still sizes the icon wherever it survives. The `alt` is empty because the
+			// sentence already names the site, so screen readers skip the icon.
 			$site_icon_markup = sprintf(
-				'<img src="%1$s" style="width:1em;height:1em;margin-left:10px;">',
+				'&nbsp;<img src="%1$s" alt="" width="16" height="16" style="width:1em;height:1em;">',
 				esc_attr( $site_icon_url )
 			);
 		}

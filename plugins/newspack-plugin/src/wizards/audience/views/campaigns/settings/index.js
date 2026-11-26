@@ -4,12 +4,7 @@
 import apiFetch from '@wordpress/api-fetch';
 import { createPortal, Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import {
-	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-	__experimentalVStack as VStack,
-	Snackbar,
-	ToggleControl,
-} from '@wordpress/components';
+import { Snackbar, ToggleControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -18,11 +13,10 @@ import {
 	withWizardScreen,
 	Button,
 	Divider,
-	Grid,
 	Notice,
 	PageControl,
-	SectionHeader,
 	SelectControl,
+	SplitSection,
 	TextControl,
 	useUnsavedChangesDialog,
 } from '../../../../../../packages/components/src';
@@ -218,9 +212,9 @@ const Settings = props => {
 					return (
 						<Fragment key={ sectionKey }>
 							{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
-							<Grid columns={ 2 } gutter={ 32 } noMargin>
-								<SectionHeader heading={ 2 } title={ sectionInfo?.description } description={ sectionInfo?.help } noMargin />
-								<VStack spacing={ 6 }>
+							<SplitSection.Root>
+								<SplitSection.Header title={ sectionInfo?.description } description={ sectionInfo?.help } />
+								<SplitSection.Content>
 									{ fields.map( setting => (
 										<SettingField
 											key={ setting.key }
@@ -229,8 +223,8 @@ const Settings = props => {
 											disabled={ inFlight }
 										/>
 									) ) }
-								</VStack>
-							</Grid>
+								</SplitSection.Content>
+							</SplitSection.Root>
 						</Fragment>
 					);
 				} ) }

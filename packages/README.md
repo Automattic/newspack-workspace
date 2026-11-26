@@ -7,6 +7,9 @@ This directory contains reusable packages for Newspack projects.
 - `colors/` - A collection of color tokens for Newspack projects
 - `components/` - A collection of React components for Newspack projects
 - `icons/` - A collection of custom SVG icons for Newspack projects
+- `motion/` - Shared motion tokens (easing curves, durations) for Newspack projects
+- `playground/` - A harness that builds design prototypes against the workspace's components (private)
+- `ui-shadcn/` - A shadcn theme and registry built from the newspack-ui tokens (private)
 
 ## Development
 

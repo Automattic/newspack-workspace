@@ -32,6 +32,15 @@ export function getCptSlug() {
 }
 
 /**
+ * The store's currency format, or null when WooCommerce is not active.
+ *
+ * @return {{symbol: string, position: string, decimals: number, decimalSeparator: string, thousandSeparator: string}|null} The format.
+ */
+export function getCurrency() {
+	return getGlobal()?.currency || null;
+}
+
+/**
  * Whether the shell is rendering inside newspack-plugin's admin header.
  *
  * `wp_localize_script()` string-casts, so PHP's boolean arrives as `'1'` or `''`

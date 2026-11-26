@@ -8,28 +8,92 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 import { sprintf, __ } from '@wordpress/i18n';
-import { CardMedia, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
-import { useEffect, useState, Fragment } from '@wordpress/element';
+import {
+	DropdownMenu,
+	MenuGroup,
+	MenuItem,
+	Notice as CoreNotice,
+	Tooltip,
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
+import { useContext, useEffect, useState, Fragment } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { moreVertical, settings } from '@wordpress/icons';
+import { Badge, Card, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies.
  */
-import { ActionCard, Button, Modal, Notice, TextControl } from '../../../../../packages/components/src';
-import PrimaryPromptPopover from '../prompt-popovers/primary';
-import PromptSettingsModal from '../settings-modal';
-import { placementForPopup } from '../../views/campaigns/utils';
+import { Button, EditTitleLink, Modal, Notice, TextControl } from '../../../../../packages/components/src';
+import PromptSettingsDrawer from '../settings-drawer';
+import { abTestBadge, promptDetails, promptStatus } from '../../views/campaigns/utils';
+import ABTestsContext from '../../views/campaigns/ab-tests/context';
+import StartTestModal from '../../views/campaigns/ab-tests/start-test-modal';
+import { openVersionB, testCardHash } from '../../views/campaigns/ab-tests/utils';
 import './style.scss';
 
 const PromptActionCard = props => {
-	const [ isSettingsModalVisible, setIsSettingsModalVisible ] = useState( false );
-	const [ popoverVisibility, setPopoverVisibility ] = useState( false );
+	const [ isSettingsOpen, setIsSettingsOpen ] = useState( false );
+	const [ settingsSession, setSettingsSession ] = useState( 0 );
 	const [ isDuplicatePromptModalVisible, setIsDuplicatePromptModalVisible ] = useState( false );
 	const [ duplicateTitle, setDuplicateTitle ] = useState( null );
+	const [ isStartTestModalVisible, setIsStartTestModalVisible ] = useState( false );
+	const abTests = useContext( ABTestsContext );
 
-	const { className, description, duplicated, duplicatePopup, inFlight, resetDuplicated, prompt = {}, segments, warning } = props;
-	const { campaign_groups: campaignGroups, id, edit_link: editLink, title } = prompt;
+	const {
+		deletePopup,
+		duplicated,
+		duplicatePopup,
+		inFlight,
+		previewPopup,
+		prompt = {},
+		publishPopup,
+		resetDuplicated,
+		restorePopup,
+		segmentDisabled,
+		unpublishPopup,
+		warning,
+	} = props;
+	const { campaign_groups: campaignGroups, id, edit_link: editLink, status, title } = prompt;
+	const isPublished = 'publish' === status;
+	const isTrash = 'trash' === status;
+	const displayTitle = title.length ? decodeEntities( title ) : __( '(no title)', 'newspack-plugin' );
+	const { label: statusLabel, intent: statusIntent } = promptStatus( prompt, segmentDisabled );
+	const abBadge = abTestBadge( prompt );
+	// Null while A/B testing is off, or for a prompt the list route didn't return.
+	const abState = abTests?.prompts?.find( item => item.id === id ) || null;
+
+	const renderABTestItem = onClose => {
+		if ( ! abState ) {
+			return null;
+		}
+		if ( abState.test_id ) {
+			return (
+				<MenuItem href={ testCardHash( abState.test_id ) } onClick={ onClose }>
+					{ __( 'View A/B Test', 'newspack-plugin' ) }
+				</MenuItem>
+			);
+		}
+		if ( abState.ineligible_reason ) {
+			return (
+				<Tooltip text={ abState.ineligible_reason } placement="left">
+					<MenuItem disabled accessibleWhenDisabled describedBy={ abState.ineligible_reason }>
+						{ __( 'Start A/B Test', 'newspack-plugin' ) }
+					</MenuItem>
+				</Tooltip>
+			);
+		}
+		return (
+			<MenuItem
+				onClick={ () => {
+					onClose();
+					setIsStartTestModalVisible( true );
+				} }
+			>
+				{ __( 'Start A/B Test', 'newspack-plugin' ) }
+			</MenuItem>
+		);
+	};
 
 	useEffect( () => {
 		if ( isDuplicatePromptModalVisible && ! duplicateTitle ) {
@@ -51,54 +115,159 @@ const PromptActionCard = props => {
 	};
 
 	return (
-		<CardMedia>
-			<ActionCard
-				isSmall
-				noBorder
-				badges={ [ { label: placementForPopup( prompt ) } ] }
-				className={ className }
-				title={ title.length ? decodeEntities( title ) : __( '(no title)', 'newspack-plugin' ) }
-				titleLink={ decodeEntities( editLink ) }
-				key={ id }
-				description={ description }
-				notification={ warning }
-				notificationLevel="error"
-				actionText={
-					<>
-						<div className="newspack-audience-campaigns__buttons">
-							<Button
-								className={ isSettingsModalVisible && 'popover-active' }
-								onClick={ () => setIsSettingsModalVisible( ! isSettingsModalVisible ) }
-								icon={ settings }
-								label={ __( 'Prompt settings', 'newspack-plugin' ) }
-								tooltipPosition="bottom center"
-							/>
-							<Button
-								className={ popoverVisibility && 'popover-active' }
-								onClick={ () => setPopoverVisibility( ! popoverVisibility ) }
-								icon={ moreVertical }
-								label={ __( 'More options', 'newspack-plugin' ) }
-								tooltipPosition="bottom center"
-							/>
-							{ popoverVisibility && (
-								<PrimaryPromptPopover
-									onFocusOutside={ () => setPopoverVisibility( false ) }
-									prompt={ prompt }
-									setIsDuplicatePromptModalVisible={ setIsDuplicatePromptModalVisible }
-									{ ...props }
-								/>
-							) }
+		<Card.Content className="newspack-campaigns__segment-group__content newspack-campaigns__prompt">
+			<Stack direction="column" gap="md">
+				<Stack direction="row" gap="md" wrap="wrap" align="center" justify="space-between">
+					<Stack direction="column" gap="xs" className="newspack-campaigns__prompt-summary">
+						<Stack direction="row" gap="sm" wrap="wrap" align="center" className="newspack-edit-title-link-row">
+							<h3 className="newspack-campaigns__prompt-title">
+								{ isTrash ? displayTitle : <EditTitleLink href={ decodeEntities( editLink ) }>{ displayTitle }</EditTitleLink> }
+							</h3>
+							<Badge intent={ statusIntent }>{ statusLabel }</Badge>
+							{ abBadge && <Badge intent={ abBadge.intent }>{ abBadge.label }</Badge> }
+						</Stack>
+						<div className="newspack-campaigns__details">
+							{ promptDetails( prompt ).map( ( { label, value } ) => (
+								<span key={ label }>
+									<span className="newspack-campaigns__details-key">{ label }</span>{ ' ' }
+									<span className="newspack-campaigns__details-value">{ value }</span>
+								</span>
+							) ) }
 						</div>
-					</>
-				}
+					</Stack>
+					<Stack direction="row" gap="sm" align="center">
+						{ ! isTrash && (
+							<Button
+								icon={ settings }
+								size="compact"
+								label={ sprintf(
+									// Translators: %s: prompt title.
+									__( 'Prompt settings: %s', 'newspack-plugin' ),
+									displayTitle
+								) }
+								onClick={ () => {
+									setSettingsSession( session => session + 1 );
+									setIsSettingsOpen( true );
+								} }
+							/>
+						) }
+						<DropdownMenu
+							icon={ moreVertical }
+							toggleProps={ { size: 'compact' } }
+							label={ sprintf(
+								// Translators: %s: prompt title.
+								__( 'More options: %s', 'newspack-plugin' ),
+								displayTitle
+							) }
+						>
+							{ ( { onClose } ) =>
+								isTrash ? (
+									<MenuGroup
+										label={
+											// Translators: %d: prompt ID.
+											sprintf( __( 'ID: %d', 'newspack-plugin' ), id )
+										}
+									>
+										<MenuItem
+											onClick={ () => {
+												onClose();
+												restorePopup( id );
+											} }
+										>
+											{ __( 'Restore', 'newspack-plugin' ) }
+										</MenuItem>
+										<MenuItem
+											isDestructive
+											onClick={ () => {
+												onClose();
+												deletePopup( id );
+											} }
+										>
+											{ __( 'Delete Permanently', 'newspack-plugin' ) }
+										</MenuItem>
+									</MenuGroup>
+								) : (
+									<>
+										<MenuGroup
+											label={
+												// Translators: %d: prompt ID.
+												sprintf( __( 'ID: %d', 'newspack-plugin' ), id )
+											}
+										>
+											<MenuItem
+												onClick={ () => {
+													onClose();
+													previewPopup( prompt );
+												} }
+											>
+												{ __( 'Preview', 'newspack-plugin' ) }
+											</MenuItem>
+											<MenuItem href={ decodeEntities( editLink ) }>{ __( 'Edit', 'newspack-plugin' ) }</MenuItem>
+											<MenuItem
+												onClick={ () => {
+													onClose();
+													setIsDuplicatePromptModalVisible( true );
+												} }
+											>
+												{ __( 'Duplicate', 'newspack-plugin' ) }
+											</MenuItem>
+											{ renderABTestItem( onClose ) }
+											<MenuItem
+												onClick={ () => {
+													onClose();
+													( isPublished ? unpublishPopup : publishPopup )( id );
+												} }
+											>
+												{ isPublished ? __( 'Deactivate', 'newspack-plugin' ) : __( 'Activate', 'newspack-plugin' ) }
+											</MenuItem>
+										</MenuGroup>
+										<MenuGroup>
+											<MenuItem
+												isDestructive
+												onClick={ () => {
+													onClose();
+													deletePopup( id );
+												} }
+											>
+												{ __( 'Delete', 'newspack-plugin' ) }
+											</MenuItem>
+										</MenuGroup>
+									</>
+								)
+							}
+						</DropdownMenu>
+					</Stack>
+				</Stack>
+				{ warning && (
+					<CoreNotice status="warning" isDismissible={ false } spokenMessage="" className="newspack-campaigns__prompt-warning">
+						{ warning }
+					</CoreNotice>
+				) }
+			</Stack>
+			<PromptSettingsDrawer
+				key={ settingsSession }
+				isOpen={ isSettingsOpen }
+				prompt={ prompt }
+				disabled={ inFlight }
+				onClose={ () => setIsSettingsOpen( false ) }
+				updatePopup={ props.updatePopup }
 			/>
-			{ isSettingsModalVisible && (
-				<PromptSettingsModal
-					prompt={ prompt }
-					disabled={ inFlight }
-					onClose={ () => setIsSettingsModalVisible( false ) }
-					segments={ segments }
-					updatePopup={ props.updatePopup }
+			{ isStartTestModalVisible && abState && (
+				<StartTestModal
+					promptId={ id }
+					testName={ title.length ? decodeEntities( title ) : '' }
+					goals={ abTests?.goals || {} }
+					suggestedGoal={ abState.suggested_goal }
+					intro={ sprintf(
+						// Translators: %s is the title of the prompt that becomes version A.
+						__(
+							'Version B starts as a draft copy of “%s” with the same placement. Change what you want to compare, then publish it to start the test.',
+							'newspack-plugin'
+						),
+						displayTitle
+					) }
+					onCreated={ openVersionB }
+					onClose={ () => setIsStartTestModalVisible( false ) }
 				/>
 			) }
 			{ isDuplicatePromptModalVisible && (
@@ -181,7 +350,7 @@ const PromptActionCard = props => {
 					) }
 				</Modal>
 			) }
-		</CardMedia>
+		</Card.Content>
 	);
 };
 export default PromptActionCard;

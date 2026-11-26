@@ -120,11 +120,11 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 			{ isModalVisible && <SiteActionModal plugins={ failedDependencies } onSuccess={ makeRequest } onRequestClose={ setIsModalVisible } /> }
 			{ /* Error UI, link user to config */ }
 			{ requestStatus === 'error' && (
-				<Tooltip text={ __( 'Click to navigate to configuration', 'newspack-plugin' ) }>
+				<Tooltip text={ __( 'Open configuration', 'newspack-plugin' ) }>
 					{ /* eslint-disable-next-line jsx-a11y/anchor-has-content -- content is supplied via the Card children through @wordpress/ui's render prop. */ }
 					<StatusPill className={ classes } render={ <a href={ configLink } /> }>
 						{ label }: <span>{ parsedStatusLabels[ requestStatus ] }</span>
-						<span className="hidden">{ __( 'Configure?', 'newspack-plugin' ) }</span>
+						<span className="hidden">{ __( 'Configure', 'newspack-plugin' ) }</span>
 					</StatusPill>
 				</Tooltip>
 			) }
@@ -133,7 +133,7 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 				<Tooltip
 					text={ sprintf(
 						// translators: %s is a comma separated list of needed dependencies.
-						__( '%s must be installed & activated!', 'newspack-plugin' ),
+						__( '%s must be installed and activated.', 'newspack-plugin' ),
 						failedDependencies.map( dep => dependencies[ dep ].label ).join( ', ' )
 					) }
 				>
@@ -153,7 +153,7 @@ const SiteStatus = ( { label = '', isPreflightValid = true, dependencies: depend
 						{ requestStatus === 'error-request'
 							? sprintf(
 									/* translators: %d is the HTTP status code */
-									__( 'Request failed - %d', 'newspack-plugin' ),
+									__( 'Request failed (%d)', 'newspack-plugin' ),
 									requestCode
 							  )
 							: parsedStatusLabels[ requestStatus ] }

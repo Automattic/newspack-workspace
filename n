@@ -11,64 +11,15 @@ else
     DOCKER_IT=""
 fi
 
-# Determine target container based on current directory
-# If inside a worktree, find the environment whose compose file mounts that
-# exact worktree path; otherwise use newspack_dev.
-#
-# Earlier versions used a 2-segment regex prefix that collapsed branches with
-# slashes (e.g. `jl/news-2239-pr1b-frontend` -> `jl`), causing false matches
-# when multiple envs mounted `jl/*` worktrees. This version reads each compose
-# file's actual mount lines and picks the LONGEST absolute path that PWD
-# starts with — unambiguous regardless of branch-name shape.
+# Route to the isolated env whose compose file mounts the current directory
+# (see env_for_path in bin/_common.sh), otherwise to newspack_dev.
 get_target_container() {
-    if [[ "$PWD" == "$NABSPATH/worktrees/"* || "$PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
-        local best_match="" best_env=""
-        for f in "$NABSPATH"/docker-compose.env-*.yml; do
-            [[ -f "$f" ]] || continue
-            while IFS= read -r mount; do
-                # Mounts can take three shapes — pre-monorepo per-plugin worktrees
-                # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>), monorepo
-                # workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
-                # or .../themes/<name>:/newspack-themes/<name>), and standalone
-                # repos/ worktrees (./worktrees-repos/<name>/<safe_branch>:/newspack-repos/<kind>/<name>).
-                # For the monorepo shape, the env mounts a per-plugin subdir but we
-                # also want to route correctly from elsewhere inside the
-                # worktree (its root, bin/, packages/, sibling plugins). Match
-                # by the enclosing worktree root instead of only the mounted
-                # subdir. Regex extraction tolerates tabs/multi-space and cuts
-                # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
-                # trailing comments don't corrupt the captured paths.
-                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
-                local rel="worktrees${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-                local container_type="${BASH_REMATCH[3]}"
-                local abs="$NABSPATH/$rel"
-                local worktree_root="$abs"
-                case "$container_type" in
-                    plugins|themes)
-                        worktree_root="${abs%/plugins/*}"
-                        worktree_root="${worktree_root%/themes/*}"
-                        ;;
-                esac
-                # Prefer the deeper mounted-subpath match (more specific) so
-                # PWD inside a mounted plugin/theme routes to that env even
-                # when a sibling env mounts a different plugin from the same
-                # worktree. Fall back to the worktree root for PWDs in
-                # shared dirs (bin/, packages/, the worktree root itself).
-                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
-                    best_match="$abs"
-                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
-                elif [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
-                    best_match="$worktree_root"
-                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
-                fi
-            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
-        done
-        if [ -n "$best_env" ]; then
-            echo "newspack_env_${best_env}" | tr '-' '_'
-            return
-        fi
+    local env_name
+    if env_name=$(env_for_path "$PWD"); then
+        echo "newspack_env_${env_name}" | tr '-' '_'
+    else
+        echo "newspack_dev"
     fi
-    echo "newspack_dev"
 }
 
 # Cache the target container for this invocation
@@ -126,6 +77,9 @@ if [[ "$PWD" == *"manager-html"* ]]; then
     path_param="--path=$current_site_path"
 fi
 
+# Commands run from the workspace root, so keep where the caller was for the
+# ones that resolve an env from it (`n env which`).
+caller_pwd="$PWD"
 cd "$(dirname "$0")"
 source .env
 
@@ -162,69 +116,52 @@ start() {
     if [[ -f docker-compose.override.yml ]]; then
         compose_files+=(-f docker-compose.override.yml)
     fi
-    # Compose never refreshes an image it already has. Offline, the current one is used.
-    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit >/dev/null 2>&1
-    docker compose "${compose_files[@]}" up -d
-
-    # Create shared network for inter-container communication.
-    # Env containers join this network with their domain as an alias,
-    # so they can reach each other by domain name via Docker DNS.
-    if ! docker network inspect newspack_envs >/dev/null 2>&1; then
-        if ! docker network create newspack_envs >/dev/null; then
-            echo "Error: failed to create Docker network 'newspack_envs'. Is Docker running?" >&2
-            exit 1
-        fi
-        echo "Created shared network: newspack_envs"
+    # The proxy's compose service declares this network external, so it has to
+    # exist before `up`. The isolated envs join it under their domain, which is
+    # also how they reach each other by name.
+    ensure_envs_network || exit 1
+    # The proxy mounts its routes directory, so the routes are written first.
+    if ! sync_proxy_routes; then
+        echo "Error: could not write the proxy routes under $PROXY_ROUTES_DIR" >&2
+        exit 1
     fi
 
-    # macOS: set up loopback aliases for isolated environments.
-    # Pre-allocate 127.0.0.2–100 so agents can create envs without sudo later.
-    # These don't survive reboots, so this runs on every start.
+    # Compose never refreshes an image it already has. Offline, the current one is used.
+    # The proxy is pulled here too: left to `up`, an image that is not cached yet
+    # makes Compose try to pull the locally built newspack-dev image as well.
+    docker compose "${compose_files[@]}" pull --quiet --ignore-pull-failures adminer mailpit proxy >/dev/null 2>&1
+    up_log=$(mktemp "${TMPDIR:-/tmp}/n-start.XXXXXX")
+    docker compose "${compose_files[@]}" up -d 2>&1 | tee "$up_log"
+    if [[ "${PIPESTATUS[0]}" -ne 0 ]]; then
+        # Port 80 or 443 already in use points at an isolated env from before the
+        # proxy, still running and publishing them itself. Stop those and try once
+        # more. Any other failure is no reason to stop anyone's env: a missing
+        # image, or another service's port being taken.
+        if ! grep -E 'address already in use|port is already allocated' "$up_log" | grep -qE ':(80|443)([^0-9]|$)' \
+            || ! stop_legacy_env_publishers \
+            || ! docker compose "${compose_files[@]}" up -d; then
+            rm -f "$up_log"
+            echo "Error: the stack did not start. See the Docker output above." >&2
+            exit 1
+        fi
+    fi
+    rm -f "$up_log"
+
+    # macOS: make sure every isolated env's domain resolves to the proxy, so
+    # agents can bring envs up without sudo later. A line left from when an env
+    # had a loopback address of its own is replaced, because that address is
+    # gone after a reboot.
     if [[ "$(uname)" == "Darwin" ]]; then
-        missing_aliases=()
-        for octet in $(seq 2 100); do
-            ip="127.0.0.$octet"
-            if ! lo0_alias_exists "$ip"; then
-                missing_aliases+=("$ip")
-            fi
-        done
-        missing_hosts=()
+        warn_if_manage_host_stale
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
-            domain=$(grep 'WP_DOMAIN=' "$f" | head -1 | sed 's/.*WP_DOMAIN=//')
-            ip=$(grep -o '127\.0\.0\.[0-9]*' "$f" | head -1)
-            # Only add hosts entries for custom domains, not IP-based ones.
-            if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-                missing_hosts+=("$ip $domain")
-            fi
+            domain=$(domain_for_env "$f")
+            # An env still addressed by its loopback IP has no name to resolve.
+            [[ -n "$domain" && "$domain" != "$(legacy_env_ip "$f")" ]] || continue
+            # A hosts line that could not be fixed is reported, not fatal: the
+            # stack is up either way.
+            point_host_at_proxy "$domain" || true
         done
-        if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
-            # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
-            warn_if_manage_host_stale
-            if command -v newspack-manage-host >/dev/null 2>&1; then
-                for ip in "${missing_aliases[@]}"; do
-                    sudo newspack-manage-host alias-add "$ip"
-                done
-                for entry in "${missing_hosts[@]}"; do
-                    read -r ip domain <<< "$entry"
-                    if [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                        sudo newspack-manage-host host-add "$ip" "$domain"
-                    else
-                        echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                    fi
-                done
-            else
-                echo ""
-                echo "Setting up networking for isolated environments (requires sudo)..."
-                for ip in "${missing_aliases[@]}"; do
-                    sudo ifconfig lo0 alias "$ip"
-                done
-                for entry in "${missing_hosts[@]}"; do
-                    echo "$entry" | sudo tee -a /etc/hosts > /dev/null
-                done
-            fi
-            echo "Ready: loopback aliases 127.0.0.2–100, $(( ${#missing_hosts[@]} )) hosts entries."
-        fi
     fi
 }
 stop() {
@@ -497,7 +434,7 @@ case $1 in
         "$NABSPATH/bin/worktree.sh" "${@:2}"
         ;;
     env)
-        "$NABSPATH/bin/env.sh" "${@:2}"
+        N_CALLER_PWD="$caller_pwd" "$NABSPATH/bin/env.sh" "${@:2}"
         ;;
     root)
         echo "$NABSPATH"
@@ -552,7 +489,7 @@ case $1 in
         echo ""
         echo "Isolated Environments:"
         echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
-        echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
+        echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, which, cleanup)."
         echo ""
         echo "Other:"
         echo "  root                         Print the absolute path to the workspace root directory."

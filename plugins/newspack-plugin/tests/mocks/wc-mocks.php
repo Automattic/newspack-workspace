@@ -835,16 +835,74 @@ class WC_Product {
 		$this->meta[ $key ] = $value;
 	}
 	/**
+	 * Drop a meta value in memory, as WC_Data::delete_meta_data() does before a save().
+	 *
+	 * @param string $key Meta key.
+	 */
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
+	}
+	/**
 	 * Persist the product back into the mock store. The object is already held by
 	 * reference, so this only matters for a product built and saved without being
 	 * registered first; it mirrors WC_Product::save() returning the product ID.
+	 * Fires the before-save action WC_Data::save() fires, so code that adjusts a
+	 * product as it is saved runs here too.
 	 *
 	 * @return int The product ID.
 	 */
 	public function save() {
+		do_action( 'woocommerce_before_product_object_save', $this, null );
 		global $products_database;
 		$products_database[ $this->get_id() ] = $this;
 		return $this->get_id();
+	}
+	/**
+	 * Setters Donations::update_donation_product() calls on an existing product.
+	 * They store into the same data the getters above read, so a test can run
+	 * that method against mock products and read the results back.
+	 *
+	 * @param string $value Product name.
+	 */
+	public function set_name( $value ) {
+		$this->data['name'] = $value;
+	}
+	public function set_regular_price( $value ) {
+		$this->data['regular_price'] = $value;
+	}
+	public function set_children( $value ) {
+		$this->data['children'] = $value;
+	}
+	public function set_status( $value ) {
+		$this->data['status'] = $value;
+	}
+	public function set_virtual( $value ) {
+		$this->data['virtual'] = $value;
+	}
+	public function set_downloadable( $value ) {
+		$this->data['downloadable'] = $value;
+	}
+	public function set_catalog_visibility( $value ) {
+		$this->data['catalog_visibility'] = $value;
+	}
+	public function set_sold_individually( $value ) {
+		$this->data['sold_individually'] = $value;
+	}
+}
+
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * Minimal stand-in for WooCommerce's wc_format_decimal(): normalizes a numeric
+	 * value to a string without trailing zeros, which is all the donation code needs.
+	 *
+	 * @param mixed $number Number to format.
+	 * @return string
+	 */
+	function wc_format_decimal( $number ) {
+		if ( '' === $number || null === $number ) {
+			return '';
+		}
+		return (string) ( 0 + $number );
 	}
 }
 
@@ -1012,6 +1070,27 @@ class WC_Order {
 		// customer must read the same way when another suite's query walks it.
 		return $this->data['customer_id'] ?? 0;
 	}
+	public function set_customer_id( $customer_id ) {
+		$this->data['customer_id'] = (int) $customer_id;
+	}
+	/**
+	 * Billing setters, as flat data keys the getters read back.
+	 *
+	 * @param string $name      Method name.
+	 * @param array  $arguments Arguments.
+	 *
+	 * @throws BadMethodCallException For any other undefined method.
+	 */
+	public function __call( $name, $arguments ) {
+		if ( 0 === strpos( $name, 'set_billing_' ) ) {
+			$this->data[ substr( $name, 4 ) ] = $arguments[0] ?? '';
+			return;
+		}
+		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+	}
+	public function get_user() {
+		return $this->get_customer_id() ? get_user_by( 'id', $this->get_customer_id() ) : false;
+	}
 	public function get_meta( $field_name ) {
 		return isset( $this->meta[ $field_name ] ) ? $this->meta[ $field_name ] : '';
 	}
@@ -1122,6 +1201,11 @@ class WC_Order {
 	}
 	public function get_checkout_payment_url() {
 		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
+	}
+	public function get_order_number() {
+		// Real WC filters the number (woocommerce_order_number), which sequential
+		// numbering plugins use to make it differ from the ID.
+		return (string) ( $this->data['order_number'] ?? $this->get_id() );
 	}
 	/**
 	 * Accepts a gateway object or id string, like the real setter.
@@ -1247,8 +1331,23 @@ class WC_Subscription {
 	public function get_user_id() {
 		return $this->data['customer_id'] ?? null;
 	}
+	public function set_customer_id( $customer_id ) {
+		$this->data['customer_id'] = (int) $customer_id;
+	}
 	public function get_payment_method() {
 		return $this->data['payment_method'] ?? '';
+	}
+	/**
+	 * Like WC_Subscription::set_payment_method(): an empty gateway also makes the
+	 * subscription manual-renewal.
+	 *
+	 * @param string $payment_method Gateway ID.
+	 */
+	public function set_payment_method( $payment_method = '' ) {
+		$this->data['payment_method'] = (string) $payment_method;
+		if ( '' === (string) $payment_method ) {
+			$this->data['requires_manual_renewal'] = true;
+		}
 	}
 	public function get_payment_method_title() {
 		return $this->data['payment_method_title'] ?? '';
@@ -1442,6 +1541,23 @@ class WC_Subscription {
 		// newest related renewal order, paid or not, staged via
 		// `related_orders`. Mixed-type calls (e.g. parent + renewal) keep the
 		// legacy `orders`-array behavior below.
+		if ( 'any' === $types && isset( $this->data['related_orders'] ) ) {
+			// Faithful to real WCS for fixtures staged via `related_orders`: 'any'
+			// expands to parent, renewal and switch orders, and the one with the
+			// highest ID wins. Fixtures staged via `orders` keep the legacy path below.
+			$newest = false;
+			foreach ( [ 'parent', 'renewal', 'switch' ] as $type ) {
+				foreach ( $this->data['related_orders'][ $type ] ?? [] as $order ) {
+					if ( ! is_object( $order ) || ( ! empty( $exclude_statuses ) && $order->has_status( $exclude_statuses ) ) ) {
+						continue;
+					}
+					if ( ! $newest || $order->get_id() > $newest->get_id() ) {
+						$newest = $order;
+					}
+				}
+			}
+			return $newest;
+		}
 		if ( [ 'renewal' ] === (array) $types ) {
 			$renewals = $this->data['related_orders']['renewal'] ?? [];
 			$newest   = false;
@@ -1590,6 +1706,9 @@ class WC_Subscription {
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
 	}
+	public function get_order_number() {
+		return (string) ( $this->data['order_number'] ?? $this->get_id() );
+	}
 	public function is_manual() {
 		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
 		return ! empty( $this->data['requires_manual_renewal'] ) || ! empty( $this->data['is_manual'] );
@@ -1614,6 +1733,10 @@ class WC_Subscription {
 		// fixtures stage address data.
 		if ( 0 === strpos( $name, 'get_billing_' ) || 0 === strpos( $name, 'get_shipping_' ) ) {
 			return $this->data[ substr( $name, 4 ) ] ?? '';
+		}
+		if ( 0 === strpos( $name, 'set_billing_' ) || 0 === strpos( $name, 'set_shipping_' ) ) {
+			$this->data[ substr( $name, 4 ) ] = $arguments[0] ?? '';
+			return;
 		}
 		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
@@ -2061,6 +2184,12 @@ function wcs_get_subscriptions_for_order( $order, $args = [] ) {
 			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
 		}
 	}
+	if ( $wants_any || in_array( 'resubscribe', $order_types, true ) ) {
+		$subscription_id = (int) $order->get_meta( '_subscription_resubscribe' );
+		if ( $subscription_id > 0 && isset( $subscriptions_database[ $subscription_id ] ) ) {
+			$matches[ $subscription_id ] = $subscriptions_database[ $subscription_id ];
+		}
+	}
 	if ( $wants_any || in_array( 'parent', $order_types, true ) ) {
 		foreach ( (array) $subscriptions_database as $id => $subscription ) {
 			if ( (int) $subscription->get_parent_id() === (int) $order->get_id() ) {
@@ -2364,6 +2493,9 @@ function wc_clean( $var ) {
 	}
 	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
 }
+function wc_price( $price, $args = [] ) {
+	return '<span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol">&#36;</span>' . number_format( (float) $price, 2 ) . '</bdi></span>';
+}
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
@@ -2498,6 +2630,14 @@ function wc_get_orders( $args ) {
 		// query args) that hands back the same rows for every page.
 		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
 		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
+	}
+	if ( 'ids' === ( $args['return'] ?? '' ) ) {
+		return array_map(
+			function( $order ) {
+				return $order->get_id();
+			},
+			array_values( $orders )
+		);
 	}
 	return $orders;
 }
@@ -2914,8 +3054,18 @@ function wcs_get_orders_with_meta_query( $args ) {
 		return $wcs_mock_orders_with_meta_query_result;
 	}
 	// Default: page the mock subscriptions database honoring limit/offset,
-	// mirroring wc_get_orders' paginate => true return shape.
-	$ids    = array_keys( $subscriptions_database );
+	// mirroring wc_get_orders' paginate => true return shape. Meta query clauses
+	// comparing with `=` (the default) are honored; other compares are ignored.
+	$ids = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		foreach ( $args['meta_query'] ?? [] as $clause ) {
+			if ( is_array( $clause ) && isset( $clause['key'], $clause['value'] ) && '=' === ( $clause['compare'] ?? '=' )
+				&& (string) $subscription->get_meta( $clause['key'], true ) !== (string) $clause['value'] ) {
+				continue 2;
+			}
+		}
+		$ids[] = $id;
+	}
 	$total  = count( $ids );
 	$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
 	$limit  = isset( $args['limit'] ) && (int) $args['limit'] > 0 ? (int) $args['limit'] : $total;
@@ -3002,3 +3152,113 @@ class WC_Webhook {
 function wc_get_webhook( $id ) {
 	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }
+
+/**
+ * Mirror of the mock subscriptions into WooCommerce's HPOS order tables.
+ *
+ * Code that answers subscription questions in SQL (Subscribers_Index)
+ * cannot see the in-memory $subscriptions_database. While $wcs_mock_hpos_enabled
+ * is set, any query touching the order tables first rewrites them from the mock
+ * database, so such code reads what the test set up. The tables are created
+ * when this file loads, outside the test transaction, so they are real tables:
+ * MySQL cannot reference a temporary table twice in one query. Rows written
+ * inside a test roll back with it.
+ */
+function wc_mocks_create_order_tables() {
+	global $wpdb;
+	$charset = $wpdb->get_charset_collate();
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wc_orders ( id bigint(20) unsigned NOT NULL, type varchar(20), status varchar(20), customer_id bigint(20) unsigned, date_created_gmt datetime, PRIMARY KEY (id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}wc_orders_meta ( id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_id bigint(20) unsigned, meta_key varchar(255), meta_value longtext, PRIMARY KEY (id), KEY order_id (order_id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_order_items ( order_item_id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_item_name text, order_item_type varchar(200), order_id bigint(20) unsigned, PRIMARY KEY (order_item_id), KEY order_id (order_id) ) {$charset}" );
+	$wpdb->query( "CREATE TABLE IF NOT EXISTS {$wpdb->prefix}woocommerce_order_itemmeta ( meta_id bigint(20) unsigned NOT NULL AUTO_INCREMENT, order_item_id bigint(20) unsigned, meta_key varchar(255), meta_value longtext, PRIMARY KEY (meta_id), KEY order_item_id (order_item_id) ) {$charset}" );
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+}
+
+/**
+ * Rewrite the mirrored order tables from $subscriptions_database.
+ */
+function wc_mocks_sync_order_tables() {
+	global $wpdb, $subscriptions_database;
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	// DELETE, not TRUNCATE: TRUNCATE commits the test's open transaction.
+	foreach ( [ 'wc_orders', 'wc_orders_meta', 'woocommerce_order_items', 'woocommerce_order_itemmeta' ] as $table ) {
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}{$table}" );
+	}
+	foreach ( (array) $subscriptions_database as $id => $subscription ) {
+		if ( ! $subscription instanceof WC_Subscription ) {
+			continue;
+		}
+		$created = $subscription->get_date_created();
+		$wpdb->insert(
+			$wpdb->prefix . 'wc_orders',
+			[
+				'id'               => (int) $id,
+				'type'             => 'shop_subscription',
+				// Post statuses WooCommerce does not prefix, such as trash, keep their own name.
+				'status'           => in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ? $subscription->get_status() : 'wc-' . $subscription->get_status(),
+				'customer_id'      => (int) $subscription->get_customer_id(),
+				'date_created_gmt' => gmdate( 'Y-m-d H:i:s', $created ? $created->getTimestamp() : time() ),
+			]
+		);
+		$meta = $subscription->meta;
+		// The gifting stub keeps recipients in a static map; real WCS stores them as this meta.
+		if ( class_exists( 'WCS_Gifting' ) && isset( WCS_Gifting::$recipients[ $id ] ) ) {
+			$meta['_recipient_user'] = WCS_Gifting::$recipients[ $id ];
+		}
+		foreach ( $meta as $key => $value ) {
+			$wpdb->insert(
+				$wpdb->prefix . 'wc_orders_meta',
+				[
+					'order_id'   => (int) $id,
+					'meta_key'   => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value' => maybe_serialize( $value ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				]
+			);
+		}
+		foreach ( $subscription->get_items() as $item ) {
+			if ( ! method_exists( $item, 'get_product_id' ) ) {
+				continue;
+			}
+			$wpdb->insert(
+				$wpdb->prefix . 'woocommerce_order_items',
+				[
+					'order_item_type' => 'line_item',
+					'order_id'        => (int) $id,
+				]
+			);
+			$item_id = (int) $wpdb->insert_id;
+			$product = [
+				'_product_id'   => (int) $item->get_product_id(),
+				'_variation_id' => method_exists( $item, 'get_variation_id' ) ? (int) $item->get_variation_id() : 0,
+			];
+			foreach ( $product as $key => $value ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'woocommerce_order_itemmeta',
+					[
+						'order_item_id' => $item_id,
+						'meta_key'      => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+						'meta_value'    => (string) $value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					]
+				);
+			}
+		}
+	}
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+}
+
+wc_mocks_create_order_tables();
+add_filter(
+	'query',
+	function ( $query ) {
+		global $wpdb, $wcs_mock_hpos_enabled;
+		static $syncing = false;
+		if ( empty( $wcs_mock_hpos_enabled ) || $syncing || ( false === strpos( $query, $wpdb->prefix . 'wc_orders' ) && false === strpos( $query, $wpdb->prefix . 'woocommerce_order_item' ) ) ) {
+			return $query;
+		}
+		$syncing = true;
+		wc_mocks_sync_order_tables();
+		$syncing = false;
+		return $query;
+	}
+);

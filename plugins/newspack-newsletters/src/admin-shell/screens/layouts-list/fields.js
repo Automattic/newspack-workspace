@@ -121,11 +121,11 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		const label = raw || __( '(no title)', 'newspack-newsletters' );
 		// Prebuilts aren't editable; only user-owned layouts link to the editor.
 		if ( item?.is_prebuilt ) {
-			return <strong>{ label }</strong>;
+			return label;
 		}
 		return (
 			<a className="newspack-newsletters-list__title" href={ editUrl( item ) } onClickCapture={ event => event.stopPropagation() }>
-				<strong>{ label }</strong>
+				{ label }
 			</a>
 		);
 	};
@@ -159,7 +159,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 		// `isNone` would need client-side post-filter after server pagination;
 		// that leaves blank slots and miscounts totals. Add once the REST
 		// collection accepts author exclusions.
-		authorField.filterBy = { operators: [ 'is', 'isAny' ] };
+		authorField.filterBy = { operators: [ 'is', 'isAny' ], isPrimary: true };
 	}
 
 	return [
@@ -187,7 +187,7 @@ export function getFields( { renamingId = null, onRenameCommit, onRenameCancel, 
 			getValue: ( { item } ) => item?.modified || '',
 			render: ( { item } ) => {
 				const formatted = formatPostDate( item, 'modified', { kind: 'date' } );
-				return formatted ? <span>{ formatted }</span> : null;
+				return formatted ? <span className="newspack-dataviews__date">{ formatted }</span> : null;
 			},
 		},
 	];

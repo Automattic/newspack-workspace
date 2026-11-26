@@ -293,6 +293,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
+		include __DIR__ . '/class-content-banner-style.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
@@ -1925,6 +1926,8 @@ class Content_Gate {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
 		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
+		wp_enqueue_style( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.css', [], $asset['version'] );
+		wp_style_add_data( 'newspack-content-gate-post-settings', 'rtl', 'replace' );
 
 		// Localize active gates data for reactive matching in the editor.
 		$gates      = self::get_gates( self::GATE_CPT, 'publish' );

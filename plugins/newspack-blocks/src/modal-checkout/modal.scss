@@ -5,17 +5,21 @@
 .newspack-ui {
 	iframe[name="newspack_modal_checkout_iframe"] {
 		border: none;
-		height: calc(100% + var(--newspack-ui-spacer-9, 48px));
-		margin: calc(-1 * var(--newspack-ui-spacer-5, 24px));
+		height: calc(100% + var(--newspack-ui-spacer-4, 20px) + var(--newspack-ui-spacer-5, 24px));
+		margin: calc(-1 * var(--newspack-ui-spacer-4, 20px)) calc(-1 * var(--newspack-ui-spacer-5, 24px)) calc(-1 * var(--newspack-ui-spacer-5, 24px));
 		max-width: unset;
 		width: calc(100% + var(--newspack-ui-spacer-9, 48px));
+	}
+
+	&__modal__header[hidden] + &__modal__content iframe[name="newspack_modal_checkout_iframe"] {
+		margin-top: 0;
 	}
 }
 
 // Close button while a payment is processing (see modal.js).
 // stylelint-disable-next-line selector-id-pattern
 #newspack_modal_checkout [class*="__modal__close"][aria-disabled="true"] {
-	color: var(--newspack-ui-color-neutral-30);
+	color: var(--newspack-ui-color-border, var(--newspack-ui-color-neutral-30, #ddd));
 	pointer-events: none;
 }
 
@@ -50,7 +54,7 @@
 			z-index: 1;
 			inset: 0;
 			opacity: 0;
-			background: np-colors.$overlay-700;
+			background: var(--newspack-ui-color-overlay-50, var(--wp--custom--color--overlay-50, #{np-colors.$overlay-500}));
 			transition: opacity 0.1s linear;
 		}
 
@@ -76,7 +80,7 @@
 				opacity: 0;
 				transition: transform 0.1s linear, opacity 0.1s linear;
 				border-radius: 6px;
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 				max-width: 600px;
 				max-height: 90%;
 				min-height: 300px;
@@ -93,6 +97,11 @@
 					display: flex;
 					align-items: center;
 					justify-content: space-between;
+
+					&[hidden] {
+						display: none;
+					}
+
 					h2 {
 						font-size: 16px;
 
@@ -119,9 +128,11 @@
 					background: transparent;
 					color: np-colors.$neutral-900;
 					cursor: pointer;
-					&:focus,
-					&:hover {
-						color: np-colors.$neutral-600;
+
+					@media ( hover: hover ) and ( pointer: fine ) {
+						&:hover {
+							color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-hover, 85%), transparent);
+						}
 					}
 					svg {
 						display: block;
@@ -131,7 +142,7 @@
 
 			&__spinner {
 				align-items: center;
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, np-colors.$neutral-000);
 				border-radius: 5px;
 				display: flex;
 				justify-content: center;
@@ -141,8 +152,8 @@
 				width: calc(100% - 24px);
 				> span {
 					animation: spin 1s infinite linear;
-					border: 2px solid np-colors.$neutral-000;
-					border-top-color: np-colors.$neutral-600;
+					border: 2px solid var(--newspack-ui-color-surface, np-colors.$neutral-000);
+					border-top-color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 					border-radius: 50%;
 					height: 25px;
 					width: 25px;
@@ -180,7 +191,7 @@
 
 				&__item {
 					border: 1px solid var(--newspack-ui-color-border, np-colors.$neutral-300);
-					border-radius: var(--newspack-ui-border-radius-m, 6px);
+					border-radius: var(--newspack-ui-radius-surface, 12px);
 					display: flex;
 					flex-direction: column;
 					flex: 1 1 100%;
@@ -206,7 +217,7 @@
 						.price {
 							del,
 							.suggested-prefix {
-								color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+								color: var(--newspack-ui-color-text-subtle, np-colors.$neutral-600);
 								left: 0;
 								position: absolute;
 								top: calc(var(--newspack-ui-spacer-base, 8px) * 0.75);

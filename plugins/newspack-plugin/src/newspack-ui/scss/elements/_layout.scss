@@ -1,6 +1,6 @@
 .newspack-ui {
 	&--loading::after {
-		background-color: var(--newspack-ui-color-neutral-0);
+		background-color: var(--newspack-ui-color-surface);
 		content: "";
 		display: block;
 		height: 100%;

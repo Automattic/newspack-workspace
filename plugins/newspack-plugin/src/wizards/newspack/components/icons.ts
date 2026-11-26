@@ -11,12 +11,15 @@ import {
 	currencyDollar,
 	envelope,
 	formatListBullets,
+	gift,
 	globe,
 	help,
+	lock,
 	mapMarker,
 	megaphone,
 	page,
 	payment,
+	plugins,
 	post,
 	postDate,
 	postList,
@@ -28,7 +31,7 @@ import {
 /**
  * Internal dependencies
  */
-import { ad, chartReport, emailAd, gift } from '../../../../packages/icons';
+import { ad, chartReport, emailAd } from '../../../../packages/icons';
 
 /**
  * Export Dashboard Icons
@@ -40,12 +43,15 @@ export const icons = {
 	currencyDollar,
 	envelope,
 	formatListBullets,
+	gift,
 	globe,
 	help,
+	lock,
 	mapMarker,
 	megaphone,
 	page,
 	payment,
+	plugins,
 	post,
 	postDate,
 	postList,
@@ -56,7 +62,6 @@ export const icons = {
 	ad,
 	chartReport,
 	emailAd,
-	gift,
 };
 
 export default icons;

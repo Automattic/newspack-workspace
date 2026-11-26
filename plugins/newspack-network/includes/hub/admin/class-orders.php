@@ -64,9 +64,7 @@ class Orders extends Woo {
 					echo '-';
 					break;
 				}
-				echo esc_html(
-					gmdate( get_option( 'date_format' ), strtotime( $value ) )
-				);
+				echo esc_html( self::format_gmt_date( $value ) );
 				break;
 			case 'subscription_relationship':
 				if ( 'parent' === $item->get_subscription_relationship() ) {

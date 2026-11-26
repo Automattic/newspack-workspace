@@ -49,20 +49,22 @@ document.addEventListener("DOMContentLoaded", () => {
 	});
 
 	/**
-	 * Copies the text in the active textarea to the clipboard when the copy button is clicked.
+	 * Copies the HTML version to the clipboard when the copy button is clicked.
+	 * The button is hidden on the Plain Text tab, and the HTML textarea only has
+	 * the tab classes when the plain-text option is on, so select it by its id.
 	 */
 	document
 		.querySelector(".republish-article__copy-button")
 		?.addEventListener("click", (event) => {
 			event.preventDefault();
 
-			const activeTextarea = document.querySelector(".republish-content.republish-content--active.republish-content__textarea");
+			const htmlTextarea = document.getElementById("republish-html-content");
 
-			if (!activeTextarea) {
+			if (!htmlTextarea) {
 				return;
 			}
 
-			ClipboardUtils.copyFromElement(activeTextarea, event.target);
+			ClipboardUtils.copyHandoutFromElement(htmlTextarea, event.target);
 		});
 
 	/**

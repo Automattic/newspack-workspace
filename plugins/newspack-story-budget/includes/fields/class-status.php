@@ -149,6 +149,23 @@ class Status {
 		return $this->order;
 	}
 	/**
+	 * Get the glyph name for this status.
+	 *
+	 * Read from the status's entry in the `newspack_story_budget_statuses` filter,
+	 * so statuses that already exist as terms take an icon without being recreated.
+	 *
+	 * @return string One of Statuses::ICONS, or an empty string for the neutral glyph.
+	 */
+	public function get_icon() {
+		foreach ( Statuses::get_default_statuses() as $definition ) {
+			if ( isset( $definition['slug'], $definition['icon'] ) && $this->slug === $definition['slug'] ) {
+				return in_array( $definition['icon'], Statuses::ICONS, true ) ? $definition['icon'] : '';
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Whether the current user can use this status.
 	 *
 	 * @return bool Whether the current user can use this status.
@@ -207,6 +224,7 @@ class Status {
 			'label'               => $this->get_label(),
 			'required_capability' => $this->get_required_capability(),
 			'user_can_apply'      => $this->current_user_can(),
+			'icon'                => $this->get_icon(),
 		];
 	}
 }

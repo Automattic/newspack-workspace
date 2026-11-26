@@ -3,9 +3,10 @@ require( '@wordpress/browserslist-config' );
 const DependencyExtractionWebpackPlugin = require( '@wordpress/dependency-extraction-webpack-plugin' );
 const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
 
-// @wordpress packages that WP does NOT expose as runtime globals and that
-// `@wordpress/admin-ui`/`@wordpress/ui` depend on, so they must be bundled.
-const FORCE_BUNDLE = new Set( [ '@wordpress/theme', '@wordpress/style-runtime' ] );
+// Bundled rather than externalized: core registers no script handle for
+// `style-runtime`, `react-inert-value` or `kebab-case`, and its `wp-theme` is
+// not the version the bundled `@wordpress/ui` expects.
+const FORCE_BUNDLE = new Set( [ '@wordpress/theme', '@wordpress/style-runtime', '@wordpress/react-inert-value', '@wordpress/kebab-case' ] );
 
 module.exports = ( ...args ) => {
 	let config = { ...defaultConfig };

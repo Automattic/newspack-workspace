@@ -52,6 +52,10 @@ a.button {
 	}
 
 	form .form-row {
+		> label:not(.checkbox, .woocommerce-form__label-for-checkbox, input + label) {
+			margin-bottom: var(--newspack-ui-spacer-1, 8px);
+		}
+
 		.required {
 			color: firebrick;
 			text-decoration: none;

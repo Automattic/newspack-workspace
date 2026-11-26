@@ -13,6 +13,8 @@ use Newspack\Reader_Activation;
 use Newspack\Reader_Data;
 
 require_once dirname( __DIR__, 2 ) . '/mocks/newspack-segments-model-mock.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/wcs-gifting-mock.php';
+require_once dirname( __DIR__, 2 ) . '/mocks/wcsg-recipient-addresses-mock.php';
 
 /**
  * The item lists the paid gates a reader can pass, however they hold the product.
@@ -47,6 +49,7 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		wp_set_current_user( 0 );
+		\WCS_Gifting::$recipients = [];
 		parent::tear_down();
 	}
 
@@ -431,5 +434,64 @@ class Newspack_Test_Gate_Access_Reader_Data extends WP_UnitTestCase {
 	 */
 	public function test_item_is_read_only() {
 		$this->assertContains( Gate_Access_Reader_Data::STORE_KEY, Reader_Data::get_read_only_keys() );
+	}
+
+	/**
+	 * Gifting hides a recipient's gifts while the billing address form is on
+	 * screen. A list refreshed on that page keeps the gift's gate, instead of
+	 * dropping it until the list is next a day old.
+	 */
+	public function test_billing_address_page_keeps_a_gifts_gate() {
+		$purchaser_id = $this->create_reader();
+		$recipient_id = $this->create_reader();
+		$gift         = $this->create_subscription( $purchaser_id );
+		\WCS_Gifting::$recipients[ $gift->get_id() ] = $recipient_id;
+		add_filter(
+			'wcs_get_users_subscriptions',
+			fn( $subscriptions, $user_id ) => (int) $user_id === $recipient_id ? $subscriptions + [ $gift->get_id() => $gift ] : $subscriptions,
+			10,
+			2
+		);
+		add_filter( 'wcs_get_users_subscriptions', 'WCSG_Recipient_Addresses::get_users_subscriptions', 100, 2 );
+		set_query_var( 'edit-address', 'billing' );
+
+		$this->view_page_as( $recipient_id );
+
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $recipient_id ) );
+	}
+
+	/**
+	 * A change of owner moves access from one reader to another with no
+	 * subscription event and, for an outsider taking over from a previous owner
+	 * who can't take a member's seat, no membership write. Group_Subscription's
+	 * announcement marks both, and their next page views put the gate right.
+	 */
+	public function test_owner_change_marks_both_owners_stale() {
+		$previous_owner_id = $this->create_reader();
+		$new_owner_id      = $this->create_reader();
+		$subscription      = $this->create_subscription( $previous_owner_id, true );
+		add_user_meta( $this->create_reader(), Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+		$ineligible = function ( $eligible, $user_id ) use ( $previous_owner_id ) {
+			return $user_id === $previous_owner_id ? false : $eligible;
+		};
+		add_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10, 2 );
+		$this->view_page_as( $previous_owner_id );
+		$this->view_page_as( $new_owner_id );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $previous_owner_id ) );
+		$this->assertSame( [], $this->stored_gates( $new_owner_id ) );
+
+		$changed = Group_Subscription::change_owner( $subscription, $new_owner_id );
+		remove_filter( 'newspack_group_subscription_member_eligible', $ineligible, 10 );
+
+		$this->assertTrue( $changed );
+		$this->assertEmpty( get_user_meta( $previous_owner_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The previous owner is marked stale.' );
+		$this->assertEmpty( get_user_meta( $new_owner_id, Gate_Access_Reader_Data::STAMP_META_KEY, true ), 'The new owner is marked stale.' );
+
+		Group_Subscription::reset_cache();
+		$this->view_page_as( $previous_owner_id );
+		$this->view_page_as( $new_owner_id );
+		$this->assertSame( [], $this->stored_gates( $previous_owner_id ) );
+		$this->assertSame( [ $this->gate_id ], $this->stored_gates( $new_owner_id ) );
 	}
 }

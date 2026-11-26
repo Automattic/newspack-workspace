@@ -13,7 +13,6 @@ type NewspackThemes = `newspack-${ ThemeNames }`;
  */
 interface Etc {
 	post_count: string;
-	has_pwa_plugin?: boolean;
 }
 
 /**
@@ -132,7 +131,7 @@ interface AdvancedSettings {
 	post_updated_date: boolean;
 	post_updated_date_threshold: number;
 
-	// PWA Display Mode.
+	// Web app display mode.
 	pwa_display_mode: string;
 
 	// Post content fallback image.

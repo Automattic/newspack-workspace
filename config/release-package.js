@@ -1,6 +1,6 @@
 /**
  * Shared semantic-release config for the workspace's published npm libraries:
- * newspack-scripts, newspack-components, newspack-colors, newspack-icons.
+ * newspack-scripts, newspack-components, newspack-colors, newspack-icons, newspack-motion.
  *
  * Mirrors config/release.js (used by the plugins) but without a PHP version
  * file — a library's version lives only in package.json. @semantic-release/git

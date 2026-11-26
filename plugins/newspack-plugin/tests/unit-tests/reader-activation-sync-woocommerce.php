@@ -22,18 +22,36 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 	 */
 	public static $current_order = false;
 
+	// A fixed registration date, so a sync that reports "now" as the reader's
+	// registration date fails instead of matching a user created a moment ago.
 	const USER_DATA = [
-		'user_login' => 'test_user',
-		'user_email' => 'test@example.com',
-		'user_pass'  => 'password',
-		'meta_input' => [
+		'user_login'      => 'test_user',
+		'user_email'      => 'test@example.com',
+		'user_pass'       => 'password',
+		'user_registered' => '2025-06-01 09:00:00',
+		'meta_input'      => [
 			'first_name'     => 'John',
 			'last_name'      => 'Doe',
 			'wc_total_spent' => 100,
 		],
 	];
 
+	/**
+	 * Paid date for orders whose payment date a test asserts. The mock order
+	 * stamps "now" when it gets none, which can land in a different second
+	 * from a "now" read later at assertion time.
+	 */
+	const DATE_PAID = '2026-01-15 12:00:00';
+
 	private static $user_id = null; // phpcs:ignore Squiz.Commenting.VariableComment.Missing
+
+	/**
+	 * The site timezone before a test changed it. The class doesn't run the
+	 * parent set_up, so options a test writes aren't rolled back for it.
+	 *
+	 * @var ?string
+	 */
+	private static $original_timezone = null;
 
 	public static function set_up_before_class() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		self::$user_id = wp_insert_user( self::USER_DATA );
@@ -59,6 +77,10 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 	 * @return void
 	 */
 	public function tear_down() {
+		if ( null !== self::$original_timezone ) {
+			update_option( 'timezone_string', self::$original_timezone );
+			self::$original_timezone = null;
+		}
 		remove_filter(
 			'newspack_reader_activation_get_current_product_order_for_sync',
 			[ __CLASS__, 'get_current_order' ]
@@ -78,10 +100,15 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 	 * Test payment metadata extraction - basic shape of the data.
 	 */
 	public function test_payment_metadata_basic() {
+		// Outside UTC, so the registration date's conversion to site time shows.
+		self::$original_timezone = get_option( 'timezone_string' );
+		update_option( 'timezone_string', 'America/New_York' );
+
 		$order_data = [
 			'customer_id' => self::$user_id,
 			'status'      => 'completed',
 			'total'       => 50,
+			'date_paid'   => self::DATE_PAID,
 			'meta'        => [
 				'utm' => [
 					'source'   => 'test_source',
@@ -96,7 +123,6 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 
 		$payment_page_url = 'https://example.com/donate';
 		$contact_data = Sync\WooCommerce::get_contact_from_order( $order, $payment_page_url );
-		$today = gmdate( Metadata::DATE_FORMAT );
 		$this->assertEquals(
 			[
 				'email'    => self::USER_DATA['user_email'],
@@ -106,7 +132,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 					'membership_status'         => 'customer',
 					'product_name'              => '',
 					'last_payment_amount'       => $order_data['total'],
-					'last_payment_date'         => $today,
+					'last_payment_date'         => self::DATE_PAID,
 					'payment_page_utm_source'   => 'test_source',
 					'payment_page_utm_medium'   => '',
 					'payment_page_utm_campaign' => 'test_campaign',
@@ -119,7 +145,8 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 					'next_payment_date'         => '',
 					'total_paid'                => self::USER_DATA['meta_input']['wc_total_spent'] + $order_data['total'],
 					'account'                   => self::$user_id,
-					'registration_date'         => $today,
+					// USER_DATA's 09:00 UTC, in New York summer time.
+					'registration_date'         => '2025-06-01 05:00:00',
 					'cancellation_reason'       => '',
 				],
 			],
@@ -182,6 +209,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 			'customer_id' => self::$user_id,
 			'status'      => 'completed',
 			'total'       => 70,
+			'date_paid'   => self::DATE_PAID,
 		];
 		$order = \wc_create_order( $order_data );
 
@@ -189,7 +217,7 @@ class Newspack_Test_RAS_Sync_WooCommerce extends WP_UnitTestCase {
 
 		$contact_data = Sync\WooCommerce::get_contact_from_customer( self::$user_id );
 		$this->assertEquals( $order_data['total'], $contact_data['metadata']['last_payment_amount'] );
-		$this->assertEquals( gmdate( Metadata::DATE_FORMAT ), $contact_data['metadata']['last_payment_date'] );
+		$this->assertEquals( self::DATE_PAID, $contact_data['metadata']['last_payment_date'] );
 	}
 
 	/**

@@ -17,19 +17,17 @@ import {
 import { useDispatch } from '@wordpress/data';
 import { Fragment, useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { cleanForSlug } from '@wordpress/url';
-import { Stack } from '@wordpress/ui';
+import { EmptyState, Stack } from '@wordpress/ui';
 
 /**
  * Internal dependencies
  */
 import WizardsTab from '../../../../wizards-tab';
 import useWizardApiFetchToggle from '../../../../hooks/use-wizard-api-fetch-toggle';
-import EmptyState from '../../../../../../packages/components/src/empty-state';
 import {
 	Button,
 	Divider,
-	Grid,
-	SectionHeader,
+	SplitSection,
 	TextControl,
 	Waiting,
 	useConfirmDialog,
@@ -243,27 +241,29 @@ function Collections() {
 		return (
 			<WizardsTab isFetching={ isBusy }>
 				{ errorNotice }
-				<EmptyState.Root>
-					<EmptyState.Header
-						icon={ collections }
-						title={ __( 'Organize content into collections', 'newspack-plugin' ) }
-						description={ __(
-							'Publish print editions, magazines and other issues as collections, each with its own page and a browsable archive.',
-							'newspack-plugin'
-						) }
-					/>
-					<EmptyState.Actions>
-						<Button
-							variant="primary"
-							accessibleWhenDisabled
-							loading={ isBusy }
-							disabled={ isBusy }
-							onClick={ () => setModuleEnabled( true ) }
-						>
-							{ __( 'Enable', 'newspack-plugin' ) }
-						</Button>
-					</EmptyState.Actions>
-				</EmptyState.Root>
+				<Stack direction="column" align="center">
+					<EmptyState.Root>
+						<EmptyState.Icon icon={ collections } />
+						<EmptyState.Title>{ __( 'Collections are off', 'newspack-plugin' ) }</EmptyState.Title>
+						<EmptyState.Description>
+							{ __(
+								'Publish print editions, magazines, and other issues as collections, each with its own page and a browsable archive.',
+								'newspack-plugin'
+							) }
+						</EmptyState.Description>
+						<EmptyState.Actions>
+							<Button
+								variant="primary"
+								accessibleWhenDisabled
+								loading={ isBusy }
+								disabled={ isBusy }
+								onClick={ () => setModuleEnabled( true ) }
+							>
+								{ __( 'Enable', 'newspack-plugin' ) }
+							</Button>
+						</EmptyState.Actions>
+					</EmptyState.Root>
+				</Stack>
 			</WizardsTab>
 		);
 	}
@@ -477,12 +477,10 @@ function Collections() {
 			{ sections.map( ( section, index ) => (
 				<Fragment key={ section.key }>
 					{ index > 0 && <Divider alignment="full-width" variant="tertiary" /> }
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader noMargin heading={ 2 } title={ section.title } description={ section.description } />
-						<Stack direction="column" gap="xl">
-							{ section.content }
-						</Stack>
-					</Grid>
+					<SplitSection.Root>
+						<SplitSection.Header title={ section.title } description={ section.description } />
+						<SplitSection.Content>{ section.content }</SplitSection.Content>
+					</SplitSection.Root>
 				</Fragment>
 			) ) }
 		</WizardsTab>

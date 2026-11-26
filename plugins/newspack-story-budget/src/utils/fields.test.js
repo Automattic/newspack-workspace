@@ -1,6 +1,39 @@
-import { getDisplayValue } from './fields';
+import { getSettings, setSettings } from '@wordpress/date';
+
+import { getDataViewsType, getDisplayValue, getFilterByOperators, isEmptyValue } from './fields';
 
 describe( 'fields utils', () => {
+	describe( 'getDataViewsType', () => {
+		it( 'uses the array type for multi-value fields so "is all" stays available', () => {
+			expect( getDataViewsType( { type: 'number', is_multiple: true, options: [ { value: 1, label: 'Weekend Edition' } ] } ) ).toBe( 'array' );
+		} );
+
+		it( 'treats a numeric field with options as text so its label is not right-aligned', () => {
+			expect( getDataViewsType( { type: 'number', options: [ { value: 1, label: 'Weekend Edition' } ] } ) ).toBe( 'text' );
+		} );
+
+		it( 'keeps the type of a plain numeric field', () => {
+			expect( getDataViewsType( { type: 'number' } ) ).toBe( 'number' );
+		} );
+	} );
+
+	describe( 'getFilterByOperators', () => {
+		it( 'leaves out "is not all", which DataViews labels the same as "is none of"', () => {
+			expect( getFilterByOperators( { is_multiple: true } ) ).not.toContain( 'isNotAll' );
+		} );
+	} );
+
+	describe( 'isEmptyValue', () => {
+		it( 'treats only null, undefined and an empty string as empty', () => {
+			expect( isEmptyValue( null ) ).toBe( true );
+			expect( isEmptyValue( undefined ) ).toBe( true );
+			expect( isEmptyValue( '' ) ).toBe( true );
+			expect( isEmptyValue( 0 ) ).toBe( false );
+			expect( isEmptyValue( false ) ).toBe( false );
+			expect( isEmptyValue( 'draft' ) ).toBe( false );
+		} );
+	} );
+
 	describe( 'getDisplayValue', () => {
 		it( 'should return null for missing values', () => {
 			const field = { type: 'text', slug: 'title' };
@@ -10,36 +43,28 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, [] ) ).toBeNull();
 		} );
 
-		it( 'should format date values', () => {
-			const field = { type: 'date', slug: 'published_date' };
-			const originalDateFormat = Intl.DateTimeFormat;
-			Intl.DateTimeFormat = jest.fn().mockImplementation( () => ( {
-				format: () => '2025-06-05',
-			} ) );
+		describe( 'on a site with its own formats and timezone', () => {
+			const defaults = getSettings();
 
-			const timestamp = 1717612800; // 2025-06-05 UTC
-			const result = getDisplayValue( field, timestamp );
+			beforeEach( () =>
+				setSettings( {
+					...defaults,
+					formats: { ...defaults.formats, date: 'd/m/Y', time: 'g:i a' },
+					timezone: { ...defaults.timezone, string: 'Pacific/Auckland', offset: 13 },
+				} )
+			);
+			afterEach( () => setSettings( defaults ) );
 
-			Intl.DateTimeFormat = originalDateFormat;
+			// 2025-06-05 22:30 UTC is 10:30 am the next day in Auckland.
+			const timestamp = Date.UTC( 2025, 5, 5, 22, 30 ) / 1000;
 
-			expect( result ).not.toBeNull();
-			expect( typeof result ).toBe( 'string' );
-		} );
+			it( 'formats a date in the site date format and timezone', () => {
+				expect( getDisplayValue( { type: 'date', slug: 'publish_date' }, timestamp ) ).toBe( '06/06/2025' );
+			} );
 
-		it( 'should format datetime values', () => {
-			const field = { type: 'datetime', slug: 'published_datetime' };
-			const originalDateFormat = Intl.DateTimeFormat;
-			Intl.DateTimeFormat = jest.fn().mockImplementation( () => ( {
-				format: () => '2025-06-05, 10:30 AM',
-			} ) );
-
-			const timestamp = 1717650000; // 2025-06-05, 10:30 AM UTC
-			const result = getDisplayValue( field, timestamp );
-
-			Intl.DateTimeFormat = originalDateFormat;
-
-			expect( result ).not.toBeNull();
-			expect( typeof result ).toBe( 'string' );
+			it( 'formats a datetime in the site date and time formats, keeping am and pm', () => {
+				expect( getDisplayValue( { type: 'datetime', slug: 'last_modified' }, timestamp ) ).toBe( '06/06/2025 10:30 am' );
+			} );
 		} );
 
 		it( 'should format boolean values', () => {
@@ -84,7 +109,14 @@ describe( 'fields utils', () => {
 			expect( getDisplayValue( field, 'Hello World' ) ).toBe( 'Hello World' );
 
 			const numField = { type: 'number', slug: 'priority' };
-			expect( getDisplayValue( numField, 123 ) ).toBe( 123 );
+			expect( getDisplayValue( numField, 2026 ) ).toBe( 2026 );
+		} );
+
+		it( 'should group a number for the locale', () => {
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, 2418 ) ).toBe( ( 2418 ).toLocaleString() );
+			expect( getDisplayValue( { type: 'number', slug: 'image_count' }, 1200 ) ).toBe( ( 1200 ).toLocaleString() );
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, 0 ) ).toBe( '0' );
+			expect( getDisplayValue( { type: 'number', slug: 'word_count' }, null ) ).toBeNull();
 		} );
 
 		it( 'should handle text fields with falsy non-empty values', () => {

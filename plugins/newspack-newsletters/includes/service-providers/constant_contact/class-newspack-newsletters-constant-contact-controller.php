@@ -59,7 +59,23 @@ class Newspack_Newsletters_Constant_Contact_Controller extends Newspack_Newslett
 		);
 		\register_rest_route(
 			$this->service_provider::BASE_NAMESPACE . $this->service_provider->service,
-			'(?P<id>[\a-z]+)',
+			'(?P<id>\d+)',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_retrieve' ],
+				'permission_callback' => [ 'Newspack_Newsletters', 'api_authoring_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'sanitize_callback' => 'absint',
+						'validate_callback' => [ 'Newspack_Newsletters', 'validate_newsletter_id' ],
+					],
+				],
+			]
+		);
+		// The newsletter editor fetches campaign data from /retrieve, as it does for the other ESPs.
+		\register_rest_route(
+			$this->service_provider::BASE_NAMESPACE . $this->service_provider->service,
+			'(?P<id>\d+)/retrieve',
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'api_retrieve' ],
@@ -74,7 +90,7 @@ class Newspack_Newsletters_Constant_Contact_Controller extends Newspack_Newslett
 		);
 		\register_rest_route(
 			$this->service_provider::BASE_NAMESPACE . $this->service_provider->service,
-			'(?P<id>[\a-z]+)/test',
+			'(?P<id>\d+)/test',
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_test' ],

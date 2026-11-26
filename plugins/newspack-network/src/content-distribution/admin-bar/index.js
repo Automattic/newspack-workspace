@@ -62,10 +62,11 @@ const REQUEST_TIMEOUT = 30000;
  *
  * @param {string} message The message.
  * @param {string} type    'success' or 'error'.
+ * @return {HTMLElement|undefined} The notice, if one was shown.
  */
 const notify = ( message, type ) => {
 	if ( window.newspackUI && window.newspackUI.notices && typeof window.newspackUI.notices.createNotice === 'function' ) {
-		window.newspackUI.notices.createNotice( message, type );
+		return window.newspackUI.notices.createNotice( message, type );
 	}
 };
 
@@ -102,6 +103,14 @@ const init = () => {
 	const selected = () => selectable().filter( box => box.checked );
 
 	let returnFocus = null;
+	// Errors stay until closed, so the next attempt replaces or clears the last one.
+	let errorNotice = null;
+	const clearError = () => {
+		if ( errorNotice?.classList.contains( 'active' ) ) {
+			window.newspackUI.notices.closeNotice( errorNotice );
+		}
+		errorNotice = null;
+	};
 
 	const refresh = () => {
 		const selectableBoxes = selectable();
@@ -253,6 +262,7 @@ const init = () => {
 					box.checked = true;
 					box.disabled = true;
 				} );
+				clearError();
 				notify( getDistributedMessage( boxes.length ), 'success' );
 				close();
 			} )
@@ -262,7 +272,11 @@ const init = () => {
 						? __( 'The request timed out. Please try again.', 'newspack-network' )
 						: /* translators: %s is the error message. */
 						  sprintf( __( 'Could not distribute: %s', 'newspack-network' ), error.message );
-				notify( message, 'error' );
+				const notice = notify( message, 'error' );
+				if ( notice !== errorNotice ) {
+					clearError();
+				}
+				errorNotice = notice;
 				// Back to the list with the selection intact, so a retry is one click.
 				// Not if the modal was closed while the request was in flight: closeModal
 				// has already reset it, and focus belongs to whatever it returned to.

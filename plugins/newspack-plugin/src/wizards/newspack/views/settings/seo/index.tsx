@@ -19,7 +19,7 @@ import Accounts from './accounts';
 import { ACCOUNTS } from './constants';
 import WizardsTab from '../../../../wizards-tab';
 import VerificationCodes from './verification-codes';
-import { Divider, Grid, Handoff, SectionHeader, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { Divider, SplitSection, Handoff, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import useFieldsValidation from '../../../../hooks/use-fields-validation';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
@@ -201,39 +201,35 @@ function Seo() {
 					</Stack>
 				</Notice>
 			) }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					noMargin
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Webmaster Tools', 'newspack-plugin' ) }
 					description={ __( 'Add verification meta tags to your site', 'newspack-plugin' ) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					{ codesValidation.errorMessage && (
 						<Notice status="error" isDismissible={ false } spokenMessage="">
 							{ codesValidation.errorMessage }
 						</Notice>
 					) }
 					<VerificationCodes setData={ verification => setData( { ...data, verification } ) } data={ data.verification } />
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					noMargin
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Social Accounts', 'newspack-plugin' ) }
 					description={ __( 'Let search engines know which social profiles are associated to your site', 'newspack-plugin' ) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					{ accountsValidation.errorMessage && (
 						<Notice status="error" isDismissible={ false } spokenMessage="">
 							{ accountsValidation.errorMessage }
 						</Notice>
 					) }
 					<Accounts setData={ urls => setData( { ...data, urls } ) } data={ data.urls } />
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</WizardsTab>
 	);
 }

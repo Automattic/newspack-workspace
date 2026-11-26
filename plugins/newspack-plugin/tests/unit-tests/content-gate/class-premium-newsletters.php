@@ -1594,6 +1594,43 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Cancelling at the end of the term (Active to Pending cancel) keeps access, so
+	 * the owner gets a remove-only check. A full check would let auto-signup re-add
+	 * a premium list the owner had left.
+	 */
+	public function test_status_change_that_keeps_access_does_not_readd_lists_the_owner_left() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$owner_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$owner_email = get_userdata( $owner_id )->user_email;
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $owner_id,
+				'status'      => 'pending-cancel',
+				'products'    => [ 100 ],
+			]
+		);
+		// The owner left the premium list on their own.
+		\Newspack_Newsletters_Subscription::$contact_lists[ $owner_email ] = [];
+
+		Premium_Newsletters::handle_product_subscription_changed(
+			time(),
+			[
+				'user_id'         => $owner_id,
+				'subscription_id' => $subscription->get_id(),
+				'status_before'   => 'active',
+				'status_after'    => 'pending-cancel',
+			],
+			null
+		);
+		$this->assertSame( Premium_Newsletters::SOURCE_ACCESS_KEPT, $this->get_queued_source( $owner_id ), 'A change that keeps access queues the owner for a remove-only check.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$this->assertEmpty( $this->get_list_calls_for( $owner_email ), 'A list the owner left must not be re-added.' );
+	}
+
+	/**
 	 * A plan switch, including a seat-count change, reports the same status before
 	 * and after. Members get a remove-only check, so with auto-signup on, a switch
 	 * doesn't re-add a premium list a member left.
@@ -1887,15 +1924,16 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Status changes for a gifted subscription: one that grants access, and one
-	 * between two statuses that both grant it.
+	 * Status changes for a gifted subscription, with the source both readers are
+	 * queued with: one that grants access, and one between two statuses that both
+	 * grant it, which may only remove lists.
 	 *
 	 * @return array[]
 	 */
 	public function data_gift_status_changes() {
 		return [
-			'access granted' => [ 'pending', 'active' ],
-			'access kept'    => [ 'active', 'pending-cancel' ],
+			'access granted' => [ 'pending', 'active', Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED ],
+			'access kept'    => [ 'active', 'pending-cancel', Premium_Newsletters::SOURCE_ACCESS_KEPT ],
 		];
 	}
 
@@ -1906,10 +1944,11 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 	 *
 	 * @dataProvider data_gift_status_changes
 	 *
-	 * @param string $status_before Status before the event.
-	 * @param string $status_after  Status after the event.
+	 * @param string $status_before   Status before the event.
+	 * @param string $status_after    Status after the event.
+	 * @param string $expected_source Source both readers are queued with.
 	 */
-	public function test_gift_subscription_change_queues_recipient( $status_before, $status_after ) {
+	public function test_gift_subscription_change_queues_recipient( $status_before, $status_after, $expected_source ) {
 		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
@@ -1930,7 +1969,8 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		$queued = $this->get_queued_user_ids();
 		$this->assertContains( $purchaser_id, $queued, 'The purchaser is still checked: they may lose lists.' );
 		$this->assertContains( $recipient_id, $queued, 'The gift recipient must be checked.' );
-		$this->assertSame( Premium_Newsletters::SOURCE_SUBSCRIPTION_CHANGED, $this->get_queued_source( $recipient_id ), 'The recipient is queued with the purchaser\'s source.' );
+		$this->assertSame( $expected_source, $this->get_queued_source( $purchaser_id ), 'The purchaser is queued with the source for this status change.' );
+		$this->assertSame( $expected_source, $this->get_queued_source( $recipient_id ), 'The recipient is queued with the purchaser\'s source.' );
 	}
 
 	/**
@@ -2185,6 +2225,124 @@ class Newspack_Test_Premium_Newsletters extends \WP_UnitTestCase {
 		Premium_Newsletters::process_access_check_queue();
 
 		$this->assertEmpty( $this->get_list_calls_for( $old_recipient_email ), 'A reader who left the list must not be re-added when a gift moves away.' );
+	}
+
+	/**
+	 * Clear a gift's recipient the way an admin does on the subscription edit
+	 * screen: WCS removes the recipient while it saves the screen, at priority 50,
+	 * and fires no hook. Also drops the filter that listed the gift under its
+	 * recipient, so it assumes the test's only gift is the one being cleared.
+	 *
+	 * @param \WC_Subscription $subscription          The gifted subscription.
+	 * @param bool             $keeps_recipient_email Whether the gift was bought at checkout, which leaves the
+	 *                                                recipient's email address behind, so WCS still counts it as
+	 *                                                a gift. The stub models that as a gift with recipient 0.
+	 *
+	 * @return void
+	 */
+	private function clear_gift_recipient_in_admin( $subscription, bool $keeps_recipient_email = false ): void {
+		foreach ( $this->gift_filters as $gift_filter ) {
+			remove_filter( 'wcs_get_users_subscriptions', $gift_filter, 10 );
+		}
+		$this->gift_filters = [];
+
+		$clear_recipient = function () use ( $subscription, $keeps_recipient_email ) {
+			if ( $keeps_recipient_email ) {
+				\WCS_Gifting::$recipients[ $subscription->get_id() ] = 0;
+			} else {
+				unset( \WCS_Gifting::$recipients[ $subscription->get_id() ] );
+			}
+		};
+		add_action( 'woocommerce_process_shop_order_meta', $clear_recipient, 50 );
+		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
+		remove_action( 'woocommerce_process_shop_order_meta', $clear_recipient, 50 );
+	}
+
+	/**
+	 * Ways an admin's save leaves a checkout gift with no recipient.
+	 *
+	 * @return array[]
+	 */
+	public function data_checkout_gift_recipient_clears() {
+		return [
+			'recipient cleared'             => [ false ],
+			'customer set to the recipient' => [ true ],
+		];
+	}
+
+	/**
+	 * A gift bought at checkout keeps its recipient's email address when its
+	 * recipient is cleared, so it stays a gift that gives no one access. The former
+	 * recipient is checked for lists to remove, and no one gets a check that could
+	 * add them.
+	 *
+	 * @dataProvider data_checkout_gift_recipient_clears
+	 *
+	 * @param bool $customer_set_to_recipient Whether the admin also made the recipient the customer, which
+	 *                                        WCS answers by clearing the recipient.
+	 */
+	public function test_cleared_recipient_of_a_checkout_gift_only_removes_lists( $customer_set_to_recipient ) {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+		if ( $customer_set_to_recipient ) {
+			// WCS saves the customer field at priority 10, before its priority-50 recipient save.
+			$subscription->data['customer_id'] = $recipient_id;
+		}
+
+		$this->clear_gift_recipient_in_admin( $subscription, true );
+
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $recipient_id ), 'The former recipient is checked for lists to remove only.' );
+		$this->assertNotContains( Premium_Newsletters::SOURCE_GIFT_RECEIVED, array_map( [ $this, 'get_queued_source' ], $this->get_queued_user_ids() ), 'No one gains access from a gift that still has a recipient address.' );
+	}
+
+	/**
+	 * End to end: a gift an admin created on the edit screen has no recipient
+	 * email address, so clearing its recipient hands the subscription back to its
+	 * buyer. The former recipient loses the gated list and the buyer gains it.
+	 */
+	public function test_cleared_recipient_of_an_admin_created_gift_moves_lists_back_to_the_buyer() {
+		update_option( 'newspack_premium_newsletters_auto_signup', 1 );
+
+		$purchaser_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id    = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$purchaser_email = get_userdata( $purchaser_id )->user_email;
+		$recipient_email = get_userdata( $recipient_id )->user_email;
+
+		$list_post_id = $this->create_premium_list();
+		$this->create_newsletter_gate( [ 100 ], [ $list_post_id ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+		\Newspack_Newsletters_Subscription::$contact_lists[ $recipient_email ] = [ 'newspack-' . $list_post_id ];
+
+		$this->clear_gift_recipient_in_admin( $subscription );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_REMOVED, $this->get_queued_source( $recipient_id ), 'The former recipient is checked for lists to remove only.' );
+		$this->assertSame( Premium_Newsletters::SOURCE_GIFT_RECEIVED, $this->get_queued_source( $purchaser_id ), 'The buyer, who holds the subscription again, is checked for lists to add.' );
+		Premium_Newsletters::process_access_check_queue();
+
+		$recipient_calls = $this->get_list_calls_for( $recipient_email );
+		$this->assertCount( 1, $recipient_calls, 'The former recipient gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $recipient_calls[0]['lists_to_remove'] );
+		$this->assertEmpty( $recipient_calls[0]['lists_to_add'], 'Losing a gift must not add lists.' );
+
+		$purchaser_calls = $this->get_list_calls_for( $purchaser_email );
+		$this->assertCount( 1, $purchaser_calls, 'The buyer gets one list update.' );
+		$this->assertContains( 'newspack-' . $list_post_id, $purchaser_calls[0]['lists_to_add'] );
+	}
+
+	/**
+	 * Saving a gift's edit screen without clearing its recipient queues no one: the
+	 * recipient's access didn't change, and a check could re-add a list they left.
+	 */
+	public function test_saving_a_gift_with_its_recipient_unchanged_queues_no_one() {
+		$purchaser_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$recipient_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_newsletter_gate( [ 100 ], [ $this->create_premium_list() ] );
+		$subscription = $this->create_gifted_subscription( $purchaser_id, $recipient_id, [ 100 ] );
+
+		do_action( 'woocommerce_process_shop_order_meta', $subscription->get_id(), $subscription );
+
+		$this->assertSame( [], $this->get_queued_user_ids(), 'A save that keeps the recipient queues no one.' );
 	}
 
 	// =========================================================================
