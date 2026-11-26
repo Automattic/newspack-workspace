@@ -724,10 +724,9 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The name a group screen shows for a person: the display name, else the
-	 * email, else the username, so an owner or member is never shown blank.
-	 * Subscribers_Index::OWNER_NAME_SQL sorts and searches the group list by the
-	 * same name.
+	 * The name the wizard shows for a person: the display name, else the email,
+	 * else the username, so nobody is shown blank. Subscribers_Index::PERSON_NAME_SQL
+	 * sorts and searches the lists by the same name.
 	 *
 	 * @param \WP_User $user The person.
 	 *
@@ -1025,11 +1024,13 @@ class Subscribers_Wizard extends Wizard {
 		$page     = (int) $request->get_param( 'page' );
 		$search   = trim( (string) $request->get_param( 'search' ) );
 
+		$sort_by_name = 'name' === $request->get_param( 'orderby' );
+
 		$query_args = [
 			'role__in'    => Reader_Activation::get_reader_roles(),
 			'number'      => $per_page,
 			'paged'       => $page,
-			'orderby'     => 'name' === $request->get_param( 'orderby' ) ? 'display_name' : 'registered',
+			'orderby'     => $sort_by_name ? 'display_name' : 'registered',
 			'order'       => 'asc' === $request->get_param( 'order' ) ? 'ASC' : 'DESC',
 			'count_total' => true,
 			'fields'      => 'all',
@@ -1057,7 +1058,24 @@ class Subscribers_Wizard extends Wizard {
 			$query_args['include'] = $include;
 		}
 
+		// WP_User_Query sorts on a column only, so the name sort is swapped for the
+		// name each row shows (person_name()), with the ID keeping ties stable across
+		// pages. The query var limits the swap to this query, not to any user query
+		// another plugin runs while it is being built.
+		$order_by_shown_name = static function ( \WP_User_Query $query ): void {
+			if ( empty( $query->query_vars['newspack_order_by_shown_name'] ) ) {
+				return;
+			}
+			global $wpdb;
+			$order                = 'ASC' === $query->query_vars['order'] ? 'ASC' : 'DESC';
+			$query->query_orderby = 'ORDER BY ' . Subscribers_Index::PERSON_NAME_SQL . " {$order}, {$wpdb->users}.ID {$order}"; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users -- Names the table WP_User_Query already reads.
+		};
+		if ( $sort_by_name ) {
+			$query_args['newspack_order_by_shown_name'] = true;
+			add_action( 'pre_user_query', $order_by_shown_name );
+		}
 		$user_query = new \WP_User_Query( $query_args );
+		remove_action( 'pre_user_query', $order_by_shown_name );
 		$total      = (int) $user_query->get_total();
 		$users      = $user_query->get_results();
 
@@ -1615,7 +1633,7 @@ class Subscribers_Wizard extends Wizard {
 
 		$subscriber = [
 			'id'             => $user_id,
-			'name'           => $user->display_name,
+			'name'           => self::person_name( $user ),
 			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
@@ -1914,7 +1932,7 @@ class Subscribers_Wizard extends Wizard {
 		}
 		return [
 			'id'      => $purchaser_id,
-			'name'    => $purchaser->display_name,
+			'name'    => self::person_name( $purchaser ),
 			'editUrl' => (string) \get_edit_user_link( $purchaser_id ),
 		];
 	}

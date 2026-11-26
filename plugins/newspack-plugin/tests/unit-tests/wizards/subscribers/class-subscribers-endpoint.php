@@ -564,6 +564,50 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A reader with a blank display name goes by their email, else their username,
+	 * and the name sort orders them by that same name.
+	 */
+	public function test_reader_without_display_name_goes_by_email_then_username() {
+		global $wpdb;
+		$this->login_admin();
+		$named  = $this->create_reader();
+		$spaced = $this->create_reader();
+		$bare   = $this->create_reader();
+		// Written straight to the table: wp_insert_user() fills a blank display name from the login.
+		$stored = [
+			$named  => [ 'display_name' => 'Mike Named' ],
+			// Sorts last by its email; as a raw display name, ' ' would sort first.
+			$spaced => [
+				'display_name' => ' ',
+				'user_email'   => 'zoe@example.test',
+			],
+			$bare   => [
+				'display_name' => '',
+				'user_email'   => '',
+			],
+		];
+		foreach ( $stored as $user_id => $fields ) {
+			$wpdb->update( $wpdb->users, $fields, [ 'ID' => $user_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+			clean_user_cache( $user_id );
+		}
+
+		$items = $this->dispatch(
+			[
+				'orderby'  => 'name',
+				'order'    => 'asc',
+				'per_page' => 100,
+				// Blank names don't carry the scope token, so drop the default search.
+				'search'   => '',
+			]
+		)->get_data()['items'];
+		$mine  = array_values( array_filter( $items, fn( $item ) => isset( $stored[ $item['id'] ] ) ) );
+
+		// The bare reader goes by their `reader-…` login, between the two.
+		$this->assertSame( [ $named, $bare, $spaced ], array_column( $mine, 'id' ) );
+		$this->assertSame( [ 'Mike Named', get_userdata( $bare )->user_login, 'zoe@example.test' ], array_column( $mine, 'name' ) );
+	}
+
+	/**
 	 * Sorting by member-since is honoured server-side — and it is the endpoint's
 	 * default order, so the list's out-of-the-box ordering rides on it.
 	 */
