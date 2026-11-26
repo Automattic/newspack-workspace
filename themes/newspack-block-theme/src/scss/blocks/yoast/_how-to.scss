@@ -20,7 +20,7 @@
 
 	.schema-how-to-step {
 		border: 1px solid var(--wp--preset--color--base-3);
-		border-radius: var(--wp--custom--border--radius-medium);
+		border-radius: var(--wp--custom--border--radius-xx-large);
 		font-size: var(--wp--preset--font-size--small);
 		line-height: var(--wp--custom--line-height--small);
 		padding: var(--wp--preset--spacing--30);
@@ -48,7 +48,7 @@
 
 		.has-background & {
 			border-color: currentcolor; // Fallback
-			border-color: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+			border-color: color-mix(in oklab, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
 		}
 	}
 }

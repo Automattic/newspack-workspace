@@ -9,6 +9,7 @@ namespace Newspack\Newsletters\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+use Newspack\Newsletters\Subscription_Lists;
 use Newspack_Newsletters;
 use WP_Post;
 
@@ -382,7 +383,7 @@ class Newsletters_List_REST {
 
 	/**
 	 * Distinct non-empty `send_list_id` meta values across in-scope
-	 * newsletters. Friendly-name resolution deferred; raw IDs ship.
+	 * newsletters, labelled with the stored list name where the site has one.
 	 *
 	 * @param string $user_scope_sql User-scope WHERE fragment.
 	 * @return array<array{id: string, label: string}>
@@ -411,7 +412,7 @@ class Newsletters_List_REST {
 			static function ( $id ) {
 				return [
 					'id'    => (string) $id,
-					'label' => (string) $id,
+					'label' => self::resolve_send_list_name( (string) $id ) ?? (string) $id,
 				];
 			},
 			$ids ? $ids : []
@@ -444,11 +445,67 @@ class Newsletters_List_REST {
 			'newspack_newsletters_author'
 		);
 
+		register_rest_field(
+			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+			'newspack_newsletters_send_list',
+			[
+				'get_callback' => [ __CLASS__, 'rest_get_send_list' ],
+				'schema'       => [
+					'context'    => [ 'edit' ],
+					'type'       => [ 'object', 'null' ],
+					'readonly'   => true,
+					'properties' => [
+						'list'    => [ 'type' => [ 'string', 'null' ] ],
+						'sublist' => [ 'type' => [ 'string', 'null' ] ],
+					],
+				],
+			]
+		);
+
 		self::register_terms_field(
 			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 			'newspack_newsletters_terms',
 			self::LIST_TAXONOMIES
 		);
+	}
+
+	/**
+	 * The names of a newsletter's send list and sublist, so the list screen
+	 * shows them without asking the provider for every row.
+	 *
+	 * @param array $post_array Prepared post, as passed by the controller.
+	 * @return array|null { list, sublist }; a name is null when the provider can't give one.
+	 */
+	public static function rest_get_send_list( $post_array ): ?array {
+		$post_id = isset( $post_array['id'] ) ? (int) $post_array['id'] : 0;
+		$list_id = $post_id ? get_post_meta( $post_id, 'send_list_id', true ) : '';
+		if ( ! $list_id ) {
+			return null;
+		}
+		$sublist_id = get_post_meta( $post_id, 'send_sublist_id', true );
+		return [
+			'list'    => self::resolve_send_list_name( (string) $list_id ),
+			'sublist' => $sublist_id ? self::resolve_send_list_name( (string) $sublist_id ) : null,
+		];
+	}
+
+	/**
+	 * A send list's name from the lists already stored on this site.
+	 *
+	 * Never asks the service provider: it reads the stored subscription lists
+	 * (`Subscription_Lists`), keyed by the ID a newsletter records.
+	 *
+	 * @param string $id Send list or sublist ID.
+	 * @return string|null The name, or null when the site doesn't store one.
+	 */
+	private static function resolve_send_list_name( string $id ): ?string {
+		foreach ( Subscription_Lists::get_all() as $list ) {
+			$name = (string) $list->get_remote_name();
+			if ( '' !== $name && in_array( $id, [ (string) $list->get_public_id(), (string) $list->get_remote_id() ], true ) ) {
+				return $name;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -495,6 +552,13 @@ class Newsletters_List_REST {
 
 		if ( get_post_meta( $post->ID, 'sending_scheduled', true ) ) {
 			$payload['kind'] = 'scheduled';
+			// A send queued when its scheduled time arrived keeps that time as the
+			// post date. Only while published: a send that gave up is moved back to
+			// draft with the flag still set, and its date is no longer a promise.
+			$datetime = 'publish' === $post->post_status ? get_post_datetime( $post, 'date', 'gmt' ) : false;
+			if ( $datetime ) {
+				$payload['scheduled_at'] = $datetime->getTimestamp();
+			}
 			return $payload;
 		}
 

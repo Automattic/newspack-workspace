@@ -1,4 +1,4 @@
-import { getColorForContrast, getMinimumDonation } from './utils';
+import { getColorForContrast, getMinimumDonation, usesSiteButtonStyle } from './utils';
 
 describe( 'getMinimumDonation', () => {
 	it.each( [
@@ -25,7 +25,7 @@ describe( 'getColorForContrast', () => {
 		[ '#ffffff', '#000000' ],
 		[ '#f0f0f0', '#000000' ],
 		[ '#ffcc00', '#000000' ],
-		// APCA flip zone: WCAG2 said black, APCA says white decisively.
+		// White reads better by APCA (Lc 74 against 36) though only black reaches 4.5:1.
 		[ '#178f15', '#ffffff' ],
 		[ '#3366cc', '#ffffff' ],
 		[ '#dd3333', '#ffffff' ],
@@ -39,6 +39,8 @@ describe( 'getColorForContrast', () => {
 		[ '#33333380', '#ffffff' ],
 		[ '#FFCC00', '#000000' ],
 		[ ' #178f15 ', '#ffffff' ],
+		// White reads better by APCA (Lc 70 against 40) though only black reaches 4.5:1.
+		[ '#e65100', '#ffffff' ],
 	] )( 'picks readable text for %s', ( background, expected ) => {
 		expect( getColorForContrast( background ) ).toBe( expected );
 	} );
@@ -50,5 +52,25 @@ describe( 'getColorForContrast', () => {
 	it( 'expands 3-digit hex the same as 6-digit hex', () => {
 		expect( getColorForContrast( '#36c' ) ).toBe( getColorForContrast( '#3366cc' ) );
 		expect( getColorForContrast( '#fff' ) ).toBe( getColorForContrast( '#ffffff' ) );
+	} );
+} );
+
+describe( 'usesSiteButtonStyle', () => {
+	it( 'is true for the default color on a block theme, ignoring case', () => {
+		expect( usesSiteButtonStyle( '#dd3333', true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '#DD3333', true ) ).toBe( true );
+	} );
+
+	it( 'treats a cleared or missing color like the default', () => {
+		expect( usesSiteButtonStyle( undefined, true ) ).toBe( true );
+		expect( usesSiteButtonStyle( '', true ) ).toBe( true );
+	} );
+
+	it( 'is false for a picked color', () => {
+		expect( usesSiteButtonStyle( '#6c6c6c', true ) ).toBe( false );
+	} );
+
+	it( 'is false off a block theme', () => {
+		expect( usesSiteButtonStyle( '#dd3333', false ) ).toBe( false );
 	} );
 } );

@@ -11,7 +11,7 @@ import { applyFilters } from '@wordpress/hooks';
  */
 import { NAMESPACE } from '../store/constants';
 import TableRowField from '../components/table-row-field';
-import { getFieldElements, getFilterByOperators } from '../utils/fields';
+import { getDataViewsType, getFieldElements, getFilterByOperators } from '../utils/fields';
 import { isBudgetStories } from '../utils/budgets';
 import StoriesEdit from '../components/stories-edit';
 
@@ -65,6 +65,20 @@ export const useStoryField = ( storyId, fieldSlug ) => {
 	}, [ field, fieldsProps ] );
 };
 
+const DATE_TYPES = [ 'date', 'datetime' ];
+
+// Dates always get DataViews' own date operators, which utils/stories.js applies;
+// other fields are offered only when filterable.
+const getFilterBy = field => {
+	if ( DATE_TYPES.includes( field.type ) ) {
+		return undefined;
+	}
+	if ( field.is_filterable && field.is_filterable !== 'no' ) {
+		return { operators: getFilterByOperators( field ), isPrimary: field.is_filterable === 'always' };
+	}
+	return false;
+};
+
 /**
  * Hook to get the fields for DataViews.
  *
@@ -90,17 +104,11 @@ export const useStoryFields = ( { allowEdit } ) => {
 					id: field.slug,
 					label: field.name,
 					isVisible: () => field.show_in_table || field.always_visible_in_table,
-					type: field.type,
+					type: getDataViewsType( field ),
 					enableHiding: ! field.always_visible_in_table,
 					enableSorting: field.is_sortable,
 					elements: getFieldElements( field ),
-					filterBy:
-						field.is_filterable && field.is_filterable !== 'no'
-							? {
-									operators: getFilterByOperators( field ),
-									isPrimary: field.is_filterable === 'always',
-							  }
-							: undefined,
+					filterBy: getFilterBy( field ),
 					render: applyFilters(
 						'newspack-story-budget.table-row-field',
 						value => <TableRowField story={ value.item } field={ field } allowEdit={ allowEdit } />,

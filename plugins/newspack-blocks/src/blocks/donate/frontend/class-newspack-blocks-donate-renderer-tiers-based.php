@@ -39,7 +39,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 		$has_recommend_label   = isset( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] ) && ! empty( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] );
 		$has_description       = isset( $attributes['tiersBasedOptions'][ $index ]['description'] ) && ! empty( $attributes['tiersBasedOptions'][ $index ]['description'] );
 		$is_reverse_style      = ! $has_recommend_label && $is_any_recommended;
-		$button_style_attr     = 'style="' . self::get_button_style( $attributes, $is_reverse_style ) . '"';
+		$button_attrs          = self::get_button_attrs( $attributes, $is_reverse_style );
 
 		ob_start();
 		?>
@@ -48,7 +48,11 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 				<h2 class="wpbnbd__tiers__heading">
 					<?php echo esc_html( $attributes['tiersBasedOptions'][ $index ]['heading'] ); ?>
 				</h2>
-				<?php if ( $has_recommend_label ) : ?>
+				<?php if ( $has_recommend_label && self::is_modern_style( $attributes ) ) : ?>
+				<span class="newspack-ui__badge newspack-ui__badge--secondary">
+					<?php echo esc_html( wp_strip_all_tags( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] ) ); ?>
+				</span>
+				<?php elseif ( $has_recommend_label ) : ?>
 				<h3 class="wpbnbd__tiers__recommend-label">
 					<?php echo esc_html( wp_strip_all_tags( $attributes['tiersBasedOptions'][ $index ]['recommendLabel'] ) ); ?>
 				</h3>
@@ -76,7 +80,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 				name="<?php echo esc_attr( self::TIER_PARAM_PREFIX ); ?><?php echo esc_attr( $selected_frequency ); ?>"
 				value="<?php echo esc_attr( $configuration['amounts'][ $selected_frequency ][ $index ] ); ?>"
 				data-tier-index="<?php echo esc_attr( $index ); ?>"
-				<?php echo $button_style_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php self::print_button_attrs( $button_attrs ); ?>
 			>
 				<?php echo esc_html( $attributes['tiersBasedOptions'][ $index ]['buttonText'] ); ?>
 			</button>
@@ -121,7 +125,7 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 			$configuration['amounts'],
 			( new DateTime() )->modify( '+1 month' )->format( 'F d, Y' ),
 			( new DateTime() )->modify( '+1 year' )->format( 'F d, Y' ),
-			$attributes['buttonColor'],
+			Newspack_Blocks::donate_button_uses_site_style( $attributes ) ? '' : $attributes['buttonColor'],
 		];
 
 		$is_any_recommended = array_reduce(
@@ -144,7 +148,21 @@ class Newspack_Blocks_Donate_Renderer_Tiers_Based extends Newspack_Blocks_Donate
 					<?php echo self::render_hidden_form_inputs( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					<input type="hidden" name="<?php echo esc_attr( self::FREQUENCY_PARAM ); ?>" value="<?php echo esc_attr( $intial_selected_frequency ); ?>">
 					<div class="wpbnbd__tiers">
-						<?php if ( count( $configuration['frequencies'] ) > 1 ) : ?>
+						<?php if ( count( $configuration['frequencies'] ) > 1 && self::is_modern_style( $attributes ) ) : ?>
+							<div class="newspack-ui__segmented-control">
+								<div class="newspack-ui newspack-ui__segmented-control__tabs">
+									<?php foreach ( $configuration['frequencies'] as $frequency_slug => $frequency_name ) : ?>
+										<button
+											type="button"
+											data-frequency-slug="<?php echo esc_attr( $frequency_slug ); ?>"
+											data-frequency-label="<?php echo esc_attr( self::get_frequency_label( $frequency_slug ) ); ?>"
+											class="newspack-ui__button newspack-ui__button--small<?php echo $intial_selected_frequency === $frequency_slug ? ' selected' : ''; ?>"
+											aria-pressed="<?php echo $intial_selected_frequency === $frequency_slug ? 'true' : 'false'; ?>"
+										><?php echo esc_html( $frequency_name ); ?></button>
+									<?php endforeach; ?>
+								</div>
+							</div>
+						<?php elseif ( count( $configuration['frequencies'] ) > 1 ) : ?>
 							<div class="wpbnbd__tiers__selection">
 								<?php foreach ( $configuration['frequencies'] as $frequency_slug => $frequency_name ) : ?>
 									<button

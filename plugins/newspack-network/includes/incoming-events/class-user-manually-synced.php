@@ -48,6 +48,10 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 	 * constrained here (sanitize `user_login` via `sanitize_user()`, restrict `role` to a
 	 * safe set).
 	 *
+	 * A payload carrying only synced reader roles (or none) never demotes or renames an account
+	 * holding any other role: its roles, display name and email stay unchanged (see
+	 * below). A payload carrying any other role applies in full, demotions included.
+	 *
 	 * @return void
 	 */
 	public function maybe_sync_user() {
@@ -92,8 +96,21 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 		$remove_roles       = array_diff( $user_current_roles, $user_new_roles );
 		$add_roles          = array_diff( $user_new_roles, $user_current_roles );
 
+		// A payload carrying only synced reader roles (or none) leaves an account that
+		// holds any other role here with its roles, display name and email unchanged.
+		// The account is matched by email alone, so such a payload is what arrives when
+		// an admin syncs a reader whose address matches a staff account on this site,
+		// and nothing in it tells that apart from a deliberate demotion. A demotion to
+		// reader roles therefore has to be made on each site. A payload carrying any
+		// other role, such as an administrator being propagated, applies in full.
+		$reader_roles_only = empty( array_diff( $user_new_roles, User_Utils::get_synced_user_roles() ) );
+		$keep_identity     = $reader_roles_only && ! User_Utils::is_syncable_account( $user );
+		if ( $keep_identity ) {
+			Debugger::log( 'Target holds a role outside the synced set; leaving its roles, display name and email unchanged.' );
+		}
+
 		// If the old and new role arrays aren't the same, update the roles.
-		if ( $remove_roles || $add_roles ) {
+		if ( ! $keep_identity && ( $remove_roles || $add_roles ) ) {
 			// Get the user object.
 			$current_user = new \WP_User( $user->ID );
 
@@ -122,9 +139,13 @@ class User_Manually_Synced extends Abstract_Incoming_Event {
 				'ID' => $user->ID,
 			];
 			foreach ( User_Update_Watcher::$user_props as $prop_key ) {
-				if ( isset( $incoming_props[ $prop_key ] ) ) {
-					$update_array[ $prop_key ] = $incoming_props[ $prop_key ];
+				if ( ! isset( $incoming_props[ $prop_key ] ) ) {
+					continue;
 				}
+				if ( $keep_identity && in_array( $prop_key, [ 'display_name', 'user_email' ], true ) ) {
+					continue;
+				}
+				$update_array[ $prop_key ] = $incoming_props[ $prop_key ];
 			}
 			// Only update if at least one allowed prop is present; $update_array always has 'ID'.
 			if ( count( $update_array ) > 1 ) {

@@ -28,7 +28,7 @@ The panel's comment layout is editable: it starts with the comment form, comment
 - Clicking a Comments Button opens the panel from the right. The panel is a focus-trapped dialog: Escape, the close button, or clicking the backdrop closes it, and focus returns to the button.
 - Pagination links and the comment form work inside the panel without a page reload. After posting, the panel stays open and moves to the new comment.
 - The panel opens on page load when the URL points at comments: a comment link (`#comment-N`, `#comments`, `#respond`) or a paginated comments view.
-- When a post has comments closed and no existing comments, `core/comments` renders nothing, but the button still shows and opens a panel holding only the close button.
+- The block renders nothing when the post has comments closed and no approved comments, since the panel would have nothing to show. A post with existing comments keeps the button after comments close, including posts closed automatically by the Discussion setting that closes comments on older posts.
 
 ## Notes
 - **One panel per page.** Only the first Comments Panel Content block renders a panel (`#newspack-comments-panel`). Every Comments Button on the page opens that same panel, so the block can appear more than once (for example, near the title and after the content) without duplicating the comments. Only that first panel's overlay color and comment layout apply: later Comments Panel Content blocks output nothing, and a Comments Panel placed earlier on the page (in a header, for example) would take over from the one in the post footer.

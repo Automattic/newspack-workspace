@@ -102,6 +102,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-registration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-activation-emails.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-reader-data.php';
+		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-active-subscriptions-reader-data.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-sync.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-metadata.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/sync/class-woocommerce.php';
@@ -249,6 +250,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-woocommerce-content-detector.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-perfmatters.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-pwa.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-web-app-manifest.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-author-rest-fields.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-guest-contributor-role.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-nicename-change.php';
@@ -315,6 +317,8 @@ final class Newspack {
 		// Load the general Newspack UI front-end styles.
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-icons.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-palette.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui-theme-style.php';
 
 		\Newspack\CLI\Initializer::init();
 	}
@@ -498,7 +502,7 @@ final class Newspack {
 	 * Is the Setup completed?
 	 */
 	public static function is_setup_complete() {
-		return '1' === get_option( NEWSPACK_SETUP_COMPLETE, '0' );
+		return (bool) get_option( NEWSPACK_SETUP_COMPLETE, false );
 	}
 
 	/**

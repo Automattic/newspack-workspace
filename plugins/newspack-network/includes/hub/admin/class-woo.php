@@ -19,6 +19,14 @@ use Newspack_Network\Hub\Stores\Woo_Item;
 abstract class Woo {
 
 	/**
+	 * The query parameter of the Complimentary filter: the same one newspack-plugin's subscription
+	 * and order lists use, so a filtered list URL reads the same on a node and on the hub.
+	 *
+	 * @var string
+	 */
+	const COMPLIMENTARY_FILTER_PARAM = 'newspack_complimentary';
+
+	/**
 	 * The affected post types
 	 *
 	 * @var string
@@ -144,6 +152,63 @@ abstract class Woo {
 		$current_node = isset( $_GET['node_id'] ) ? sanitize_text_field( $_GET['node_id'] ) : '';
 
 		Nodes::nodes_dropdown( $current_node );
+
+		$current = self::get_complimentary_filter_value();
+		$options = [
+			'all'     => __( 'All access types', 'newspack-network' ),
+			'only'    => __( 'Complimentary', 'newspack-network' ),
+			'exclude' => __( 'Not complimentary', 'newspack-network' ), // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- A filter option, not a query argument.
+		];
+		?>
+		<label class="screen-reader-text" for="<?php echo esc_attr( self::COMPLIMENTARY_FILTER_PARAM ); ?>"><?php esc_html_e( 'Filter by complimentary access', 'newspack-network' ); ?></label>
+		<select name="<?php echo esc_attr( self::COMPLIMENTARY_FILTER_PARAM ); ?>" id="<?php echo esc_attr( self::COMPLIMENTARY_FILTER_PARAM ); ?>">
+			<?php foreach ( $options as $value => $label ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $label ); ?></option>
+			<?php endforeach; ?>
+		</select>
+		<?php
+	}
+
+	/**
+	 * The Complimentary filter option requested for the list: 'only', 'exclude', or 'all'.
+	 *
+	 * @return string
+	 */
+	private static function get_complimentary_filter_value(): string {
+		$value = isset( $_GET[ self::COMPLIMENTARY_FILTER_PARAM ] ) ? sanitize_key( wp_unslash( $_GET[ self::COMPLIMENTARY_FILTER_PARAM ] ) ) : '';
+		return in_array( $value, [ 'only', 'exclude' ], true ) ? $value : 'all';
+	}
+
+	/**
+	 * The meta query clause for a Complimentary filter option.
+	 *
+	 * Items stored before nodes sent the marker have none, and count as not complimentary.
+	 *
+	 * @param string $mode 'only', 'exclude', or anything else for no filter.
+	 * @return array|null
+	 */
+	public static function get_complimentary_meta_query( string $mode ): ?array {
+		if ( 'only' === $mode ) {
+			return [
+				'key'   => 'is_complimentary',
+				'value' => '1',
+			];
+		}
+		if ( 'exclude' === $mode ) {
+			return [
+				'relation' => 'OR',
+				[
+					'key'     => 'is_complimentary',
+					'value'   => '1',
+					'compare' => '!=',
+				],
+				[
+					'key'     => 'is_complimentary',
+					'compare' => 'NOT EXISTS',
+				],
+			];
+		}
+		return null;
 	}
 
 	/**
@@ -159,13 +224,30 @@ abstract class Woo {
 			return null;
 		}
 
-		if ( ! isset( $_GET['node_id'] ) || ! is_numeric( $_GET['node_id'] ) ) { // zero is a valid value.
+		$clauses = [];
+
+		$complimentary_clause = self::get_complimentary_meta_query( self::get_complimentary_filter_value() );
+		if ( $complimentary_clause ) {
+			$clauses[] = $complimentary_clause;
+		}
+
+		if ( isset( $_GET['node_id'] ) && is_numeric( $_GET['node_id'] ) ) { // zero is a valid value.
+			$clauses[] = [
+				'key'   => 'node_id',
+				'value' => sanitize_text_field( $_GET['node_id'] ),
+			];
+		}
+
+		if ( ! $clauses ) {
 			return null;
 		}
-		$query->query_vars['meta_query'][] = [
-			'key'   => 'node_id',
-			'value' => sanitize_text_field( $_GET['node_id'] ),
-		];
+
+		// A search sets its own meta query, an OR group; the filters must narrow it, not join it.
+		$existing = $query->get( 'meta_query' );
+		if ( $existing ) {
+			$clauses[] = $existing;
+		}
+		$query->set( 'meta_query', array_merge( [ 'relation' => 'AND' ], $clauses ) );
 
 		return null;
 	}
@@ -231,6 +313,24 @@ abstract class Woo {
 			esc_attr( $target ),
 			esc_html( (string) $text )
 		);
+	}
+
+	/**
+	 * Formats a date the nodes report in GMT, in the site's date format and timezone.
+	 *
+	 * @param string $value A GMT date string, such as WooCommerce's `Y-m-d H:i:s` or `Y-m-d\TH:i:s`.
+	 * @return string The formatted date, or '-' when the value is empty or not a date.
+	 */
+	protected static function format_gmt_date( $value ) {
+		if ( empty( $value ) ) {
+			return '-';
+		}
+		try {
+			$date = new \DateTimeImmutable( (string) $value, new \DateTimeZone( 'UTC' ) );
+		} catch ( \Exception $e ) {
+			return '-';
+		}
+		return (string) wp_date( get_option( 'date_format' ), $date->getTimestamp() );
 	}
 
 	/**

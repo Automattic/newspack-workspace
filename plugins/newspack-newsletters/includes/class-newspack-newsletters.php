@@ -704,9 +704,21 @@ final class Newspack_Newsletters {
 			'show_in_rest'     => true,
 			'supports'         => $supports,
 			'taxonomies'       => [ 'category', 'post_tag' ],
-			'menu_icon'        => 'data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 7c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm2-.5h14c.3 0 .5.2.5.5v1L12 13.5 4.5 7.9V7c0-.3.2-.5.5-.5Zm-.5 3.3V17c0 .3.2.5.5.5h14c.3 0 .5-.2.5-.5V9.8L12 15.4 4.5 9.8Z"></path></svg>' ),
+			'menu_icon'        => self::get_menu_icon(),
 		];
 		\register_post_type( self::NEWSPACK_NEWSLETTERS_CPT, $cpt_args );
+	}
+
+	/**
+	 * The admin menu icon for newsletter screens, as a data URI.
+	 *
+	 * The drawing is the WordPress envelope with its strokes outlined, because the
+	 * admin menu repaints icons by rewriting their fill.
+	 *
+	 * @return string
+	 */
+	public static function get_menu_icon() {
+		return 'data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" fill="none"><path d="M19.5 9.97266L12 15.4277L4.5 9.97266V17C4.5 17.2762 4.72384 17.5 5 17.5H19C19.2762 17.5 19.5 17.2762 19.5 17V9.97266ZM19.5 7C19.5 6.72384 19.2762 6.5 19 6.5H5C4.72385 6.5 4.5 6.72385 4.5 7V8.11719L12 13.5723L19.5 8.11719V7ZM21 17C21 18.1046 20.1046 19 19 19H5C3.89544 19 3 18.1046 3 17V7C3 5.89543 3.89543 5 5 5H19C20.1046 5 21 5.89544 21 7V17Z"></path></svg>' );
 	}
 
 	/**

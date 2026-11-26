@@ -18,7 +18,7 @@
 				color: var(--wp-admin-theme-color);
 
 				.components-menu-items__item-icon {
-					fill: currentcolor;
+					color: inherit;
 				}
 			}
 
@@ -56,7 +56,7 @@
 			}
 
 			.components-menu-items__item-icon {
-				fill: wp-colors.$gray-900;
+				color: wp-colors.$gray-900;
 			}
 
 			.components-menu-item__item {

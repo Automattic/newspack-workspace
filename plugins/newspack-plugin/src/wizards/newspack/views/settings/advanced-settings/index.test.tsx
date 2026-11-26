@@ -109,7 +109,7 @@ beforeEach( () => {
 	responses = {
 		[ THEME_PATH ]: {
 			theme_mods: { ...ADVANCED_SETTINGS_DEFAULTS, show_author_email: false },
-			etc: { post_count: '10', has_pwa_plugin: false },
+			etc: { post_count: '10' },
 		},
 		'/newspack/v1/wizard/newspack-settings/related-content': { relatedPostsEnabled: true, relatedPostsMaxAge: 0 },
 		[ PRIMARY_CATEGORY_PATH ]: { enabled: true, yoast_active: true },
@@ -162,6 +162,15 @@ it( 'saves only the settings that changed, then confirms', async () => {
 	expect( ( posts()[ 0 ].data as { theme_mods: AdvancedSettings } ).theme_mods.show_author_email ).toBe( true );
 	expect( headerAction( 'Save' ).disabled ).toBe( true );
 	expect( notices() ).toContain( 'Settings saved.' );
+} );
+
+it( 'saves the web app display mode', async () => {
+	await renderView();
+
+	fireEvent.change( screen.getByLabelText( 'Web app display mode' ), { target: { value: 'standalone' } } );
+	await save();
+
+	expect( ( posts()[ 0 ].data as { theme_mods: AdvancedSettings } ).theme_mods.pwa_display_mode ).toBe( 'standalone' );
 } );
 
 it( 'saves the related posts age and primary category through their own endpoints', async () => {

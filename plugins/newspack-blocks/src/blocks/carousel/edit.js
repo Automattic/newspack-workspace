@@ -5,6 +5,7 @@
  */
 import { isEqual } from 'lodash';
 import classnames from 'classnames';
+import { prefersReducedMotion } from 'newspack-motion';
 
 /**
  * WordPress dependencies
@@ -174,7 +175,7 @@ class Edit extends Component {
 			'slides-per-view-' + slidesPerView,
 			'swiper',
 			{
-				'wp-block-newspack-blocks-carousel__autoplay-playing': autoplay,
+				'wp-block-newspack-blocks-carousel__autoplay-playing': autoplay && ! prefersReducedMotion(),
 				'newspack-block--disabled': isUIDisabled,
 				'hide-controls': hideControls,
 			}

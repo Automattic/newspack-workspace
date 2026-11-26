@@ -7,6 +7,8 @@
 
 use Newspack\WooCommerce_Subscriptions;
 use Newspack\Reader_Activation;
+use Newspack\Group_Subscription;
+use Newspack\Group_Subscription_Settings;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
 require_once __DIR__ . '/class-newspack-test-modal-checkout.php';
@@ -18,10 +20,20 @@ require_once __DIR__ . '/class-newspack-test-modal-checkout.php';
  */
 class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	/**
+	 * Load the gifting stub the subscription-readers tests lean on.
+	 */
+	public static function set_up_before_class() {
+		parent::set_up_before_class();
+		require_once dirname( __DIR__, 3 ) . '/mocks/wcs-gifting-mock.php';
+	}
+
+	/**
 	 * Reset the global mock databases before each test.
 	 */
 	public function set_up() {
 		parent::set_up();
+		// The gifting stub's recipient map is static and shared across test classes.
+		\WCS_Gifting::$recipients = [];
 		global $subscriptions_database, $products_database, $orders_database, $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args, $wcs_mock_order_items, $wcs_mock_items_sign_up_fee, $wcs_mock_prices_include_tax, $wcs_mock_last_items_sign_up_fee_tax, $wcs_mock_cart_switches, $wcs_mock_product_switchable;
 		$subscriptions_database                   = [];
 		$products_database                        = [];
@@ -58,6 +70,8 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		unset( $_GET['pay_for_order'], $GLOBALS['wp']->query_vars['order-pay'] );
 		wp_set_current_user( 0 );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
+		\WCS_Gifting::$recipients = [];
+		remove_all_filters( 'newspack_group_subscription_members' );
 		parent::tear_down();
 	}
 
@@ -1640,6 +1654,193 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$this->assertFalse(
 			WooCommerce_Subscriptions::maybe_limit_subscription_product_for_user( false, $fixture['product'], $fixture['user_id'] ),
 			'The subscription on a failed order being paid should not count toward the limit.'
+		);
+	}
+
+	/**
+	 * Create a subscription for the readers tests.
+	 *
+	 * @param int  $purchaser_id Customer who bought it.
+	 * @param bool $is_group     Whether the subscription is a group subscription.
+	 *
+	 * @return \WC_Subscription
+	 */
+	private function create_readers_subscription( int $purchaser_id, bool $is_group = false ) {
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $purchaser_id,
+				'status'      => 'active',
+				'products'    => [ 101 ],
+			]
+		);
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', $is_group ? 'yes' : 'no' );
+		return $subscription;
+	}
+
+	/**
+	 * Add a user to a group subscription, as joining the group does.
+	 *
+	 * @param int              $user_id      User ID.
+	 * @param \WC_Subscription $subscription Group subscription.
+	 */
+	private function add_group_member( int $user_id, $subscription ): void {
+		add_user_meta( $user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+	}
+
+	/**
+	 * A plain subscription affects its customer and nobody else.
+	 */
+	public function test_get_subscription_readers_plain_subscription() {
+		$purchaser_id = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id );
+
+		$this->assertSame(
+			[
+				'purchaser' => $purchaser_id,
+				'recipient' => 0,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
+		);
+		$this->assertSame(
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription ),
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription->get_id() ),
+			'A subscription ID resolves to the same subscription.'
+		);
+	}
+
+	/**
+	 * A gift names its buyer and its recipient. The buyer stays listed because a
+	 * change to the gift can mean the buyer no longer holds what they used to.
+	 */
+	public function test_get_subscription_readers_gift() {
+		$purchaser_id = $this->factory->user->create();
+		$recipient_id = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		$this->assertSame(
+			[
+				'purchaser' => $purchaser_id,
+				'recipient' => $recipient_id,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
+		);
+	}
+
+	/**
+	 * A gift whose recipient account is gone has no recipient to name.
+	 */
+	public function test_get_subscription_readers_gift_with_deleted_recipient() {
+		$purchaser_id = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = 987654321;
+
+		$this->assertSame(
+			[
+				'purchaser' => $purchaser_id,
+				'recipient' => 0,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
+		);
+	}
+
+	/**
+	 * An enabled group lists each member once, managers included, and leaves out
+	 * the purchaser even when they joined their own group.
+	 */
+	public function test_get_subscription_readers_enabled_group() {
+		$purchaser_id = $this->factory->user->create();
+		$member_id    = $this->factory->user->create();
+		$manager_id   = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id, true );
+
+		$this->add_group_member( $purchaser_id, $subscription );
+		$this->add_group_member( $member_id, $subscription );
+		// A promoted manager keeps the member meta and gains the manager meta.
+		$this->add_group_member( $manager_id, $subscription );
+		add_user_meta( $manager_id, Group_Subscription::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		Group_Subscription::reset_cache();
+
+		$readers = WooCommerce_Subscriptions::get_subscription_readers( $subscription );
+
+		$this->assertSame( $purchaser_id, $readers['purchaser'] );
+		$this->assertSame( 0, $readers['recipient'] );
+		$this->assertEqualsCanonicalizing( [ $member_id, $manager_id ], $readers['members'], 'Members and managers are listed, the purchaser is not.' );
+		$this->assertCount( 2, $readers['members'] );
+	}
+
+	/**
+	 * Members come back as unique positive integers, whatever the members list
+	 * holds, and neither the purchaser nor a gift recipient repeats among them.
+	 */
+	public function test_get_subscription_readers_group_members_are_unique_positive_ints() {
+		$purchaser_id = $this->factory->user->create();
+		$recipient_id = $this->factory->user->create();
+		$member_id    = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id, true );
+		\WCS_Gifting::$recipients[ $subscription->get_id() ] = $recipient_id;
+
+		add_filter(
+			'newspack_group_subscription_members',
+			function () use ( $purchaser_id, $recipient_id, $member_id ) {
+				return [ (string) $member_id, $member_id, 0, -4, 'not-an-id', $purchaser_id, (string) $recipient_id ];
+			}
+		);
+
+		$readers = WooCommerce_Subscriptions::get_subscription_readers( $subscription );
+
+		$this->assertSame( [ $member_id ], $readers['members'] );
+	}
+
+	/**
+	 * A group that is switched off has no members to name, even if member rows
+	 * are still on file.
+	 */
+	public function test_get_subscription_readers_disabled_group() {
+		$purchaser_id = $this->factory->user->create();
+		$member_id    = $this->factory->user->create();
+		$subscription = $this->create_readers_subscription( $purchaser_id, false );
+		$this->add_group_member( $member_id, $subscription );
+
+		$this->assertSame(
+			[
+				'purchaser' => $purchaser_id,
+				'recipient' => 0,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( $subscription )
+		);
+	}
+
+	/**
+	 * An ID that matches no subscription names no readers.
+	 */
+	public function test_get_subscription_readers_unknown_id() {
+		$this->assertSame(
+			[
+				'purchaser' => 0,
+				'recipient' => 0,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( 424242 )
+		);
+	}
+
+	/**
+	 * Something that isn't a subscription names no readers, rather than throwing.
+	 */
+	public function test_get_subscription_readers_non_subscription_object() {
+		$this->assertSame(
+			[
+				'purchaser' => 0,
+				'recipient' => 0,
+				'members'   => [],
+			],
+			WooCommerce_Subscriptions::get_subscription_readers( new \stdClass() )
 		);
 	}
 }

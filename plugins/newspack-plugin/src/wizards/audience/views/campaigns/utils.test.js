@@ -8,7 +8,7 @@
  * coerce those elements to "[object Object]".
  *
  * Regression coverage for NPPM-2729: the Campaigns admin page rendered blank
- * because a prompt's taxonomy arrays reached `promptDescription` holding a null
+ * because a prompt's taxonomy arrays reached `promptDetails` holding a null
  * entry — a term deleted out from under a stale object cache — and `.map()` threw
  * on `.name`. `warningForPopup` walks the same category arrays and throws the same
  * way. Both must tolerate null entries and a non-array value, since PHP's
@@ -61,7 +61,7 @@ const CRITERIA = [
 
 const PLACEMENT = 'center';
 
-let segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup;
+let segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, abTestBadge, warningForPopup, isOverlay, placementForPopup;
 
 beforeAll( async () => {
 	window.newspackAudienceCampaigns = {
@@ -70,7 +70,8 @@ beforeAll( async () => {
 		overlay_placements: [ PLACEMENT, 'top', 'bottom' ],
 		custom_placements: {},
 	};
-	( { segmentDescription, promptDescription, warningForPopup, isOverlay, placementForPopup } = await import( './utils' ) );
+	( { segmentDescription, splitCriteriaMessage, promptDetails, promptStatus, abTestBadge, warningForPopup, isOverlay, placementForPopup } =
+		await import( './utils' ) );
 } );
 
 describe( 'segmentDescription', () => {
@@ -174,9 +175,60 @@ const realTag = { term_id: 58, name: 'real-tag' };
 const realCategory = { term_id: 5, name: 'Sports' };
 const otherCategory = { term_id: 6, name: 'News' };
 
-describe( 'promptDescription', () => {
+const describePrompt = prompt =>
+	promptDetails( prompt )
+		.map( ( { label, value } ) => `${ label } ${ value }` )
+		.join( ' | ' );
+
+describe( 'splitCriteriaMessage', () => {
+	it( 'splits a plain message at its first separator', () => {
+		expect( splitCriteriaMessage( 'Articles read: min: 5' ) ).toEqual( { label: 'Articles read:', value: 'min: 5' } );
+	} );
+
+	it( 'leaves a message with no label as the value', () => {
+		expect( splitCriteriaMessage( 'Segment disabled' ) ).toEqual( { value: 'Segment disabled' } );
+	} );
+
+	it( 'leaves an element-valued message alone', () => {
+		const element = <span>Subscribed to: Weekly Digest</span>;
+		expect( splitCriteriaMessage( element ) ).toEqual( { value: element } );
+	} );
+} );
+
+describe( 'abTestBadge', () => {
+	it( 'labels each published version of a running test', () => {
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'a' } ) ) ).toEqual( { label: 'A/B test · A', intent: 'informational' } );
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).toEqual( { label: 'A/B test · B', intent: 'informational' } );
+	} );
+
+	it( 'gives no badge to a prompt outside a running test', () => {
+		expect( abTestBadge( overlay() ) ).toBeNull();
+	} );
+
+	it( 'gives no badge to a draft version of a running test', () => {
+		expect( abTestBadge( overlay( { ab_test_id: 'hero', ab_variant: 'c', status: 'draft' } ) ) ).toBeNull();
+	} );
+} );
+
+describe( 'promptDetails', () => {
+	it( 'leads with the placement and the frequency', () => {
+		expect( promptDetails( overlay() ).map( ( { label } ) => label ) ).toEqual( [ 'Placement:', 'Frequency:' ] );
+	} );
+
+	it( 'names a custom frequency without the editor hint', () => {
+		const prompt = overlay();
+		const details = promptDetails( { ...prompt, options: { ...prompt.options, frequency: 'custom' } } );
+		expect( details.find( ( { label } ) => 'Frequency:' === label ).value ).toBe( 'Custom' );
+	} );
+
+	// The A/B badge says which version a prompt is, and the test ID is an
+	// internal key rather than the name publishers see.
+	it( 'leaves the A/B test out of the details', () => {
+		expect( describePrompt( overlay( { ab_test_id: 'hero', ab_variant: 'b' } ) ) ).not.toContain( 'A/B test' );
+	} );
+
 	it( 'renders a description from valid taxonomy arrays', () => {
-		const result = promptDescription(
+		const result = describePrompt(
 			overlay( {
 				categories: [ realCategory ],
 				tags: [ realTag ],
@@ -194,39 +246,98 @@ describe( 'promptDescription', () => {
 	// The reported crash: a null entry alongside a real term must not take the
 	// real term's name down with it.
 	it( 'tolerates a null entry in tags', () => {
-		const result = promptDescription( overlay( { tags: [ realTag, null ] } ) );
+		const result = describePrompt( overlay( { tags: [ realTag, null ] } ) );
 		expect( result ).toContain( 'Tags:' );
 		expect( result ).toContain( 'real-tag' );
 	} );
 
 	it( 'tolerates a null entry in categories', () => {
-		const result = promptDescription( overlay( { categories: [ realCategory, null ] } ) );
+		const result = describePrompt( overlay( { categories: [ realCategory, null ] } ) );
 		expect( result ).toContain( 'Categories:' );
 		expect( result ).toContain( 'Sports' );
 	} );
 
 	it( 'tolerates a null entry in campaign_groups', () => {
-		const result = promptDescription( overlay( { campaign_groups: [ { name: 'Group A' }, null ] } ) );
+		const result = describePrompt( overlay( { campaign_groups: [ { name: 'Group A' }, null ] } ) );
 		expect( result ).toContain( 'Campaign:' );
 		expect( result ).toContain( 'Group A' );
 	} );
 
 	it( 'tolerates tags === null', () => {
-		expect( () => promptDescription( overlay( { tags: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { tags: null } ) ) ).not.toThrow();
 	} );
 
 	it( 'tolerates categories === null', () => {
-		expect( () => promptDescription( overlay( { categories: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { categories: null } ) ) ).not.toThrow();
 	} );
 
 	it( 'tolerates campaign_groups === null', () => {
-		expect( () => promptDescription( overlay( { campaign_groups: null } ) ) ).not.toThrow();
+		expect( () => describePrompt( overlay( { campaign_groups: null } ) ) ).not.toThrow();
+	} );
+} );
+
+describe( 'promptStatus', () => {
+	it.each( [
+		[ 'publish', 'Active', 'stable' ],
+		[ 'draft', 'Inactive', 'draft' ],
+		[ 'pending', 'Pending Review', 'draft' ],
+		[ 'future', 'Scheduled', 'informational' ],
+		[ 'trash', 'Trash', 'draft' ],
+	] )( 'labels a %s prompt', ( status, label, intent ) => {
+		expect( promptStatus( { status } ) ).toEqual( { label, intent } );
+	} );
+
+	it( 'says when a published prompt is held back by its segment', () => {
+		expect( promptStatus( { status: 'publish' }, true ).label ).toBe( 'Segment Disabled' );
+	} );
+
+	it( 'keeps the status of an unpublished prompt in a disabled segment', () => {
+		expect( promptStatus( { status: 'draft' }, true ).label ).toBe( 'Inactive' );
 	} );
 } );
 
 describe( 'warningForPopup', () => {
 	it( 'test fixture is correctly set up as an overlay', () => {
 		expect( isOverlay( overlay() ) ).toBe( true );
+	} );
+
+	it( 'reports a published prompt in the same placement with no categories on either', () => {
+		const prompt = overlay( { id: 100 } );
+		const conflict = overlay( { id: 200, title: 'Other prompt' } );
+		const { container } = render( warningForPopup( [ prompt, conflict ], prompt ) );
+		expect( container.textContent ).toContain( 'Other prompt' );
+	} );
+
+	// Two prompts in one A/B test target the same readers in the same placement
+	// on purpose, and the view engine shows each reader one of them. `ab_test_id`
+	// is only on the payload while the test is valid and the feature is on.
+	it( 'does not report the other arm of the same A/B test as a conflict', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		expect( warningForPopup( [ prompt, pair ], prompt ) ).toBeNull();
+	} );
+
+	it( 'reports a prompt on the same arm of the same A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'b' } );
+		const twin = overlay( { id: 200, title: 'Second B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const { container } = render( warningForPopup( [ prompt, twin ], prompt ) );
+		expect( container.textContent ).toContain( 'Second B' );
+	} );
+
+	it( 'still reports a prompt outside the test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const pair = overlay( { id: 200, title: 'Variant B', ab_test_id: 'hero', ab_variant: 'b' } );
+		const third = overlay( { id: 300, title: 'Unrelated prompt' } );
+		const { container } = render( warningForPopup( [ prompt, pair, third ], prompt ) );
+		expect( container.textContent ).toContain( 'Unrelated prompt' );
+		expect( container.textContent ).not.toContain( 'Variant B' );
+	} );
+
+	it( 'reports a prompt in a different A/B test', () => {
+		const prompt = overlay( { id: 100, ab_test_id: 'hero', ab_variant: 'a' } );
+		const other = overlay( { id: 200, title: 'Other test', ab_test_id: 'footer', ab_variant: 'a' } );
+		const { container } = render( warningForPopup( [ prompt, other ], prompt ) );
+		expect( container.textContent ).toContain( 'Other test' );
 	} );
 
 	it( 'returns null when no conflicting prompts share segments and categories', () => {

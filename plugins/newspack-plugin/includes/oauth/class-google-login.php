@@ -306,6 +306,12 @@ class Google_Login {
 				// Log the user in.
 				$result  = Reader_Activation::set_current_reader( $existing_user->ID );
 				$message = __( 'Thank you for signing in!', 'newspack-plugin' );
+
+				// Google_OAuth::validate_token_and_get_email_address() accepts only addresses Google reports as verified,
+				// so signing in proves the address, as registering with Google does.
+				if ( ! is_wp_error( $result ) ) {
+					Reader_Activation::set_reader_verified( $existing_user );
+				}
 			} else {
 				$metadata['registration_method'] = 'google';
 				$result = Reader_Activation::register_reader( $email, '', true, $metadata );

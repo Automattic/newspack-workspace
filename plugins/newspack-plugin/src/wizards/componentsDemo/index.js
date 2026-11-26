@@ -19,7 +19,7 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
-import { Component, Fragment, render, createInterpolateElement, createRef } from '@wordpress/element';
+import { Component, Fragment, render, createInterpolateElement, createRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { Icon, plus, postList, settings } from '@wordpress/icons';
 
@@ -38,7 +38,6 @@ import {
 	CollapsibleGroup,
 	ColorPicker,
 	DebugBadge,
-	EmptyState,
 	Footer,
 	Grid,
 	Handoff,
@@ -59,8 +58,48 @@ import {
 	Waiting,
 	WebPreview,
 } from '../../../packages/components/src';
+import DataViews from '../../../packages/components/src/dataviews';
 import * as newspackIcons from '../../../packages/icons';
 import colors from '../../../packages/colors/colors.module.scss';
+
+const TABLE_CARD_DEMO_DATA = [
+	{ id: 1, cycles: '1 → 3', price: '$3.00' },
+	{ id: 2, cycles: '4 onward', price: '$6.00' },
+];
+
+const TABLE_CARD_DEMO_FIELDS = [
+	{ id: 'cycles', label: __( 'Cycles', 'newspack-plugin' ), enableHiding: false, enableSorting: false },
+	{ id: 'price', label: __( 'Price', 'newspack-plugin' ), enableHiding: false, enableSorting: false },
+];
+
+const TableCardDemo = () => {
+	const [ view, setView ] = useState( {
+		type: 'table',
+		fields: [ 'cycles', 'price' ],
+		layout: {},
+	} );
+	return (
+		<TableCard
+			title={ __( 'Price Schedule', 'newspack-plugin' ) }
+			actions={
+				<Button variant="tertiary" size="compact">
+					{ __( 'Add Price', 'newspack-plugin' ) }
+				</Button>
+			}
+		>
+			<DataViews
+				data={ TABLE_CARD_DEMO_DATA }
+				fields={ TABLE_CARD_DEMO_FIELDS }
+				view={ view }
+				onChangeView={ setView }
+				getItemId={ item => String( item.id ) }
+				paginationInfo={ { totalItems: TABLE_CARD_DEMO_DATA.length, totalPages: 1 } }
+				defaultLayouts={ { table: {} } }
+				search={ false }
+			/>
+		</TableCard>
+	);
+};
 
 class ComponentsDemo extends Component {
 	/**
@@ -456,6 +495,39 @@ class ComponentsDemo extends Component {
 										{ __( 'A phrase rather than a number, so it drops the hero scale.', 'newspack-plugin' ) }
 									</StatCard.Footer>
 								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label qualifier={ __( '(recurring donors)', 'newspack-plugin' ) }>
+										{ __( 'Average tenure', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Value
+											value="214"
+											unit={ __( 'days', 'newspack-plugin' ) }
+											suffix={ <StatCard.Delta direction="unchanged">0%</StatCard.Delta> }
+										/>
+									</StatCard.Body>
+									<StatCard.Footer>
+										<StatCard.Description>
+											{ __( 'A unit beside the figure, and a delta with nothing to point at.', 'newspack-plugin' ) }
+										</StatCard.Description>
+									</StatCard.Footer>
+								</StatCard.Root>
+								<StatCard.Root>
+									<StatCard.Label qualifier={ __( '(recurring donors)', 'newspack-plugin' ) }>
+										{ __( 'Donor retention', 'newspack-plugin' ) }
+									</StatCard.Label>
+									<StatCard.Body>
+										<StatCard.Note>
+											{ __( 'No recurring donors at the start of this timeframe.', 'newspack-plugin' ) }
+										</StatCard.Note>
+									</StatCard.Body>
+									<StatCard.Footer>
+										<StatCard.Description>
+											{ __( 'A note in place of the figure, level with the figures beside it.', 'newspack-plugin' ) }
+										</StatCard.Description>
+										<StatCard.Description>{ __( 'Two descriptions, stacked.', 'newspack-plugin' ) }</StatCard.Description>
+									</StatCard.Footer>
+								</StatCard.Root>
 							</Grid>
 						</Card>
 						<Card>
@@ -492,68 +564,7 @@ class ComponentsDemo extends Component {
 						</Card>
 						<Card>
 							<h2>{ __( 'Table card', 'newspack-plugin' ) }</h2>
-							<TableCard
-								title={ __( 'Price Schedule', 'newspack-plugin' ) }
-								titleId="components-demo-table-card-title"
-								actions={
-									<Button variant="secondary" size="compact">
-										{ __( 'Add Price', 'newspack-plugin' ) }
-									</Button>
-								}
-							>
-								<div role="region" aria-labelledby="components-demo-table-card-title">
-									{ /* Real tables supply the 24px card-padding alignment from their stylesheet. */ }
-									<table style={ { borderCollapse: 'collapse', width: '100%' } }>
-										<thead>
-											<tr>
-												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Cycles', 'newspack-plugin' ) }</th>
-												<th style={ { padding: '8px 24px', textAlign: 'left' } }>{ __( 'Price', 'newspack-plugin' ) }</th>
-											</tr>
-										</thead>
-										<tbody>
-											<tr>
-												<td style={ { padding: '8px 24px' } }>1 → 3</td>
-												<td style={ { padding: '8px 24px' } }>$3.00</td>
-											</tr>
-											<tr>
-												<td style={ { padding: '8px 24px' } }>4 onward</td>
-												<td style={ { padding: '8px 24px' } }>$6.00</td>
-											</tr>
-										</tbody>
-									</table>
-								</div>
-							</TableCard>
-						</Card>
-						<Card>
-							<h2>{ __( 'Empty state', 'newspack-plugin' ) }</h2>
-							<EmptyState.Root>
-								<EmptyState.Header
-									icon={ postList }
-									title={ __( 'Get started with posts', 'newspack-plugin' ) }
-									description={ __( 'Nothing here yet. Once you publish, your posts show up in this list.', 'newspack-plugin' ) }
-									heading={ 3 }
-								/>
-								<EmptyState.Actions>
-									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
-								</EmptyState.Actions>
-							</EmptyState.Root>
-						</Card>
-						<Card>
-							<h2>{ __( 'Empty state (small, stacked actions)', 'newspack-plugin' ) }</h2>
-							<EmptyState.Root size="small">
-								<EmptyState.Header
-									icon={ postList }
-									title={ __( 'Nothing to show yet', 'newspack-plugin' ) }
-									description={ __(
-										'The small size suits an empty state standing in for a panel inside a card.',
-										'newspack-plugin'
-									) }
-								/>
-								<EmptyState.Actions orientation="column">
-									<Button variant="primary">{ __( 'Add Post', 'newspack-plugin' ) }</Button>
-									<p style={ { margin: 0 } }>{ __( 'A note under the action.', 'newspack-plugin' ) }</p>
-								</EmptyState.Actions>
-							</EmptyState.Root>
+							<TableCardDemo />
 						</Card>
 						<Card>
 							<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>

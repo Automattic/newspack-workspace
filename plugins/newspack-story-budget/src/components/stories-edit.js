@@ -18,7 +18,7 @@ import { caution } from '@wordpress/icons';
 
 import StoryFieldControl from './story-field-control';
 import { NAMESPACE as storeNamespace } from '../store/constants';
-import { getDisplayValue } from '../utils/fields';
+import { getDisplayValue, isEmptyValue } from '../utils/fields';
 import { useFields, useStoryField } from '../hooks';
 
 const EMPTY_STRING = '';
@@ -59,7 +59,12 @@ const FieldControl = ( { field, story, onChange, disabled } ) => {
 		<VStack spacing={ 2 }>
 			<Heading level={ 5 }>{ fieldProps.name }</Heading>
 			{ fieldProps.description && <p className="newspack-story-budget__field-description">{ fieldProps.description }</p> }
-			<StoryFieldControl field={ fieldProps } value={ story[ fieldProps.slug ] || EMPTY_STRING } onChange={ onChange } disabled={ disabled } />
+			<StoryFieldControl
+				field={ fieldProps }
+				value={ isEmptyValue( story[ fieldProps.slug ] ) ? EMPTY_STRING : story[ fieldProps.slug ] }
+				onChange={ onChange }
+				disabled={ disabled }
+			/>
 		</VStack>
 	);
 };
@@ -199,7 +204,7 @@ export default ( { items, closeModal, onActionPerformed } ) => {
 							<EditFieldPanel
 								key={ field.slug }
 								field={ field }
-								value={ editedStory[ field.slug ] || EMPTY_STRING }
+								value={ isEmptyValue( editedStory[ field.slug ] ) ? EMPTY_STRING : editedStory[ field.slug ] }
 								onToggle={ handleFieldToggle( field ) }
 								initialOpen={ editedFields.includes( field.slug ) }
 								onChange={ data =>

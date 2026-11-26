@@ -112,6 +112,16 @@ abstract class Starter_Content_Provider {
 	}
 
 	/**
+	 * Whether a post is the starter homepage.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function is_starter_homepage( $post_id ) {
+		return (bool) get_post_meta( $post_id, self::$starter_homepage_meta, true );
+	}
+
+	/**
 	 * Get post ID of Xth starter post.
 	 *
 	 * @param int $post_index Index of a starter post to get.

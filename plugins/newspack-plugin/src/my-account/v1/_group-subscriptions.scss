@@ -1,3 +1,5 @@
+@use "../../newspack-ui/scss/mixins";
+
 .newspack-ui .newspack-my-account__group_subscription {
 	&__tabs {
 		margin-bottom: var(--newspack-ui-spacer-5);
@@ -11,7 +13,7 @@
 
 	// Enter animation for invite-link controls revealed after the link is created.
 	&__entering {
-		animation: newspack-group-subscription-enter 125ms ease both;
+		animation: newspack-group-subscription-enter var(--newspack-ui-duration-reveal) var(--newspack-ui-ease-out) both;
 
 		@media (prefers-reduced-motion: reduce) {
 			animation: none;
@@ -46,7 +48,7 @@
 	// Per-tab info line shown when one tab is empty but the other has content
 	// (e.g. "No pending invitations." on the Invitations tab when members exist).
 	&__panel-info {
-		color: var(--newspack-ui-color-neutral-60);
+		color: var(--newspack-ui-color-text-muted);
 		margin: var(--newspack-ui-spacer-5) 0;
 		text-align: center;
 	}
@@ -61,7 +63,7 @@
 	&__invites--actions {
 		&--manager {
 			display: none !important;
-			@media ( min-width: 768px ) {
+			@include mixins.media( tablet ) {
 				display: table-cell !important;
 				&::after {
 					content: '';

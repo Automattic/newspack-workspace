@@ -358,6 +358,30 @@ class Test_Group_Subscription_Invite_Created_Action extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A confirmed bulk list fires once per address it invites, with the `bulk` source.
+	 * The repeated address is invited once, so it fires once.
+	 */
+	public function test_bulk_invite_fires_once_per_address() {
+		$owner_id     = $this->create_user();
+		$subscription = $this->create_group_subscription( $owner_id );
+		wp_set_current_user( $owner_id );
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/invite-bulk' );
+		$request->set_param( 'subscription_id', $subscription->get_id() );
+		$request->set_param( 'emails', "bulk-one@example.test\nbulk-two@example.test\nbulk-one@example.test" );
+		$request->set_param( 'confirm', true );
+
+		Group_Subscription_API::api_invite_bulk( $request );
+
+		$this->assertSame(
+			[
+				[ $subscription->get_id(), 'bulk-one@example.test', $owner_id, 'bulk', false ],
+				[ $subscription->get_id(), 'bulk-two@example.test', $owner_id, 'bulk', false ],
+			],
+			array_column( $this->fired, 'args' )
+		);
+	}
+
+	/**
 	 * A Teams invitation that predates the migration becomes an invite when its link
 	 * is followed. It fires as `migration`, unemailed and with no inviter, since Teams'
 	 * own hook already reported it with its sender. A second click reuses the stored

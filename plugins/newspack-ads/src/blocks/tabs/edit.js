@@ -7,7 +7,7 @@ import PropTypes from 'prop-types';
 /**
  * WordPress dependencies
  */
-import { createBlock } from '@wordpress/blocks';
+import { createBlock, getBlockType } from '@wordpress/blocks';
 import { compose, ifCondition, useRefEffect } from '@wordpress/compose';
 import { useState, useEffect, useLayoutEffect, useCallback, Fragment } from '@wordpress/element';
 import { withSelect, withDispatch } from '@wordpress/data';
@@ -25,6 +25,22 @@ import './editor.scss';
 
 const FilterableTabsHeader = createFilterableComponent( 'newspack.tabs.header' );
 const FilterableTabsFooter = createFilterableComponent( 'newspack.tabs.footer' );
+
+/**
+ * Before WP 7.2, InnerBlocks only reads the template from props.
+ * Core List has a settings template from 7.2 on, so it marks support.
+ * TODO: Remove once WP 7.2 is released, and the plugin's minimum WordPress version is updated to 7.2.
+ *
+ * @param {string} name Block name.
+ * @return {Object} InnerBlocks template props, empty on WP 7.2+.
+ */
+const getLegacyTemplateProps = name => {
+	if ( getBlockType( 'core/list' )?.template ) {
+		return {};
+	}
+	const { template, templateInsertUpdatesSelection } = getBlockType( name );
+	return { template, templateInsertUpdatesSelection };
+};
 
 const TabsEdit = props => {
 	const { isSelected, clientId, block, selectBlock, insertBlock, removeBlock, activeClass = 'is-active' } = props;
@@ -212,8 +228,7 @@ const TabsEdit = props => {
 				<InnerBlocks
 					orientation="horizontal"
 					allowedBlocks={ [ 'newspack/tabs-item' ] }
-					template={ [ [ 'newspack/tabs-item', { header: '' }, [ [ 'core/paragraph', {} ] ] ] ] }
-					templateInsertUpdatesSelection
+					{ ...getLegacyTemplateProps( props.name ) }
 					__experimentalCaptureToolbars
 				/>
 			</div>

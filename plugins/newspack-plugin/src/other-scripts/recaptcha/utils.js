@@ -1,5 +1,7 @@
 /* globals jQuery, grecaptcha, newspack_recaptcha_data */
 
+import { getNoticeIcon } from '../../newspack-ui/js/icons';
+
 // The minimum continuous amount of time an element must be in the viewport before being considered visible.
 const MINIMUM_VISIBLE_TIME = 250;
 
@@ -156,6 +158,10 @@ export function addErrorMessage( form, message ) {
 		form.append( container );
 	} else {
 		container.classList.add( 'newspack-ui__notice', 'newspack-ui__notice--error' );
+		const icon = getNoticeIcon( 'error' );
+		if ( icon ) {
+			container.prepend( icon );
+		}
 		form.insertBefore( container, form.firstChild );
 	}
 }

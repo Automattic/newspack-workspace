@@ -59,15 +59,27 @@ const apcaContrast = ( backgroundY: number, textY: number ): number => {
 	return sapc > -0.1 ? 0 : ( sapc + 0.027 ) * 100;
 };
 
+export const DEFAULT_BUTTON_COLOR = '#dd3333';
+
+/**
+ * Whether a button left at the default color should render as the site's own button.
+ * Keep in sync with Newspack_Blocks::donate_button_uses_site_style().
+ */
+export const usesSiteButtonStyle = ( color: string | undefined, isBlockTheme = !! window.newspackIsBlockTheme ): boolean =>
+	isBlockTheme && ( ! color || color.toLowerCase() === DEFAULT_BUTTON_COLOR );
+
 /**
  * Pick either black or white text, whichever reads better on the given background.
  *
  * Scores pure black and pure white as text against the background and returns
- * whichever produces the greater APCA lightness contrast (Lc); ties fall to
+ * whichever reads better by APCA: the greater lightness contrast (Lc), ties to
  * black. The constants are the SA98G set from apca-w3 0.1.9.
  *
- * Keep in sync with Newspack_Blocks::get_color_for_contrast() in
- * includes/class-newspack-blocks.php.
+ * Keep in sync with: Newspack_Blocks::get_color_for_contrast() in includes/class-newspack-blocks.php,
+ * newspack_get_color_contrast() (newspack-theme), \Newspack\newspack_get_color_contrast() (newspack-plugin),
+ * getContrastColor() in contrast-color.js (packages/components), Newspack_Popups_Model::contrast_text_color()
+ * (newspack-popups) and Newspack_Listings\Curated_List_Block\contrast_text_color() (newspack-listings).
+ * The block theme's Newspack_Block_Theme\Contrast::get_text_color() makes the same pick (it leaves the property unset for unparseable input).
  */
 export const getColorForContrast = ( color?: string ): string => {
 	const blackColor = '#000000';
@@ -188,3 +200,5 @@ export const getFrequencyLabelWithAmount = ( amount: number, frequencySlug: Dona
 
 	return template.replace( 'AMOUNT_PLACEHOLDER', getFormattedAmount( amount ) ).replace( 'FREQUENCY_PLACEHOLDER', frequency );
 };
+
+export const isModernStyle = ( className?: string ) => ( className || '' ).split( /\s+/ ).includes( 'is-style-modern' );

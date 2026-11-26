@@ -36,7 +36,6 @@ describe( 'buildPushLogQuery', () => {
 				filters: [
 					{ field: 'status', operator: 'is', value: 'failed' },
 					{ field: 'operation', operator: 'is', value: 'flag' },
-					{ field: 'needs_attention', operator: 'is', value: NEEDS_ATTENTION_VALUE },
 				],
 			} )
 		);
@@ -48,8 +47,15 @@ describe( 'buildPushLogQuery', () => {
 			search: 'reader@example.test',
 			status: 'failed',
 			operation: 'flag',
-			needs_attention: true,
+			needs_attention: undefined,
 		} );
+	} );
+
+	it( 'sends "Needs attention" as its own arg, not as a status', () => {
+		const query = buildPushLogQuery( view( { filters: [ { field: 'status', operator: 'is', value: NEEDS_ATTENTION_VALUE } ] } ) );
+
+		expect( query.status ).toBeUndefined();
+		expect( query.needs_attention ).toBe( true );
 	} );
 } );
 
@@ -137,9 +143,22 @@ describe( 'getEmptyMessage', () => {
 	it( 'reads an empty "needs attention" list as what the log holds, not as an all-clear', () => {
 		// A push that sent only some fields still closes a failed one, so an
 		// empty list does not prove every reader's data reached the provider.
-		expect( getEmptyMessage( view( { filters: [ { field: 'needs_attention', operator: 'is', value: NEEDS_ATTENTION_VALUE } ] } ) ) ).toBe(
+		expect( getEmptyMessage( view( { filters: [ { field: 'status', operator: 'is', value: NEEDS_ATTENTION_VALUE } ] } ) ) ).toBe(
 			'Nothing in the log needs attention.'
 		);
+	} );
+
+	it( 'does not read an empty "needs attention" list as clear when an operation filter narrowed it', () => {
+		expect(
+			getEmptyMessage(
+				view( {
+					filters: [
+						{ field: 'status', operator: 'is', value: NEEDS_ATTENTION_VALUE },
+						{ field: 'operation', operator: 'is', value: 'delete' },
+					],
+				} )
+			)
+		).toBe( 'No pushes match these filters.' );
 	} );
 
 	it( 'says a status or operation filter matched nothing, rather than that the log is empty', () => {

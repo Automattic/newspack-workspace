@@ -36,8 +36,8 @@
 		--wp-admin-theme-color: #{wp-colors.$white};
 		--wp-components-color-accent: #{wp-colors.$white};
 		--wp-components-color-accent-inverted: #{colors.$primary-600};
-		--wp-admin-theme-color-darker-10: color-mix(in srgb, #{wp-colors.$white} 85%, #{colors.$primary-600});
-		--wp-admin-theme-color-darker-20: color-mix(in srgb, #{wp-colors.$white} 70%, #{colors.$primary-600});
+		--wp-admin-theme-color-darker-10: color-mix(in oklab, #{wp-colors.$white} 85%, #{colors.$primary-600});
+		--wp-admin-theme-color-darker-20: color-mix(in oklab, #{wp-colors.$white} 70%, #{colors.$primary-600});
 
 		display: flex;
 		flex-shrink: 0;

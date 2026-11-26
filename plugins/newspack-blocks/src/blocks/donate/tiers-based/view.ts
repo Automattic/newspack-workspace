@@ -13,7 +13,7 @@ export default ( parentEl: HTMLElement ) => {
 	if ( ! config ) {
 		return;
 	}
-	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button' );
+	const frequencyButtonsEls = parentEl.querySelectorAll( '.wpbnbd__tiers__selection button, .newspack-ui__segmented-control__tabs button' );
 	const amountsEls: NodeListOf< HTMLElement > = parentEl.querySelectorAll( '.wpbnbd__tiers__amount [data-frequency-slug]' );
 	const frequencyInputEl = parentEl.querySelector( `input[name="${ config.params.frequency }"]` );
 	const initFormEl = parentEl.querySelector( 'form[data-is-init-form]' );
@@ -46,7 +46,7 @@ export default ( parentEl: HTMLElement ) => {
 			// Toggle the frequency buttons' active states.
 			frequencyButtonsEls.forEach( el => {
 				const isActive = selectedFrequency === el.getAttribute( 'data-frequency-slug' );
-				el.classList.toggle( BUTTON_ACTIVE_CLASSNAME, isActive );
+				el.classList.toggle( el.classList.contains( 'newspack-ui__button' ) ? 'selected' : BUTTON_ACTIVE_CLASSNAME, isActive );
 				el.setAttribute( 'aria-pressed', isActive ? 'true' : 'false' );
 			} );
 

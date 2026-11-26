@@ -84,7 +84,7 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		render( <Institutions /> );
 		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
 
-		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.isDestructive );
+		const { RenderModal } = mockDataViewsProps.current.actions.find( action => action.id === 'delete' );
 		render( <RenderModal items={ [ { id: 1 } ] } closeModal={ () => {} } /> );
 
 		await act( async () => {
@@ -92,5 +92,37 @@ describe( 'Institutions list — fetched option list invalidation', () => {
 		} );
 
 		expect( mockInvalidate ).toHaveBeenCalledWith( 'institution' );
+	} );
+} );
+
+describe( 'Institutions list — address lists', () => {
+	const renderCell = async ( fieldId, meta ) => {
+		mockApiFetch.mockResolvedValue( [] );
+		render( <Institutions /> );
+		await waitFor( () => expect( mockDataViewsProps.current ).not.toBeNull() );
+		const field = mockDataViewsProps.current.fields.find( ( { id } ) => id === fieldId );
+		return render( field.render( { item: { id: 1, title: { raw: 'City Library' }, meta } } ) ).container;
+	};
+
+	it( 'shows one space after a separator saved with one', async () => {
+		const cell = await renderCell( 'email_domain', { np_institution_email_domain: 'a.edu, b.edu' } );
+
+		expect( cell.textContent ).toBe( 'a.edu, b.edu' );
+		expect( [ ...cell.querySelectorAll( '.newspack-institutions__list-item' ) ].map( item => item.textContent ) ).toEqual( [
+			'a.edu,',
+			'b.edu',
+		] );
+	} );
+
+	it( 'splits reader data on semicolons only', async () => {
+		const cell = await renderCell( 'reader_data', { np_institution_reader_data: 'org=Acme,Inc;role=staff' } );
+
+		expect( cell.textContent ).toBe( 'org=Acme,Inc; role=staff' );
+	} );
+
+	it( 'adds a space where none follows the separator', async () => {
+		const cell = await renderCell( 'ip_range', { np_institution_ip_range: '192.0.2.0/24,198.51.100.10-198.51.100.40' } );
+
+		expect( cell.textContent ).toBe( '192.0.2.0/24, 198.51.100.10-198.51.100.40' );
 	} );
 } );

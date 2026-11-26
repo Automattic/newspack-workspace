@@ -9,7 +9,7 @@
 	display: grid;
 	grid-gap: 32px;
 	grid-auto-rows: min-content;
-	grid-template-columns: 1fr;
+	grid-template-columns: minmax(0, 1fr);
 	margin: 32px 0;
 
 	// No Margin
@@ -74,7 +74,7 @@
 
 	// Columns 6
 	&__columns-6 {
-		grid-template-columns: repeat(2, 1fr);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	// Media Queries - 744px
@@ -82,7 +82,7 @@
 		&__columns-2,
 		&__columns-3,
 		&__columns-4 {
-			grid-template-columns: repeat(2, 1fr);
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 
 			> [start],
 			> [data-start] {
@@ -96,7 +96,7 @@
 		}
 
 		&__columns-6 {
-			grid-template-columns: repeat(3, 1fr);
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
 
@@ -104,12 +104,12 @@
 	@media screen and ( min-width: 1054px ) {
 		// Columns 3
 		&__columns-3 {
-			grid-template-columns: repeat(3, 1fr);
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 
 		// Columns 4
 		&__columns-4 {
-			grid-template-columns: repeat(4, 1fr);
+			grid-template-columns: repeat(4, minmax(0, 1fr));
 
 			// Positioning is keyed off `data-` attributes because the emotion-styled
 			// components in newer `@wordpress/components` filter props through
@@ -137,12 +137,12 @@
 
 		// Columns 6
 		&__columns-6 {
-			grid-template-columns: repeat(6, 1fr);
+			grid-template-columns: repeat(6, minmax(0, 1fr));
 		}
 
 		// Columns 12
 		&__columns-12 {
-			grid-template-columns: repeat(12, 1fr);
+			grid-template-columns: repeat(12, minmax(0, 1fr));
 		}
 	}
 

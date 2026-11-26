@@ -58,8 +58,8 @@ import {
 	Grid,
 	IntegrationIcon,
 	PluginInstaller,
-	SectionHeader,
 	SelectControl,
+	SplitSection,
 	TextControl,
 	Waiting,
 	espProviderOrder,
@@ -250,7 +250,7 @@ export const Settings = ( {
 				);
 			}
 			case 'select':
-				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } />;
+				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } help={ config.settings[ setting.key ]?.help } />;
 			case 'checkbox': {
 				const props = getSettingProps( setting.key );
 				return (
@@ -319,7 +319,7 @@ export const Settings = ( {
 		);
 
 	const renderProviderControls = () => (
-		<VStack spacing={ 6 } className="newspack-newsletters-settings-stack">
+		<>
 			{ error && (
 				<WpNotice status="error" isDismissible={ false }>
 					{ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) }
@@ -352,10 +352,10 @@ export const Settings = ( {
 						) ) }
 					</Grid>
 					{ selectedProviderValue && (
-						<VStack spacing={ 4 } className="newspack-newsletters-settings-stack">
+						<>
 							{ selectedProviderValue === 'constant_contact' && renderAuthorizeBlock() }
 							{ espSettings.filter( s => s.provider === selectedProviderValue ).map( renderSettingControl ) }
-						</VStack>
+						</>
 					) }
 				</>
 			) }
@@ -366,7 +366,7 @@ export const Settings = ( {
 					</Button>
 				</HStack>
 			) }
-		</VStack>
+		</>
 	);
 
 	if ( ! error && isEmpty( config ) ) {
@@ -388,35 +388,33 @@ export const Settings = ( {
 			) }
 			{ config.configured === true &&
 				( isOnboarding ? (
-					renderProviderControls()
+					<VStack spacing={ 6 } className="newspack-newsletters-settings-stack">
+						{ renderProviderControls() }
+					</VStack>
 				) : (
 					<>
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader
-								heading={ 2 }
+						<SplitSection.Root>
+							<SplitSection.Header
 								title={ __( 'Email Service Provider', 'newspack-plugin' ) }
 								description={ __( 'Connect an email service provider (ESP) to author and send newsletters.', 'newspack-plugin' ) }
-								noMargin
 							/>
-							{ renderProviderControls() }
-						</Grid>
+							<SplitSection.Content className="newspack-newsletters-settings-stack">{ renderProviderControls() }</SplitSection.Content>
+						</SplitSection.Root>
 						{ postSettings.length > 0 && (
 							<>
 								<Divider alignment="full-width" variant="tertiary" />
-								<Grid columns={ 2 } gutter={ 32 } noMargin>
-									<SectionHeader
-										heading={ 2 }
+								<SplitSection.Root>
+									<SplitSection.Header
 										title={ __( 'Newsletter posts', 'newspack-plugin' ) }
 										description={ __(
 											'Settings for how published newsletters appear as posts on your site.',
 											'newspack-plugin'
 										) }
-										noMargin
 									/>
-									<VStack spacing={ 4 } className="newspack-newsletters-settings-stack">
+									<SplitSection.Content className="newspack-newsletters-settings-stack">
 										{ postSettings.map( renderSettingControl ) }
-									</VStack>
-								</Grid>
+									</SplitSection.Content>
+								</SplitSection.Root>
 							</>
 						) }
 					</>
@@ -667,14 +665,12 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 	return (
 		<>
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Subscription lists', 'newspack-plugin' ) }
 					description={ __( 'Manage the lists available to readers for subscription.', 'newspack-plugin' ) }
-					noMargin
 				/>
-				<VStack spacing={ 4 } className="newspack-newsletters-settings-stack">
+				<SplitSection.Content className="newspack-newsletters-settings-stack">
 					{ lockedLists && (
 						<WpNotice status="warning" isDismissible={ false }>
 							{ __( 'Please save your ESP settings before changing your subscription lists.', 'newspack-plugin' ) }
@@ -773,8 +769,8 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 							</VStack>
 						</>
 					) }
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 		</>
 	);
 };
@@ -903,14 +899,12 @@ const NewslettersSettings = () => {
 			{ letterheadSetting && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ __( 'Letterhead', 'newspack-plugin' ) }
 							description={ __( 'Connect Letterhead to insert promotions into your newsletters.', 'newspack-plugin' ) }
-							noMargin
 						/>
-						<VStack spacing={ 4 } className="newspack-newsletters-settings-stack">
+						<SplitSection.Content className="newspack-newsletters-settings-stack">
 							<VStack spacing={ 2 }>
 								<TextControl
 									label={ letterheadSetting.description }
@@ -925,8 +919,8 @@ const NewslettersSettings = () => {
 									</p>
 								) }
 							</VStack>
-						</VStack>
-					</Grid>
+						</SplitSection.Content>
+					</SplitSection.Root>
 				</>
 			) }
 		</>

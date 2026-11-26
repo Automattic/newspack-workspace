@@ -31,6 +31,35 @@ class RSS {
 	const FEED_RESTRICTION_INHERIT = '';
 
 	/**
+	 * Post meta holding the timestamp of a feed's last recorded fetch.
+	 *
+	 * Refreshed at most once a day, so a fetch is a database write once per
+	 * feed per day rather than once per request. Feeds are anonymous traffic,
+	 * and a per-request write would be a view counter.
+	 */
+	const FEED_LAST_FETCHED_META = 'partner_feed_last_fetched';
+
+	/**
+	 * Option holding when usage tracking started on this site. A feed nobody
+	 * has fetched is "not in use" only once tracking has run for a full window.
+	 */
+	const USAGE_TRACKING_START_OPTION = 'newspack_rss_usage_tracking_start';
+
+	/**
+	 * How long a feed counts as in use after its last recorded fetch. Twice the
+	 * refresh interval, so a feed fetched every day never drops out.
+	 */
+	const FEED_IN_USE_WINDOW = 2 * DAY_IN_SECONDS;
+
+	/**
+	 * Feed usage statuses, from get_feed_usage().
+	 */
+	const FEED_USAGE_IN_USE            = 'in_use';
+	const FEED_USAGE_NOT_RECENTLY_USED = 'not_recently_used';
+	const FEED_USAGE_NOT_IN_USE        = 'not_in_use';
+	const FEED_USAGE_UNKNOWN           = 'unknown';
+
+	/**
 	 * Resolved restriction override per requested feed slug, for this request.
 	 *
 	 * @var array<string,string>
@@ -51,11 +80,13 @@ class RSS {
 		add_action( 'save_post_' . self::FEED_CPT, [ __CLASS__, 'save_settings' ] );
 		add_filter( 'manage_' . self::FEED_CPT . '_posts_columns', [ __CLASS__, 'columns_head' ] );
 		add_action( 'manage_' . self::FEED_CPT . '_posts_custom_column', [ __CLASS__, 'column_content' ], 10, 2 );
+		add_action( 'admin_notices', [ __CLASS__, 'render_usage_help' ] );
 		add_action( 'wp_ajax_newspack_rss_search_terms', [ __CLASS__, 'ajax_search_terms' ] );
 
 		// Frontend.
 		add_filter( 'option_rss_use_excerpt', [ __CLASS__, 'filter_use_rss_excerpt' ] );
 		add_action( 'pre_get_posts', [ __CLASS__, 'modify_feed_query' ] );
+		add_filter( 'wp_headers', [ __CLASS__, 'record_feed_fetch' ] );
 		add_action( 'rss2_item', [ __CLASS__, 'add_extra_tags' ] );
 		add_action( 'atom_entry', [ __CLASS__, 'add_extra_tags' ] );
 		add_filter( 'the_excerpt_rss', [ __CLASS__, 'maybe_remove_content_featured_image' ], 1 );
@@ -264,10 +295,9 @@ class RSS {
 	 * the query arg. The `partner-feed` arg cannot change mid-request, so one
 	 * lookup answers for all of them.
 	 *
-	 * Only a published feed is honoured. get_page_by_path() matches on slug and
-	 * post type alone, so a draft or trashed feed resolves like any other — and
-	 * an override is the one partner-feed setting that can switch the paywall
-	 * off, which must not be reachable from a post nobody has published.
+	 * Only a published feed is honoured: an override is the one partner-feed
+	 * setting that can switch the paywall off, which must not be reachable from
+	 * a post nobody has published.
 	 *
 	 * @return string One of the overridable modes, or FEED_RESTRICTION_INHERIT.
 	 */
@@ -281,14 +311,31 @@ class RSS {
 		}
 
 		$override  = self::FEED_RESTRICTION_INHERIT;
-		$feed_post = get_page_by_path( sanitize_text_field( $query_feed ), OBJECT, self::FEED_CPT ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_page_by_path_get_page_by_path
-		if ( $feed_post && 'publish' === $feed_post->post_status ) {
+		$feed_post = self::get_published_feed_post( $query_feed );
+		if ( $feed_post ) {
 			$settings = self::get_feed_settings( $feed_post );
 			$override = self::normalize_stored_restriction_mode( $settings[ self::FEED_RESTRICTION_SETTING ] ?? null );
 		}
 
 		self::$restriction_override_cache[ $query_feed ] = $override;
 		return $override;
+	}
+
+	/**
+	 * The published partner feed with the given slug.
+	 *
+	 * Without the status check a draft or trashed feed would resolve like a
+	 * published one, since get_page_by_path() matches on slug and post type alone.
+	 *
+	 * @param string $feed_slug Feed slug, as requested in the `partner-feed` arg.
+	 * @return \WP_Post|null The feed post, or null when no published feed has that slug.
+	 */
+	private static function get_published_feed_post( string $feed_slug ): ?\WP_Post {
+		$feed_post = get_page_by_path( sanitize_text_field( $feed_slug ), OBJECT, self::FEED_CPT ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.get_page_by_path_get_page_by_path
+		if ( ! $feed_post || 'publish' !== $feed_post->post_status ) {
+			return null;
+		}
+		return $feed_post;
 	}
 
 	/**
@@ -429,8 +476,119 @@ class RSS {
 	 * @return array Modified $columns.
 	 */
 	public static function columns_head( $columns ) {
-		$columns['feed_url'] = __( 'Feed URLs', 'newspack-plugin' );
+		$columns['feed_url']   = __( 'Feed URLs', 'newspack-plugin' );
+		$columns['feed_usage'] = __( 'Usage', 'newspack-plugin' );
 		return $columns;
+	}
+
+	/**
+	 * Explain the Usage column above the RSS Feeds list. Without it, "not in
+	 * use" reads as a verdict, though a feed polled less often than the window
+	 * shows that way too.
+	 */
+	public static function render_usage_help() {
+		$screen = get_current_screen();
+		if ( ! $screen || 'edit-' . self::FEED_CPT !== $screen->id ) {
+			return;
+		}
+		$window_hours = self::FEED_IN_USE_WINDOW / HOUR_IN_SECONDS;
+		?>
+		<div class="notice notice-info">
+			<p>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %d: number of hours. */
+						_n(
+							'Usage shows whether any app or service fetched a feed in the last %d hour. A feed checked less often shows as not recently used, so check its last fetch date before you remove it.',
+							'Usage shows whether any app or service fetched a feed in the last %d hours. A feed checked less often shows as not recently used, so check its last fetch date before you remove it.',
+							$window_hours,
+							'newspack-plugin'
+						),
+						$window_hours
+					)
+				);
+				?>
+			</p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Record that a published partner feed was fetched, at most once a day.
+	 *
+	 * Runs on `wp_headers` because core answers a conditional request for an
+	 * unchanged feed with a 304 and exits before `template_redirect`. Feed
+	 * readers send those headers, so a later hook would miss a feed that is
+	 * polled often but rarely gets new items.
+	 *
+	 * The host caches feeds, so only requests that miss the cache reach this.
+	 * That is enough for in use / not in use: a feed anyone polls misses the
+	 * cache at least once a day. It is not enough for a request count.
+	 *
+	 * Any client counts, crawlers included, except a user who can edit feeds:
+	 * a publisher opening the feed URL to check it must not mark it in use.
+	 *
+	 * @param array $headers Response headers, returned unchanged.
+	 * @return array
+	 */
+	public static function record_feed_fetch( $headers ) {
+		if ( ! is_feed() || Capabilities::current_user_can( 'edit_posts', self::FEED_CPT ) ) {
+			return $headers;
+		}
+		$query_feed = filter_input( INPUT_GET, self::FEED_QUERY_ARG, FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		$feed_post  = $query_feed ? self::get_published_feed_post( $query_feed ) : null;
+		if ( ! $feed_post ) {
+			return $headers;
+		}
+		$last_fetched = (int) get_post_meta( $feed_post->ID, self::FEED_LAST_FETCHED_META, true );
+		if ( time() - $last_fetched >= DAY_IN_SECONDS ) {
+			update_post_meta( $feed_post->ID, self::FEED_LAST_FETCHED_META, time() );
+		}
+		return $headers;
+	}
+
+	/**
+	 * Whether a feed is in use, from its last recorded fetch.
+	 *
+	 * @param int $feed_post_id Feed post ID.
+	 * @return array{status: string, last_fetched: int} One of the FEED_USAGE_*
+	 *               statuses, and the last recorded fetch (0 when there is none).
+	 *               The timestamp is accurate to a day.
+	 */
+	public static function get_feed_usage( int $feed_post_id ): array {
+		$last_fetched = (int) get_post_meta( $feed_post_id, self::FEED_LAST_FETCHED_META, true );
+		if ( ! $last_fetched ) {
+			// Tracking can't have seen a feed before it was published.
+			$tracked_since = max( self::get_usage_tracking_start(), (int) get_post_time( 'U', true, $feed_post_id ) );
+			$status        = time() - $tracked_since < self::FEED_IN_USE_WINDOW ? self::FEED_USAGE_UNKNOWN : self::FEED_USAGE_NOT_IN_USE;
+		} elseif ( time() - $last_fetched < self::FEED_IN_USE_WINDOW ) {
+			$status = self::FEED_USAGE_IN_USE;
+		} else {
+			$status = self::FEED_USAGE_NOT_RECENTLY_USED;
+		}
+		return [
+			'status'       => $status,
+			'last_fetched' => $last_fetched,
+		];
+	}
+
+	/**
+	 * When usage tracking started, stored the first time anyone asks.
+	 *
+	 * Only the admin list asks, so the first view after deploy sets it. That
+	 * can be later than tracking really began, which only delays a "not in
+	 * use" verdict, never makes one wrong.
+	 *
+	 * @return int Timestamp.
+	 */
+	private static function get_usage_tracking_start(): int {
+		$tracking_start = (int) get_option( self::USAGE_TRACKING_START_OPTION );
+		if ( ! $tracking_start ) {
+			$tracking_start = time();
+			add_option( self::USAGE_TRACKING_START_OPTION, $tracking_start, '', false );
+		}
+		return $tracking_start;
 	}
 
 	/**
@@ -457,6 +615,36 @@ class RSS {
 					<?php echo esc_url( $atom_feed_url ); ?>
 				</a>
 			</span>
+			<?php
+		}
+		if ( 'feed_usage' === $column_name ) {
+			$usage = self::get_feed_usage( $post_id );
+			if ( self::FEED_USAGE_IN_USE === $usage['status'] ) {
+				$window_hours = self::FEED_IN_USE_WINDOW / HOUR_IN_SECONDS;
+				$label        = __( 'In use', 'newspack-plugin' );
+				$description  = sprintf(
+					/* translators: %d: number of hours. */
+					_n( 'Fetched in the last %d hour.', 'Fetched in the last %d hours.', $window_hours, 'newspack-plugin' ),
+					$window_hours
+				);
+			} elseif ( self::FEED_USAGE_NOT_RECENTLY_USED === $usage['status'] ) {
+				$label       = __( 'Not recently used', 'newspack-plugin' );
+				$description = sprintf(
+					/* translators: %s: date the feed was last fetched. */
+					__( 'Last fetched around %s.', 'newspack-plugin' ),
+					wp_date( get_option( 'date_format' ), $usage['last_fetched'] )
+				);
+			} elseif ( self::FEED_USAGE_NOT_IN_USE === $usage['status'] ) {
+				$label       = __( 'Not in use', 'newspack-plugin' );
+				$description = __( 'Never fetched.', 'newspack-plugin' );
+			} else {
+				$label       = __( 'No data yet', 'newspack-plugin' );
+				$description = __( 'No fetches recorded yet.', 'newspack-plugin' );
+			}
+			?>
+			<strong><?php echo esc_html( $label ); ?></strong>
+			<br />
+			<span class="description"><?php echo esc_html( $description ); ?></span>
 			<?php
 		}
 	}

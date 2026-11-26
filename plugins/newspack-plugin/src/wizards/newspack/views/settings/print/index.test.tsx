@@ -85,7 +85,7 @@ describe( 'when InDesign export is off', () => {
 	it( 'offers the empty state instead of the settings', async () => {
 		await renderPrint();
 
-		expect( screen.getByText( 'Export articles to Adobe InDesign' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'InDesign export is off' ) ).toBeInTheDocument();
 		expect( screen.queryByLabelText( 'Platform' ) ).not.toBeInTheDocument();
 	} );
 
@@ -203,7 +203,7 @@ describe( 'when InDesign export is on', () => {
 		} );
 
 		expect( lastPost() ).toEqual( { module_enabled_print: false } );
-		expect( screen.getByText( 'Export articles to Adobe InDesign' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'InDesign export is off' ) ).toBeInTheDocument();
 		expect( headerActions() ).toHaveLength( 0 );
 	} );
 
@@ -237,7 +237,7 @@ describe( 'when InDesign export is on', () => {
 			fireEvent.click( screen.getByRole( 'button', { name: 'Disable' } ) );
 		} );
 
-		const emptyState = screen.getByText( 'Export articles to Adobe InDesign' );
+		const emptyState = screen.getByText( 'InDesign export is off' );
 		const { activeElement } = emptyState.ownerDocument;
 		expect( activeElement ).toHaveClass( 'newspack-wizard__sections' );
 	} );

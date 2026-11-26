@@ -180,6 +180,11 @@ type ContentGiftingConfig = {
 	expiration_time?: number;
 	expiration_time_unit?: string;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_type?: string;
@@ -192,6 +197,11 @@ type MeteringCountdownConfig = {
 	// and writes should stay int-shaped to keep dirty checks honest.
 	enabled?: boolean | number;
 	style?: string;
+	bg_color?: string;
+	button_color?: string;
+	text_color?: string;
+	button_text_color?: string;
+	shadow?: boolean | number;
 	cta_label?: string;
 	button_label?: string;
 	cta_url?: string;
@@ -210,6 +220,7 @@ type AdvancedSettingsConfig = {
 	comment_restriction_gate_id: number;
 	comment_restriction_message: string;
 	comment_restriction_purchase_url: string;
+	comment_require_full_name: boolean;
 };
 
 type GateSettings = {
@@ -257,8 +268,5 @@ type Institution = {
 		np_institution_email_domain: string;
 		np_institution_ip_range: string;
 		np_institution_reader_data: string;
-	};
-	_embedded?: {
-		'wp:featuredmedia'?: Array<{ source_url: string }>;
 	};
 };

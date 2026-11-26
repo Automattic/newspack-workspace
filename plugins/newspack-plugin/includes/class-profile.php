@@ -42,7 +42,7 @@ class Profile {
 			],
 			[
 				'key'         => 'twitter_site',
-				'label'       => __( 'Twitter', 'newspack' ),
+				'label'       => 'X',
 				'placeholder' => __( 'username', 'newspack' ),
 			],
 			[
@@ -52,7 +52,7 @@ class Profile {
 			],
 			[
 				'key'         => 'linkedin_url',
-				'label'       => 'Linkedin',
+				'label'       => 'LinkedIn',
 				'placeholder' => __( 'https://linkedin.com/user', 'newspack' ),
 			],
 			[
@@ -75,7 +75,13 @@ class Profile {
 		$site_icon                = get_site_icon_url();
 		$wc_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'woocommerce' );
 		$wc_location_data         = $wc_configuration_manager->location_data();
-		$profile_fields           = [
+		if ( '' === $wc_location_data['countrystate'] ) {
+			$wc_location_data['countrystate'] = get_option( 'woocommerce_default_country', '' );
+		}
+		if ( '' === $wc_location_data['currency'] ) {
+			$wc_location_data['currency'] = get_option( 'woocommerce_currency', '' );
+		}
+		$profile_fields = [
 			[
 				'name'    => 'site_icon',
 				'value'   => ! empty( $site_icon ) ? [
@@ -190,10 +196,15 @@ class Profile {
 	 */
 	public function api_get_profile( $request ) {
 		$response = [
-			'profile'      => $this->newspack_get_profile(),
-			'currencies'   => newspack_get_currencies_options(),
-			'countries'    => newspack_get_countries(),
-			'wpseo_fields' => self::get_wpseo_fields(),
+			'profile'        => $this->newspack_get_profile(),
+			'currencies'     => newspack_get_currencies_options(),
+			'countries'      => newspack_get_countries(),
+			'wpseo_fields'   => self::get_wpseo_fields(),
+			'location_hints' => [
+				'site_locale'        => get_locale(),
+				'country_currencies' => newspack_get_country_currencies(),
+				'imported_currency'  => (string) get_option( Starter_Content::IMPORTED_CURRENCY_OPTION, '' ),
+			],
 		];
 		return rest_ensure_response( $response );
 	}

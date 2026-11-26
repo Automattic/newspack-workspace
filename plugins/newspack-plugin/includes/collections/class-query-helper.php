@@ -94,7 +94,9 @@ class Query_Helper {
 		 * @param array  $category_years    Array of years.
 		 * @param string $selected_category Selected category slug.
 		 */
-		return apply_filters( 'newspack_collections_available_years', (array) $category_years, $selected_category );
+		$category_years = apply_filters( 'newspack_collections_available_years', (array) $category_years, $selected_category );
+
+		return is_array( $category_years ) ? $category_years : [];
 	}
 
 	/**
