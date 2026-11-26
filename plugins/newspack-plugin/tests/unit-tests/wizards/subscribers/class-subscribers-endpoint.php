@@ -220,9 +220,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	private function create_individual_subscription( int $owner_id, string $status = 'active', int $product_id = 0 ): WC_Subscription {
 		$data = [
-			'customer_id'    => $owner_id,
-			'status'         => $status,
-			'billing_period' => 'month',
+			'customer_id'      => $owner_id,
+			'status'           => $status,
+			'billing_period'   => 'month',
+			'billing_interval' => 1,
 		];
 		if ( $product_id ) {
 			$data['products'] = [ $product_id ];
@@ -691,6 +692,33 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A failed checkout trashes its pending subscription, and
+	 * wcs_get_users_subscriptions() still returns it. The row, the profile and the
+	 * status filter must all leave it out, or it shows as an extra On hold plan
+	 * whose edit link WordPress refuses. A trashed group the reader owns is left
+	 * out the same way.
+	 */
+	public function test_a_trashed_subscription_is_not_on_its_readers_row_or_profile() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'FailedCheckout' );
+		$pending   = $this->create_individual_subscription( $reader_id, 'pending' );
+		$this->create_individual_subscription( $reader_id, 'trash' );
+		$this->create_group_subscription( $reader_id, 5, 'trash' );
+
+		$row = $this->dispatch()->get_data()['items'][0];
+		$this->assertSame( [ $pending->get_id() ], array_column( $row['subscriptions'], 'id' ) );
+		$this->assertSame( [], $row['groups'] );
+		$this->assertSame( 'pending', $row['status'] );
+
+		$profile = rest_get_server()->dispatch( new WP_REST_Request( 'GET', self::ROUTE . '/' . $reader_id ) )->get_data();
+		$this->assertSame( [ $pending->get_id() ], array_column( $profile['subscriptions'], 'id' ) );
+		$this->assertSame( [], $profile['groups'] );
+		$this->assertSame( 'pending', $profile['status'] );
+
+		$this->assertSame( [], $this->filtered_ids( [ 'status' => [ 'on-hold' ] ] ), 'A trashed subscription must not match the On hold filter.' );
+	}
+
+	/**
 	 * A plain individual subscription is hydrated into `subscriptions` with its
 	 * mapped status, and does not appear as a group.
 	 */
@@ -749,6 +777,26 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 		$this->assertSame( 'Fan Membership (Node Daily)', $items[0]['subscriptions'][0]['plan'] );
 		$this->assertSame( 'Fan Membership', $items[0]['subscriptions'][0]['planName'], 'The bare plan name travels too, so the row can name the site outside the plan link.' );
 		$this->assertSame( 'Node Daily', $items[0]['subscriptions'][0]['managedOn']['name'] );
+	}
+
+	/**
+	 * A failed checkout on another network site trashes that site's subscription, and
+	 * the hub records the trash status. The row and the On hold filter leave it out,
+	 * as they do a trashed subscription on this site.
+	 */
+	public function test_a_subscription_trashed_on_another_network_site_is_left_out() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'TrashedElsewhere' );
+		$trashed   = $this->network_index_row( $reader_id, 'trash', 'Fan Membership' );
+		$for_user  = fn( $existing, $user_id ) => (int) $user_id === $reader_id ? [ $trashed ] : $existing;
+		add_filter( 'newspack_subscribers_network_subscriptions', $for_user, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $for_user ];
+		$this->stub_network_index( [ $trashed ] );
+
+		$row = $this->dispatch()->get_data()['items'][0];
+		$this->assertSame( [], $row['subscriptions'] );
+		$this->assertSame( '', $row['status'] );
+		$this->assertSame( [], $this->filtered_ids( [ 'status' => [ 'on-hold' ] ] ) );
 	}
 
 	/**

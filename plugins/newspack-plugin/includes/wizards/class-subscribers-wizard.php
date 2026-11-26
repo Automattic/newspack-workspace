@@ -55,6 +55,14 @@ class Subscribers_Wizard extends Wizard {
 	const MANAGED_ON_THIS_SITE = 'this-site';
 
 	/**
+	 * Subscription statuses the screen treats as no subscription at all. A failed
+	 * checkout trashes its pending subscription, and wcs_get_users_subscriptions()
+	 * still returns it. Subscribers_Index builds its SQL filters from this list too,
+	 * so the rows, the profile and the filters agree.
+	 */
+	const UNLISTED_STATUSES = [ 'trash', 'draft', 'auto-draft' ];
+
+	/**
 	 * Upper bound on the number of avatars one /avatars request resolves. A single
 	 * list page needs at most `per_page` (≤100); the client batches larger sets.
 	 */
@@ -491,6 +499,17 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * Whether the screen shows a subscription at all. See UNLISTED_STATUSES.
+	 *
+	 * @param mixed $subscription A subscription, or anything a filter on the reader's subscription list returned.
+	 *
+	 * @return bool
+	 */
+	private static function is_listed( $subscription ): bool {
+		return $subscription instanceof \WC_Subscription && ! in_array( $subscription->get_status(), self::UNLISTED_STATUSES, true );
+	}
+
+	/**
 	 * GET one page of the site's group subscriptions, hydrated for the admin group list.
 	 *
 	 * The list is server-paginated: Subscribers_Index filters, searches,
@@ -829,9 +848,10 @@ class Subscribers_Wizard extends Wizard {
 		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
 			? Group_Subscription_Settings::get_subscription_settings( $subscription )
 			: [];
-		// A subscription that isn't group-enabled is not a group. 404 rather than a
-		// half-populated payload the detail screen would render as an empty group.
-		if ( ! $subscription || empty( $settings['enabled'] ) ) {
+		// A subscription that isn't group-enabled is not a group, and a trashed one is
+		// off the Teams tab. 404 rather than a half-populated payload the detail
+		// screen would render as an empty group.
+		if ( ! $subscription || empty( $settings['enabled'] ) || ! self::is_listed( $subscription ) ) {
 			return new \WP_Error(
 				'newspack_subscribers_group_not_found',
 				sprintf(
@@ -1616,7 +1636,10 @@ class Subscribers_Wizard extends Wizard {
 		$user_id = (int) $user->ID;
 		// Resolve the user's own subscriptions once and reuse them, so hydration
 		// doesn't fetch the same list twice per row.
-		$owned_subscriptions = function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [];
+		$owned_subscriptions = array_filter(
+			function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [],
+			[ __CLASS__, 'is_listed' ]
+		);
 		// Subscriptions managed on other network sites follow the local ones, so the
 		// status badge, the Subscription column and the profile cards all see them
 		// through the one array.
@@ -1875,7 +1898,8 @@ class Subscribers_Wizard extends Wizard {
 	 * lets a plan label on a row filter back to the reader who holds it.
 	 *
 	 * A record needs a positive numeric `id`, a `site_name` with something in it once
-	 * trimmed, and a non-empty string `status`. A missing `plan` reads as empty.
+	 * trimmed, and a non-empty string `status` outside UNLISTED_STATUSES. A missing
+	 * `plan` reads as empty.
 	 *
 	 * @param mixed $record One record from the network filters.
 	 *
@@ -1895,7 +1919,9 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		$status = $record['status'] ?? null;
-		if ( ! is_string( $status ) || '' === $status ) {
+		// A failed checkout on the other site trashes its subscription, and the record
+		// carries that status. It counts no more than a trashed subscription here.
+		if ( ! is_string( $status ) || '' === $status || in_array( $status, self::UNLISTED_STATUSES, true ) ) {
 			return null;
 		}
 		$plan      = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
@@ -2148,15 +2174,17 @@ class Subscribers_Wizard extends Wizard {
 				foreach ( array_map( 'absint', (array) get_user_meta( $user_id, $meta_key, false ) ) as $subscription_id ) {
 					if ( $subscription_id && ! isset( $subscriptions[ $subscription_id ] ) ) {
 						$subscription = \wcs_get_subscription( $subscription_id );
-						// Member and manager meta outlives a trashed group; the Teams tab
-						// and the filters leave those statuses out, so the row does too.
-						if ( $subscription && ! in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ) {
+						if ( $subscription ) {
 							$subscriptions[ $subscription_id ] = $subscription;
 						}
 					}
 				}
 			}
 		}
+		// Member and manager meta outlives a trashed group, and the profile's
+		// lookups return it. The Teams tab and the filters leave it out, so the
+		// row and the profile do too.
+		$subscriptions = array_filter( $subscriptions, [ __CLASS__, 'is_listed' ] );
 
 		$out = [];
 		foreach ( $subscriptions as $subscription ) {
