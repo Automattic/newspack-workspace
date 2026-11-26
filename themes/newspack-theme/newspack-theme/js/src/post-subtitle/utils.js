@@ -101,7 +101,7 @@ const renderSubtitle = () => {
 	renderScheduled = false;
 
 	// The post editor canvas is normally an iframe; fall back to the outer document when it isn't.
-	// TODO: Remove the `document` fallback once WordPress no longer renders a non-iframed post editor.
+	// TODO: Remove the `document` fallback once the theme requires WordPress 7.1+, which always iframes the post editor.
 	const editorCanvas = document.querySelector( 'iframe[name="editor-canvas"]' );
 	const doc = ( editorCanvas && editorCanvas.contentDocument ) || document;
 
