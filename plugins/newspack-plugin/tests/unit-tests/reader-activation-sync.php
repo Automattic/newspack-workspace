@@ -769,7 +769,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$reflection->setAccessible( true );
 
 		$cases = [
-			'Member Exists'    => 'transient',
+			'Member Exists'                       => 'transient',
 			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'transient',
 			'neil@example.com was permanently deleted and cannot be re-imported.' => 'benign',
 			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
@@ -783,7 +783,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'Authorization Failure: User does not have access to the requested operation.' => 'permanent_config',
 			'Invalid MailChimp API key supplied.' => 'permanent_config',
 			'Resource Not Found: The requested resource could not be found.' => 'transient',
-			'Payment Required' => 'transient',
+			'Payment Required'                    => 'transient',
 			'ActiveCampaign REST returned status 402 for /api/3/contact/sync.' => 'transient',
 		];
 
