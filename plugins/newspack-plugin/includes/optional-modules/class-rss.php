@@ -54,9 +54,10 @@ class RSS {
 	/**
 	 * Feed usage statuses, from get_feed_usage().
 	 */
-	const FEED_USAGE_IN_USE     = 'in_use';
-	const FEED_USAGE_NOT_IN_USE = 'not_in_use';
-	const FEED_USAGE_UNKNOWN    = 'unknown';
+	const FEED_USAGE_IN_USE            = 'in_use';
+	const FEED_USAGE_NOT_RECENTLY_USED = 'not_recently_used';
+	const FEED_USAGE_NOT_IN_USE        = 'not_in_use';
+	const FEED_USAGE_UNKNOWN           = 'unknown';
 
 	/**
 	 * Resolved restriction override per requested feed slug, for this request.
@@ -499,8 +500,8 @@ class RSS {
 					sprintf(
 						/* translators: %d: number of hours. */
 						_n(
-							'Usage shows whether any app or service fetched a feed in the last %d hour. A feed checked less often shows as not in use, so check its last fetch date before you remove it.',
-							'Usage shows whether any app or service fetched a feed in the last %d hours. A feed checked less often shows as not in use, so check its last fetch date before you remove it.',
+							'Usage shows whether any app or service fetched a feed in the last %d hour. A feed checked less often shows as not recently used, so check its last fetch date before you remove it.',
+							'Usage shows whether any app or service fetched a feed in the last %d hours. A feed checked less often shows as not recently used, so check its last fetch date before you remove it.',
 							$window_hours,
 							'newspack-plugin'
 						),
@@ -564,7 +565,7 @@ class RSS {
 		} elseif ( time() - $last_fetched < self::FEED_IN_USE_WINDOW ) {
 			$status = self::FEED_USAGE_IN_USE;
 		} else {
-			$status = self::FEED_USAGE_NOT_IN_USE;
+			$status = self::FEED_USAGE_NOT_RECENTLY_USED;
 		}
 		return [
 			'status'       => $status,
@@ -626,15 +627,16 @@ class RSS {
 					_n( 'Fetched in the last %d hour.', 'Fetched in the last %d hours.', $window_hours, 'newspack-plugin' ),
 					$window_hours
 				);
+			} elseif ( self::FEED_USAGE_NOT_RECENTLY_USED === $usage['status'] ) {
+				$label       = __( 'Not recently used', 'newspack-plugin' );
+				$description = sprintf(
+					/* translators: %s: date the feed was last fetched. */
+					__( 'Last fetched around %s.', 'newspack-plugin' ),
+					wp_date( get_option( 'date_format' ), $usage['last_fetched'] )
+				);
 			} elseif ( self::FEED_USAGE_NOT_IN_USE === $usage['status'] ) {
 				$label       = __( 'Not in use', 'newspack-plugin' );
-				$description = $usage['last_fetched']
-					? sprintf(
-						/* translators: %s: date the feed was last fetched. */
-						__( 'Last fetched around %s.', 'newspack-plugin' ),
-						wp_date( get_option( 'date_format' ), $usage['last_fetched'] )
-					)
-					: __( 'No fetches recorded.', 'newspack-plugin' );
+				$description = __( 'Never fetched.', 'newspack-plugin' );
 			} else {
 				$label       = __( 'No data yet', 'newspack-plugin' );
 				$description = __( 'No fetches recorded yet.', 'newspack-plugin' );

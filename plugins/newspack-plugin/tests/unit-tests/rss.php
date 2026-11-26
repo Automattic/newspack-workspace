@@ -1302,7 +1302,7 @@ class Newspack_Test_RSS extends WP_UnitTestCase {
 
 		$this->set_last_fetched_hours_ago( 49 );
 		$usage = RSS::get_feed_usage( $this->feed_post_id );
-		$this->assertSame( RSS::FEED_USAGE_NOT_IN_USE, $usage['status'] );
+		$this->assertSame( RSS::FEED_USAGE_NOT_RECENTLY_USED, $usage['status'] );
 		$this->assertEqualsWithDelta( time() - 49 * HOUR_IN_SECONDS, $usage['last_fetched'], 5 );
 	}
 
