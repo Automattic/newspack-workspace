@@ -125,17 +125,28 @@ function IncomingPost() {
 					} );
 				} );
 		} else {
-			toggleUnlinkedState( _unlinked ).then( async data => {
-				if ( ! data ) {
-					setIsUnLinkedToggling( false );
-					return;
-				}
-				// Save edits made while linked, so the reload doesn't prompt to discard them.
-				if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
-					await wp.data.dispatch( 'core/editor' ).savePost();
-				}
-				window.location.reload();
-			} );
+			toggleUnlinkedState( _unlinked )
+				.then( data => {
+					if ( ! data ) {
+						setIsUnLinkedToggling( false );
+						return;
+					}
+					// Unsaved edits stay the editor's to save or discard, so leave the reload to them.
+					if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
+						setIsUnLinkedToggling( false );
+						createNotice(
+							'info',
+							__(
+								'Reload the page to edit the excerpt, discussion and featured image. Save first to keep your unsaved changes.',
+								'newspack-network'
+							),
+							{ id: 'newspack-network-unlinked-reload' }
+						);
+						return;
+					}
+					window.location.reload();
+				} )
+				.catch( () => setIsUnLinkedToggling( false ) );
 		}
 	};
 
