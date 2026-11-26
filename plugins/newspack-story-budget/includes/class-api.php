@@ -529,7 +529,8 @@ class API {
 			'post_type'   => 'post',
 		);
 
-		$post_id = wp_insert_post( $post_data );
+		// REST parameters arrive unslashed, but wp_insert_post() strips a level of slashes.
+		$post_id = wp_insert_post( wp_slash( $post_data ) );
 
 		if ( is_wp_error( $post_id ) ) {
 			return $post_id;
@@ -604,7 +605,8 @@ class API {
 			'story_budget_search' => true,
 			'fields'              => 'ids',
 			'posts_per_page'      => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Accepted cost on an authenticated editorial screen: the story_budget_search shape (postmeta JOIN + leading-wildcard LIKE) is the expense here, not the row count. Capping is a behavior change left to a follow-up.
-			's'                   => $request->get_param( 's' ) ?? '',
+			// REST parameters arrive unslashed, but WP_Query strips a level of slashes from the term.
+			's'                   => wp_slash( $request->get_param( 's' ) ?? '' ),
 		];
 
 		// If the user is not an editor, filter the stories by the user's stories.
@@ -958,7 +960,8 @@ class API {
 			'story_budget_search' => true,
 			'fields'              => 'ids',
 			'posts_per_page'      => -1, // phpcs:ignore WordPressVIPMinimum.Performance.NoPaging -- Accepted cost on an authenticated editorial screen: the story_budget_search shape (postmeta JOIN + leading-wildcard LIKE) is the expense here, not the row count. Capping is a behavior change left to a follow-up.
-			's'                   => $request->get_param( 's' ) ?? '',
+			// REST parameters arrive unslashed, but WP_Query strips a level of slashes from the term.
+			's'                   => wp_slash( $request->get_param( 's' ) ?? '' ),
 		];
 
 		// If the user is not an editor, filter the stories by the user's stories.
