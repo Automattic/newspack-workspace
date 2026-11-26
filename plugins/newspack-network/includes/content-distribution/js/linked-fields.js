@@ -21,11 +21,11 @@ const isLinked = item => {
 	if ( ! isIncomingPost() ) {
 		return false;
 	}
-	const stored = item?.meta?.newspack_network_post_unlinked;
-	if ( stored === undefined ) {
+	const unlinked = item?.newspack_network_unlinked;
+	if ( unlinked === undefined ) {
 		return ! window.newspack_network_incoming_post.unlinked;
 	}
-	return ! Number( stored );
+	return ! unlinked;
 };
 
 // Core's view of the field reads the image from `_embedded`, which the editor's copy of the
@@ -46,8 +46,8 @@ function FeaturedImagePreview( { item } ) {
 
 // The featured image renders its picker inline and ignores `isDisabled`, so the field swaps
 // core's editor for the preview while the post is linked. Core's editor isn't a public
-// export; if it can't be loaded, the field falls back to a read-only preview, which only
-// unlocks after a reload.
+// export; if it can't be loaded, a post that is linked when the editor opens gets a read-only
+// preview, which only unlocks after a reload.
 let CoreFeaturedImageEdit = null;
 try {
 	CoreFeaturedImageEdit = ( await import( '@wordpress/core-fields/post_type_supports' ) ).default?.featured_media?.Edit ?? null;
@@ -62,7 +62,12 @@ function FeaturedImageField( props ) {
 	return createElement( CoreFeaturedImageEdit, props );
 }
 
-const featuredImage = CoreFeaturedImageEdit ? { Edit: FeaturedImageField } : { readOnly: isLinked(), render: FeaturedImagePreview };
+let featuredImage = {};
+if ( CoreFeaturedImageEdit ) {
+	featuredImage = { Edit: FeaturedImageField };
+} else if ( isLinked() ) {
+	featuredImage = { readOnly: true, render: FeaturedImagePreview };
+}
 
 const locked = { isDisabled: ( { item } ) => isLinked( item ) };
 

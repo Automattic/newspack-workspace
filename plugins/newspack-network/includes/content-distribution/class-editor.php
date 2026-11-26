@@ -21,6 +21,7 @@ class Editor {
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_linked_fields_module' ] );
+		add_action( 'rest_api_init', [ __CLASS__, 'register_unlinked_field' ] );
 		add_action( 'wp_entity_fields_api_init', [ __CLASS__, 'lock_linked_fields' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_filter( 'manage_posts_columns', [ __CLASS__, 'add_distribution_column' ], 10, 2 );
@@ -57,22 +58,6 @@ class Editor {
 					},
 				]
 			);
-			// Read by linked-fields.js. The unlink endpoint is the only way to change it.
-			register_post_meta(
-				$post_type,
-				Incoming_Post::UNLINKED_META,
-				[
-					'single'        => true,
-					'type'          => 'integer',
-					'show_in_rest'  => [
-						'schema' => [
-							'context' => [ 'edit' ],
-							'type'    => 'integer',
-						],
-					],
-					'auth_callback' => '__return_false',
-				]
-			);
 		}
 	}
 
@@ -82,7 +67,7 @@ class Editor {
 	 * It is registered on every request, rather than with the fields, so that it is in the
 	 * editor's import map when the fields load it.
 	 */
-	public static function register_linked_fields_module() {
+	public static function register_linked_fields_module(): void {
 		if ( ! function_exists( 'wp_update_entity_fields' ) ) {
 			return;
 		}
@@ -96,14 +81,48 @@ class Editor {
 	}
 
 	/**
+	 * Expose whether a post is unlinked from its origin, for linked-fields.js on WordPress 7.2+.
+	 *
+	 * The field is read-only. Unlinking or relinking has to go through Incoming_Post, because a
+	 * relink re-runs the sync from the origin. Post meta would not do: the editor sends every
+	 * registered meta key back with any meta edit, so a key no one may write fails those saves.
+	 */
+	public static function register_unlinked_field(): void {
+		if ( ! function_exists( 'wp_update_entity_fields' ) ) {
+			return;
+		}
+		foreach ( Content_Distribution_Class::get_distributed_post_types() as $post_type ) {
+			register_rest_field(
+				$post_type,
+				'newspack_network_unlinked',
+				[
+					'get_callback' => function ( $post ) {
+						return (bool) get_post_meta( $post['id'], Incoming_Post::UNLINKED_META, true );
+					},
+					'schema'       => [
+						'type'     => 'boolean',
+						'context'  => [ 'edit' ],
+						'readonly' => true,
+					],
+				]
+			);
+		}
+	}
+
+	/**
 	 * Lock the sidebar fields a linked post takes from its origin, on WordPress 7.2+.
 	 *
 	 * Earlier versions lock them with the stylesheet overlay, whose selectors don't match
 	 * 7.2's sidebar. Each field is updated only where core registers it, mirroring the
 	 * supports core derives them from.
 	 */
-	public static function lock_linked_fields() {
+	public static function lock_linked_fields(): void {
 		foreach ( Content_Distribution_Class::get_distributed_post_types() as $post_type ) {
+			// Core registers these fields only for post types in the REST API.
+			$post_type_object = get_post_type_object( $post_type );
+			if ( ! $post_type_object || ! $post_type_object->show_in_rest ) {
+				continue;
+			}
 			$ids = [];
 			if ( post_type_supports( $post_type, 'excerpt' ) ) {
 				$ids[] = 'excerpt';
@@ -127,12 +146,7 @@ class Editor {
 				'newspack-network',
 				'postType',
 				$post_type,
-				array_map(
-					function ( $id ) {
-						return [ 'id' => $id ];
-					},
-					$ids
-				),
+				array_map( fn( string $id ): array => [ 'id' => $id ], $ids ),
 				'newspack-network-linked-fields'
 			);
 		}

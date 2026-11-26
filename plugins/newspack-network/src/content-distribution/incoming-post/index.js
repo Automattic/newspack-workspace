@@ -95,18 +95,12 @@ function IncomingPost() {
 		} )
 			.then( data => {
 				setIsUnLinked( data.unlinked );
-				// On WordPress 7.2+ the sidebar fields lock on the linked state stored with the
-				// post (see linked-fields.js), so the editor's copy has to carry the new value.
-				// Receiving it as saved, not as an edit, keeps it out of the next save.
+				// On WordPress 7.2+ the sidebar fields lock on the post's unlinked state (see
+				// linked-fields.js), so the editor's copy has to carry the new value. Receiving it
+				// as saved, not as an edit, keeps it out of the next save.
 				const record = wp.data.select( 'core' ).getEntityRecord( 'postType', postType, postId );
 				if ( record ) {
-					receiveEntityRecords(
-						'postType',
-						postType,
-						[ { ...record, meta: { ...record.meta, newspack_network_post_unlinked: data.unlinked ? 1 : 0 } } ],
-						undefined,
-						false
-					);
+					receiveEntityRecords( 'postType', postType, [ { ...record, newspack_network_unlinked: data.unlinked } ], undefined, false );
 				}
 			} )
 			.catch( error => createNotice( 'error', error.message ) );
