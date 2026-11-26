@@ -61,6 +61,11 @@ class Subscribers_Wizard extends Wizard {
 	const AVATAR_BATCH_CAP = 200;
 
 	/**
+	 * The most one-time donations the profile lists, newest first.
+	 */
+	const PROFILE_DONATIONS_LIMIT = 20;
+
+	/**
 	 * Per-request memo of holder IDs keyed by the sorted status set they were
 	 * resolved for. See customer_ids_for_raw_statuses().
 	 *
@@ -1615,6 +1620,12 @@ class Subscribers_Wizard extends Wizard {
 		];
 
 		if ( $detailed ) {
+			// Profile-only, like the payment methods: the list never shows donations,
+			// and scanning a reader's orders on every row would cost a query per row.
+			$donations                    = $this->one_time_donations( $user_id, $owned_subscriptions );
+			$subscriber['donations']     = $donations['items'];
+			$subscriber['donationsMore'] = $donations['more'];
+
 			/**
 			 * The Newspack Network site a reader first signed up on, when it isn't
 			 * this one. Only the profile shows it, so it is asked for on detailed reads
@@ -1688,6 +1699,9 @@ class Subscribers_Wizard extends Wizard {
 						// Who bought this subscription for the reader, when they
 						// were given it rather than paying for it themselves.
 						'giftedBy'      => $this->gifted_by( $subscription, $user_id ),
+						// A gift's orders are the purchaser's, so only the reader who
+						// pays for the subscription gets its latest order.
+						'lastOrder'     => (int) $subscription->get_customer_id() === $user_id ? $this->latest_order( $subscription ) : null,
 						// Where the payment link goes. For a gift this is the
 						// purchaser's billing email, not the reader's, so the
 						// reactivate confirmation can name who gets the email.
@@ -1953,8 +1967,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The billing shape a subscription card renders: what it costs, how often, and
-	 * the four dates the card's label/value rows show.
+	 * The billing shape a subscription card renders: what it costs, how often, its
+	 * number, and the four dates the card's label/value rows show.
 	 *
 	 * Shared by individual subscriptions and groups so one card component renders
 	 * both, and so the person profile and the group-detail billing drawer cannot
@@ -1989,9 +2003,137 @@ class Subscribers_Wizard extends Wizard {
 			// is ending even while its status still maps to active (still entitled).
 			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
 			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+			// The number WooCommerce, its emails and the payment processor show for
+			// the subscription, which a numbering plugin can make differ from the ID.
+			// Admins follow a case across those by number.
+			'number'          => (string) $subscription->get_order_number(),
 			// A complimentary subscription is billed nothing, so the card shows
 			// "Complimentary" in place of its price and payment dates.
 			'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
+		];
+	}
+
+	/**
+	 * An order as the profile links to it: its number and its edit screen.
+	 *
+	 * @param \WC_Order|false|null $order The order, or a falsy value when there is none.
+	 *
+	 * @return array|null { number, editUrl }, or null when there is no order.
+	 */
+	private function order_reference( $order ): ?array {
+		if ( ! $order instanceof \WC_Order ) {
+			return null;
+		}
+		return [
+			'number'  => (string) $order->get_order_number(),
+			'editUrl' => (string) $order->get_edit_order_url(),
+		];
+	}
+
+	/**
+	 * A subscription's latest parent, renewal or switch order, for the card of the
+	 * reader who pays for it.
+	 *
+	 * WooCommerce Subscriptions picks the order with the highest ID, which is the
+	 * newest one unless orders were imported out of sequence. Unpaid renewals
+	 * count, so a failed charge is the order the admin lands on.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return array|null { number, editUrl }, or null when it has no orders.
+	 */
+	private function latest_order( $subscription ): ?array {
+		return $this->order_reference( $subscription->get_last_order( 'all', 'any' ) );
+	}
+
+	/**
+	 * A reader's one-time donations, newest first, for the person profile.
+	 *
+	 * A one-time donation is a paid or refunded order on a donation product that
+	 * none of the reader's subscriptions owns. A recurring donation is a
+	 * subscription, and its parent and renewal orders show on its subscription
+	 * card, so they are left out here. Unpaid attempts (pending, failed,
+	 * cancelled) are not donations and are left out too.
+	 *
+	 * The test is per order: a cart that mixes a donation with other products
+	 * lists its whole total, and an order whose subscription was deleted or moved
+	 * to another customer reads as a one-time donation.
+	 *
+	 * Lists at most PROFILE_DONATIONS_LIMIT orders, and `more` says whether older
+	 * ones exist. The query returns IDs, the reader's subscription orders are
+	 * skipped before loading, and the scan stops at the first donation past the
+	 * limit, so the orders loaded are the reader's latest other purchases.
+	 *
+	 * @param int                $user_id             The reader user ID.
+	 * @param \WC_Subscription[] $owned_subscriptions The reader's subscriptions, already fetched by the caller.
+	 *
+	 * @return array { items: array[], more: bool }
+	 */
+	private function one_time_donations( int $user_id, array $owned_subscriptions ): array {
+		$none = [
+			'items' => [],
+			'more'  => false,
+		];
+		if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_is_paid_statuses' ) ) {
+			return $none;
+		}
+
+		$subscription_order_ids = [];
+		foreach ( $owned_subscriptions as $subscription ) {
+			if ( $subscription instanceof \WC_Subscription ) {
+				foreach ( $subscription->get_related_orders( 'ids', 'any' ) as $order_id ) {
+					$subscription_order_ids[ (int) $order_id ] = true;
+				}
+			}
+		}
+
+		$order_ids = \wc_get_orders(
+			[
+				'customer_id' => $user_id,
+				'type'        => 'shop_order',
+				'status'      => array_merge( \wc_get_is_paid_statuses(), [ 'refunded' ] ),
+				'limit'       => -1,
+				'return'      => 'ids',
+				// The ID breaks ties between orders placed in the same second, so the
+				// limit always cuts the list at the same order.
+				'orderby'     => [
+					'date' => 'DESC',
+					'ID'   => 'DESC',
+				],
+			]
+		);
+
+		$items = [];
+		$more  = false;
+		foreach ( $order_ids as $order_id ) {
+			if ( isset( $subscription_order_ids[ (int) $order_id ] ) ) {
+				continue;
+			}
+			$order = \wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order || ! Donations::is_donation_order( $order ) ) {
+				continue;
+			}
+			if ( count( $items ) >= self::PROFILE_DONATIONS_LIMIT ) {
+				$more = true;
+				break;
+			}
+			$created = $order->get_date_created();
+			$items[] = [
+				'id'       => (int) $order->get_id(),
+				'number'   => (string) $order->get_order_number(),
+				'editUrl'  => (string) $order->get_edit_order_url(),
+				'date'     => $this->local_date( $created ? $created->getTimestamp() : null ),
+				'amount'   => is_numeric( $order->get_total() ) ? (float) $order->get_total() : null,
+				// A partial refund leaves the order completed; the row shows what was returned.
+				'refunded' => (float) $order->get_total_refunded(),
+				'currency' => (string) $order->get_currency(),
+				'status'   => (string) $order->get_status(),
+			];
+		}
+
+		return [
+			'items' => $items,
+			'more'  => $more,
 		];
 	}
 
@@ -2150,10 +2292,12 @@ class Subscribers_Wizard extends Wizard {
 				$this->prepare_group( $subscription, $settings ),
 				$this->subscription_billing( $subscription ),
 				[
-					'role'     => $role,
+					'role'      => $role,
 					// Null for a member who predates the joined-at meta, rather than a
 					// misleading Unix epoch.
-					'joinedAt' => $this->local_date( $joined_at ),
+					'joinedAt'  => $this->local_date( $joined_at ),
+					// The owner pays for the group, so only their card carries its latest order.
+					'lastOrder' => 'owner' === $role ? $this->latest_order( $subscription ) : null,
 				]
 			);
 		}
