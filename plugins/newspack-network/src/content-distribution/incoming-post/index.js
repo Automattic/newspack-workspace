@@ -24,12 +24,19 @@ const originalSiteUrl = newspack_network_incoming_post.originalSiteUrl;
 const originalPostEditUrl = newspack_network_incoming_post.originalPostEditUrl;
 const unlinked = newspack_network_incoming_post.unlinked;
 
+// Sidebar fields a linked post takes from its origin. The stylesheet's overlay can't
+// lock them, because their markup changes between WordPress versions, so they are
+// removed from the editor instead. A removed panel stays removed until the editor
+// reloads, which is why unlinking reloads the page.
+const LINKED_PANELS = [ 'post-excerpt', 'discussion-panel', 'featured-image' ];
+
 function IncomingPost() {
 	const { createNotice } = useDispatch( 'core/notices' );
-	const { lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
+	const { lockPostAutosaving, unlockPostAutosaving, removeEditorPanel } = useDispatch( 'core/editor' );
 	const { openGeneralSidebar } = useDispatch( 'core/edit-post' );
 	const [ isUnLinkedToggling, setIsUnLinkedToggling ] = useState( false );
-	const [ isUnLinked, setIsUnLinked ] = useState( false );
+	// Start from the stored state: a first render as linked would remove the panels until reload.
+	const [ isUnLinked, setIsUnLinked ] = useState( unlinked );
 	const [ hasInitializedSidebar, setHasInitializedSidebar ] = useState( false );
 	const [ showConfirmDialog, setShowConfirmDialog ] = useState( false );
 
@@ -78,6 +85,7 @@ function IncomingPost() {
 			unlockPostAutosaving( lockName );
 		} else {
 			lockPostAutosaving( lockName );
+			LINKED_PANELS.forEach( panel => removeEditorPanel( panel ) );
 		}
 		// Toggle the CSS overlay.
 		document.querySelector( '#editor' )?.classList.toggle( 'newspack-network-incoming-post-linked', ! isUnLinked );
@@ -93,8 +101,12 @@ function IncomingPost() {
 		} )
 			.then( data => {
 				setIsUnLinked( data.unlinked );
+				return data;
 			} )
-			.catch( error => createNotice( 'error', error.message ) );
+			.catch( error => {
+				createNotice( 'error', error.message );
+				return null;
+			} );
 	};
 
 	const toggleUnlinkedClicked = _unlinked => {
@@ -115,22 +127,13 @@ function IncomingPost() {
 					} ); // Reload to get the origin post content.
 				} );
 		} else {
-			toggleUnlinkedState( _unlinked ).then( () => {
-				setIsUnLinkedToggling( false );
-				createNotice(
-					'info',
-					sprintf(
-						// translators: %s: post type
-						__( '%s has been unlinked', 'newspack-network' ),
-						newspack_network_incoming_post.postTypeLabel
-					),
-					{
-						type: 'snackbar',
-						isDismissible: true,
-						autoDismiss: true,
-						autoDismissTimeout: 3000,
-					}
-				);
+			toggleUnlinkedState( _unlinked ).then( data => {
+				if ( data ) {
+					// Reload so the panels removed while linked come back.
+					window.location.reload();
+				} else {
+					setIsUnLinkedToggling( false );
+				}
 			} );
 		}
 	};

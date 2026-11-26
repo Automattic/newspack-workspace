@@ -42,9 +42,6 @@
 	/* stylelint-disable-next-line selector-id-pattern */
 	#edit-post\:document {
 		.components-panel__body,
-		.editor-post-featured-image,
-		.editor-post-discussion__panel-dropdown,
-		.editor-post-excerpt__dropdown,
 		.components-dropdown:has(.editor-post-author__panel-toggle) {
 			@include grey-out-outer;
 
