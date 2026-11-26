@@ -318,7 +318,7 @@ function SubscriberOnlyProducts() {
 				</div>
 			) }
 
-			{ editing && <RestrictionEditor restriction={ editing } saving={ saving } onSave={ handleSave } onClose={ () => setEditing( null ) } /> }
+			<RestrictionEditor restriction={ editing } saving={ saving } onSave={ handleSave } onClose={ () => setEditing( null ) } />
 
 			{ deleting && (
 				<Modal title={ __( 'Delete restriction?', 'newspack-plugin' ) } onRequestClose={ () => setDeleting( null ) }>

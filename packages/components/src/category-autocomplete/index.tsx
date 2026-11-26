@@ -20,7 +20,7 @@ import './style.scss';
  * External dependencies
  */
 import debounce from 'lodash/debounce';
-import find from 'lodash/find';
+import chunk from 'lodash/chunk';
 import filter from 'lodash/filter';
 import classnames from 'classnames';
 import type { DebouncedFunc } from 'lodash';
@@ -56,9 +56,14 @@ type CategoryAutocompleteProps = {
 
 type CategoryAutocompleteState = {
 	suggestions: Record< string, Term >;
-	allCategories: Term[];
+	knownCategories: Record< number, Term >;
 	isLoading: boolean;
 };
+
+/**
+ * The most terms the REST API returns per request.
+ */
+const MAX_TERMS_PER_REQUEST = 100;
 
 /**
  * Category autocomplete field component.
@@ -70,9 +75,11 @@ class CategoryAutocomplete extends Component< CategoryAutocompleteProps, Categor
 
 	debouncedUpdateSuggestions: DebouncedFunc< ( search: string ) => void >;
 
+	requestedIds: Set< number >;
+
 	state: CategoryAutocompleteState = {
 		suggestions: {},
-		allCategories: [],
+		knownCategories: {},
 		isLoading: false,
 	};
 
@@ -82,18 +89,60 @@ class CategoryAutocomplete extends Component< CategoryAutocompleteProps, Categor
 	constructor( props: CategoryAutocompleteProps ) {
 		super( props );
 		this.debouncedUpdateSuggestions = debounce( this.updateSuggestions, 100 );
+		// IDs already requested, so a deleted term or a failed request is not fetched again on every update.
+		this.requestedIds = new Set();
 	}
 
 	componentDidMount() {
+		this.fetchUnknownCategories();
+	}
+
+	componentDidUpdate() {
+		this.fetchUnknownCategories();
+	}
+
+	/**
+	 * Fetch the names of numeric IDs in the value that are not known yet.
+	 * Only those IDs are requested, never the whole taxonomy.
+	 */
+	fetchUnknownCategories() {
+		const { taxonomy, value } = this.props;
+		const { knownCategories } = this.state;
+		const isUnknown = ( item: TermValue ): item is number =>
+			Number.isInteger( item ) && ! knownCategories[ item as number ] && ! this.requestedIds.has( item as number );
+		const ids = [ ...new Set( value.filter( isUnknown ) ) ];
+		if ( ! ids.length ) {
+			return;
+		}
+		ids.forEach( id => this.requestedIds.add( id ) );
 		this.setState( { isLoading: true } );
-		apiFetch< Term[] >( {
-			path: addQueryArgs( `/wp/v2/${ this.props.taxonomy }`, {
-				per_page: -1,
-				_fields: 'id,name',
-			} ),
-		} )
-			.then( categories => this.setState( { allCategories: categories } ) )
+		const requests = chunk( ids, MAX_TERMS_PER_REQUEST ).map( idsChunk =>
+			apiFetch< Term[] >( {
+				path: addQueryArgs( `/wp/v2/${ taxonomy }`, {
+					include: idsChunk.join( ',' ),
+					per_page: MAX_TERMS_PER_REQUEST,
+					_fields: 'id,name',
+				} ),
+			} )
+		);
+		Promise.all( requests )
+			.then( responses => this.addKnownCategories( responses.flat() ) )
 			.finally( () => this.setState( { isLoading: false } ) );
+	}
+
+	/**
+	 * Add terms to the lookup used to show names for numeric IDs.
+	 *
+	 * @param categories Terms with `id` and `name`.
+	 */
+	addKnownCategories( categories: Term[] ) {
+		this.setState( ( { knownCategories } ) => {
+			const nextKnownCategories = { ...knownCategories };
+			categories.forEach( ( { id, name } ) => {
+				nextKnownCategories[ id as number ] = { id, name };
+			} );
+			return { knownCategories: nextKnownCategories };
+		} );
 	}
 
 	/**
@@ -144,6 +193,14 @@ class CategoryAutocomplete extends Component< CategoryAutocompleteProps, Categor
 			.filter( token => 'undefined' !== typeof token ) // Ensure each token is a valid value.
 			.map( token => ( 'string' === typeof token ? suggestions[ token ] : token ) )
 			.filter( ( token ): token is Term => Boolean( token ) );
+		// Callers that store bare IDs pass picked terms back as numbers, so remember their names.
+		const pickedCategories = tokens
+			.filter( ( token ): token is string => 'string' === typeof token )
+			.map( token => suggestions[ token ] )
+			.filter( ( token ): token is Term => Boolean( token ) );
+		if ( pickedCategories.length ) {
+			this.addKnownCategories( pickedCategories );
+		}
 		onChange( allValues );
 	};
 
@@ -165,14 +222,14 @@ class CategoryAutocomplete extends Component< CategoryAutocompleteProps, Categor
 	 */
 	render() {
 		const { className, disabled, description, hideHelpFromVision, hideLabelFromVision, label, value } = this.props;
-		const { allCategories, isLoading } = this.state;
+		const { knownCategories, isLoading } = this.state;
 		const classes = classnames( 'newspack-category-autocomplete', className );
 		return (
 			<div className={ classes }>
 				<FormTokenField
 					onInputChange={ ( input: string ) => this.debouncedUpdateSuggestions( input ) }
 					value={ value.reduce( ( acc: { id: number; value: string }[], item ) => {
-						const categoryOrItem = typeof item === 'number' ? find( allCategories, [ 'id', item ] ) : item;
+						const categoryOrItem = typeof item === 'number' ? knownCategories[ item ] : item;
 						if ( categoryOrItem ) {
 							acc.push( {
 								id: ( categoryOrItem.term_id || categoryOrItem.id ) as number,

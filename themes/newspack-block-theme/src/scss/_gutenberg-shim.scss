@@ -60,7 +60,7 @@ figcaption a {
  * Fix spacing between title and editor content.
  * In other themes, this comes from the spacing around the block, but we're using flex and gap.
  */
-.edit-post-visual-editor {
+.editor-visual-editor {
 	&__post-title-wrapper {
 		margin-bottom: var(--wp--preset--spacing--50);
 	}
