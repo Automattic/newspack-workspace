@@ -242,7 +242,7 @@ final class Subscribers_Index {
 			FROM {$store['from']}
 			LEFT JOIN ( " . self::first_product_sql( $ids ) . " ) fp ON fp.order_id = {$id_col}
 			WHERE {$id_col} IN ({$ids})
-				AND {$store['status']} NOT IN ( 'trash', 'draft', 'auto-draft' )";
+				AND {$store['status']} NOT IN ( '" . implode( "', '", Subscribers_Wizard::UNLISTED_STATUSES ) . "' )";
 	}
 
 	/**

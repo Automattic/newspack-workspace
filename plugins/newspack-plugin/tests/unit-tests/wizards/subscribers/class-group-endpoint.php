@@ -396,6 +396,17 @@ class Test_Subscribers_Wizard_Group_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A trashed group is off the Teams tab, so a stale link to it is a 404 too.
+	 */
+	public function test_404_for_trashed_group() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+
+		$trashed = $this->create_group_subscription( $this->create_reader_user(), 5, 'trash' );
+
+		$this->assertSame( 404, $this->dispatch( $trashed->get_id() )->get_status() );
+	}
+
+	/**
 	 * An id that resolves to nothing is a 404.
 	 */
 	public function test_404_for_unknown_id() {

@@ -220,9 +220,10 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	 */
 	private function create_individual_subscription( int $owner_id, string $status = 'active', int $product_id = 0 ): WC_Subscription {
 		$data = [
-			'customer_id'    => $owner_id,
-			'status'         => $status,
-			'billing_period' => 'month',
+			'customer_id'      => $owner_id,
+			'status'           => $status,
+			'billing_period'   => 'month',
+			'billing_interval' => 1,
 		];
 		if ( $product_id ) {
 			$data['products'] = [ $product_id ];
@@ -644,6 +645,33 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 
 		$items = array_column( $this->dispatch()->get_data()['items'], null, 'id' );
 		$this->assertSame( [], $items[ $member_id ]['groups'] );
+	}
+
+	/**
+	 * A failed checkout trashes its pending subscription, and
+	 * wcs_get_users_subscriptions() still returns it. The row, the profile and the
+	 * status filter must all leave it out, or it shows as an extra On hold plan
+	 * whose edit link WordPress refuses. A trashed group the reader owns is left
+	 * out the same way.
+	 */
+	public function test_a_trashed_subscription_is_not_on_its_readers_row_or_profile() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'FailedCheckout' );
+		$pending   = $this->create_individual_subscription( $reader_id, 'pending' );
+		$this->create_individual_subscription( $reader_id, 'trash' );
+		$this->create_group_subscription( $reader_id, 5, 'trash' );
+
+		$row = $this->dispatch()->get_data()['items'][0];
+		$this->assertSame( [ $pending->get_id() ], array_column( $row['subscriptions'], 'id' ) );
+		$this->assertSame( [], $row['groups'] );
+		$this->assertSame( 'pending', $row['status'] );
+
+		$profile = rest_get_server()->dispatch( new WP_REST_Request( 'GET', self::ROUTE . '/' . $reader_id ) )->get_data();
+		$this->assertSame( [ $pending->get_id() ], array_column( $profile['subscriptions'], 'id' ) );
+		$this->assertSame( [], $profile['groups'] );
+		$this->assertSame( 'pending', $profile['status'] );
+
+		$this->assertSame( [], $this->filtered_ids( [ 'status' => [ 'on-hold' ] ] ), 'A trashed subscription must not match the On hold filter.' );
 	}
 
 	/**
