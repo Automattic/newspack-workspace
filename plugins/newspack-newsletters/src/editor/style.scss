@@ -15,6 +15,15 @@
 	padding: 12px;
 }
 
+// A block with an unsupported-features notice is wrapped in this container (see
+// `blocks-validation/blocks-filters.js`). Center it like the blocks around it, or
+// the notice and its block sit at the left edge of the canvas.
+.newspack-newsletters__editor-block {
+	margin-left: auto;
+	margin-right: auto;
+	max-width: var(--newspack-newsletters-max-width);
+}
+
 // Layout thumbnails (marker class set by `NewsletterPreview`) drop the
 // email-width cap and per-block padding so they match the layouts list.
 .newspack-newsletters-layout-preview.editor-styles-wrapper .block-editor-block-list__layout.is-preview-mode .wp-block {
@@ -182,6 +191,31 @@
 			// the email and the standard post editor.
 			&[data-type="core/social-link"] {
 				padding: 6px;
+			}
+
+			// Newspack's social-links style variants (registered in `../index.js`).
+			// The email renders them under either renderer, so the canvas shows them
+			// under either renderer too.
+			&.wp-block-social-links {
+				&.is-style-circle-black .wp-social-link {
+					background: black;
+					color: white;
+				}
+
+				&.is-style-filled-black .wp-social-link {
+					background: transparent;
+					color: black;
+				}
+
+				&.is-style-circle-white .wp-social-link {
+					background: white;
+					color: black;
+				}
+
+				&.is-style-filled-white .wp-social-link {
+					background: transparent;
+					color: white;
+				}
 			}
 
 			// Batch C canvas↔email parity. On a classic theme the canvas otherwise

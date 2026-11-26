@@ -95,6 +95,7 @@ class Renderer_Controller {
 		// Reset the per-render theme.json memoization — it's keyed by post ID and
 		// process-global, so a repeated render must rebuild from current meta.
 		Editor_Bootstrap::reset_theme_json_cache();
+		Nested_Blocks::reset_cache();
 
 		// Apply the newspack_newsletters_newsletter_content filter to inject ad blocks,
 		// mirroring what the MJML renderer does. Feed the result to the package via a
@@ -128,6 +129,10 @@ class Renderer_Controller {
 			return $block_content;
 		};
 		add_filter( 'render_block', $wrap_conditionals, 20, 2 );
+
+		// Rewrite attributes the engine can't read (render-time block supports) before
+		// its own preprocessing of each parsed block list. See Block_Normalizer.
+		Block_Normalizer::add_hooks();
 
 		// Save/restore so nested render_wc() calls leave the outer post intact.
 		$previous             = self::$rendering_post;
@@ -164,6 +169,7 @@ class Renderer_Controller {
 			\Newspack_Newsletters_Renderer::$newsletter_id = $previous_newsletter_id;
 			remove_filter( 'the_content', $inject_content, 0 );
 			remove_filter( 'render_block', $wrap_conditionals, 20 );
+			Block_Normalizer::remove_hooks();
 		}
 	}
 
@@ -182,9 +188,79 @@ class Renderer_Controller {
 		if ( class_exists( '\Newspack_Newsletters_Renderer' ) ) {
 			$html = (string) \Newspack_Newsletters_Renderer::process_links( $html, $post );
 		}
+		$html = self::undecorate_image_links( $html );
 		$html = self::inject_custom_css( $html, $post );
 		$html = self::inject_tracking_pixel( $html, $post );
 		return $html;
+	}
+
+	/**
+	 * Remove the text-link underline from links that hold only images.
+	 *
+	 * Links are underlined like text links in the editor (see Theme_Json_Builder), which
+	 * the CSS inliner applies to every link. On a link around an image, some email
+	 * clients draw that underline as a line under the image.
+	 *
+	 * @param string $html Email HTML.
+	 * @return string
+	 */
+	private static function undecorate_image_links( string $html ): string {
+		if ( false === stripos( $html, 'text-decoration: underline' ) && false === stripos( $html, 'text-decoration:underline' ) ) {
+			return $html;
+		}
+		// First pass: find the links whose content is images only. A link with any text,
+		// before or after its image (`<a>Read <img></a>`, `<a><img> Read more</a>`), is a
+		// text link and keeps its underline.
+		$image_links = [];
+		$scan        = new \WP_HTML_Tag_Processor( $html );
+		$link_index  = -1;
+		$link        = null;
+		while ( $scan->next_token() ) {
+			$type = $scan->get_token_type();
+			if ( '#text' === $type ) {
+				// A failed match (invalid UTF-8) counts as text, so the link keeps its underline.
+				if ( null !== $link && 0 !== preg_match( '/[^\s\x{00A0}]/u', $scan->get_modifiable_text() ) ) {
+					$link['text'] = true;
+				}
+				continue;
+			}
+			if ( '#tag' !== $type ) {
+				continue;
+			}
+			$tag = $scan->get_tag();
+			if ( 'A' === $tag && $scan->is_tag_closer() ) {
+				if ( null !== $link && $link['image'] && ! $link['text'] ) {
+					$image_links[ $link['index'] ] = true;
+				}
+				$link = null;
+			} elseif ( 'A' === $tag ) {
+				++$link_index;
+				$link = preg_match( '/text-decoration:\s*underline/i', (string) $scan->get_attribute( 'style' ) )
+					? [
+						'index' => $link_index,
+						'image' => false,
+						'text'  => false,
+					]
+					: null;
+			} elseif ( 'IMG' === $tag && null !== $link ) {
+				$link['image'] = true;
+			}
+		}
+		if ( empty( $image_links ) ) {
+			return $html;
+		}
+
+		// Second pass: rewrite those links.
+		$processor  = new \WP_HTML_Tag_Processor( $html );
+		$link_index = -1;
+		while ( $processor->next_tag( 'a' ) ) {
+			++$link_index;
+			if ( isset( $image_links[ $link_index ] ) ) {
+				$style = (string) $processor->get_attribute( 'style' );
+				$processor->set_attribute( 'style', (string) preg_replace( '/text-decoration:\s*underline/i', 'text-decoration: none', $style ) );
+			}
+		}
+		return $processor->get_updated_html();
 	}
 
 	/**

@@ -197,36 +197,9 @@ $canvas-chrome: ();
 			padding: 0;
 		}
 
+		// The style variants' colors live in `../style.scss`, for both renderers.
 		.wp-block-social-links {
 			gap: 0 !important;
-
-			&.is-style-circle-black {
-				.wp-social-link {
-					background: black;
-					color: white;
-				}
-			}
-
-			&.is-style-filled-black {
-				.wp-social-link {
-					background: transparent;
-					color: black;
-				}
-			}
-
-			&.is-style-circle-white {
-				.wp-social-link {
-					background: white;
-					color: black;
-				}
-			}
-
-			&.is-style-filled-white {
-				.wp-social-link {
-					background: transparent;
-					color: white;
-				}
-			}
 		}
 
 		.wp-social-link {
