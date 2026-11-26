@@ -6,6 +6,11 @@ declare module '*.png' {
 	export default path;
 }
 
+declare module '*.module.scss' {
+	const values: Record< string, string >;
+	export default values;
+}
+
 /**
  * Wizard API fetch function
  */

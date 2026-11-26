@@ -1,5 +1,7 @@
 declare global {
 	interface Window {
+		// Set on the new admin frame page, where the frame mounts the views itself.
+		newspackAdminApp?: Record< string, unknown >;
 		newspackWizardsAdminHeader: {
 			tabs: Array<{
 				textContent: string;
