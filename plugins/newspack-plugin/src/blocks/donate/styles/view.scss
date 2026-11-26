@@ -1,0 +1,62 @@
+@use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
+@use "../../../shared/sass/variables";
+@use "./style-variations";
+
+.wpbnbd {
+	&__button,
+	.tab-container .freq-label {
+		border: 0 solid np-colors.$neutral-300;
+		background: np-colors.$neutral-000;
+		color: np-colors.$neutral-600;
+		line-height: variables.$font__line-height-body;
+		text-overflow: ellipsis;
+		text-align: center;
+		transition:
+			background-color motion.$duration-color motion.$ease-color,
+			border-color motion.$duration-color motion.$ease-color,
+			color motion.$duration-color motion.$ease-color;
+		&:hover {
+			color: np-colors.$neutral-600;
+		}
+		&--active,
+		&.wpbnbd__button--active:hover {
+			color: np-colors.$neutral-900;
+		}
+
+		@include motion.hover {
+			&:hover {
+				color: np-colors.$neutral-900;
+			}
+		}
+
+		&:active:not(.wpbnbd__button--active) {
+			color: color-mix(in oklab, np-colors.$neutral-900 var(--newspack-ui-color-mix-pressed, 75%), transparent);
+		}
+	}
+
+	&__tiers__amount__value,
+	.tier-frequency {
+		font-size: 13px;
+	}
+
+	.woocommerce-Price-amount,
+	.price-amount {
+		display: inline;
+		font-family: var(--newspack-theme-font-heading, sans-serif);
+		font-size: 29px;
+		font-weight: 700;
+	}
+
+	mark {
+		background-color: transparent;
+	}
+
+	&--selected {
+		&-other {
+			.wp-block-newspack-blocks-donate__frequency-label {
+				display: none;
+			}
+		}
+	}
+}

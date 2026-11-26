@@ -88,6 +88,9 @@ final class Newspack {
 	 * e.g. include_once NEWSPACK_ABSPATH . 'includes/foo.php';
 	 */
 	private function includes() {
+		// First, so the bundled newspack-blocks copy hooks in before this plugin, as newspack-blocks did.
+		include_once NEWSPACK_ABSPATH . 'includes/class-bundled-blocks.php';
+
 		include_once NEWSPACK_ABSPATH . 'includes/class-logger.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-alert-manager.php';
 

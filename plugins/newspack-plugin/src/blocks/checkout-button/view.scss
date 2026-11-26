@@ -1,0 +1,39 @@
+.wp-block-newspack-blocks-checkout-button {
+	&.alignwide,
+	&.alignfull {
+		button {
+			width: 100%;
+		}
+	}
+	&.aligncenter {
+		form {
+			flex-direction: column;
+		}
+		button {
+			margin-left: auto;
+			margin-right: auto;
+		}
+	}
+
+	&.wp-block-button__width-25 button {
+		width: 25%;
+	}
+	&.wp-block-button__width-50 button {
+		width: 50%;
+	}
+	&.wp-block-button__width-75 button {
+		width: 75%;
+	}
+	&.wp-block-button__width-100 button {
+		width: 100%;
+	}
+
+	form {
+		display: flex;
+	}
+
+	.wp-block-button__link {
+		display: inline-block;
+		width: auto;
+	}
+}
