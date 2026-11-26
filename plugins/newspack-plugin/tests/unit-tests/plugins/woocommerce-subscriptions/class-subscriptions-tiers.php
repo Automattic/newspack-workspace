@@ -1356,4 +1356,95 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 
 		$this->assertNull( Subscriptions_Tiers::vouch_switch_quantity( null, 340, 4 ) );
 	}
+
+	/**
+	 * Build a grouped product offering one fixed-price tier (701) and one Name
+	 * Your Price tier (702) in the same billing period.
+	 *
+	 * @param array $nyp_meta Extra meta for the Name Your Price tier, such as a suggested or minimum price.
+	 *
+	 * @return \WC_Product The grouped product (id 700).
+	 */
+	private function make_group_with_nyp_tier( $nyp_meta = [] ) {
+		$this->make_tier_product( 701 );
+		$this->make_tier_product( 702, array_merge( [ '_nyp' => 'yes' ], $nyp_meta ) );
+		return wc_create_mock_product(
+			[
+				'id'       => 700,
+				'type'     => 'grouped',
+				'children' => [ 701, 702 ],
+			]
+		);
+	}
+
+	/**
+	 * A new purchase leaves out a Name Your Price tier with no suggested or
+	 * minimum price, which has nothing to charge.
+	 */
+	public function test_purchase_form_leaves_out_unpriced_nyp_tier() {
+		$html = $this->render_tier_form( $this->make_group_with_nyp_tier() );
+
+		$this->assertStringContainsString( 'value="701"', $html );
+		$this->assertStringNotContainsString( 'value="702"', $html );
+	}
+
+	/**
+	 * A Name Your Price tier with a suggested or a minimum price is still offered.
+	 *
+	 * @dataProvider priced_nyp_meta
+	 *
+	 * @param array $nyp_meta Meta that gives the tier a price.
+	 */
+	public function test_purchase_form_keeps_priced_nyp_tier( $nyp_meta ) {
+		$html = $this->render_tier_form( $this->make_group_with_nyp_tier( $nyp_meta ) );
+
+		$this->assertStringContainsString( 'value="701"', $html );
+		$this->assertStringContainsString( 'value="702"', $html );
+	}
+
+	/**
+	 * Meta that gives a Name Your Price tier a price.
+	 *
+	 * @return array
+	 */
+	public function priced_nyp_meta() {
+		return [
+			'suggested price' => [ [ '_suggested_price' => '5' ] ],
+			'minimum price'   => [ [ '_min_price' => '3' ] ],
+		];
+	}
+
+	/**
+	 * The switch modal keeps every tier: the reader names an amount there, and the
+	 * modal starts from what they already pay.
+	 */
+	public function test_switch_form_keeps_unpriced_nyp_tier() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$product     = $this->make_group_with_nyp_tier();
+		$switch_data = $this->make_switch_data( $user_id, [ 701 ], 701, 1 );
+
+		$html = $this->render_tier_form( $product, $switch_data );
+
+		$this->assertStringContainsString( 'value="702"', $html );
+	}
+
+	/**
+	 * A product whose only tiers are unpriced Name Your Price ones has nothing to
+	 * sell, which is what lets the Checkout Button hide itself.
+	 */
+	public function test_purchasable_tiers_are_empty_when_every_tier_is_unpriced_nyp() {
+		$this->make_tier_product( 711, [ '_nyp' => 'yes' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'       => 710,
+				'type'     => 'grouped',
+				'children' => [ 711 ],
+			]
+		);
+
+		$this->assertNotEmpty( Subscriptions_Tiers::get_tiers_by_frequency( $product ) );
+		$this->assertSame( [], Subscriptions_Tiers::get_purchasable_tiers( $product ) );
+		$this->assertSame( '', $this->render_tier_form( $product ) );
+	}
 }
