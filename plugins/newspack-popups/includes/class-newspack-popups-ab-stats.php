@@ -73,6 +73,28 @@ final class Newspack_Popups_AB_Stats {
 	 *                    at a pooled rate of 0 or 1, or at zero standard error.
 	 */
 	public static function confidence( $control_readers, $control_conversions, $challenger_readers, $challenger_conversions ) {
+		$z = self::z( $control_readers, $control_conversions, $challenger_readers, $challenger_conversions );
+		if ( null === $z ) {
+			return null;
+		}
+
+		$t   = 1 / ( 1 + 0.2316419 * $z );
+		$d   = 0.3989423 * exp( -( $z * $z ) / 2 );
+		$cdf = 1 - $d * $t * ( 0.3193815 + $t * ( -0.3565638 + $t * ( 1.7814779 + $t * ( -1.8212560 + $t * 1.3302744 ) ) ) );
+
+		return round( $cdf * 100, 1 );
+	}
+
+	/**
+	 * The two-proportion z statistic behind confidence(), unsigned.
+	 *
+	 * @param int $control_readers        Readers who saw the control.
+	 * @param int $control_conversions    Control conversions.
+	 * @param int $challenger_readers     Readers who saw the challenger.
+	 * @param int $challenger_conversions Challenger conversions.
+	 * @return float|null Null where confidence() is null.
+	 */
+	public static function z( $control_readers, $control_conversions, $challenger_readers, $challenger_conversions ) {
 		if ( $control_readers < self::MIN_READERS_PER_ARM || $challenger_readers < self::MIN_READERS_PER_ARM ) {
 			return null;
 		}
@@ -84,13 +106,47 @@ final class Newspack_Popups_AB_Stats {
 		if ( 0.0 === $standard_error ) {
 			return null;
 		}
-		$z = abs( $control_conversions / $control_readers - $challenger_conversions / $challenger_readers ) / $standard_error;
+		return abs( $control_conversions / $control_readers - $challenger_conversions / $challenger_readers ) / $standard_error;
+	}
 
-		$t   = 1 / ( 1 + 0.2316419 * $z );
-		$d   = 0.3989423 * exp( -( $z * $z ) / 2 );
-		$cdf = 1 - $d * $t * ( 0.3193815 + $t * ( -0.3565638 + $t * ( 1.7814779 + $t * ( -1.8212560 + $t * 1.3302744 ) ) ) );
-
-		return round( $cdf * 100, 1 );
+	/**
+	 * Roughly how many more readers, across both arms, a comparison needs to
+	 * reach a label, if the two rates and the split stay as they are.
+	 *
+	 * At fixed rates, z grows with the square root of the sample, so the
+	 * sample that reaches a target z is the current one times
+	 * (target / current)². The targets are the one-sided normal quantiles of
+	 * the two thresholds.
+	 *
+	 * @param string $label                  'directional' or 'reliable'.
+	 * @param int    $control_readers        Readers who saw the control.
+	 * @param int    $control_conversions    Control conversions.
+	 * @param int    $challenger_readers     Readers who saw the challenger.
+	 * @param int    $challenger_conversions Challenger conversions.
+	 * @return int|null At least 1; null once the label is reached, with no
+	 *                  confidence figure, or when the rates are level.
+	 */
+	public static function readers_to( $label, $control_readers, $control_conversions, $challenger_readers, $challenger_conversions ) {
+		$targets = [
+			'directional' => [ self::THRESHOLD_DIRECTIONAL, 0.8416 ],
+			'reliable'    => [ self::THRESHOLD_RELIABLE, 1.6449 ],
+		];
+		if ( ! isset( $targets[ $label ] ) ) {
+			return null;
+		}
+		list( $threshold, $z_target ) = $targets[ $label ];
+		$confidence                   = self::confidence( $control_readers, $control_conversions, $challenger_readers, $challenger_conversions );
+		// Judged on the rounded figure, as label() judges it, so an estimate
+		// never appears beside a label it says hasn't been reached.
+		if ( null === $confidence || $confidence >= $threshold ) {
+			return null;
+		}
+		$z = self::z( $control_readers, $control_conversions, $challenger_readers, $challenger_conversions );
+		if ( ! $z ) {
+			return null;
+		}
+		$readers = $control_readers + $challenger_readers;
+		return max( 1, (int) ceil( $readers * ( $z_target / $z ) ** 2 ) - $readers );
 	}
 
 	/**

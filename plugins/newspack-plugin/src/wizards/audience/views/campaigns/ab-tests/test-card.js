@@ -349,7 +349,8 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue =
 	);
 
 	// Incomplete and Needs attention cards say what to fix in a notice instead.
-	const verdict = getVerdict( test, status, hasStats ? stats : null );
+	const copy = { labels: data.labels, thresholds: data.thresholds };
+	const verdict = getVerdict( test, status, hasStats ? stats : null, copy );
 
 	const notices = [];
 	if ( duplicates.length > 0 ) {
@@ -529,6 +530,7 @@ const TestCard = ( { test, data, onRenamed, onEnded, isTarget = false, enqueue =
 				<EndTestModal
 					test={ test }
 					stats={ hasStats ? stats : null }
+					copy={ copy }
 					onEnded={ ended => {
 						setModal( null );
 						// End Test is gone from an ended card, so the modal has

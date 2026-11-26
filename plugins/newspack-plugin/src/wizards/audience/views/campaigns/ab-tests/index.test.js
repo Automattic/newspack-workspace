@@ -514,7 +514,11 @@ describe( 'Ended tests', () => {
 		render( <ABTests /> );
 		const card = await screen.findByRole( 'region', { name: 'Test run' } );
 		expect( await within( card ).findByText( 'No winner yet. B is ahead, 2.69% against 1.90%.' ) ).toBeInTheDocument();
-		expect( within( card ).getByText( 'More readers are needed. Some may have seen both versions on different devices.' ) ).toBeInTheDocument();
+		expect(
+			within( card ).getByText(
+				'Early signal: 85.0% confident B is better than A. A reliable result needs 95% confidence. More readers are needed. Some readers may have seen both versions on different devices.'
+			)
+		).toBeInTheDocument();
 		expect( within( card ).queryByText( 'Most readers are logged out.' ) ).not.toBeInTheDocument();
 	} );
 

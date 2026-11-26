@@ -417,6 +417,61 @@ class ABDashboardTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * A running comparison estimates the readers and days left to each label,
+	 * at the pair's pace across every day of the window.
+	 */
+	public function test_comparison_estimates_readers_and_days_left() {
+		$this->as_admin();
+		// Ten counted days, today included: 800 readers is 80 a day.
+		$this->create_running_test( 't', gmdate( 'Y-m-d', time() - 9 * DAY_IN_SECONDS ) );
+		$this->use_provider( $this->counts( 400, 8, 400, 11 ) );
+		$estimate = $this->stats_request( 't' )->get_data()['comparisons']['b']['estimate'];
+		$this->assertSame(
+			[
+				'readers' => 368,
+				'days'    => 5,
+			],
+			$estimate['directional']
+		);
+		$this->assertSame(
+			[
+				'readers' => 3662,
+				'days'    => 46,
+			],
+			$estimate['reliable']
+		);
+	}
+
+	/**
+	 * A label already reached has no estimate, and level rates have none at all.
+	 */
+	public function test_comparison_estimate_is_null_where_nothing_is_left_to_project() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 1000, 19, 1000, 27 ) );
+		$estimate = $this->stats_request( 't' )->get_data()['comparisons']['b']['estimate'];
+		$this->assertNull( $estimate['directional'] );
+		$this->assertSame( 1800, $estimate['reliable']['readers'] );
+
+		$this->use_provider( $this->counts( 1000, 50, 1000, 50 ) );
+		$estimate = $this->stats_request( 't', [ 'refresh' => '1' ] )->get_data()['comparisons']['b']['estimate'];
+		$this->assertNull( $estimate['directional'] );
+		$this->assertNull( $estimate['reliable'] );
+	}
+
+	/**
+	 * An ended test has nothing left to wait for, so it carries no estimate.
+	 */
+	public function test_ended_test_has_no_estimate() {
+		$this->as_admin();
+		$this->create_running_test();
+		$this->use_provider( $this->counts( 400, 8, 400, 11 ) );
+		$this->assertNotWPError( Newspack_Popups_AB_Tests::end_test( 't', 'a' ) );
+		Newspack_Popups_AB_Tests::reset_config_cache();
+		$this->assertNull( $this->stats_request( 't' )->get_data()['comparisons']['b']['estimate'] );
+	}
+
+	/**
 	 * The provider's variants are matched to discovery's, not trusted as the list.
 	 */
 	public function test_unknown_variants_are_dropped_and_missing_ones_zero_filled() {
