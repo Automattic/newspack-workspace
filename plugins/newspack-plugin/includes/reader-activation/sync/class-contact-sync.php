@@ -166,14 +166,6 @@ class Contact_Sync extends Sync {
 			'compliance state',
 			'invalid email address and cannot be imported',
 		],
-		'permanent_config'  => [
-			'api access has been disabled',
-			'payment required',
-			'api key invalid',
-			'invalid mailchimp api key',
-			'user disabled',
-			'authorization failure',
-		],
 		'benign'            => [
 			'was permanently deleted',
 		],
