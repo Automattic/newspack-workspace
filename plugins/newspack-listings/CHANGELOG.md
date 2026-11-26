@@ -1,3 +1,10 @@
+## newspack-listings [3.7.14](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.13...newspack-listings@3.7.14) (2026-11-24)
+
+
+### Bug Fixes
+
+* **listings:** only return listing post types from the listings API ([#1448](https://github.com/Automattic/newspack-workspace/issues/1448)) ([11a372c](https://github.com/Automattic/newspack-workspace/commit/11a372c2395dfc9f5f91db6009f1efb35adf2bd9))
+
 ## newspack-listings [3.7.13](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.7.12...newspack-listings@3.7.13) (2026-11-23)
 
 
