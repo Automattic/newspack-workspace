@@ -500,7 +500,11 @@ class Products {
 			$user_id = $user_ID;
 		}
 
-		$user_meta      = get_userdata( $user_id );
+		$user_meta = get_userdata( $user_id );
+		if ( ! $user_meta ) {
+			return false;
+		}
+
 		$user_roles     = $user_meta->roles;
 		$customer_roles = [ 'subscriber', 'customer' ]; // Avoid limiting capabilities for contributor/author/editor/admin roles.
 
