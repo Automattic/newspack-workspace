@@ -58,7 +58,7 @@ class My_Account_UI_V1 {
 		\add_action( 'woocommerce_account_content', [ __CLASS__, 'print_urgent_notices' ], 2 );
 		\add_action( 'woocommerce_my_account_my_orders_column_order-status', [ __CLASS__, 'render_order_status_column' ] );
 		\add_action( 'woocommerce_my_account_my_orders_column_order-number', [ __CLASS__, 'render_order_number_column' ] );
-		\add_action( 'woocommerce_my_account_my_orders_column_order-actions', [ __CLASS__, 'render_order_actions_column' ] );
+		\add_filter( 'woocommerce_account_orders_columns', [ __CLASS__, 'orders_columns' ] );
 		\add_action( 'woocommerce_account_content', [ __CLASS__, 'cancel_order_modal' ], 20 );
 	}
 
@@ -1631,8 +1631,8 @@ class My_Account_UI_V1 {
 	}
 
 	/**
-	 * An order's actions for the reader, as plugins have filtered them, without View:
-	 * the order number links to the order. Cancel reads "Cancel order" and comes last.
+	 * An order's actions for the order page header, as plugins have filtered them, without
+	 * View, which would link to the page itself. Cancel reads "Cancel order" and comes last.
 	 *
 	 * @param \WC_Order $order The order.
 	 * @return array[] Actions keyed by slug, each with a `url` and a `name`.
@@ -1649,12 +1649,11 @@ class My_Account_UI_V1 {
 	}
 
 	/**
-	 * Render the modal that confirms cancelling an order, on the Orders list and the
-	 * order page. Its confirm button gets the clicked "Cancel order" link's URL from
-	 * the my-account script, so one modal serves every order on the page.
+	 * Render the modal that confirms cancelling an order on the order page. Its confirm
+	 * button gets the "Cancel order" link's URL from the my-account script.
 	 */
 	public static function cancel_order_modal(): void {
-		if ( ! \is_user_logged_in() || ! in_array( \WC()->query->get_current_endpoint(), [ 'orders', 'view-order' ], true ) ) {
+		if ( ! \is_user_logged_in() || 'view-order' !== \WC()->query->get_current_endpoint() ) {
 			return;
 		}
 		Newspack_UI::generate_modal(
@@ -1679,46 +1678,15 @@ class My_Account_UI_V1 {
 	}
 
 	/**
-	 * Render the actions cell of the Orders table: a menu of the order's actions,
-	 * such as an invoice download a plugin adds. Pay stays out of it, because the
-	 * status cell has "Pay now". An order with no other action gets no menu, and
-	 * the table hides the column when no row has one.
+	 * Drop the actions column from the Orders table. The order number links to the
+	 * order, whose page lists the order's actions; "Pay now" sits in the status cell.
 	 *
-	 * @param \WC_Order $order The order.
+	 * @param array $columns Orders table columns.
+	 * @return array Orders table columns.
 	 */
-	public static function render_order_actions_column( $order ): void {
-		$actions = array_diff_key( self::get_order_actions( $order ), [ 'pay' => true ] );
-		if ( empty( $actions ) ) {
-			return;
-		}
-		?>
-		<div class="newspack-ui__dropdown newspack-my-account__order-actions">
-			<button type="button" class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small" aria-expanded="false">
-				<?php Newspack_UI_Icons::print_svg( 'more' ); ?>
-				<span class="screen-reader-text">
-					<?php
-					/* translators: %s: the order number. */
-					echo \esc_html( sprintf( __( 'Actions for order #%s', 'newspack-plugin' ), $order->get_order_number() ) );
-					?>
-				</span>
-			</button>
-			<div class="newspack-ui__dropdown__content">
-				<ul>
-					<?php foreach ( $actions as $key => $action_link ) : ?>
-						<?php
-						$classes = [ 'newspack-ui__button', 'newspack-ui__button--ghost', \sanitize_html_class( $key ) ];
-						if ( 'cancel' === $key ) {
-							$classes[] = 'newspack-ui__button--destructive';
-						}
-						?>
-						<li>
-							<a class="<?php echo \esc_attr( implode( ' ', $classes ) ); ?>" href="<?php echo \esc_url( $action_link['url'] ); ?>"<?php echo empty( $action_link['aria-label'] ) ? '' : ' aria-label="' . \esc_attr( $action_link['aria-label'] ) . '"'; ?>><?php echo \esc_html( $action_link['name'] ); ?></a>
-						</li>
-					<?php endforeach; ?>
-				</ul>
-			</div>
-		</div>
-		<?php
+	public static function orders_columns( array $columns ): array {
+		unset( $columns['order-actions'] );
+		return $columns;
 	}
 }
 My_Account_UI_V1::init();

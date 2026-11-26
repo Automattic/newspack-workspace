@@ -277,24 +277,27 @@ class Newspack_Test_My_Account_Status extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Orders table's actions cell is a menu of the order's actions, such as an
-	 * invoice download a plugin adds, with Cancel last. View and Pay stay out of it,
-	 * because the order number links to the order and the status cell has "Pay now",
-	 * so an order whose only action is Pay gets no menu.
+	 * The Orders table has no actions column: the order number links to the order,
+	 * whose page lists the actions.
 	 */
-	public function test_order_actions_column_menu() {
-
-		$order = new WC_Order(
+	public function test_orders_columns_drop_actions() {
+		$columns = My_Account_UI_V1::orders_columns(
 			[
-				'status' => 'pending',
-				'total'  => 15,
+				'order-number'  => 'Order',
+				'order-status'  => 'Status',
+				'order-actions' => 'Actions',
 			]
 		);
 
-		ob_start();
-		My_Account_UI_V1::render_order_actions_column( $order );
-		$this->assertSame( '', trim( ob_get_clean() ) );
+		$this->assertSame( [ 'order-number', 'order-status' ], array_keys( $columns ) );
+	}
 
+	/**
+	 * The order page lists the order's actions, such as an invoice download a plugin
+	 * adds, without View, and with Cancel renamed "Cancel order" and last.
+	 */
+	public function test_order_page_actions() {
+		$order       = new WC_Order( [ 'status' => 'pending' ] );
 		$add_actions = function ( $actions ) {
 			return $actions + [
 				'view'    => [
@@ -306,25 +309,17 @@ class Newspack_Test_My_Account_Status extends WP_UnitTestCase {
 					'name' => 'Cancel',
 				],
 				'invoice' => [
-					'url'        => 'https://example.test/invoice/',
-					'name'       => 'Invoice',
-					'aria-label' => 'Download the invoice for this order',
+					'url'  => 'https://example.test/invoice/',
+					'name' => 'Invoice',
 				],
 			];
 		};
 		add_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
-		ob_start();
-		My_Account_UI_V1::render_order_actions_column( $order );
-		$html = ob_get_clean();
+		$actions = My_Account_UI_V1::get_order_actions( $order );
 		remove_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
 
-		$this->assertStringContainsString( 'newspack-ui__dropdown__toggle', $html );
-		$this->assertStringContainsString( 'href="https://example.test/invoice/" aria-label="Download the invoice for this order">Invoice</a>', $html );
-		$this->assertStringContainsString( '>Cancel order</a>', $html );
-		$this->assertStringContainsString( 'href="https://example.test/cancel-order/"', $html );
-		$this->assertLessThan( strpos( $html, '>Cancel order</a>' ), strpos( $html, '>Invoice</a>' ), 'Invoice comes before Cancel order.' );
-		$this->assertStringNotContainsString( 'view-order', $html );
-		$this->assertStringNotContainsString( 'order-pay', $html );
+		$this->assertSame( [ 'invoice', 'cancel' ], array_keys( $actions ) );
+		$this->assertSame( 'Cancel order', $actions['cancel']['name'] );
 	}
 
 	/**
