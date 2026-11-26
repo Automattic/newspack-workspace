@@ -51,6 +51,8 @@ window.newspackBlockVisibility = {
 	available_access_rules: {
 		subscription: { name: 'Active subscription', description: '', default: [], options: DUPLICATE_NAME_PRODUCTS },
 		// The one rule whose options are fetched at edit time rather than localised.
+		flag_untrusted: { name: 'Flag field', description: '', default: true, is_boolean: true, is_untrusted: true },
+		reader_data: { name: 'Reader data', description: '', default: '', has_options: false, trusted_keys: [ 'plan' ] },
 		institution: { name: 'Institutional access', description: '', default: [], options: [ { value: 12, label: 'City Library' } ] },
 	},
 };
@@ -165,5 +167,36 @@ describe( 'block visibility panel, a rule whose options are fetched', () => {
 
 		expect( await screen.findByText( /may be outdated/ ) ).toBeInTheDocument();
 		expect( screen.getByText( 'City Library (#12)' ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'block visibility panel, reader data rule', () => {
+	const renderReaderData = value =>
+		renderPanel( {
+			newspackAccessControlMode: 'custom',
+			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'reader_data', value } ] ] } },
+		} );
+
+	it( 'says a key the browser can also set matches no reader', () => {
+		renderReaderData( 'utm_source=x' );
+
+		expect( screen.getByRole( 'note' ) ).toHaveTextContent( /The browser can also set utm_source, so this rule matches no reader/ );
+	} );
+
+	it( 'says nothing about a key the server sets', () => {
+		renderReaderData( 'plan=x' );
+
+		expect( screen.queryByRole( 'note' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'block visibility panel, untrusted boolean field', () => {
+	it( 'says the field matches no reader even though it has no control', () => {
+		renderPanel( {
+			newspackAccessControlMode: 'custom',
+			newspackAccessControlRules: { custom_access: { active: true, access_rules: [ [ { slug: 'flag_untrusted', value: true } ] ] } },
+		} );
+
+		expect( screen.getByText( /can also set this field’s value, so this rule matches no reader/ ) ).toBeInTheDocument();
 	} );
 } );

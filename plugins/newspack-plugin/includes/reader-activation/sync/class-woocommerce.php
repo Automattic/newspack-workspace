@@ -156,40 +156,15 @@ class WooCommerce {
 	}
 
 	/**
-	 * Get the most recent one-time donation order for a user.
+	 * Get the most recent one-time donation order for a user, by the definition
+	 * gate access uses (Donations::get_one_time_donation_order()).
 	 *
 	 * @param int $user_id User ID.
 	 *
 	 * @return ?WC_Order An Order object or null.
 	 */
 	private static function get_one_time_donation_order_for_user( $user_id ) {
-		$donation_product = Donations::get_donation_product( 'once' );
-		if ( ! $donation_product ) {
-			return;
-		}
-		$user_has_donated = \wc_customer_bought_product( null, $user_id, $donation_product );
-		if ( ! $user_has_donated ) {
-			return;
-		}
-
-		// If user has donated, we'll loop through their orders to find the most recent donation.
-		// If this method was called, that's because they don't have any active subscriptions, so there shouldn't be too many.
-		$args = [
-			'customer_id' => $user_id,
-			'status'      => [ 'wc-completed' ],
-			'limit'       => -1,
-			'order'       => 'DESC',
-			'orderby'     => 'date',
-			'return'      => 'objects',
-		];
-
-		// Return the most recent completed order.
-		$orders = \wc_get_orders( $args );
-		foreach ( $orders as $order ) {
-			if ( Donations::is_donation_order( $order ) ) {
-				return $order;
-			}
-		}
+		return Donations::get_one_time_donation_order( (int) $user_id );
 	}
 
 	/**

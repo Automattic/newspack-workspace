@@ -17,7 +17,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 export type AccessRuleShape = {
 	has_options?: boolean;
@@ -26,6 +26,39 @@ export type AccessRuleShape = {
 	empty_grants_access?: boolean;
 	requires_value?: boolean;
 	options?: unknown[];
+	// Reader-data keys only the server writes; present only on the `reader_data` rule.
+	trusted_keys?: string[];
+	// Set on a promoted-field rule whose key the server doesn't manage.
+	is_untrusted?: boolean;
+};
+
+/**
+ * The keys in a `key=value;…` reader-data rule outside `trusted_keys`. The browser can
+ * also set them, so the rule can't match any reader. Parses as the server does: items
+ * split on `;`, trimmed, key taken before the first `=`. Items with no `=` or an empty
+ * key are malformed rather than untrusted, and are left out. Empty when the rule
+ * declares no trusted keys.
+ *
+ * @param config The rule's registry entry.
+ * @param value  The rule's stored value.
+ */
+export const getUntrustedReaderDataKeys = ( config: AccessRuleShape | undefined, value: unknown ): string[] => {
+	if ( ! Array.isArray( config?.trusted_keys ) || 'string' !== typeof value ) {
+		return [];
+	}
+	const trusted = config.trusted_keys;
+	const keys: string[] = [];
+	for ( const item of value.split( ';' ) ) {
+		const separator = item.indexOf( '=' );
+		if ( separator < 0 ) {
+			continue;
+		}
+		const key = item.slice( 0, separator ).trim();
+		if ( '' !== key && ! trusted.includes( key ) && ! keys.includes( key ) ) {
+			keys.push( key );
+		}
+	}
+	return keys;
 };
 
 /**
@@ -187,6 +220,36 @@ export const isUnconstrainedAccessRuleValue = ( config: AccessRuleShape | undefi
 export const isUnconfiguredAccessRuleValue = ( config: AccessRuleShape | undefined, value: unknown ) =>
 	Boolean( config?.requires_value ) && isEmptyValueForRule( config, value );
 
+const getUntrustedFieldNotice = () => __( 'The browser can also set this field’s value, so this rule matches no reader.', 'newspack-plugin' );
+
+/**
+ * The caution for a rule that can't match any reader because the browser can set what it
+ * reads: a `reader_data` rule naming keys outside `trusted_keys`, or a promoted field
+ * flagged `is_untrusted`. Undefined where neither applies.
+ *
+ * @param config The rule's registry entry.
+ * @param value  The rule's stored value.
+ */
+export const getUntrustedAccessRuleNotice = ( config: AccessRuleShape | undefined, value: unknown ): string | undefined => {
+	if ( config?.is_untrusted ) {
+		return getUntrustedFieldNotice();
+	}
+	const untrustedKeys = getUntrustedReaderDataKeys( config, value );
+	if ( untrustedKeys.length > 0 ) {
+		return sprintf(
+			// translators: %s: comma-separated reader data keys.
+			_n(
+				'The browser can also set %s, so this rule matches no reader.',
+				'The browser can also set %s, so this rule matches no reader.',
+				untrustedKeys.length,
+				'newspack-plugin'
+			),
+			untrustedKeys.join( ', ' )
+		);
+	}
+	return undefined;
+};
+
 /**
  * The caution to show under a rule's picker, or undefined where the stored value
  * needs none.
@@ -201,6 +264,10 @@ export const isUnconfiguredAccessRuleValue = ( config: AccessRuleShape | undefin
  * @param hasOptions Whether the picker has anything to offer.
  */
 export const getAccessRuleValueNotice = ( config: AccessRuleShape | undefined, value: unknown, hasOptions: boolean ): string | undefined => {
+	const untrustedNotice = getUntrustedAccessRuleNotice( config, value );
+	if ( untrustedNotice ) {
+		return untrustedNotice;
+	}
 	if ( isMalformedAccessRuleValue( config, value ) ) {
 		// A value of the wrong shape holds no token, so the picker alone would read as
 		// an empty selection — the opposite of what the value does. Name it, or an
@@ -268,6 +335,9 @@ export const isAccessRulePickerInert = ( config: AccessRuleShape | undefined, va
  * @param value  The rule's stored value.
  */
 export const getRangeRuleValueNotice = ( config: AccessRuleShape | undefined, value: unknown ): string | undefined => {
+	if ( config?.is_untrusted ) {
+		return getUntrustedFieldNotice();
+	}
 	if ( isMalformedAccessRuleValue( config, value ) ) {
 		return 'string' === typeof value
 			? sprintf(

@@ -38,6 +38,16 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 		$this->user_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
 	}
 
+	/**
+	 * Enable one incoming field whose key the browser also writes. Read-only
+	 * fields are exempt from the per-reader cap, and this one is not read-only,
+	 * so it is the field a cap can still refuse.
+	 */
+	private function use_browser_written_field() {
+		update_option( 'newspack_integration_incoming_fields_pull_mock', [ 'referrer' => [ 'name' => 'Referrer' ] ] );
+		Failing_Sample_Integration::$pull_data = [ 'referrer' => 'gold' ];
+	}
+
 	public function tear_down() {
 		delete_option( 'newspack_integration_incoming_fields_pull_mock' );
 		Integrations::disable( 'pull_mock' );
@@ -71,6 +81,7 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 	 * alone must not count as success (NPPD-2076).
 	 */
 	public function test_write_failure_returns_wp_error() {
+		$this->use_browser_written_field();
 		// Fill the reader to the data-key cap so the pull's write is rejected.
 		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
 			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
@@ -89,6 +100,7 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 	 * preview could not show (NPPD-2076 review).
 	 */
 	public function test_dry_run_reports_writes_that_would_fail() {
+		$this->use_browser_written_field();
 		// Fill the reader to the data-key cap so the pull's write would be rejected.
 		for ( $i = 0; $i < Reader_Data::MAX_ITEMS; $i++ ) {
 			Reader_Data::update_item( $this->user_id, "filler_{$i}", '"x"' );
@@ -99,7 +111,7 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result, 'The preview must surface a guaranteed write failure.' );
 		$this->assertSame( 'reader_data_write_failed', $result->get_error_code() );
 		$this->assertStringContainsString( 'Too many items', $result->get_error_message() );
-		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'field_a' ), 'The preview still persists nothing.' );
+		$this->assertFalse( Reader_Data::get_data( $this->user_id, 'referrer' ), 'The preview still persists nothing.' );
 	}
 
 	/**
@@ -112,13 +124,13 @@ class Test_Contact_Pull_Dry_Run extends WP_UnitTestCase {
 		update_option(
 			'newspack_integration_incoming_fields_pull_mock',
 			[
-				'field_a' => [ 'name' => 'Field A' ],
-				'field_b' => [ 'name' => 'Field B' ],
+				'referrer'   => [ 'name' => 'Referrer' ],
+				'utm_source' => [ 'name' => 'UTM source' ],
 			]
 		);
 		Failing_Sample_Integration::$pull_data = [
-			'field_a' => 'gold',
-			'field_b' => 'silver',
+			'referrer'   => 'gold',
+			'utm_source' => 'silver',
 		];
 		// Leave exactly one free slot, so only the first of the two new keys fits.
 		for ( $i = 0; $i < Reader_Data::MAX_ITEMS - 1; $i++ ) {

@@ -926,6 +926,207 @@ class Donations {
 	}
 
 	/**
+	 * Per-request donor status by user ID, so a gate evaluating several rules
+	 * runs the order lookup once.
+	 *
+	 * @var array<int, bool|null>
+	 */
+	private static $donor_status_cache = [];
+
+	/**
+	 * One-time donation orders are fetched in pages of this many. Tests shrink it
+	 * to exercise the walk.
+	 *
+	 * @var int
+	 */
+	private static $one_time_orders_page_size = 20;
+
+	/**
+	 * The one-time donation walk gives up after this many pages. It runs on every
+	 * email-provider sync of a reader with no donation subscription, and on a
+	 * gate check, so a long order history must not load in full. Fifty pages of
+	 * twenty covers a reader's 1,000 most recent paid orders; a one-time
+	 * donation older than that is not found.
+	 *
+	 * @var int
+	 */
+	const ONE_TIME_ORDERS_MAX_PAGES = 50;
+
+	/**
+	 * Clear the per-request donor status, for one user or for all of them.
+	 *
+	 * Call it before reading a status that an order or subscription change in the
+	 * same request may have moved, such as in a Data Events handler, where one
+	 * request can run several queued events.
+	 *
+	 * @param int|null $user_id User ID, or null for every user.
+	 */
+	public static function reset_donor_status_cache( ?int $user_id = null ): void {
+		if ( null === $user_id ) {
+			self::$donor_status_cache = [];
+			return;
+		}
+		unset( self::$donor_status_cache[ $user_id ] );
+	}
+
+	/**
+	 * Whether the user is a donor, according to their orders and subscriptions.
+	 *
+	 * A recurring donor counts only through an active subscription, so a former
+	 * recurring donor (whose parent, renewal, switch and resubscribe orders
+	 * remain) is not a donor. Only one-time donation orders count.
+	 *
+	 * That holds only while WooCommerce Subscriptions is active, because only it can
+	 * tell a subscription's orders from a one-time donation's. With it inactive, a
+	 * former recurring donor's retained orders count as one-time donations.
+	 *
+	 * One-time donations are get_one_time_donation_order()'s, the same ones the
+	 * donor fields synced to the ESP count.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Null when the platform does not track donors server-side,
+	 *                   or when the order lookup is unavailable and nothing could be checked.
+	 */
+	public static function compute_is_donor( int $user_id ): ?bool {
+		if ( $user_id <= 0 || ! self::has_server_side_donor_tracking() ) {
+			return null;
+		}
+		if ( ! array_key_exists( $user_id, self::$donor_status_cache ) ) {
+			self::$donor_status_cache[ $user_id ] = self::lookup_is_donor( $user_id );
+		}
+		return self::$donor_status_cache[ $user_id ];
+	}
+
+	/**
+	 * Look up the user's donor status, uncached.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool|null Null when the order lookup is unavailable.
+	 */
+	private static function lookup_is_donor( int $user_id ): ?bool {
+		/**
+		 * Filters the computed donor status. A boolean replaces the WooCommerce
+		 * lookup; any other return value is ignored.
+		 *
+		 * @param bool|null $is_donor Donor status, or null to compute it.
+		 * @param int       $user_id  User ID.
+		 */
+		$filtered = apply_filters( 'newspack_reader_data_compute_is_donor', null, $user_id );
+		if ( is_bool( $filtered ) ) {
+			return $filtered;
+		}
+
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			return null;
+		}
+
+		if ( function_exists( 'wcs_get_users_subscriptions' ) ) {
+			foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
+				if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+					continue;
+				}
+				foreach ( $subscription->get_items() as $item ) {
+					if ( self::is_donation_product( $item->get_product_id() ) ) {
+						return true;
+					}
+				}
+			}
+		}
+
+		return null !== self::get_one_time_donation_order( $user_id );
+	}
+
+	/**
+	 * The user's most recent paid one-time donation order.
+	 *
+	 * This is the one definition of a one-time donation, shared by gate access
+	 * (compute_is_donor()) and the donor fields synced to the ESP. An order counts
+	 * when it is paid (`processing` or `completed`) and holds a donation product,
+	 * and, while WooCommerce Subscriptions is active, is not a subscription's
+	 * parent, renewal, switch or resubscribe order: those count only through an
+	 * active subscription. An order whose only donation products are recurring
+	 * ones does not count either, even when nothing links it to a subscription.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return \WC_Order|null Null when there is none, or WooCommerce is inactive.
+	 */
+	public static function get_one_time_donation_order( int $user_id ) {
+		if ( $user_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
+			return null;
+		}
+		$per_page = max( 1, (int) self::$one_time_orders_page_size );
+		$seen_ids = [];
+		for ( $page = 1; $page <= self::ONE_TIME_ORDERS_MAX_PAGES; $page++ ) {
+			// `date` alone is not unique: orders created in the same second, as
+			// imports make, could straddle a page boundary and be skipped.
+			$orders = \wc_get_orders(
+				[
+					'customer_id' => $user_id,
+					'status'      => WooCommerce_Connection::ACTIVE_ORDER_STATUSES,
+					'limit'       => $per_page,
+					'page'        => $page,
+					'order'       => 'DESC',
+					'orderby'     => 'date ID',
+					'return'      => 'objects',
+				]
+			);
+			// Stop on a page with no order not already seen, so a store that
+			// ignores `page` cannot loop forever.
+			$seen_any_new = false;
+			foreach ( $orders as $order ) {
+				if ( isset( $seen_ids[ $order->get_id() ] ) ) {
+					continue;
+				}
+				$seen_ids[ $order->get_id() ] = true;
+				$seen_any_new                 = true;
+				if ( ! self::holds_one_time_donation_product( $order ) ) {
+					continue;
+				}
+				if ( function_exists( 'wcs_order_contains_subscription' ) && \wcs_order_contains_subscription( $order, 'any' ) ) {
+					continue;
+				}
+				return $order;
+			}
+			if ( ! $seen_any_new || count( $orders ) < $per_page ) {
+				break;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether the order holds a donation product that is not a subscription product.
+	 *
+	 * Orders still linked to a subscription are left out by the caller. This
+	 * covers the ones nothing links any more, such as those of a deleted
+	 * subscription, which would otherwise pass as one-time gifts.
+	 *
+	 * @param \WC_Order $order Order object.
+	 *
+	 * @return bool
+	 */
+	private static function holds_one_time_donation_product( $order ) {
+		if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+			return self::is_donation_order( $order );
+		}
+		foreach ( $order->get_items() as $item ) {
+			$product_id = $item->get_product_id();
+			if ( ! self::is_donation_product( $product_id ) ) {
+				continue;
+			}
+			// Defensive: a product that doesn't load can't be told apart, so it counts.
+			$product = \wc_get_product( $product_id );
+			if ( ! $product || ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Handle submission of the donation form.
 	 */
 	public static function process_donation_request() {

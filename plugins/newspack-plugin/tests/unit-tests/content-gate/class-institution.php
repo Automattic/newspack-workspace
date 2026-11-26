@@ -439,6 +439,27 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An institution's reader data condition matches only a value the server wrote
+	 * for a server-managed key.
+	 */
+	public function test_reader_data_institution_uses_trust() {
+		$browser_key_inst = Institution::create( 'Browser Key Institute', '', [ 'reader_data' => 'utm_source=campus' ] );
+		$server_key_inst  = Institution::create( 'Server Key Institute', '', [ 'reader_data' => 'is_newsletter_subscriber=true' ] );
+		$this->post_ids[] = $browser_key_inst;
+		$this->post_ids[] = $server_key_inst;
+		$reader_id        = $this->create_reader( 'reader@example.test' );
+
+		\Newspack\Reader_Data::update_item( $reader_id, 'utm_source', 'campus' );
+		delete_transient( Institution::TRANSIENT_KEY );
+		$this->assertFalse( Institution::evaluate( $reader_id, [ $browser_key_inst ] ) );
+		$this->assertFalse( Institution::evaluate( $reader_id, [ $server_key_inst ] ) );
+
+		\Newspack\Reader_Data::update_item( $reader_id, 'is_newsletter_subscriber', true );
+		Institution::reset_matching_cache();
+		$this->assertTrue( Institution::evaluate( $reader_id, [ $server_key_inst ] ) );
+	}
+
+	/**
 	 * Test that evaluate_rule returns false for anonymous users without matching IP.
 	 */
 	public function test_evaluate_rule_anonymous_no_ip_returns_false() {

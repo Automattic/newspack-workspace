@@ -10,6 +10,7 @@ use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Data;
+use Newspack\Reader_Data_Trust;
 use Newspack\WooCommerce_Products;
 
 /**
@@ -360,6 +361,26 @@ class Newspack_Test_Reader_Data_Active_Subscriptions extends WP_UnitTestCase {
 		);
 		$this->assertSame( 0, $second_updates );
 		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+	}
+
+	/**
+	 * A right list with no server mark, as stored before the mark existed, is
+	 * rewritten once so reader-data rules can read it.
+	 */
+	public function test_refresh_marks_a_right_but_unmarked_list() {
+		$owner_id = $this->create_reader();
+		$this->create_subscription( $owner_id, 101 );
+		Reader_Data::update_item( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY, wp_json_encode( [ 101 ] ), false );
+		$this->assertFalse( Reader_Data_Trust::has_valid_mark( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY ) );
+
+		$updates = $this->count_item_updates(
+			function () use ( $owner_id ) {
+				Active_Subscriptions_Reader_Data::refresh( $owner_id );
+			}
+		);
+		$this->assertSame( 1, $updates );
+		$this->assertSame( [ 101 ], $this->stored_products( $owner_id ) );
+		$this->assertTrue( Reader_Data_Trust::has_valid_mark( $owner_id, Active_Subscriptions_Reader_Data::STORE_KEY ) );
 	}
 
 	/**

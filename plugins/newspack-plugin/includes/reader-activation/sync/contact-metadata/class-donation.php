@@ -174,7 +174,8 @@ class Donation extends Subscription {
 	}
 
 	/**
-	 * Get the most recent one-time donation order for the current user.
+	 * Get the most recent one-time donation order for the current user, by the
+	 * definition gate access uses (Donations::get_one_time_donation_order()).
 	 *
 	 * @return \WC_Order|null
 	 */
@@ -189,64 +190,8 @@ class Donation extends Subscription {
 			return null;
 		}
 
-		$donation_product = Donations::get_donation_product( 'once' );
-		if ( ! $donation_product ) {
-			return null;
-		}
-
-		$user_has_donated = \wc_customer_bought_product( null, $this->user->ID, $donation_product );
-		if ( ! $user_has_donated ) {
-			return null;
-		}
-
-		$page = 1;
-		do {
-			$orders = \wc_get_orders(
-				[
-					'customer_id' => $this->user->ID,
-					'status'      => [ 'wc-completed' ],
-					'limit'       => 20,
-					'order'       => 'DESC',
-					'orderby'     => 'date',
-					'return'      => 'objects',
-					'page'        => $page++,
-				]
-			);
-
-			foreach ( $orders as $order ) {
-				if ( $this->is_one_time_donation_order( $order ) ) {
-					$this->one_time_donation_order_cache = $order;
-					return $this->one_time_donation_order_cache;
-				}
-			}
-		} while ( ! empty( $orders ) );
-
-		return null;
-	}
-
-	/**
-	 * Whether the order holds a one-time donation.
-	 *
-	 * Renewal, switch, and other subscription orders carry the recurring donation
-	 * product, so they also count as donation orders. Leaving them out keeps a
-	 * donation edit, whose switch order often totals 0.00, from passing as the
-	 * reader's latest gift.
-	 *
-	 * @param \WC_Order $order Order object.
-	 * @return bool
-	 */
-	private function is_one_time_donation_order( $order ) {
-		foreach ( $order->get_items() as $item ) {
-			$product_id = $item->get_product_id();
-			if ( ! Donations::is_donation_product( $product_id ) ) {
-				continue;
-			}
-			$product = \wc_get_product( $product_id );
-			if ( $product && ! \WC_Subscriptions_Product::is_subscription( $product ) ) {
-				return true;
-			}
-		}
-		return false;
+		$this->one_time_donation_order_cache = Donations::get_one_time_donation_order( (int) $this->user->ID );
+		return $this->one_time_donation_order_cache;
 	}
 
 	/**

@@ -157,7 +157,8 @@ describe( 'block-visibility access rule value control', () => {
 	it( 'gives a rule that declares no options source the free-text box', () => {
 		const control = renderControl( 'email_domain', { name: 'Whitelisted email domain', has_options: false, options: [] }, '' );
 
-		expect( controlOf( control ).type ).toBe( TextControl );
+		// The box sits inside the same caution wrapper as the picker.
+		expect( childrenOf( controlOf( control ) )[ 0 ].type ).toBe( TextControl );
 	} );
 
 	it( 'takes the picker out of play when the rule needs a value it cannot offer', () => {

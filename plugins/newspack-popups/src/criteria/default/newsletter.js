@@ -28,6 +28,37 @@ export function isFromEmail() {
 }
 
 /**
+ * Seconds a browser-side newsletter signup keeps matching "subscribers" segments
+ * for a logged-in reader.
+ */
+const SIGNUP_HINT_LIFETIME = 24 * 60 * 60;
+
+/**
+ * Whether the browser-side signup hint counts as a signup.
+ *
+ * The hint is the signup time in seconds, and any value that isn't a number is
+ * not a hint. It is not cleared when a reader later unsubscribes. For a
+ * logged-in reader it only counts for a day. Where the site can check the ESP,
+ * the server-managed `is_newsletter_subscriber` has reached the browser and
+ * caught up by then; where it can't, the signup stops counting after the day.
+ * A logged-out reader never receives that value, so the hint keeps counting.
+ *
+ * @param {*}       hint       Stored `newsletter_signup_client` value.
+ * @param {boolean} isLoggedIn Whether the reader is authenticated.
+ * @return {boolean} Whether the hint records a signup that still counts.
+ */
+export function isCountingSignupHint( hint, isLoggedIn ) {
+	if ( 'number' !== typeof hint || ! Number.isFinite( hint ) ) {
+		return false;
+	}
+	const now = Date.now() / 1000;
+	if ( hint > now ) {
+		return false;
+	}
+	return ! isLoggedIn || now - hint < SIGNUP_HINT_LIFETIME;
+}
+
+/**
  * Matching function for the 'newsletter' criteria.
  *
  * @param {Object} config    The segment criteria config.
@@ -36,7 +67,9 @@ export function isFromEmail() {
  * @return {boolean} Whether the criteria matches.
  */
 export function matchNewsletter( config, { store } ) {
-	const isSubscriber = store.get( 'is_newsletter_subscriber' ) || isFromEmail();
+	const isLoggedIn = Boolean( store.get( 'reader' )?.authenticated );
+	const isSubscriber =
+		store.get( 'is_newsletter_subscriber' ) || isCountingSignupHint( store.get( 'newsletter_signup_client' ), isLoggedIn ) || isFromEmail();
 	switch ( config.value ) {
 		case 'subscribers':
 			return isSubscriber;
