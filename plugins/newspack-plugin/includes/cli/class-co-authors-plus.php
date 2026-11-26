@@ -467,7 +467,7 @@ class Co_Authors_Plus {
 			}
 
 			self::assign_user_props( $guest_author_data, $user_id, $author_slug );
-			self::assign_user_meta( $guest_author, $user_id );
+			self::assign_user_meta( $guest_author_data, $user_id );
 
 			if ( self::$live ) {
 				$linked_user->add_role( \Newspack\Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME );
@@ -562,12 +562,11 @@ class Co_Authors_Plus {
 	/**
 	 * Assign user meta from guest author post's meta.
 	 *
-	 * @param WP_Post $guest_author The guest author post.
-	 * @param int     $user_id The user ID to update the avatar for.
+	 * @param array $guest_author_data The guest author post's meta, read before the post is deleted.
+	 * @param int   $user_id The user ID to update the avatar for.
 	 * @return bool True if the user meta was updated, false otherwise.
 	 */
-	private static function assign_user_meta( $guest_author, $user_id ) {
-		$guest_author_data = get_post_meta( $guest_author->ID );
+	private static function assign_user_meta( $guest_author_data, $user_id ) {
 		$assignable_meta = array_merge(
 			[
 				'display_name',

@@ -27,6 +27,12 @@ if ( ! class_exists( 'CoAuthors_Guest_Authors' ) ) {
 		}
 
 		public function delete_guest_author_cache( $guest_author ) {}
+
+		// Stands in for the one effect these tests need: the guest author post and its meta are gone.
+		public function delete( $id, $reassign_to = false ) {
+			wp_delete_post( $id, true );
+			return true;
+		}
 	}
 }
 
@@ -149,6 +155,39 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		$this->assertSame( [], get_user_meta( $user_id, '_np_cap_guest_author_migration_data', false ) );
 	}
 
+	public function linked_user_terms() {
+		return [
+			'linked user without an author term' => [ false ],
+			'linked user with an author term'    => [ true ],
+		];
+	}
+
+	/**
+	 * The guest author is deleted during the run, so anything not copied is lost.
+	 *
+	 * @dataProvider linked_user_terms
+	 */
+	public function test_live_run_copies_the_guest_profile_to_the_linked_user( $has_own_term ) {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'linked123' ] );
+		if ( $has_own_term ) {
+			wp_insert_term( 'linked123', 'author', [ 'slug' => 'cap-linked123' ] );
+		}
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$profile = [
+			'first_name'         => 'Jane',
+			'last_name'          => 'Doe',
+			'description'        => 'Guest bio',
+			'newspack_job_title' => 'Guest title',
+		];
+		$this->create_guest_author( 'jane-doe', array_merge( [ 'linked_account' => 'linked123' ], $profile ) );
+
+		$this->migrate( [ 'live' => true ] );
+
+		foreach ( $profile as $key => $value ) {
+			$this->assertSame( $value, get_user_meta( $user_id, $key, true ), $key );
+		}
+	}
+
 	public function unusable_slugs() {
 		return [
 			'held by another user, live run' => [ 'jane-doe', true, [ 'live' => true ] ],
@@ -236,6 +275,27 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		$this->migrate( [ 'live' => true ] );
 
 		$this->assertSame( 'Original Name', get_userdata( $user_id )->display_name );
+	}
+
+	public function test_live_run_keeps_backslashes_for_a_linked_user() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'linked123' ] );
+		update_user_meta( $user_id, 'newspack_job_title', wp_slash( 'Old A\\B' ) );
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$this->create_guest_author(
+			'jane-doe',
+			[
+				'linked_account'     => 'linked123',
+				'display_name'       => 'Jane C\\D',
+				'newspack_job_title' => 'New E\\F',
+			]
+		);
+
+		$this->migrate( [ 'live' => true ] );
+
+		$this->assertSame( 'Jane C\\D', get_userdata( $user_id )->display_name );
+		$this->assertSame( 'New E\\F', get_user_meta( $user_id, 'newspack_job_title', true ) );
+		$this->assertSame( 'Old A\\B', get_user_meta( $user_id, '_np_original_newspack_job_title', true ) );
+		$this->assertSame( 'Old A\\B', get_user_meta( $user_id, '_np_cap_guest_author_migration_data', true )['newspack_job_title'] );
 	}
 
 	public function test_dry_run_stores_no_backup_for_an_existing_user() {
