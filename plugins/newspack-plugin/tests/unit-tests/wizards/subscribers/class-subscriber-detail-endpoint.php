@@ -644,6 +644,29 @@ class Test_Subscribers_Wizard_Subscriber_Detail_Endpoint extends WP_UnitTestCase
 	}
 
 	/**
+	 * A reader with a blank display name goes by their email, on their own profile
+	 * and as the purchaser of a gift.
+	 */
+	public function test_people_without_display_name_go_by_email() {
+		global $wpdb;
+		$this->login_admin();
+		$purchaser_id = $this->create_reader( 'Gift Buyer' );
+		$recipient_id = $this->create_reader( 'Gift Receiver' );
+		$gift         = $this->create_gifted_subscription( $purchaser_id, $recipient_id );
+		foreach ( [ $purchaser_id, $recipient_id ] as $user_id ) {
+			// Written straight to the table: wp_insert_user() fills a blank display name from the login.
+			$wpdb->update( $wpdb->users, [ 'display_name' => ' ' ], [ 'ID' => $user_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+			clean_user_cache( $user_id );
+		}
+
+		$subscriber = $this->dispatch( $recipient_id )->get_data();
+		$by_id      = array_column( $subscriber['subscriptions'], null, 'id' );
+
+		$this->assertSame( get_userdata( $recipient_id )->user_email, $subscriber['name'] );
+		$this->assertSame( get_userdata( $purchaser_id )->user_email, $by_id[ $gift->get_id() ]['giftedBy']['name'] );
+	}
+
+	/**
 	 * Each subscription reports the billing email its payment link goes to. For a
 	 * gift that is the purchaser's, who still pays, not the recipient's account
 	 * email; the profile's reactivate confirmation shows it so the admin knows who

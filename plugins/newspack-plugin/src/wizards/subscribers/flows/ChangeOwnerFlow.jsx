@@ -95,7 +95,12 @@ export default function ChangeOwnerFlow( { group, actions, onClose, onDone } ) {
 		() =>
 			( group.memberList || [] )
 				.filter( member => 'owner' !== member.role )
-				.map( member => ( { value: String( member.id ), label: `${ member.name } (${ member.email })`, name: member.name } ) ),
+				.map( member => ( {
+					value: String( member.id ),
+					// A member with no display name already goes by their email.
+					label: member.name === member.email ? member.name : `${ member.name } (${ member.email })`,
+					name: member.name,
+				} ) ),
 		[ group ]
 	);
 
