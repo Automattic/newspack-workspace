@@ -669,7 +669,7 @@ describe( 'the numbers on a card', () => {
 			} )
 		);
 
-		expect( rowValue( 'Subscription number' ) ).toHaveTextContent( '#1001' );
+		expect( screen.getByRole( 'link', { name: '#1001' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=31&action=edit' );
 		expect( screen.getByRole( 'link', { name: '#2002' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=2002&action=edit' );
 	} );
 

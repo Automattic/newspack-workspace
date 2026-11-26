@@ -154,7 +154,9 @@ const orderNumber = ( { number, editUrl } ) => ( editUrl ? <a href={ editUrl }>{
  * @return {Array} Card rows.
  */
 const numberRows = entry => [
-	...( entry.number ? [ { label: __( 'Subscription number', 'newspack-plugin' ), value: `#${ entry.number }` } ] : [] ),
+	...( entry.number
+		? [ { label: __( 'Subscription number', 'newspack-plugin' ), value: orderNumber( { number: entry.number, editUrl: entry.editUrl } ) } ]
+		: [] ),
 	...( entry.lastOrder ? [ { label: __( 'Latest order', 'newspack-plugin' ), value: orderNumber( entry.lastOrder ) } ] : [] ),
 ];
 
