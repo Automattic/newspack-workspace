@@ -1860,7 +1860,8 @@ class Subscribers_Wizard extends Wizard {
 	 * lets a plan label on a row filter back to the reader who holds it.
 	 *
 	 * A record needs a positive numeric `id`, a `site_name` with something in it once
-	 * trimmed, and a non-empty string `status`. A missing `plan` reads as empty.
+	 * trimmed, and a non-empty string `status` outside UNLISTED_STATUSES. A missing
+	 * `plan` reads as empty.
 	 *
 	 * @param mixed $record One record from the network filters.
 	 *
@@ -1880,7 +1881,9 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		$status = $record['status'] ?? null;
-		if ( ! is_string( $status ) || '' === $status ) {
+		// A failed checkout on the other site trashes its subscription, and the record
+		// carries that status. It counts no more than a trashed subscription here.
+		if ( ! is_string( $status ) || '' === $status || in_array( $status, self::UNLISTED_STATUSES, true ) ) {
 			return null;
 		}
 		$plan      = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';

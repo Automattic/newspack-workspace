@@ -736,6 +736,26 @@ class Test_Subscribers_Wizard_Subscribers_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A failed checkout on another network site trashes that site's subscription, and
+	 * the hub records the trash status. The row and the On hold filter leave it out,
+	 * as they do a trashed subscription on this site.
+	 */
+	public function test_a_subscription_trashed_on_another_network_site_is_left_out() {
+		$this->login_admin();
+		$reader_id = $this->create_reader( 'TrashedElsewhere' );
+		$trashed   = $this->network_index_row( $reader_id, 'trash', 'Fan Membership' );
+		$for_user  = fn( $existing, $user_id ) => (int) $user_id === $reader_id ? [ $trashed ] : $existing;
+		add_filter( 'newspack_subscribers_network_subscriptions', $for_user, 10, 2 );
+		$this->network_callbacks[] = [ 'newspack_subscribers_network_subscriptions', $for_user ];
+		$this->stub_network_index( [ $trashed ] );
+
+		$row = $this->dispatch()->get_data()['items'][0];
+		$this->assertSame( [], $row['subscriptions'] );
+		$this->assertSame( '', $row['status'] );
+		$this->assertSame( [], $this->filtered_ids( [ 'status' => [ 'on-hold' ] ] ) );
+	}
+
+	/**
 	 * The Active filter counts a subscription managed on another network site: a
 	 * reader whose only subscription lives elsewhere shows an Active badge in the
 	 * list, so filtering on Active has to return them, and `total` has to count them.
