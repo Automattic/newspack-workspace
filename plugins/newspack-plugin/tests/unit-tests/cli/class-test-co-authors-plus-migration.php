@@ -97,7 +97,7 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 			$meta
 		);
 		foreach ( $meta as $key => $value ) {
-			update_post_meta( $guest_author_id, 'cap-' . $key, $value );
+			update_post_meta( $guest_author_id, 'cap-' . $key, wp_slash( $value ) );
 		}
 		return $guest_author_id;
 	}
@@ -146,6 +146,96 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		$this->assertSame( 'linked123', $user->user_nicename );
 		$this->assertNotNull( get_post( $guest_author_id ) );
 		$this->assertStringContainsString( 'Would add the Non-Editing Contributor role', implode( "\n", WP_CLI::$logs ) );
+		$this->assertSame( [], get_user_meta( $user_id, '_np_cap_guest_author_migration_data', false ) );
+	}
+
+	public function unusable_slugs() {
+		return [
+			'held by another user, live run' => [ 'jane-doe', true, [ 'live' => true ] ],
+			'held by another user, dry run'  => [ 'jane-doe', true, [] ],
+			'over 50 characters, live run'   => [ str_repeat( 'long-', 11 ), false, [ 'live' => true ] ],
+			'over 50 characters, dry run'    => [ str_repeat( 'long-', 11 ), false, [] ],
+		];
+	}
+
+	/**
+	 * Migrating either would move the guest author's posts to another byline, or to none.
+	 *
+	 * @dataProvider unusable_slugs
+	 */
+	public function test_linked_guest_author_with_an_unusable_slug_is_left_alone( $slug, $held_by_another_user, $args ) {
+		$slug    = rtrim( $slug, '-' );
+		$user_id = self::factory()->user->create(
+			[
+				'user_login' => 'linked123',
+				'role'       => 'administrator',
+			]
+		);
+		if ( $held_by_another_user ) {
+			self::factory()->user->create( [ 'user_nicename' => $slug ] );
+		}
+		$term_id         = wp_insert_term( $slug, 'author', [ 'slug' => 'cap-' . $slug ] )['term_id'];
+		$guest_author_id = $this->create_guest_author( $slug, [ 'linked_account' => 'linked123' ] );
+
+		$this->migrate( $args );
+
+		$user = get_userdata( $user_id );
+		$this->assertNotNull( get_post( $guest_author_id ) );
+		$this->assertSame( 'cap-' . $slug, get_term( $term_id, 'author' )->slug );
+		$this->assertSame( 'linked123', $user->user_nicename );
+		$this->assertSame( [ 'administrator' ], array_values( $user->roles ) );
+		$this->assertStringContainsString( sprintf( 'Skipping guest author %d', $guest_author_id ), implode( "\n", WP_CLI::$warnings ) );
+		$this->assertNotContains( 'Simple Local Avatars plugin not active.', WP_CLI::$warnings );
+	}
+
+	public function test_live_run_reports_a_failed_update_of_a_linked_user() {
+		self::factory()->user->create( [ 'user_login' => 'linked123' ] );
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$this->create_guest_author( 'jane-doe', [ 'linked_account' => 'linked123' ] );
+		// An empty result from this filter makes WordPress refuse the user write.
+		add_filter( 'wp_pre_insert_user_data', '__return_empty_array' );
+
+		$this->migrate( [ 'live' => true ] );
+
+		$this->assertStringContainsString( 'Could not update user', implode( "\n", WP_CLI::$warnings ) );
+	}
+
+	public function test_live_run_backs_up_the_linked_user_name_and_nicename() {
+		$user_id = self::factory()->user->create(
+			[
+				'user_login'   => 'linked123',
+				'display_name' => 'Original Name',
+			]
+		);
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$this->create_guest_author( 'jane-doe', [ 'linked_account' => 'linked123' ] );
+
+		$this->migrate( [ 'live' => true ] );
+
+		$backup = get_user_meta( $user_id, '_np_cap_guest_author_migration_data', true );
+		$this->assertSame( 'Original Name', $backup['display_name'] );
+		$this->assertSame( 'linked123', $backup['user_nicename'] );
+	}
+
+	public function test_live_run_keeps_the_linked_user_name_when_the_guest_name_is_blank() {
+		$user_id = self::factory()->user->create(
+			[
+				'user_login'   => 'linked123',
+				'display_name' => 'Original Name',
+			]
+		);
+		wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] );
+		$this->create_guest_author(
+			'jane-doe',
+			[
+				'linked_account' => 'linked123',
+				'display_name'   => ' ',
+			]
+		);
+
+		$this->migrate( [ 'live' => true ] );
+
+		$this->assertSame( 'Original Name', get_userdata( $user_id )->display_name );
 	}
 
 	public function test_dry_run_stores_no_backup_for_an_existing_user() {
@@ -196,5 +286,29 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		$backup = get_user_meta( $user_id, '_np_cap_guest_author_migration_data', true );
 		$this->assertSame( 'https://existing.example/', $backup['user_url'] );
 		$this->assertSame( 'Existing title', $backup['newspack_job_title'] );
+	}
+
+	public function test_live_run_keeps_backslashes_for_new_and_updated_users() {
+		$user_id = self::factory()->user->create( [ 'user_nicename' => 'jane-doe' ] );
+		update_user_meta( $user_id, 'description', wp_slash( 'Old C:\\bio' ) );
+		$this->create_guest_author( 'jane-doe', [ 'description' => 'Guest D:\\bio' ] );
+		$this->create_guest_author( 'new-writer', [ 'newspack_job_title' => 'Editor E:\\desk' ] );
+
+		$this->migrate( [ 'live' => true ] );
+
+		$this->assertSame( 'Guest D:\\bio', get_user_meta( $user_id, 'description', true ) );
+		$this->assertSame( 'Old C:\\bio', get_user_meta( $user_id, '_np_cap_guest_author_migration_data', true )['description'] );
+		$this->assertSame( 'Editor E:\\desk', get_user_meta( get_user_by( 'login', 'new-writer' )->ID, 'newspack_job_title', true ) );
+	}
+
+	public function test_verbose_dry_run_describes_only_what_a_live_run_would_do() {
+		self::factory()->user->create( [ 'user_nicename' => 'jane-doe' ] );
+		$this->create_guest_author( 'jane-doe', [ 'display_name' => ' ' ] );
+
+		$this->migrate( [ 'verbose' => true ] );
+
+		$logs = implode( "\n", WP_CLI::$logs );
+		$this->assertStringContainsString( 'would be stored in _np_cap_guest_author_migration_data', $logs );
+		$this->assertStringNotContainsString( 'Display name will be updated', $logs );
 	}
 }
