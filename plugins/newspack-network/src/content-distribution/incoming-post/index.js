@@ -50,10 +50,6 @@ function IncomingPost() {
 	} );
 
 	useEffect( () => {
-		setIsUnLinked( unlinked );
-	}, [ unlinked ] );
-
-	useEffect( () => {
 		if ( ! hasInitializedSidebar && areMetaBoxesInitialized ) {
 			openGeneralSidebar( 'newspack-network-incoming-post/newspack-network-content-distribution-panel' );
 			setHasInitializedSidebar( true ); // We only want to strongarm this once.
@@ -120,20 +116,25 @@ function IncomingPost() {
 				.then( () => {
 					// Remove the 'draft saved' notice.
 					wp.data.dispatch( 'core/notices' ).removeNotice( 'SAVE_POST_NOTICE_ID' );
-					toggleUnlinkedState( _unlinked ).then( () => {
-						setIsUnLinkedToggling( false );
-						setIsUnLinked( false );
-						window.location.reload();
-					} ); // Reload to get the origin post content.
+					toggleUnlinkedState( _unlinked ).then( data => {
+						if ( data ) {
+							window.location.reload(); // Reload to get the origin post content.
+						} else {
+							setIsUnLinkedToggling( false );
+						}
+					} );
 				} );
 		} else {
-			toggleUnlinkedState( _unlinked ).then( data => {
-				if ( data ) {
-					// Reload so the panels removed while linked come back.
-					window.location.reload();
-				} else {
+			toggleUnlinkedState( _unlinked ).then( async data => {
+				if ( ! data ) {
 					setIsUnLinkedToggling( false );
+					return;
 				}
+				// Save edits made while linked, so the reload doesn't prompt to discard them.
+				if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
+					await wp.data.dispatch( 'core/editor' ).savePost();
+				}
+				window.location.reload();
 			} );
 		}
 	};
