@@ -70,9 +70,48 @@ installed plugin code, so a plugin/core update can't leave a stale fixture behin
   `site-setup.sh` and `e2e-plugin.php` are shipped from this repo, not the site –
   provisioning deploys the plugin every run, so it can't drift out of sync.
 
-## CI (TeamCity) notes
+## CI (TeamCity)
 
-The build definition lives in TeamCity settings, not this repo. It provisions over
-SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` / `E2E_SSH_USER_PASS` credentials, which
-`setupSite` also reads for the remote path. A managed host (Atomic) cannot
-`DROP DATABASE`, so the remote path uses `--reset clean` (drop tables, keep the DB).
+TeamCity runs the suite; the build definitions live in TeamCity settings, not this
+repo. Provisioning is over SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` /
+`E2E_SSH_USER_PASS` credentials that `setupSite` reads for its remote path. A managed
+host (Atomic) cannot `DROP DATABASE`, so the remote path uses `--reset clean` (drop
+tables, keep the DB).
+
+Two kinds of run:
+
+- **Nightly** — against the shared staging site, testing its installed release build.
+  The broad daily signal.
+- **Release gate** — on a PR into `alpha` or `release`, testing that PR's own built
+  code against a dedicated per-branch staging site, so a regression is caught before
+  it promotes. Each gated branch has its own site, so runs never collide; two PRs
+  into the same branch serialise on that site via the build queue.
+
+### Release-gate build (per gated branch)
+
+The gate build differs from the nightly only in that it deploys the candidate build
+before provisioning:
+
+1. Trigger on the PR's **target branch** (TeamCity's Pull Requests build feature
+   filters by target branch); build the PR's merge commit.
+2. Build the plugins, then run `e2e/deploy-plugins.sh` to push them onto the
+   branch's site over the same `E2E_SSH_*` channel. It swaps each plugin/theme in
+   place, backing up the managed symlink it replaces.
+3. `USE_SETUP=true npm run test:setup` — `setupSite` provisions from scratch against
+   the deployed code, then the suite runs.
+4. Report the result to the PR as a status check (Commit Status Publisher).
+
+The gate build supplies the same secrets as the nightly — the `E2E_SSH_*` SSH
+credentials and `ADMIN_PASSWORD` — plus a strong `E2E_EMAIL_SENDBOX_SECRET`:
+provisioning refuses the default sendbox secret on an internet-reachable host, and
+the suite reads `/_email` with the same value.
+
+`deploy-plugins.sh` deploys only the plugins/theme whose source is in this monorepo
+(`newspack-plugin`, `-blocks`, `-popups`, `-newsletters`, `-ads`, and the
+`newspack-theme` classic theme). `newspack-manager` ships from its own repo and is
+expected already installed on the site.
+
+The specs track the release-channel UI (see the setup-model note above). On the
+`alpha` gate they run against alpha code, so a spec that no longer matches alpha's UI
+fails there first — the gate flagging a spec to update before the feature promotes,
+not a reason to branch the spec.
