@@ -17,7 +17,7 @@ type Brand = {
 	meta: {
 		_custom_url: string;
 		_show_page_on_front: number;
-		_logo: number | Attachment;
+		_logo: number | Attachment | { id: number; url: string; [ key: string ]: unknown } | null;
 		_theme_colors: ThemeColorsMeta[];
 		_menus: Array< {
 			location: string;

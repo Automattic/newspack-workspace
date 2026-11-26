@@ -78,7 +78,7 @@ const InstitutionsAdvancedSettings = ( { closeModal }: { closeModal: () => void 
 
 	saveText.current = handleSaveText;
 	return (
-		<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+		<Modal size="medium" title={ __( 'Advanced Settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
 			<Stack direction="column" gap="xl" className="newspack-content-gates__stack">
 				<TextControl
 					__next40pxDefaultSize

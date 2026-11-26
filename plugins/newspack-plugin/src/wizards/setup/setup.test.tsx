@@ -192,7 +192,7 @@ describe( 'Setup wizard shell', () => {
 	} );
 
 	it( 'opens Done directly once the setup was completed before', async () => {
-		window.newspack_aux_data = { has_completed_setup: '1' };
+		window.newspack_aux_data = { has_completed_setup: true, is_e2e: false, is_debug_mode: false, site_title: 'My Site', is_managed: false };
 		mockInitialCheck( true );
 		window.location.hash = '#/done';
 		render( <SetupWizard /> );

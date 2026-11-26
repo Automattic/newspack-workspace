@@ -58,6 +58,7 @@
 		"@babel/preset-env": "^7.29.7",
 		"@babel/preset-react": "^7.29.7",
 		"@babel/preset-typescript": "^7.29.7",
+		"@types/react-router-dom": "^5.3.3",
 		"newspack-scripts": "workspace:*",
 		"recursive-copy": "^2.0.0"
 	},
