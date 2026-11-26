@@ -24,31 +24,29 @@ const originalSiteUrl = newspack_network_incoming_post.originalSiteUrl;
 const originalPostEditUrl = newspack_network_incoming_post.originalPostEditUrl;
 const unlinked = newspack_network_incoming_post.unlinked;
 
-// Sidebar fields a linked post takes from its origin. The stylesheet's overlay can't
-// lock them, because their markup changes between WordPress versions, so they are
-// removed from the editor instead. A removed panel stays removed until the editor
-// reloads, which is why unlinking reloads the page, or asks the user to when there are
-// unsaved edits.
-const LINKED_PANELS = [ 'post-excerpt', 'discussion-panel', 'featured-image' ];
-
 function IncomingPost() {
 	const { createNotice } = useDispatch( 'core/notices' );
-	const { lockPostAutosaving, unlockPostAutosaving, removeEditorPanel } = useDispatch( 'core/editor' );
+	const { lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
 	const { openGeneralSidebar } = useDispatch( 'core/edit-post' );
+	const { receiveEntityRecords } = useDispatch( 'core' );
 	const [ isUnLinkedToggling, setIsUnLinkedToggling ] = useState( false );
-	// Start from the stored state: a first render as linked would remove the panels until reload.
-	const [ isUnLinked, setIsUnLinked ] = useState( unlinked );
+	const [ isUnLinked, setIsUnLinked ] = useState( false );
 	const [ hasInitializedSidebar, setHasInitializedSidebar ] = useState( false );
 	const [ showConfirmDialog, setShowConfirmDialog ] = useState( false );
 
-	const { postId, areMetaBoxesInitialized } = useSelect( select => {
-		const { getCurrentPostId } = select( 'core/editor' );
+	const { postId, postType, areMetaBoxesInitialized } = useSelect( select => {
+		const { getCurrentPostId, getCurrentPostType } = select( 'core/editor' );
 		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } = select( 'core/edit-post' );
 		return {
 			postId: getCurrentPostId(),
+			postType: getCurrentPostType(),
 			areMetaBoxesInitialized: _areMetaBoxesInitialized(),
 		};
 	} );
+
+	useEffect( () => {
+		setIsUnLinked( unlinked );
+	}, [ unlinked ] );
 
 	useEffect( () => {
 		if ( ! hasInitializedSidebar && areMetaBoxesInitialized ) {
@@ -82,7 +80,6 @@ function IncomingPost() {
 			unlockPostAutosaving( lockName );
 		} else {
 			lockPostAutosaving( lockName );
-			LINKED_PANELS.forEach( panel => removeEditorPanel( panel ) );
 		}
 		// Toggle the CSS overlay.
 		document.querySelector( '#editor' )?.classList.toggle( 'newspack-network-incoming-post-linked', ! isUnLinked );
@@ -98,12 +95,21 @@ function IncomingPost() {
 		} )
 			.then( data => {
 				setIsUnLinked( data.unlinked );
-				return data;
+				// On WordPress 7.2+ the sidebar fields lock on the linked state stored with the
+				// post (see linked-fields.js), so the editor's copy has to carry the new value.
+				// Receiving it as saved, not as an edit, keeps it out of the next save.
+				const record = wp.data.select( 'core' ).getEntityRecord( 'postType', postType, postId );
+				if ( record ) {
+					receiveEntityRecords(
+						'postType',
+						postType,
+						[ { ...record, meta: { ...record.meta, newspack_network_post_unlinked: data.unlinked ? 1 : 0 } } ],
+						undefined,
+						false
+					);
+				}
 			} )
-			.catch( error => {
-				createNotice( 'error', error.message );
-				return null;
-			} );
+			.catch( error => createNotice( 'error', error.message ) );
 	};
 
 	const toggleUnlinkedClicked = _unlinked => {
@@ -117,46 +123,30 @@ function IncomingPost() {
 				.then( () => {
 					// Remove the 'draft saved' notice.
 					wp.data.dispatch( 'core/notices' ).removeNotice( 'SAVE_POST_NOTICE_ID' );
-					toggleUnlinkedState( _unlinked ).then( data => {
-						if ( data ) {
-							window.location.reload(); // Reload to get the origin post content.
-						} else {
-							setIsUnLinkedToggling( false );
-						}
-					} );
+					toggleUnlinkedState( _unlinked ).then( () => {
+						setIsUnLinkedToggling( false );
+						setIsUnLinked( false );
+						window.location.reload();
+					} ); // Reload to get the origin post content.
 				} );
 		} else {
-			toggleUnlinkedState( _unlinked )
-				.then( data => {
-					if ( ! data ) {
-						setIsUnLinkedToggling( false );
-						return;
+			toggleUnlinkedState( _unlinked ).then( () => {
+				setIsUnLinkedToggling( false );
+				createNotice(
+					'info',
+					sprintf(
+						// translators: %s: post type
+						__( '%s has been unlinked', 'newspack-network' ),
+						newspack_network_incoming_post.postTypeLabel
+					),
+					{
+						type: 'snackbar',
+						isDismissible: true,
+						autoDismiss: true,
+						autoDismissTimeout: 3000,
 					}
-					// Unsaved edits are the user's to save or discard, so leave the reload to them.
-					// Autosave is unlocked now, so an autosave may still keep them.
-					if ( wp.data.select( 'core/editor' ).isEditedPostDirty() ) {
-						setIsUnLinkedToggling( false );
-						createNotice(
-							'info',
-							__(
-								'Reload the page to edit the excerpt, discussion and featured image. Save first to keep your unsaved changes.',
-								'newspack-network'
-							),
-							{
-								id: 'newspack-network-unlinked-reload',
-								actions: [
-									{
-										label: __( 'Reload', 'newspack-network' ),
-										onClick: () => window.location.reload(),
-									},
-								],
-							}
-						);
-						return;
-					}
-					window.location.reload();
-				} )
-				.catch( () => setIsUnLinkedToggling( false ) );
+				);
+			} );
 		}
 	};
 

@@ -20,6 +20,8 @@ class Editor {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_linked_fields_module' ] );
+		add_action( 'wp_entity_fields_api_init', [ __CLASS__, 'lock_linked_fields' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_filter( 'manage_posts_columns', [ __CLASS__, 'add_distribution_column' ], 10, 2 );
 		add_filter( 'manage_pages_columns', [ __CLASS__, 'add_distribution_column' ], 10, 2 );
@@ -54,6 +56,84 @@ class Editor {
 						return current_user_can( Admin::CAPABILITY );
 					},
 				]
+			);
+			// Read by linked-fields.js. The unlink endpoint is the only way to change it.
+			register_post_meta(
+				$post_type,
+				Incoming_Post::UNLINKED_META,
+				[
+					'single'        => true,
+					'type'          => 'integer',
+					'show_in_rest'  => [
+						'schema' => [
+							'context' => [ 'edit' ],
+							'type'    => 'integer',
+						],
+					],
+					'auth_callback' => '__return_false',
+				]
+			);
+		}
+	}
+
+	/**
+	 * Register the script module that locks a linked post's sidebar fields on WordPress 7.2+.
+	 *
+	 * It is registered on every request, rather than with the fields, so that it is in the
+	 * editor's import map when the fields load it.
+	 */
+	public static function register_linked_fields_module() {
+		if ( ! function_exists( 'wp_update_entity_fields' ) ) {
+			return;
+		}
+		$path = 'includes/content-distribution/js/linked-fields.js';
+		wp_register_script_module(
+			'newspack-network-linked-fields',
+			plugins_url( $path, NEWSPACK_NETWORK_PLUGIN_FILE ),
+			[],
+			filemtime( NEWSPACK_NETWORK_PLUGIN_DIR . $path )
+		);
+	}
+
+	/**
+	 * Lock the sidebar fields a linked post takes from its origin, on WordPress 7.2+.
+	 *
+	 * Earlier versions lock them with the stylesheet overlay, whose selectors don't match
+	 * 7.2's sidebar. Each field is updated only where core registers it, mirroring the
+	 * supports core derives them from.
+	 */
+	public static function lock_linked_fields() {
+		foreach ( Content_Distribution_Class::get_distributed_post_types() as $post_type ) {
+			$ids = [];
+			if ( post_type_supports( $post_type, 'excerpt' ) ) {
+				$ids[] = 'excerpt';
+			}
+			if ( post_type_supports( $post_type, 'comments' ) ) {
+				$ids[] = 'comment_status';
+			}
+			if ( post_type_supports( $post_type, 'trackbacks' ) ) {
+				$ids[] = 'ping_status';
+			}
+			if ( post_type_supports( $post_type, 'comments' ) || post_type_supports( $post_type, 'trackbacks' ) ) {
+				$ids[] = 'discussion';
+			}
+			if ( post_type_supports( $post_type, 'thumbnail' ) && current_theme_supports( 'post-thumbnails', $post_type ) ) {
+				$ids[] = 'featured_media';
+			}
+			if ( ! $ids ) {
+				continue;
+			}
+			wp_update_entity_fields(
+				'newspack-network',
+				'postType',
+				$post_type,
+				array_map(
+					function ( $id ) {
+						return [ 'id' => $id ];
+					},
+					$ids
+				),
+				'newspack-network-linked-fields'
 			);
 		}
 	}
