@@ -100,8 +100,8 @@ let renderScheduled = false;
 const renderSubtitle = () => {
 	renderScheduled = false;
 
-	// In WordPress 7.0+ the editor is always iframed; use the canvas document.
-	// TODO: Remove `document` fallback once the non-iframed editor is no longer supported.
+	// The post editor canvas is normally an iframe; fall back to the outer document when it isn't.
+	// TODO: Remove the `document` fallback once WordPress no longer renders a non-iframed post editor.
 	const editorCanvas = document.querySelector( 'iframe[name="editor-canvas"]' );
 	const doc = ( editorCanvas && editorCanvas.contentDocument ) || document;
 
@@ -134,7 +134,7 @@ const renderSubtitle = () => {
 	}
 };
 
-/** Batches observer callbacks to at most one render per animation frame. */
+/** Batches render requests (observers, canvas load) to at most one per animation frame. */
 const scheduleRender = () => {
 	if ( renderScheduled ) {
 		return;
@@ -150,10 +150,17 @@ const scheduleRender = () => {
  * browsers), and can be re-rendered (e.g. after switching from the code editor), so
  * observers re-add the subtitle whenever the title is present without it.
  *
- * @param {string} subtitle Subtitle text
+ * @param {string|undefined} subtitle Subtitle text, or undefined while the post meta is loading.
  */
 export const appendSubtitleToTitleDOMElement = subtitle => {
-	subtitleHtml = typeof subtitle === 'string' ? sanitizeSubtitle( subtitle ) : null;
+	subtitleHtml = null;
+	if ( typeof subtitle === 'string' ) {
+		// Writing can change sanitized markup (e.g. the parser splits nested links), so store
+		// the form the browser reads back; otherwise the comparison in renderSubtitle never settles.
+		const normalizer = document.createElement( 'template' );
+		normalizer.innerHTML = sanitizeSubtitle( subtitle );
+		subtitleHtml = normalizer.innerHTML;
+	}
 
 	if ( ! pageObserver ) {
 		canvasObserver = new MutationObserver( scheduleRender );
