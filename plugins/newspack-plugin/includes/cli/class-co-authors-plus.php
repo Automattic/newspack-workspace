@@ -225,7 +225,10 @@ class Co_Authors_Plus {
 			 */
 			global $wpdb;
 			$existing_user = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $wpdb->users WHERE user_nicename = %s", $guest_author_login ) ); //phpcs:ignore
-			$updating = false;
+			$updating              = false;
+			$migration_data        = [];
+			$needs_nicename_change = false;
+			$old_nicename          = '';
 
 			if ( $existing_user ) {
 				$updated_users_count++;
@@ -243,15 +246,13 @@ class Co_Authors_Plus {
 				$migration_data = [
 					'info'         => 'User data before Guest Authors migration executed on ' . gmdate( 'Y-m-d H:i:s' ),
 					'display_name' => $existing_user->display_name,
-					'first_name'   => get_user_meta( $existing_user->ID, 'first_name', true ),
-					'last_name'    => get_user_meta( $existing_user->ID, 'last_name', true ),
-					'description'  => get_user_meta( $existing_user->ID, 'description', true ),
+					'user_url'     => $existing_user->user_url,
 				];
-				add_user_meta( $existing_user->ID, '_np_cap_guest_author_migration_data', $migration_data );
+				foreach ( array_merge( [ 'first_name', 'last_name', 'description' ], array_values( \Newspack\Authors_Custom_Fields::USER_META_NAMES ) ) as $meta_key ) {
+					$migration_data[ $meta_key ] = get_user_meta( $existing_user->ID, $meta_key, true );
+				}
 			} else {
 				$created_users_count++;
-				$needs_nicename_change = false;
-				$old_nicename = '';
 
 				// For new users, we need to remove the cap- prefix from the login, otherwise CAP won't find them when getting the authors of a post
 				// See https://github.com/Automattic/Co-Authors-Plus/blob/30602dbd59c6cd73bd4aa3ff8a3e6eda0c1bccea/template-tags.php#L20.
@@ -302,8 +303,19 @@ class Co_Authors_Plus {
 				}
 			}
 
+			if ( $updating ) {
+				// An empty guest author field would otherwise erase what the existing user already has.
+				foreach ( [ 'user_url', 'display_name' ] as $field ) {
+					if ( '' === $user_data[ $field ] ) {
+						unset( $user_data[ $field ] );
+					}
+				}
+				$user_data['meta_input'] = array_filter( $user_data['meta_input'], fn( $value ) => '' !== $value );
+			}
+
 			if ( self::$live ) {
 				if ( $updating ) {
+					add_user_meta( $existing_user->ID, '_np_cap_guest_author_migration_data', $migration_data );
 					$user_id = wp_update_user( $user_data );
 				} else {
 					$user_id = wp_insert_user( $user_data );
@@ -400,7 +412,8 @@ class Co_Authors_Plus {
 
 			global $coauthors_plus;
 
-			$guest_term = $coauthors_plus->get_author_term( (object) [ 'user_nicename' => $guest_author->post_name ] );
+			// Co-Authors Plus checks the object's user_login against the term, so it needs the real guest author object.
+			$guest_term = $coauthors_plus->get_author_term( $coauthors_plus->guest_authors->get_guest_author_by( 'ID', $guest_author->ID ) );
 			$wp_user_term = $coauthors_plus->get_author_term( $linked_user );
 			if ( ! $guest_term ) {
 				WP_CLI::warning( sprintf( 'No term found for guest author %d. This will make post reassignement impossible. Skipping!', $guest_author->ID ) );
@@ -450,8 +463,11 @@ class Co_Authors_Plus {
 			self::assign_user_props( $guest_author_data, $user_id, $author_slug );
 			self::assign_user_meta( $guest_author, $user_id );
 
-			// Add the Non-Editing Contributor role.
-			$linked_user->add_role( \Newspack\Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME );
+			if ( self::$live ) {
+				$linked_user->add_role( \Newspack\Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME );
+			} else {
+				WP_CLI::log( sprintf( 'Would add the Non-Editing Contributor role to user #%d.', $user_id ) );
+			}
 		}
 	}
 
