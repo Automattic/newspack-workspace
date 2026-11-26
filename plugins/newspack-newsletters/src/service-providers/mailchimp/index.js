@@ -32,7 +32,8 @@ const renderPreSendInfo = ( newsletterData = {}, meta = {} ) => {
 	}
 	let listData,
 		sublistData,
-		subscriberCount = 0;
+		subscriberCount = 0,
+		isCountUnavailable = false;
 	if ( campaign?.recipients?.list_id && campaign.recipients.list_id === listId ) {
 		const list = find( lists, [ 'id', listId ] );
 		if ( list ) {
@@ -45,8 +46,10 @@ const renderPreSendInfo = ( newsletterData = {}, meta = {} ) => {
 		if ( sublist ) {
 			sublistData = sublist;
 		}
-		if ( ! isNaN( sublistData?.count ) ) {
-			subscriberCount = parseInt( sublistData.count );
+		if ( sublistData ) {
+			// Saved-segment counts are fetched daily, so a segment can have none yet. The audience total would be wrong for it.
+			isCountUnavailable = isNaN( sublistData.count );
+			subscriberCount = isCountUnavailable ? 0 : parseInt( sublistData.count );
 		}
 	}
 
@@ -67,7 +70,8 @@ const renderPreSendInfo = ( newsletterData = {}, meta = {} ) => {
 					<br />
 				</>
 			) }
-			{ subscriberCount && (
+			{ isCountUnavailable && <strong>{ __( 'Subscriber count not available yet', 'newspack-newsletters' ) }</strong> }
+			{ subscriberCount > 0 && (
 				<strong>
 					{ sprintf(
 						// translators: %d: subscriber count.
