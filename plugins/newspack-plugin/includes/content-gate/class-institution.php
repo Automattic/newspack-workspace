@@ -98,7 +98,7 @@ class Institution {
 				'read_private_posts',
 				'create_posts',
 			],
-			'manage_options'
+			Capabilities::MANAGE_ACCESS_CONTROL
 		);
 
 		\register_post_type(
@@ -112,13 +112,13 @@ class Institution {
 				'supports'              => [ 'title', 'excerpt', 'thumbnail', 'custom-fields' ],
 				/**
 				 * Institutions effectively grant access, so every write —
-				 * including via REST — is restricted to the `manage_options`
+				 * including via REST — is restricted to the Access Control
 				 * capability; every key in the map above resolves to it. Reads
 				 * are not covered here: core does not gate reads of a published
 				 * post through this map, so the REST read requirement is
 				 * enforced separately by Institution_REST_Controller (below),
 				 * which admits Block_Visibility::CONFIGURE_CAPABILITY in
-				 * addition to `manage_options`.
+				 * addition to the Access Control capability.
 				 */
 				'capabilities'          => $capabilities,
 				/**

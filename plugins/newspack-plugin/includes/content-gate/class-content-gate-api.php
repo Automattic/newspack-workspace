@@ -21,7 +21,7 @@ class Content_Gate_API {
 	 *
 	 * @var string
 	 */
-	const MANAGE_GATES_CAPABILITY = 'manage_options';
+	const MANAGE_GATES_CAPABILITY = Capabilities::MANAGE_ACCESS_CONTROL;
 
 	/**
 	 * Gate schema properties.

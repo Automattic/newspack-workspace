@@ -4,7 +4,8 @@
  *
  * The admin-side, people-first view of the site's subscribers and group
  * subscriptions. Ported from the signed-off i2 design prototype; it lives under
- * the Audience menu and is visible to any admin who can `manage_options`.
+ * the Audience menu and is visible to anyone who can manage Access Control
+ * (Capabilities::MANAGE_ACCESS_CONTROL).
  *
  * @package Newspack
  */
@@ -32,7 +33,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @var string
 	 */
-	protected $capability = 'manage_options';
+	protected $capability = Capabilities::MANAGE_ACCESS_CONTROL;
 
 	/**
 	 * The parent menu slug this wizard hangs under.
@@ -881,14 +882,14 @@ class Subscribers_Wizard extends Wizard {
 					'seatsReserved'      => Group_Subscription_API::reserved_seats( $subscription ),
 					'billing'            => $this->subscription_billing( $subscription ),
 					// Whether this caller may use the screen's write buttons. Reading the
-					// screen needs `manage_options` ($capability); every write on it goes
-					// to the group-subscription API, which admits an admin on
-					// `manage_woocommerce` alone -- permission_callback(),
+					// screen needs `manage_options` or `manage_woocommerce` ($capability);
+					// every write on it goes to the group-subscription API, which admits
+					// an admin on `manage_woocommerce` alone -- permission_callback(),
 					// role_permission_callback() and admin_permission_callback() all
 					// reduce to that capability for someone who is not a manager of the
-					// group. The two are independent, so a role holding one and not the
-					// other is possible, and without this the buttons would render live
-					// and fail with a 403 on click.
+					// group. An administrator who lacks it, as on a site where
+					// WooCommerce's roles were never installed, can read the screen and
+					// without this would see buttons that fail with a 403 on click.
 					'canManage'          => current_user_can( 'manage_woocommerce' ),
 					// The owner holds billing, so a group renewing from their payment
 					// method can't change hands here (Group_Subscription::change_owner()).
