@@ -17,12 +17,17 @@ import {
  * Internal dependencies
  */
 import ContentRuleControlTokenField from './content-rule-control-tokenfield';
+import UnavailableRule from './unavailable-rule';
+import { getContentRuleConfig } from '../utils';
 import { Grid } from '../../../../../../packages/components/src';
 import PublishedAgeRuleControl from '../../../../../content-gate/components/published-age-rule-control';
 import { PUBLISHED_AGE_RULE, formatPublishedAge } from '../../../../../content-gate/utils/published-age';
 
 export default function ContentRuleControl( { slug, value, exclusion, onChange, onChangeExclusion, isStatic = false }: GateRuleControlProps ) {
-	const rule = window.newspackAudienceContentGates.available_content_rules[ slug ];
+	const rule = getContentRuleConfig( slug );
+	if ( rule?.unavailable ) {
+		return <UnavailableRule slug={ slug } value={ value } showHelp={ ! isStatic } />;
+	}
 	if ( rule && PUBLISHED_AGE_RULE === slug ) {
 		return isStatic ? (
 			<p>
@@ -43,6 +48,23 @@ export default function ContentRuleControl( { slug, value, exclusion, onChange, 
 		return null;
 	}
 	if ( isStatic ) {
+		// No REST route to look the names up: a taxonomy that isn't show_in_rest. Print the raw IDs rather than guess an endpoint.
+		const hasNoLookup = ! rule.endpoint && ! ( rule.options && rule.options.length > 0 ) && ! [ 'category', 'post_tag' ].includes( slug );
+		if ( hasNoLookup ) {
+			return (
+				<p>
+					<strong>
+						{ sprintf(
+							// translators: 1: rule name, 2: includes or excludes
+							__( '%1$s %2$s:', 'newspack-plugin' ),
+							rule.name,
+							exclusion ? __( 'exclude', 'newspack-plugin' ) : __( 'include', 'newspack-plugin' )
+						) }
+					</strong>{ ' ' }
+					{ value.join( ', ' ) }
+				</p>
+			);
+		}
 		return rule.options && rule.options.length > 0 ? (
 			<p>
 				<strong>

@@ -149,3 +149,28 @@ describe( 'gate summary sign-up and visibility', () => {
 		expect( signUpAndVisibilityText( gate, { isNewsletter: false } ) ).toBeNull();
 	} );
 } );
+
+describe( 'gate summary archive pages', () => {
+	beforeEach( () => {
+		window.newspackAudienceContentGates = {
+			available_access_rules: {},
+			available_archive_rules: {
+				post_type_archives: { name: 'Archive pages', default: [], options: [ { value: 'newspack_collection', label: 'Collections' } ] },
+			},
+		};
+	} );
+
+	it( 'lists archive pages', () => {
+		const gate = { ...buildGate(), archive_rules: [ { slug: 'post_type_archives', value: [ 'newspack_collection' ] } ] };
+		const { getGateSummarySections } = require( './gate-summary' );
+		const section = getGateSummarySections( gate, false, SPLIT_METER ).find( entry => entry.key === 'archive_rules' );
+
+		expect( section.label ).toBe( 'Archive pages' );
+		expect( summarise( gate, 'archive_rules' ) ).toContain( 'Collections' );
+	} );
+
+	it( 'leaves the section out without archive rules', () => {
+		const { getGateSummarySections } = require( './gate-summary' );
+		expect( getGateSummarySections( buildGate(), false, SPLIT_METER ).some( entry => entry.key === 'archive_rules' ) ).toBe( false );
+	} );
+} );
