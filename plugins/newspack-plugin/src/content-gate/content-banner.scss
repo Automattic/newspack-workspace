@@ -247,7 +247,6 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 		}
 
 		.newspack-wizard & {
-			box-shadow: none;
 			position: relative;
 			z-index: 0;
 
@@ -257,6 +256,10 @@ body.newspack-has-countdown-banner:has(.newspack-countdown-banner__cta.is-style-
 				overflow: clip;
 				padding: 32px 3px 3px;
 				pointer-events: none;
+
+				&:has(.has-no-shadow) {
+					padding-top: 3px;
+				}
 			}
 		}
 	}

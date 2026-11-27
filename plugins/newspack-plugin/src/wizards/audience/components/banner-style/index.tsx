@@ -109,8 +109,9 @@ export const getBannerPreviewProps = ( settings: BannerStyleSettings ) => {
 			bannerStyle[ '--newspack-content-banner-button-ink' ] = settings.button_text_color;
 		}
 	}
+	const hasNoShadow = hasOptions && settings.shadow !== undefined && ! settings.shadow;
 	return {
-		bannerClassName: `is-style-${ style }`,
+		bannerClassName: `is-style-${ style }${ hasNoShadow ? ' has-no-shadow' : '' }`,
 		bannerStyle: bannerStyle as React.CSSProperties,
 		buttonClassName: style === 'theme' ? '' : `newspack-ui__button--${ style === 'dark' ? 'primary-light' : 'primary' }`,
 	};
