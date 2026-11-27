@@ -296,7 +296,7 @@ class Edit extends Component< HomepageArticlesProps > {
 				<PanelBody title={ __( 'Settings', 'newspack-blocks' ) } className="newspack-block__panel is-content">
 					<QueryControls
 						numberOfItems={ postsToShow }
-						onNumberOfItemsChange={ ( _postsToShow: number ) => setAttributes( { postsToShow: _postsToShow || 1 } ) }
+						onNumberOfItemsChange={ ( _postsToShow?: number ) => setAttributes( { postsToShow: _postsToShow || 1 } ) }
 						specificMode={ specificMode }
 						onSpecificModeChange={ () => setAttributes( { specificMode: true } ) }
 						onLoopModeChange={ () => setAttributes( { specificMode: false } ) }
