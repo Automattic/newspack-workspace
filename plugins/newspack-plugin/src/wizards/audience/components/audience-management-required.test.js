@@ -178,8 +178,8 @@ describe( 'every gate-editing wizard section is guarded (NPPD-1846)', () => {
 	const path = require( 'path' );
 
 	const ROUTERS = [
-		[ 'Access Control', path.join( __dirname, '../views/content-gates/index.js' ), 7 ],
-		[ 'Premium Newsletters', path.join( __dirname, '../../newsletters/views/premium-newsletters/index.js' ), 2 ],
+		[ 'Access Control', path.join( __dirname, '../views/content-gates/index.tsx' ), 7 ],
+		[ 'Premium Newsletters', path.join( __dirname, '../../newsletters/views/premium-newsletters/index.tsx' ), 2 ],
 	];
 
 	it.each( ROUTERS )( '%s guards every section renderer', ( _name, routerPath, expectedSections ) => {
