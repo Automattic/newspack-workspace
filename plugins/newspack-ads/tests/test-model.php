@@ -189,6 +189,29 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A "no featured image" template targets as the template it copies.
+	 */
+	public function test_no_featured_image_template_targets_as_its_parent() {
+		$post_id = self::factory()->post->create();
+
+		$cases = [
+			'single-feature.php'                       => 'single-feature',
+			'single/large-image'                       => 'large-image',
+			'single/large-image--no-featured-image'    => 'large-image',
+			'single/sidebar-layout--no-featured-image' => 'sidebar-layout',
+			'single/50-50-image--no-featured-image'    => '50-50-image',
+			'single/no-featured-image'                 => null,
+			'single/newsletter--no-featured-image'     => null,
+		];
+		foreach ( $cases as $template => $expected ) {
+			update_post_meta( $post_id, '_wp_page_template', $template );
+			self::go_to( get_permalink( $post_id ) );
+			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+			self::assertSame( $expected, $targeting['template'] ?? null, $template );
+		}
+	}
+
+	/**
 	 * Reader status targeting respects JSON-encoded boolean values.
 	 */
 	public function test_reader_status_targets_only_flags_stored_as_true() {

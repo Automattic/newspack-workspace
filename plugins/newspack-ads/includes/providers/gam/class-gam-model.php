@@ -925,6 +925,24 @@ final class GAM_Model {
 	}
 
 	/**
+	 * Get the template slug a post is targeted by.
+	 *
+	 * A block theme "no featured image" template targets as the template it
+	 * copies, so hiding a post's image does not change which line items match.
+	 * The twins of single.html and the newsletter template send none, as their
+	 * parents do.
+	 *
+	 * @param string $template_slug The post's template slug.
+	 * @return string The slug to target by, or an empty string for none.
+	 */
+	private static function get_targeting_template_slug( $template_slug ) {
+		if ( in_array( $template_slug, [ 'single/no-featured-image', 'single/newsletter--no-featured-image' ], true ) ) {
+			return '';
+		}
+		return (string) preg_replace( '/--no-featured-image$/', '', (string) $template_slug );
+	}
+
+	/**
 	 * Get ad targeting params for the current post or archive.
 	 *
 	 * @param array $ad_unit Ad unit to get targeting for.
@@ -984,7 +1002,7 @@ final class GAM_Model {
 				$targeting['slug'] = sanitize_text_field( $slug );
 			}
 
-			$template_slug = get_page_template_slug();
+			$template_slug = self::get_targeting_template_slug( get_page_template_slug() );
 			if ( ! empty( $template_slug ) ) {
 				$targeting['template'] = sanitize_title( basename( $template_slug, '.php' ) );
 			}
