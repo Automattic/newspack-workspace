@@ -53,6 +53,7 @@ type ColorFieldProps = {
 
 const supportsThemeStyle = () => !! window.newspackAudience?.content_banner?.supports_theme_style;
 const usesSiteTheme = () => !! window.newspackAudience?.content_banner?.uses_site_theme;
+const isShadowOff = ( shadow?: boolean | number ) => shadow === false || shadow === 0;
 
 export type BannerRenderStyle = 'light' | 'dark' | 'theme' | 'site';
 
@@ -109,7 +110,7 @@ export const getBannerPreviewProps = ( settings: BannerStyleSettings ) => {
 			bannerStyle[ '--newspack-content-banner-button-ink' ] = settings.button_text_color;
 		}
 	}
-	const hasNoShadow = hasOptions && settings.shadow !== undefined && ! settings.shadow;
+	const hasNoShadow = hasOptions && isShadowOff( settings.shadow );
 	return {
 		bannerClassName: `is-style-${ style }${ hasNoShadow ? ' has-no-shadow' : '' }`,
 		bannerStyle: bannerStyle as React.CSSProperties,
@@ -257,7 +258,7 @@ export default function BannerStyleControl( { settings, onChange, disabled = fal
 	const shadow = (
 		<ToggleGroupControl
 			label={ __( 'Shadow', 'newspack-plugin' ) }
-			value={ shown.shadow === false || shown.shadow === 0 ? 'disabled' : 'enabled' }
+			value={ isShadowOff( shown.shadow ) ? 'disabled' : 'enabled' }
 			onChange={ value => change( { shadow: value === 'enabled' } ) }
 			isBlock
 			__next40pxDefaultSize
