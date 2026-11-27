@@ -32,6 +32,13 @@ class Audience_Content_Gates extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * Capability required to use this wizard. See Capabilities::MANAGE_ACCESS_CONTROL.
+	 *
+	 * @var string
+	 */
+	protected $capability = Capabilities::MANAGE_ACCESS_CONTROL;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {

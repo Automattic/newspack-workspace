@@ -14,10 +14,47 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Capabilities {
 	/**
+	 * Capability required to use the Access Control admin screens: Readers, Access
+	 * Control, premium newsletter restrictions and a user's gate access panel.
+	 *
+	 * Held by anyone with `manage_options` or `manage_woocommerce`, unless a role
+	 * or user stores it explicitly. Store staff manage members and plans, as they
+	 * could under WooCommerce Memberships, and administrators keep access on a site
+	 * without WooCommerce, where nobody holds `manage_woocommerce`.
+	 *
+	 * Granted through `user_has_cap` rather than `map_meta_cap`, so it also holds
+	 * where core checks it without mapping it, as when a post type's capability
+	 * map resolves `edit_post` to it.
+	 */
+	const MANAGE_ACCESS_CONTROL = 'newspack_manage_access_control';
+
+	/**
 	 * Initialize Hooks.
 	 */
 	public static function init() {
 		add_filter( 'user_has_cap', [ __CLASS__, 'map_capabilities' ], 10, 2 );
+		add_filter( 'user_has_cap', [ __CLASS__, 'grant_manage_access_control' ], 10, 2 );
+	}
+
+	/**
+	 * Grant MANAGE_ACCESS_CONTROL to a user holding either capability it stands for.
+	 *
+	 * A value stored on the role or user wins, so a role editor can withhold
+	 * Access Control from store staff.
+	 *
+	 * @param bool[]   $allcaps All caps.
+	 * @param string[] $caps    Required primitive capabilities for the requested capability.
+	 *
+	 * @return bool[]
+	 */
+	public static function grant_manage_access_control( array $allcaps, array $caps ): array {
+		if ( isset( $allcaps[ self::MANAGE_ACCESS_CONTROL ] ) ) {
+			return $allcaps;
+		}
+		if ( in_array( self::MANAGE_ACCESS_CONTROL, $caps, true ) && ( ! empty( $allcaps['manage_options'] ) || ! empty( $allcaps['manage_woocommerce'] ) ) ) {
+			$allcaps[ self::MANAGE_ACCESS_CONTROL ] = true;
+		}
+		return $allcaps;
 	}
 
 	/**

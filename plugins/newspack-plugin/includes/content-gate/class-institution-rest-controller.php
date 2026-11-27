@@ -44,7 +44,7 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 *
 	 * @var string
 	 */
-	const RULES_CAPABILITY = 'manage_options';
+	const RULES_CAPABILITY = Capabilities::MANAGE_ACCESS_CONTROL;
 
 	/**
 	 * True while get_items() is running.
@@ -107,12 +107,12 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * The shared read gate.
 	 *
-	 * Accepts either capability: a role holding only RULES_CAPABILITY (an ops
-	 * or billing role scoped to manage_options without content capabilities,
-	 * for example) still owns this route — it is the tier the Audience wizard
-	 * grants access to, and it already sees every field once past this check,
-	 * per prepare_item_for_response() below. Without this, such a role could
-	 * open the wizard but never load the institutions list inside it.
+	 * Accepts either capability: a role holding only RULES_CAPABILITY (store
+	 * staff without content capabilities, for example) still owns this route.
+	 * It is the tier the Access Control wizard admits, and it already sees every
+	 * field once past this check, per prepare_item_for_response() below. Without
+	 * this, such a role could open the wizard but never load the institutions
+	 * list inside it.
 	 *
 	 * @return true|\WP_Error
 	 */
