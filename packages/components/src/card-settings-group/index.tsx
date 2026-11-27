@@ -31,13 +31,13 @@ const CardSettingsGroup = ( {
 	children?: React.ReactNode;
 	className?: string;
 	disabled?: boolean;
-	icon?: React.ReactNode;
+	icon?: React.ReactElement | null;
 	/** A ready-rendered icon element (e.g. `<IntegrationIcon>`) shown as-is, without the default icon badge. */
 	iconElement?: React.ReactNode;
 	title: string;
 	headerAction?: {
 		label: string;
-		icon?: React.ReactNode;
+		icon?: React.ReactElement;
 		href?: string;
 		onClick?: () => void;
 		disabled?: boolean;

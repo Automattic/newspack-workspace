@@ -17,13 +17,47 @@ type Brand = {
 	meta: {
 		_custom_url: string;
 		_show_page_on_front: number;
-		_logo: number | Attachment;
+		_logo: number | Attachment | { id: number; url: string; [ key: string ]: unknown } | null;
 		_theme_colors: ThemeColorsMeta[];
 		_menus: Array< {
 			location: string;
 			menu: number;
 		} >;
+		_block_theme_menus: Record< string, number >;
+		_block_theme_parts: Record< string, string >;
+		_block_theme_palette: string;
 	};
+};
+
+type BlockThemeMenu = {
+	value: number;
+	label: string;
+	editUrl: string;
+};
+
+type BlockThemePart = {
+	slug: string;
+	title: string;
+	area: string;
+	source: string;
+	editUrl: string;
+	navs: Array< { id: number; fallback: boolean } >;
+	copyOf: string;
+};
+
+type BlockThemeSlot = {
+	slot: string;
+	label: string;
+	area: 'header' | 'footer' | 'sidebar';
+	main: string;
+};
+
+type BlockThemeData = {
+	slots: BlockThemeSlot[];
+	parts: Record< string, BlockThemePart >;
+	menus: BlockThemeMenu[];
+	palettes: Array< { title: string; colors: Record< string, string > } >;
+	colorPrefix: string;
 };
 
 interface PublicPage {

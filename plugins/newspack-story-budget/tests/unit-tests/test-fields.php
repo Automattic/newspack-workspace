@@ -6,6 +6,7 @@
  */
 
 use Newspack_Story_Budget\Fields;
+use Newspack_Story_Budget\Fields\Abstract_Field;
 use Newspack_Story_Budget\Fields\Editable_Field;
 use Newspack_Story_Budget\Fields\Read_Only_Field;
 use Newspack_Story_Budget\Fields\Taxonomy_Field;
@@ -416,5 +417,141 @@ class TestFields extends WP_UnitTestCase {
 				sprintf( 'Array version should have the same key "%s" as the object version.', $slug )
 			);
 		}
+	}
+
+	/**
+	 * Saving a story field counts as a modification, without touching the post's own modified date.
+	 */
+	public function test_last_modified_follows_story_field_saves() {
+		global $wpdb;
+		$post_id = self::create_post();
+		$wpdb->update( $wpdb->posts, [ 'post_modified_gmt' => '2026-01-01 00:00:00' ], [ 'ID' => $post_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		delete_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified' );
+		clean_post_cache( $post_id );
+		$post_modified = strtotime( '2026-01-01 00:00:00 UTC' );
+		$field         = Fields::get_field( 'last_modified' );
+
+		$saved_at = time();
+		Fields::get_field( 'description' )->update_value( $post_id, 'A note for the desk' );
+		clean_post_cache( $post_id );
+		$this->assertGreaterThanOrEqual( $saved_at, $field->get_value( $post_id ), 'A story field save sets the last modified time.' );
+		$this->assertEquals( '2026-01-01 00:00:00', get_post_field( 'post_modified_gmt', $post_id ), 'The post keeps its own modified date.' );
+
+		update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $post_modified - 600 );
+		$this->assertEquals( $post_modified, $field->get_value( $post_id ), 'A later post edit sets the last modified time.' );
+	}
+
+	/**
+	 * WP Status carries the labels WordPress registers for each post status a story can have.
+	 */
+	public function test_wp_status_options_use_post_status_labels() {
+		$options = Fields::get_field( 'wp_status' )->to_array()['options'];
+		$labels  = array_column( $options, 'label', 'value' );
+
+		$this->assertSame( [ 'publish', 'pending', 'draft', 'future', 'private' ], array_keys( $labels ) );
+		$this->assertSame( get_post_status_object( 'publish' )->label, $labels['publish'] );
+		$this->assertSame( get_post_status_object( 'future' )->label, $labels['future'] );
+	}
+
+	/**
+	 * Empty the static registry so a test can observe it being built.
+	 */
+	private static function reset_registry() {
+		( new ReflectionProperty( Fields::class, 'all_fields' ) )->setValue( null, [] );
+		( new ReflectionProperty( Fields::class, 'is_registered' ) )->setValue( null, false );
+	}
+
+	/**
+	 * Reset the registry after each test, so state from one can't leak into the next.
+	 */
+	public function tear_down() {
+		self::reset_registry();
+		parent::tear_down();
+	}
+
+	/**
+	 * Requests that never read a field must not pay for building the registry.
+	 */
+	public function test_init_does_not_build_registry() {
+		$this->assertFalse( has_action( 'init', [ Fields::class, 'register_fields' ] ) );
+	}
+
+	/**
+	 * The registry builds on the first read, and only once.
+	 */
+	public function test_registry_builds_once_on_first_read() {
+		self::reset_registry();
+		$builds = 0;
+		add_filter(
+			'newspack_story_budget_fields',
+			function( $fields ) use ( &$builds ) {
+				$builds++;
+				return $fields;
+			}
+		);
+
+		$this->assertNotEmpty( Fields::get_all_fields() );
+		$this->assertNotNull( Fields::get_field( 'name' ) );
+		$this->assertSame( 1, $builds, 'Later reads reuse the registry.' );
+	}
+
+	/**
+	 * A field filter that reads the registry must not trigger a second build.
+	 */
+	public function test_registry_read_inside_field_filter_does_not_rebuild() {
+		self::reset_registry();
+		$builds = 0;
+		add_filter(
+			'newspack_story_budget_fields',
+			function( $fields ) use ( &$builds ) {
+				$builds++;
+				Fields::get_all_fields();
+				return $fields;
+			}
+		);
+
+		$this->assertNotEmpty( Fields::get_all_fields() );
+		$this->assertSame( 1, $builds );
+	}
+
+	/**
+	 * A read before init must not lock in a registry built too early.
+	 */
+	public function test_read_before_init_does_not_build() {
+		global $wp_actions;
+		self::reset_registry();
+		$init_count = $wp_actions['init'];
+		unset( $wp_actions['init'] );
+
+		$this->assertEmpty( Fields::get_all_fields() );
+		$this->assertNull( Fields::get_field( 'name' ) );
+
+		$wp_actions['init'] = $init_count; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$this->assertNotEmpty( Fields::get_all_fields(), 'The registry builds once init has run.' );
+	}
+
+	/**
+	 * During init, reads only build from priority 10 on, after taxonomies register.
+	 */
+	public function test_read_during_init_waits_for_priority_10() {
+		global $wp_filter;
+		self::reset_registry();
+		$counts       = [];
+		$original     = $wp_filter['init'];
+		$record_count = function( $priority ) use ( &$counts ) {
+			return function() use ( $priority, &$counts ) {
+				$counts[ $priority ] = count( Fields::get_all_fields() );
+			};
+		};
+
+		// Run only the two probes, not every init callback a second time.
+		$wp_filter['init'] = new WP_Hook(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		add_action( 'init', $record_count( 5 ), 5 );
+		add_action( 'init', $record_count( 10 ), 10 );
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$wp_filter['init'] = $original; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$this->assertSame( 0, $counts[5], 'A read at init:5 builds nothing.' );
+		$this->assertGreaterThan( 0, $counts[10], 'A read at init:10 builds the registry.' );
 	}
 }

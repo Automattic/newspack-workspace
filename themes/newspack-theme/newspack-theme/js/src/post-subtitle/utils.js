@@ -6,8 +6,7 @@ import { withSelect } from '@wordpress/data';
 const SUBTITLE_ID = 'newspack-post-subtitle-element';
 export const META_FIELD_NAME = 'newspack_post_subtitle';
 
-const SUBTITLE_RETRY_LIMIT = 20;
-const SUBTITLE_RETRY_INTERVAL_MS = 100;
+const TITLE_SELECTOR = '.edit-post-visual-editor__post-title-wrapper';
 
 /**
  * Allowed inline tags and their permitted attributes for the subtitle preview.
@@ -86,36 +85,90 @@ const sanitizeSubtitle = html => {
 	return parsed.body.innerHTML;
 };
 
-/** Tracks the single in-flight retry timeout to prevent overlapping chains. */
-let subtitleRetryTimeout = null;
+/** Sanitized markup for the current subtitle, or null until the meta value is known. */
+let subtitleHtml = null;
+let pageObserver = null;
+let canvasObserver = null;
+let observedCanvas = null;
+let observedCanvasDoc = null;
+let renderScheduled = false;
 
 /**
- * Appends subtitle to DOM, below the Title in the Editor.
- *
- * @param {string} subtitle   Subtitle text
- * @param {number} retryCount Internal retry counter
+ * Inserts or updates the subtitle below the title, if the title is rendered.
+ * Safe to call repeatedly: it only touches the DOM when something is missing or stale.
  */
-export const appendSubtitleToTitleDOMElement = ( subtitle, retryCount = 0 ) => {
-	// In WordPress 7.0+ the editor is always iframed; use the canvas document.
-	// TODO: Remove `document` fallback once WordPress 7.0 is released and the non-iframed editor is no longer supported.
+const renderSubtitle = () => {
+	renderScheduled = false;
+
+	// The post editor canvas is normally an iframe; fall back to the outer document when it isn't.
+	// TODO: Remove the `document` fallback once the theme requires WordPress 7.1+, which always iframes the post editor.
 	const editorCanvas = document.querySelector( 'iframe[name="editor-canvas"]' );
 	const doc = ( editorCanvas && editorCanvas.contentDocument ) || document;
-	const titleEl = doc.querySelector( '.edit-post-visual-editor__post-title-wrapper' );
 
-	clearTimeout( subtitleRetryTimeout );
-
-	if ( titleEl && typeof subtitle === 'string' ) {
-		let subtitleEl = doc.getElementById( SUBTITLE_ID );
-		const titleParent = titleEl.parentNode;
-		if ( ! subtitleEl ) {
-			subtitleEl = doc.createElement( 'div' );
-			subtitleEl.id = SUBTITLE_ID;
-			titleParent.insertBefore( subtitleEl, titleEl.nextSibling );
-		}
-		subtitleEl.innerHTML = sanitizeSubtitle( subtitle );
-	} else if ( ! titleEl && typeof subtitle === 'string' && subtitle.length > 0 && retryCount < SUBTITLE_RETRY_LIMIT ) {
-		subtitleRetryTimeout = setTimeout( () => appendSubtitleToTitleDOMElement( subtitle, retryCount + 1 ), SUBTITLE_RETRY_INTERVAL_MS );
+	// The canvas swaps its document as it loads (about:blank, then the editor) without
+	// changing the outer page, so listen for that and observe whichever document is current.
+	if ( editorCanvas && editorCanvas !== observedCanvas ) {
+		editorCanvas.addEventListener( 'load', scheduleRender );
+		observedCanvas = editorCanvas;
 	}
+	if ( doc !== document && doc !== observedCanvasDoc ) {
+		canvasObserver.disconnect();
+		canvasObserver.observe( doc, { childList: true, subtree: true } );
+		observedCanvasDoc = doc;
+	}
+
+	const titleEl = doc.querySelector( TITLE_SELECTOR );
+	if ( ! titleEl || subtitleHtml === null ) {
+		return;
+	}
+
+	let subtitleEl = doc.getElementById( SUBTITLE_ID );
+	if ( ! subtitleEl ) {
+		subtitleEl = doc.createElement( 'div' );
+		subtitleEl.id = SUBTITLE_ID;
+		titleEl.parentNode.insertBefore( subtitleEl, titleEl.nextSibling );
+	}
+	// Comparing first keeps our own write from re-triggering the observer in a loop.
+	if ( subtitleEl.innerHTML !== subtitleHtml ) {
+		subtitleEl.innerHTML = subtitleHtml;
+	}
+};
+
+/** Batches render requests (observers, canvas load) to at most one per animation frame. */
+const scheduleRender = () => {
+	if ( renderScheduled ) {
+		return;
+	}
+	renderScheduled = true;
+	window.requestAnimationFrame( renderSubtitle );
+};
+
+/**
+ * Shows the subtitle below the Title in the Editor.
+ *
+ * The title renders at an unpredictable time after the editor loads (later in some
+ * browsers), and can be re-rendered (e.g. after switching from the code editor), so
+ * observers re-add the subtitle whenever the title is present without it.
+ *
+ * @param {string|undefined} subtitle Subtitle text, or undefined while the post meta is loading.
+ */
+export const appendSubtitleToTitleDOMElement = subtitle => {
+	subtitleHtml = null;
+	if ( typeof subtitle === 'string' ) {
+		// Writing can change sanitized markup (e.g. the parser splits nested links), so store
+		// the form the browser reads back; otherwise the comparison in renderSubtitle never settles.
+		const normalizer = document.createElement( 'template' );
+		normalizer.innerHTML = sanitizeSubtitle( subtitle );
+		subtitleHtml = normalizer.innerHTML;
+	}
+
+	if ( ! pageObserver ) {
+		canvasObserver = new MutationObserver( scheduleRender );
+		pageObserver = new MutationObserver( scheduleRender );
+		pageObserver.observe( document.body, { childList: true, subtree: true } );
+	}
+
+	renderSubtitle();
 };
 
 export const connectWithSelect = withSelect( select => ( {

@@ -47,7 +47,8 @@ export type OverridableConfiguration = {
 	amounts: DonationAmounts;
 	tiered: boolean;
 	disabledFrequencies: Record< DonationFrequencySlug, boolean >;
-	minimumDonation: number;
+	// Saved as a number; blocks saved before that carry a string. Read it with getMinimumDonation().
+	minimumDonation?: number | string;
 };
 
 export type TierBasedOptionValue = {
@@ -77,7 +78,6 @@ export type DonateBlockAttributes = OverridableConfiguration & {
 	// Legacy attributes.
 	suggestedAmounts?: [ number, number, number ];
 	suggestedAmountUntiered?: number;
-	minimumDonation: number;
 };
 
 export type ComponentProps = {
@@ -87,6 +87,8 @@ export type ComponentProps = {
 	setSettings: ( settings: Partial< EditState > ) => void;
 	amounts: DonationAmounts;
 	availableFrequencies: typeof FREQUENCY_SLUGS;
+	// The minimum the front end uses: a manual block's own minimum, or the site-wide one when it has none.
+	minimumDonation: number;
 };
 
 export type EditProps = {

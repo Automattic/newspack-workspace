@@ -3,22 +3,19 @@
  */
 
 /**
- * External dependencies
- */
-import moment from 'moment';
-
-/**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
 import { Icon, Notice } from '@wordpress/components';
 import { Stack } from '@wordpress/ui';
+import { humanTimeDiff } from '@wordpress/date';
 
 /**
  * Internal dependencies
  */
 import { Modal } from '../../../../../../../../packages/components/src';
+import { formatSiteDateTime } from '../../../../../../../../packages/components/src/dataviews/format-date';
 import { getEndpointLabel, getRequestStatusIcon, hasEndpointErrors } from '../utils';
 
 const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoint' ]; setAction: ModalComponentProps[ 'setAction' ] } ) => {
@@ -59,14 +56,16 @@ const View = ( { endpoint, setAction }: { endpoint: ModalComponentProps[ 'endpoi
 									<td className="scheduled">
 										{ 'pending' === request.status
 											? sprintf(
-													// translators: %s is a human-readable time difference.
-													__( 'sending in %s', 'newspack-plugin' ),
-													moment( parseInt( request.scheduled ) * 1000 ).fromNow( true )
+													// translators: 1: the date and time. 2: a human-readable time difference, such as "10 minutes from now".
+													__( 'sending on %1$s (%2$s)', 'newspack-plugin' ),
+													formatSiteDateTime( parseInt( request.scheduled ) ),
+													humanTimeDiff( parseInt( request.scheduled ) * 1000 )
 											  )
 											: sprintf(
-													// translators: %s is a human-readable time difference.
-													__( 'processed %s', 'newspack-plugin' ),
-													moment( parseInt( request.scheduled ) * 1000 ).fromNow()
+													// translators: 1: the date and time. 2: a human-readable time difference, such as "2 hours ago".
+													__( 'processed on %1$s (%2$s)', 'newspack-plugin' ),
+													formatSiteDateTime( parseInt( request.scheduled ) ),
+													humanTimeDiff( parseInt( request.scheduled ) * 1000 )
 											  ) }
 									</td>
 									{ hasEndpointErrors( endpoint ) && (

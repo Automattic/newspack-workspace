@@ -252,6 +252,8 @@ class Content_Gate_Advanced_Settings {
 			'comment_restriction_gate_id'      => (int) get_option( self::OPTION_PREFIX . 'comment_restriction_gate_id', 0 ),
 			'comment_restriction_message'      => (string) get_option( self::OPTION_PREFIX . 'comment_restriction_message', '' ),
 			'comment_restriction_purchase_url' => (string) get_option( self::OPTION_PREFIX . 'comment_restriction_purchase_url', '' ),
+			// See Reader_Activation\Comment_Display_Name.
+			'comment_require_full_name'        => (int) get_option( self::OPTION_PREFIX . 'comment_require_full_name', 0 ),
 		];
 
 		self::$settings = $settings;
@@ -335,6 +337,9 @@ class Content_Gate_Advanced_Settings {
 				update_option( self::OPTION_PREFIX . 'institutional_access_text', $institutional_access_text, false );
 				flush_page_cache();
 			}
+		}
+		if ( isset( $settings['comment_require_full_name'] ) ) {
+			update_option( self::OPTION_PREFIX . 'comment_require_full_name', boolval( $settings['comment_require_full_name'] ) ? 1 : 0, false );
 		}
 		$comment_restriction = [
 			'comment_restriction_gate_id'      => fn( $value ) => max( 0, (int) $value ),

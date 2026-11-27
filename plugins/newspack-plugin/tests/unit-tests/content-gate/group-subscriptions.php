@@ -697,6 +697,26 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test generate_invite() returns WP_Error when the email is malformed. The My
+	 * Account form's FILTER_SANITIZE_EMAIL passes an address like this through as-is.
+	 */
+	public function test_generate_invite_malformed_email() {
+		$admin_id  = $this->create_admin_user();
+		$owner_id  = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		wp_set_current_user( $admin_id );
+
+		$result = Group_Subscription_Invite::generate_invite( $group_sub->get_id(), 'not-an-email' );
+
+		$this->assertWPError( $result );
+		$this->assertEquals(
+			'newspack_group_subscription_invite_invalid_email',
+			$result->get_error_code()
+		);
+		$this->assertEmpty( Group_Subscription_Invite::get_invites( $group_sub ), 'A malformed address must not be stored as an invite.' );
+	}
+
+	/**
 	 * Test generate_invite() returns WP_Error when the email belongs to an existing member.
 	 */
 	public function test_generate_invite_existing_member() {
@@ -1254,6 +1274,40 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$this->assertEquals( $cached_ids, $result, 'Should return the cached IDs verbatim' );
 
 		// Cleanup.
+		delete_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT );
+	}
+
+	/**
+	 * The group-subscription IDs combine three sources: a subscription's own
+	 * `enabled = yes`, a group-enabled product, and a subscription's own
+	 * `enabled = no` overriding that product. The opt-out wins over the product.
+	 */
+	public function test_get_group_subscription_ids_honours_own_flag_and_opt_out() {
+		delete_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT );
+		$prefix     = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		$product_id = self::factory()->post->create( [ 'post_type' => 'product' ] );
+		update_post_meta( $product_id, $prefix . 'enabled', 'yes' );
+		$team_product = wc_create_mock_product(
+			[
+				'id'   => $product_id,
+				'type' => 'subscription',
+			]
+		);
+
+		$flagged   = $this->create_group_subscription( 1 );
+		$inherited = wcs_create_subscription( [ 'customer_id' => 2 ] );
+		$inherited->add_product( $team_product );
+		$opted_out = wcs_create_subscription( [ 'customer_id' => 3 ] );
+		$opted_out->add_product( $team_product );
+		$opted_out->update_meta_data( $prefix . 'enabled', 'no' );
+		$plain = wcs_create_subscription( [ 'customer_id' => 4 ] );
+
+		$ids = Group_Subscription_Settings::get_group_subscription_ids();
+		sort( $ids );
+
+		$this->assertSame( [ $flagged->get_id(), $inherited->get_id() ], $ids );
+		$this->assertNotContains( $opted_out->get_id(), $ids, 'Its own enabled = no overrides the product.' );
+		$this->assertNotContains( $plain->get_id(), $ids );
 		delete_transient( Group_Subscription_Settings::GROUP_SUBSCRIPTION_IDS_TRANSIENT );
 	}
 

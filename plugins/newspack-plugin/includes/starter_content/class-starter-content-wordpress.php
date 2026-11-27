@@ -24,6 +24,20 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 	private static $existing_content_raw_data_option = '_newspack_existing_content_raw_data';
 
 	/**
+	 * Seconds the whole identity import may take, kept under a typical 60-second gateway timeout.
+	 *
+	 * @var int
+	 */
+	const IDENTITY_IMPORT_BUDGET = 45;
+
+	/**
+	 * Timestamp after which the identity import makes no more requests.
+	 *
+	 * @var float
+	 */
+	private static float $identity_deadline = 0.0;
+
+	/**
 	 * Initialize starter content data.
 	 *
 	 * @param array $args Array of info to initialize provider. Needs to contain 'site' with site URL with this one.
@@ -36,15 +50,15 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 				sprintf(
 					/* translators: %s - Site URL */
 					__( 'Invalid site URL: "%s".', 'newspack' ),
-					sanitize_text_field( $request_params['site'] )
+					sanitize_text_field( $args['site'] ?? '' )
 				)
 			);
 		}
 
 		$site_url   = trailingslashit( esc_url_raw( $args['site'] ) );
-		$wp_api_url = $site_url . 'wp-json/wp/v2/posts?per_page=50';
+		$wp_api_url = $site_url . 'wp-json/wp/v2/posts?per_page=40';
 
-		$response = wp_remote_get( $wp_api_url, [ 'timeout' => 60 ] ); //phpcs:ignore
+		$response = wp_safe_remote_get( $wp_api_url, [ 'timeout' => 60 ] ); //phpcs:ignore
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
@@ -77,7 +91,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 
 		$response_body = wp_remote_retrieve_body( $response );
 		$response_json = json_decode( $response_body, true );
-		if ( ! $response_json ) {
+		if ( ! is_array( $response_json ) ) {
 			return new WP_Error(
 				'newspack_starter_content',
 				sprintf(
@@ -103,6 +117,15 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 
 		update_option( self::$existing_content_raw_data_option, $relevant_info );
 		return true;
+	}
+
+	/**
+	 * Number of articles fetched from the existing site.
+	 *
+	 * @return int
+	 */
+	public static function get_post_count() {
+		return count( (array) get_option( self::$existing_content_raw_data_option, [] ) );
 	}
 
 	/**
@@ -146,7 +169,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 			$featured_image_id = (int) $raw_post_data['featured_image'];
 			if ( $featured_image_id ) {
 				$media_endpoint = trailingslashit( esc_url_raw( $raw_post_data['site_url'] ) ) . 'wp-json/wp/v2/media/' . $featured_image_id;
-				$media_response = wp_remote_get( $media_endpoint, [ 'timeout' => 60 ] ); //phpcs:ignore
+				$media_response = wp_safe_remote_get( $media_endpoint, [ 'timeout' => 60 ] ); //phpcs:ignore
 				if ( ! is_wp_error( $media_response ) && 200 === wp_remote_retrieve_response_code( $media_response ) ) {
 					$media_response_body = json_decode( wp_remote_retrieve_body( $media_response ), true );
 					$media_src           = $media_response_body['source_url'];
@@ -234,7 +257,7 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		$content = ob_get_clean();
 
 		$post_data = [
-			'post_title'   => 'Homepage',
+			'post_title'   => __( 'Homepage', 'newspack-plugin' ),
 			'post_type'    => 'page',
 			'post_content' => $content,
 		];
@@ -246,5 +269,216 @@ class Starter_Content_WordPress extends Starter_Content_Provider {
 		self::mark_starter_homepage( $page_id );
 
 		return $page_id;
+	}
+
+	/**
+	 * Seconds a request may take: its own limit, or less once the identity import is near its deadline.
+	 *
+	 * @param int $limit The request's own timeout.
+	 * @return int Seconds, 0 once less than a second is left.
+	 */
+	private static function identity_timeout( int $limit ): int {
+		return (int) min( $limit, max( 0, floor( self::$identity_deadline - microtime( true ) ) ) );
+	}
+
+	/**
+	 * Drop the cached copy of these options, so the next read sees a value another request saved meanwhile.
+	 *
+	 * @param string[] $names Option names.
+	 */
+	private static function forget_cached_options( array $names ): void {
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		foreach ( $names as $name ) {
+			wp_cache_delete( $name, 'options' );
+		}
+	}
+
+	/**
+	 * Fetch JSON from the moved site. Best effort.
+	 *
+	 * @param string $url URL.
+	 * @return array|null Decoded JSON, null on any failure.
+	 */
+	private static function fetch_json( string $url ): ?array {
+		$timeout = self::identity_timeout( 10 );
+		if ( ! $timeout ) {
+			return null;
+		}
+		$response = wp_safe_remote_get( $url, [ 'timeout' => $timeout ] ); //phpcs:ignore
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return null;
+		}
+		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * Download an image from the moved site into the media library. Best effort.
+	 *
+	 * @param string $src Image URL.
+	 * @return int Attachment ID, 0 on failure.
+	 */
+	private static function sideload_image( string $src ): int {
+		if ( ! $src || ! wp_http_validate_url( $src ) ) {
+			return 0;
+		}
+		/** This filter is documented in wp-admin/includes/media.php */
+		$extensions = apply_filters( 'image_sideload_extensions', [ 'jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp' ], $src );
+		if ( ! preg_match( '/[^\?]+\.(' . implode( '|', array_map( 'preg_quote', $extensions ) ) . ')\b/i', $src, $matches ) ) {
+			return 0;
+		}
+		$timeout = self::identity_timeout( 15 );
+		if ( ! $timeout ) {
+			return 0;
+		}
+		if ( ! function_exists( 'media_handle_sideload' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+		}
+		$tmp_name = download_url( $src, $timeout );
+		if ( is_wp_error( $tmp_name ) ) {
+			return 0;
+		}
+		$id = media_handle_sideload(
+			[
+				'name'     => wp_basename( $matches[0] ),
+				'tmp_name' => $tmp_name,
+			]
+		);
+		if ( is_wp_error( $id ) ) {
+			wp_delete_file( $tmp_name );
+			return 0;
+		}
+		return (int) $id;
+	}
+
+	/**
+	 * Get the URL of a media item on the moved site.
+	 *
+	 * @param string $site_url Site URL with trailing slash.
+	 * @param mixed  $media_id Media ID.
+	 * @return string URL, empty if not found.
+	 */
+	private static function get_media_url( string $site_url, $media_id ): string {
+		$media_id = (int) $media_id;
+		if ( ! $media_id ) {
+			return '';
+		}
+		$media = self::fetch_json( $site_url . 'wp-json/wp/v2/media/' . $media_id . '?_fields=source_url' );
+		return ! empty( $media['source_url'] ) && is_string( $media['source_url'] ) ? esc_url_raw( $media['source_url'] ) : '';
+	}
+
+	/**
+	 * Find the custom logo image on the moved site's homepage.
+	 *
+	 * @param string $site_url Site URL with trailing slash.
+	 * @return string URL, empty if not found.
+	 */
+	private static function find_custom_logo_url( string $site_url ): string {
+		$timeout = self::identity_timeout( 10 );
+		if ( ! $timeout ) {
+			return '';
+		}
+		$response = wp_safe_remote_get(
+			$site_url,
+			[
+				'timeout'             => $timeout,
+				'limit_response_size' => 512 * KB_IN_BYTES,
+			]
+		);
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return '';
+		}
+		$processor = new \WP_HTML_Tag_Processor( wp_remote_retrieve_body( $response ) );
+		while ( $processor->next_tag( 'img' ) ) {
+			if ( $processor->has_class( 'custom-logo' ) ) {
+				$src = $processor->get_attribute( 'src' );
+				return is_string( $src ) && '' !== $src ? esc_url_raw( \WP_Http::make_absolute_url( $src, $site_url ) ) : '';
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Import the identity of the moved site: title, tagline, logo, icon and store currency.
+	 *
+	 * Best effort: any item that can't be fetched in time is skipped. A logo, icon or currency set in the meantime is kept.
+	 *
+	 * @param string $site_url URL of the moved site.
+	 * @return array Map of item to whether it was imported.
+	 */
+	public static function import_identity( string $site_url ): array {
+		$result = [
+			'title'    => false,
+			'tagline'  => false,
+			'logo'     => false,
+			'icon'     => false,
+			'currency' => false,
+		];
+		if ( ! $site_url ) {
+			return $result;
+		}
+		self::$identity_deadline = microtime( true ) + self::IDENTITY_IMPORT_BUDGET;
+
+		$site_url = trailingslashit( esc_url_raw( $site_url ) );
+		$index    = self::fetch_json( $site_url . 'wp-json/?_fields=name,description,site_logo,site_icon' );
+
+		if ( ! empty( $index['name'] ) && is_string( $index['name'] ) ) {
+			update_option( 'blogname', sanitize_text_field( $index['name'] ) );
+			$result['title'] = true;
+		}
+		if ( ! empty( $index['description'] ) && is_string( $index['description'] ) ) {
+			update_option( 'blogdescription', sanitize_text_field( $index['description'] ) );
+			$result['tagline'] = true;
+		}
+
+		if ( ! get_theme_mod( 'custom_logo' ) ) {
+			$logo_url = self::get_media_url( $site_url, $index['site_logo'] ?? 0 );
+			if ( ! $logo_url ) {
+				$logo_url = self::find_custom_logo_url( $site_url );
+			}
+			$logo_id = self::sideload_image( $logo_url );
+			if ( $logo_id ) {
+				self::forget_cached_options( [ 'theme_mods_' . get_option( 'stylesheet' ) ] );
+				if ( get_theme_mod( 'custom_logo' ) ) {
+					wp_delete_attachment( $logo_id, true );
+				} else {
+					set_theme_mod( 'custom_logo', $logo_id );
+					set_theme_mod( 'header_text', false );
+					set_theme_mod( 'header_display_tagline', false );
+					$result['logo'] = true;
+				}
+			}
+		}
+
+		if ( ! get_option( 'site_icon' ) ) {
+			$icon_id = self::sideload_image( self::get_media_url( $site_url, $index['site_icon'] ?? 0 ) );
+			if ( $icon_id ) {
+				self::forget_cached_options( [ 'site_icon' ] );
+				if ( get_option( 'site_icon' ) ) {
+					wp_delete_attachment( $icon_id, true );
+				} else {
+					update_option( 'site_icon', $icon_id );
+					$result['icon'] = true;
+				}
+			}
+		}
+
+		if ( ! get_option( 'woocommerce_currency' ) ) {
+			$cart     = self::fetch_json( $site_url . 'wp-json/wc/store/v1/cart' );
+			$currency = $cart['totals']['currency_code'] ?? '';
+			if ( is_string( $currency ) && in_array( $currency, wp_list_pluck( newspack_get_currencies_options(), 'value' ), true ) ) {
+				self::forget_cached_options( [ 'woocommerce_currency' ] );
+				if ( ! get_option( 'woocommerce_currency' ) ) {
+					update_option( 'woocommerce_currency', $currency );
+					update_option( Starter_Content::IMPORTED_CURRENCY_OPTION, $currency, false );
+					$result['currency'] = true;
+				}
+			}
+		}
+
+		return $result;
 	}
 }

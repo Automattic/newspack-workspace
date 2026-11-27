@@ -14,23 +14,49 @@ use Newspack_Story_Budget\Budgets;
  */
 class Read_Only_Field extends Abstract_Field {
 	/**
+	 * Optional labels for the field's values, or a callback that returns them,
+	 * as an array of `label` and `value` pairs. Used to show and filter by a
+	 * label instead of the stored value.
+	 *
+	 * @var array|callable
+	 */
+	protected $options = [];
+
+	/**
 	 * Register the field.
 	 *
 	 * @param array $args {
 	 *    Configuration for registering a read-only field. See abstract class constructor for additional params.
 	 *    @type callable $get_value_callback? Optional callback used to dynamically calculate the value of a read-only field.
 	 *    @type callable $post_save_callback? Optional callback used to calculate the value of a read-only field on post_save.
+	 *    @type array|callable $options?    Optional labels for the field's values, or a callback that returns them.
 	 * }
 	 */
 	public function __construct( $args ) {
 
 		parent::__construct( $args );
+		if ( ! empty( $args['options'] ) ) {
+			$this->options = $args['options'];
+		}
 		if ( is_null( $this->get_value_callback ) && is_null( $this->post_save_callback ) ) {
 			$this->errors->add(
 				'newspack_story_budget_invalid_field_configuration',
 				__( 'Read-only fields must receive a callback function to calculate their value.', 'newspack-story-budget' )
 			);
 		}
+	}
+
+	/**
+	 * Get an array representation of the field.
+	 */
+	public function to_array() {
+		$options = is_callable( $this->options ) ? call_user_func( $this->options ) : $this->options;
+		return array_merge(
+			parent::to_array(),
+			[
+				'options' => $options,
+			]
+		);
 	}
 
 	/**

@@ -9,7 +9,6 @@ import { __ } from '@wordpress/i18n';
 import { Fragment, useEffect, useRef, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import { Notice } from '@wordpress/components';
-import { Stack } from '@wordpress/ui';
 
 /**
  * External dependencies.
@@ -21,7 +20,7 @@ import mergeWith from 'lodash/mergeWith';
  */
 import { ADVANCED_SETTINGS_DEFAULTS } from '../constants';
 import WizardsTab from '../../../../wizards-tab';
-import { Divider, Grid, SectionHeader, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
+import { Divider, SplitSection, useConfirmDialog, useUnsavedChangesDialog } from '../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import Recirculation from './recirculation';
@@ -31,7 +30,7 @@ import DefaultTemplates, { TemplateOptions } from './default-templates';
 import MediaCredits from './media-credits';
 import PostDate from './post-date';
 import AccessibilityStatement from './accessibility-statement';
-import PwaDisplayMode from './pwa-display-mode';
+import WebAppDisplayMode from './web-app-display-mode';
 import PrivateTags from './private-tags';
 import PrimaryCategory from './primary-category';
 
@@ -78,7 +77,7 @@ export default function AdvancedSettings() {
 
 	const [ data, setData ] = useState< AdvancedSettings >( DEFAULT_DATA );
 	const [ savedData, setSavedData ] = useState< AdvancedSettings >( DEFAULT_DATA );
-	const [ etc, setEtc ] = useState< Etc >( { post_count: '0', has_pwa_plugin: false } );
+	const [ etc, setEtc ] = useState< Etc >( { post_count: '0' } );
 
 	const [ recirculation, setRecirculation ] = useState< Recirculation >( {
 		relatedPostsMaxAge: 0,
@@ -359,11 +358,14 @@ export default function AdvancedSettings() {
 			key: 'accessibility-statement',
 			element: <AccessibilityStatement isFetching={ isFetching } />,
 		},
-		!! etc.has_pwa_plugin && {
-			key: 'pwa',
-			title: __( 'Progressive Web App', 'newspack-plugin' ),
-			description: __( 'Choose how your site appears when readers install it as a Progressive Web App on their devices.', 'newspack-plugin' ),
-			content: <PwaDisplayMode data={ data } update={ update } isFetching={ isFetching } />,
+		{
+			key: 'web-app-display-mode',
+			title: __( 'Web App', 'newspack-plugin' ),
+			description: __(
+				'Choose how the site opens when readers install it as an app on their device. Readers can only install the site once it has a site icon.',
+				'newspack-plugin'
+			),
+			content: <WebAppDisplayMode data={ data } update={ update } isFetching={ isFetching } />,
 		},
 	];
 
@@ -384,12 +386,10 @@ export default function AdvancedSettings() {
 						{ 'element' in section ? (
 							section.element
 						) : (
-							<Grid columns={ 2 } gutter={ 32 } noMargin>
-								<SectionHeader noMargin heading={ 2 } title={ section.title } description={ section.description } />
-								<Stack direction="column" gap="xl">
-									{ section.content }
-								</Stack>
-							</Grid>
+							<SplitSection.Root>
+								<SplitSection.Header title={ section.title } description={ section.description } />
+								<SplitSection.Content>{ section.content }</SplitSection.Content>
+							</SplitSection.Root>
 						) }
 					</Fragment>
 				) ) }

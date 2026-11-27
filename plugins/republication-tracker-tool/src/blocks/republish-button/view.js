@@ -290,6 +290,7 @@ domReady( () => {
 	document.querySelectorAll( '[data-modal-trigger="republish"]' ).forEach( button => {
 		button.addEventListener( 'click', e => {
 			e.preventDefault();
+			e.stopPropagation();
 			showModal( modal, button );
 		} );
 	} );

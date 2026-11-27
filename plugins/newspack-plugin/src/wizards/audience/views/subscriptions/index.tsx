@@ -34,10 +34,7 @@ const PREREQUISITE_SECTION = {
 	breadcrumbs: [ { label: __( 'Audience Management', 'newspack-plugin' ) }, { label: __( 'Subscriptions', 'newspack-plugin' ) } ],
 	render: () => (
 		<AudienceManagementRequired
-			description={ __(
-				'The Subscriptions screen needs accounts, sign-in, and account emails. Audience Management provides them.',
-				'newspack-plugin'
-			) }
+			description={ __( 'Subscriptions need accounts, sign-in, and account emails. Audience Management provides them.', 'newspack-plugin' ) }
 			setupUrl={ window.newspackAudienceSubscriptions?.audience_management_url || '' }
 		/>
 	),
@@ -91,7 +88,7 @@ function AudienceSubscriptions( _props: Record< string, unknown >, ref: React.Fo
 				fullWidth: registered.fullWidth,
 			};
 		} )
-		.filter( Boolean );
+		.filter( ( section ): section is NonNullable< typeof section > => section !== null );
 
 	// Dropping one unregistered tab is a graceful degrade; ending up with none is
 	// not. Wizard redirects to `sections[ 0 ].path` unconditionally, so an empty

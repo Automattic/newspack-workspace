@@ -133,6 +133,7 @@ class Newspack_Settings extends Wizard {
 							},
 							wp_get_nav_menus()
 						),
+						'blockTheme'    => method_exists( '\Newspack_Multibranded_Site\Block_Theme\Api', 'get_wizard_data' ) ? \Newspack_Multibranded_Site\Block_Theme\Api::get_wizard_data() : null,
 					],
 				],
 			];

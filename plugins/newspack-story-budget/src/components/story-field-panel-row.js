@@ -9,6 +9,7 @@ import { __experimentalHStack as HStack, __experimentalText as Text } from '@wor
  * Internal dependencies
  */
 import StoryField from './story-field';
+import { isEmptyValue } from '../utils/fields';
 
 const EMPTY_STRING = '';
 
@@ -39,7 +40,7 @@ export default ( { field, story, anchor = 'field', onChange } ) => {
 			<StoryField
 				fieldId={ field.slug }
 				storyId={ story.id }
-				value={ story[ field.slug ] || EMPTY_STRING }
+				value={ isEmptyValue( story[ field.slug ] ) ? EMPTY_STRING : story[ field.slug ] }
 				onChange={ onChange }
 				popoverProps={ popoverProps }
 			/>

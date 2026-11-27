@@ -22,7 +22,7 @@ const baseProps = {
 	presaveChecksEnabled: true,
 	summary: [
 		{ label: 'Content rules', content: 'All content' },
-		{ label: 'Paid access', content: 'N/A' },
+		{ label: 'Paid access', content: '—' },
 	],
 	isSaving: false,
 	onCancel: jest.fn(),

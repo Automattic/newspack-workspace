@@ -45,7 +45,7 @@
 		display: flex;
 		flex-direction: column;
 		float: none;
-		font-family: var(--newspack-ui-font-family);
+		font-family: var(--newspack-ui-font-family-control);
 		font-size: var(--newspack-ui-font-size-body);
 		line-height: var(--newspack-ui-line-height-body);
 		width: auto;
@@ -72,7 +72,7 @@
 			margin-inline: var(--newspack-ui-spacer-3) 0;
 			padding: calc(var(--newspack-ui-spacer-half) / 2);
 			place-items: center;
-			transition: border-color var(--newspack-ui-duration-color) ease;
+			transition: border-color var(--newspack-ui-duration-color) var(--newspack-ui-ease-color);
 			width: var(--newspack-ui-spacer-9);
 
 			img {
@@ -97,9 +97,9 @@
 		.newspack-my-account__navigation-sign-out {
 			align-items: center;
 			display: inline-flex;
+			font-family: var(--newspack-ui-font-family-control);
 
 			svg {
-				fill: currentcolor;
 				height: var(--newspack-ui-spacer-3);
 				width: var(--newspack-ui-spacer-3);
 			}
@@ -122,6 +122,8 @@
 			--newspack-ui-button-height: var(--newspack-ui-spacer-8);
 			--newspack-ui-button-padding-block: var(--newspack-ui-spacer-1);
 			--newspack-ui-button-padding-inline: var(--newspack-ui-spacer-3);
+			--newspack-ui-button-letter-spacing: normal;
+			--newspack-ui-button-text-transform: none;
 
 			font-weight: var(--newspack-ui-font-weight-medium);
 			margin: 0;
@@ -230,8 +232,7 @@
 					}
 
 					&:active {
-						color: var(--newspack-ui-color-inverse-ink);
-						opacity: 0.75;
+						color: color-mix(in oklab, var(--newspack-ui-color-inverse-ink) var(--newspack-ui-color-mix-pressed), transparent);
 					}
 
 					&:focus-visible {

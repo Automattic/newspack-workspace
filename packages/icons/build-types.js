@@ -17,8 +17,8 @@ if ( ! fs.existsSync( buildTypesDir ) ) {
 	fs.mkdirSync( buildTypesDir, { recursive: true } );
 }
 
-// Read the main index.js to extract all exports
-const indexPath = path.join( __dirname, 'index.js' );
+// Read the main index.ts to extract all exports
+const indexPath = path.join( __dirname, 'index.ts' );
 const indexContent = fs.readFileSync( indexPath, 'utf8' );
 
 // Extract icon names from the export statements

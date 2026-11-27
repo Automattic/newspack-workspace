@@ -1,4 +1,5 @@
 @use "newspack-colors" as np-colors;
+@use "newspack-motion" as motion;
 @use "../../../shared/sass/mixins";
 @use "../../../shared/sass/variables";
 
@@ -8,14 +9,22 @@
 	.wpbnbd {
 		&__button {
 			padding: 0.38rem 0.76rem;
-			&:focus {
-				background: np-colors.$neutral-050;
+
+			@include motion.hover {
+				&:hover {
+					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
+				}
 			}
 
-			@media ( hover: hover ) and ( pointer: fine ) {
-				&:hover {
-					background: np-colors.$neutral-050;
-				}
+			&:active {
+				background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
+			}
+
+			&:focus-visible {
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
+				transition:
+					background-color motion.$duration-color motion.$ease-color,
+					color motion.$duration-color motion.$ease-color;
 			}
 		}
 		&__tiers {
@@ -31,7 +40,7 @@
 		.wpbnbd__button {
 			border-width: 0 0 1px;
 			&--active {
-				background: np-colors.$neutral-000;
+				background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 				border-bottom: 0;
 			}
 		}
@@ -51,7 +60,7 @@
 /* Alternate Style */
 
 .wpbnbd.is-style-alternate {
-	border-color: np-colors.$neutral-050;
+	border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 	border-radius: 5px;
 
 	.thanks {
@@ -76,8 +85,8 @@
 	&.tiered {
 		.tiers {
 			.tier-label {
-				background: np-colors.$neutral-050;
-				border-color: np-colors.$neutral-050;
+				background: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
+				border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 				margin: 0;
 				text-align: center;
 			}
@@ -92,8 +101,8 @@
 
 	.tab-container .freq-label,
 	.wpbnbd__tiers__selection {
-		background: np-colors.$neutral-050;
-		border-color: np-colors.$neutral-050;
+		background: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
+		border-color: var(--newspack-ui-color-surface-subtle, #{np-colors.$neutral-050});
 	}
 
 	.wpbnbd__tiers__selection {
@@ -103,7 +112,7 @@
 		padding: 5px;
 		border-radius: 5px;
 		.wpbnbd__button {
-			color: np-colors.$neutral-900;
+			color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 			padding: 0 15px;
 		}
 	}
@@ -113,16 +122,16 @@
 		border: 0.19rem solid transparent;
 
 		&--active {
-			border-color: np-colors.$neutral-000;
+			border-color: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 		}
 	}
 
 	.wpbnbd__tiers .wpbnbd__button--active,
 	/* Frequency-based version. */
 	.tab-container .freq-label.wpbnbd__button--active::after {
-		background: np-colors.$neutral-000;
+		background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 		border-radius: 5px;
-		box-shadow: 0 0 0 1px np-colors.$neutral-300;
+		box-shadow: 0 0 0 1px var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 	}
 
 	.tab-container {
@@ -135,7 +144,7 @@
 			}
 
 			&.wpbnbd__button--active {
-				color: np-colors.$neutral-900;
+				color: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 				&::after {
 					box-sizing: content-box;
 					content: "";
@@ -143,11 +152,6 @@
 					inset: 0.19rem;
 					position: absolute;
 					z-index: -1;
-				}
-				@media ( hover: hover ) and ( pointer: fine ) {
-					&:hover {
-						background: np-colors.$neutral-050;
-					}
 				}
 			}
 		}
@@ -224,7 +228,7 @@
 					content: "";
 					display: block;
 					height: 1px;
-					background: np-colors.$neutral-300;
+					background: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 					width: 100%;
 					left: 0;
 					bottom: 0;
@@ -232,7 +236,7 @@
 				&--active {
 					&::after {
 						height: 3px;
-						background: np-colors.$neutral-900;
+						background: var(--newspack-ui-color-text, #{np-colors.$neutral-900});
 					}
 				}
 			}
@@ -250,7 +254,7 @@
 				display: grid;
 				background: transparent;
 				border: none;
-				color: np-colors.$neutral-600;
+				color: var(--newspack-ui-color-text-subtle, #{np-colors.$neutral-600});
 				font-family: inherit;
 				font-weight: inherit;
 				grid-gap: 0.25rem;
@@ -260,10 +264,10 @@
 				text-align: left;
 
 				&::before {
-					background: np-colors.$neutral-000;
-					border: 1px solid np-colors.$neutral-300;
+					background: var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
+					border: 1px solid var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 					border-radius: 100%;
-					box-shadow: inset 0 0 0 3px np-colors.$neutral-000;
+					box-shadow: inset 0 0 0 3px var(--newspack-ui-color-surface, #{np-colors.$neutral-000});
 					content: "";
 					display: block;
 					height: 20px;
@@ -299,7 +303,7 @@
 		.freq-label {
 			background: transparent;
 			border: none;
-			box-shadow: 0 3px 0 np-colors.$neutral-000, 0 4px 0 0 np-colors.$neutral-300;
+			box-shadow: 0 3px 0 var(--newspack-ui-color-surface, #{np-colors.$neutral-000}), 0 4px 0 0 var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			padding: 0.38rem 0;
 			transition: none;
 
@@ -310,11 +314,19 @@
 
 			&::before {
 				border-width: 1px;
-				border-color: np-colors.$neutral-300;
+				border-color: var(--newspack-ui-color-border, #{np-colors.$neutral-300});
 			}
 
 			&.wpbnbd__button--active {
 				box-shadow: 0 4px 0 currentcolor;
+			}
+
+			&:focus-visible {
+				@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: (0 3px 0 var(--newspack-ui-color-surface, #{np-colors.$neutral-000}), 0 4px 0 0 var(--newspack-ui-color-border, #{np-colors.$neutral-300})) );
+
+				&.wpbnbd__button--active {
+					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: 0 4px 0 currentcolor );
+				}
 			}
 		}
 	}
@@ -354,7 +366,7 @@
 	background: none;
 	border: none;
 	color: var(--newspack-ui-color-text, np-colors.$neutral-900);
-	font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+	font-family: var(--newspack-ui-font-family-body, var(--newspack-ui-font-family, system-ui, sans-serif));
 	font-size: var(--newspack-ui-font-size-body, 16px);
 	line-height: var(--newspack-ui-line-height-body, 1.5);
 	position: relative;
@@ -372,8 +384,10 @@
 	}
 
 	.money-input {
-		border-color: var(--newspack-ui-color-input-border, np-colors.$neutral-500);
-		border-radius: var(--newspack-ui-radius-control, 8px);
+		background: var(--newspack-ui-field-bg, var(--newspack-ui-color-surface, np-colors.$neutral-000));
+		border-color: var(--newspack-ui-field-border-color, var(--newspack-ui-color-input-border, np-colors.$neutral-500));
+		border-radius: var(--newspack-ui-field-radius, var(--newspack-ui-radius-control, 8px));
+		border-width: var(--newspack-ui-field-border-width, 1px);
 		color: var(--newspack-ui-color-text, np-colors.$neutral-900);
 		font-size: var(--newspack-ui-font-size-body, 16px);
 		left: var(--newspack-ui-spacer-5, 24px);
@@ -381,9 +395,14 @@
 		max-width: 100%;
 		overflow: hidden;
 		right: var(--newspack-ui-spacer-5, 24px);
-		transition: border-color var(--newspack-ui-duration-color, 150ms) ease, box-shadow var(--newspack-ui-duration-color, 150ms) ease;
+		transition: border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, outline-color motion.$duration-color motion.$ease-color;
 
-		@media ( hover: hover ) and ( pointer: fine ) {
+		@media ( forced-colors: none ) {
+			outline: 1px solid transparent;
+			outline-offset: -2px;
+		}
+
+		@include motion.hover {
 			&:hover:not(:focus-within) {
 				border-color: var(--newspack-ui-color-input-border-hover, np-colors.$neutral-700);
 			}
@@ -408,6 +427,7 @@
 		}
 
 		input[type="number"] {
+			color: var(--newspack-ui-field-ink, inherit);
 			font-family: inherit;
 			font-size: inherit;
 			font-weight: 400;
@@ -415,6 +435,20 @@
 			max-width: 100%;
 			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px);
 			width: 100%;
+		}
+	}
+
+	.newspack-ui__segmented-control {
+		container: wpbnbd-segmented-control / inline-size;
+	}
+
+	@container wpbnbd-segmented-control ( width <= 480px ) {
+		.newspack-ui__segmented-control__tabs {
+			align-self: stretch;
+
+			.newspack-ui__button {
+				flex: 1 1 0;
+			}
 		}
 	}
 
@@ -496,13 +530,17 @@
 					margin: 0;
 					padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 					text-align: center;
-					transition: background var(--newspack-ui-duration-color, 150ms) ease, color var(--newspack-ui-duration-color, 150ms) ease;
+					transition: background motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color;
 
-					@media ( hover: hover ) and ( pointer: fine ) {
+					@include motion.hover {
 						&:hover {
 							background: var(--newspack-ui-color-neutral-fill-hover, np-colors.$neutral-200);
 							color: var(--newspack-ui-color-text, np-colors.$neutral-900);
 						}
+					}
+
+					&:active {
+						background: var(--newspack-ui-color-neutral-fill-pressed, np-colors.$neutral-300);
 					}
 				}
 
@@ -519,7 +557,6 @@
 				}
 
 				input[type="radio"]:focus + .tier-label {
-					background: var(--newspack-ui-color-neutral-fill, np-colors.$neutral-100);
 					outline: none;
 				}
 
@@ -543,14 +580,11 @@
 		button[type="submit"],
 		.submit-button {
 			border-radius: var(--newspack-ui-radius-button, 8px);
-			font-family: inherit;
 			font-size: var(--newspack-ui-font-size-body, 16px);
-			font-weight: var(--newspack-ui-font-weight-strong, 600);
 			line-height: var(--newspack-ui-line-height-body, 1.5);
 			margin: 0 calc(1px + var(--newspack-ui-spacer-5, 24px)) calc(1px + var(--newspack-ui-spacer-5, 24px));
 			padding: var(--newspack-ui-spacer-2, 12px) var(--newspack-ui-spacer-5, 24px);
 			position: relative;
-			transition: opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 			width: calc(100% - 2 * var(--newspack-ui-spacer-5, 24px) - 2px);
 			z-index: 1;
 
@@ -558,16 +592,28 @@
 				pointer-events: none;
 			}
 
-			@media ( hover: hover ) and ( pointer: fine ) {
-				&:hover {
-					opacity: 0.8;
+			&:where(:not(.wp-element-button)) {
+				font-family: inherit;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+				transition: box-shadow motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+			}
+
+			@include motion.hover {
+				&:where(:not(.wp-element-button)):hover {
+					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
+					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 				}
 			}
 
-			&:active {
-				transform: scale(0.97);
+			&:where(:not(.wp-element-button)):active {
+				--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
+				box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+			}
 
-				@media ( prefers-reduced-motion: reduce ) {
+			&:active {
+				transform: scale(motion.$press-scale);
+
+				@include motion.reduced-motion {
 					transform: none;
 				}
 			}
@@ -577,7 +623,7 @@
 			}
 
 			&:focus-visible {
-				@include mixins.focus-edge( currentcolor, 2px, mixins.$focus-color );
+				@include mixins.focus-edge( currentcolor, 2px, mixins.$focus-color, var(--wpbnbd-overlay, 0 0 #0000) );
 			}
 		}
 	}
@@ -590,7 +636,7 @@
 
 			&__heading {
 				align-self: flex-start;
-				font-family: inherit;
+				font-family: var(--newspack-ui-font-family-heading, inherit);
 				font-size: var(--newspack-ui-font-size-title-m, 20px);
 				font-weight: var(--newspack-ui-font-weight-strong, 600);
 				letter-spacing: var(--newspack-ui-letter-spacing-title-m, -0.012em);
@@ -662,52 +708,107 @@
 
 			button[type="submit"],
 			.submit-button {
-				border-radius: var(--newspack-ui-radius-button, 8px);
-				border-width: 1px;
-				font-family: inherit;
-				font-size: var(--newspack-ui-font-size-body, 16px);
-				font-weight: var(--newspack-ui-font-weight-strong, 600);
-				line-height: var(--newspack-ui-line-height-body, 1.5);
 				margin: auto 0 0;
-				padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
-				transition: background var(--newspack-ui-duration-color, 150ms) ease, border-color var(--newspack-ui-duration-color, 150ms) ease, opacity var(--newspack-ui-duration-color, 150ms) ease, transform var(--newspack-ui-duration-press, 160ms) var(--newspack-ui-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 
-				@media ( hover: hover ) and ( pointer: fine ) {
-					&:hover {
-						opacity: 0.8;
+				&:where(:not(.wp-element-button)) {
+					border-radius: var(--newspack-ui-radius-button, 8px);
+					border-width: 1px;
+					font-size: var(--newspack-ui-font-size-body, 16px);
+					line-height: var(--newspack-ui-line-height-body, 1.5);
+					padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-5, 24px) - 1px);
+					transition: background motion.$duration-color motion.$ease-color, border-color motion.$duration-color motion.$ease-color, box-shadow motion.$duration-color motion.$ease-color, color motion.$duration-color motion.$ease-color, transform motion.$duration-press motion.$ease-out;
+					font-family: inherit;
+					font-weight: var(--newspack-ui-font-weight-strong, 600);
+				}
+
+				@include motion.hover {
+					&:where(:not(.wp-element-button)):hover {
+						--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-hover, 85%)), transparent);
+						box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
 					}
 				}
 
-				&:active {
-					transform: scale(0.97);
+				&:where(:not(.wp-element-button)):active {
+					--wpbnbd-overlay: inset 0 0 0 100vmax color-mix(in oklab, black calc(100% - var(--newspack-ui-color-mix-pressed, 75%)), transparent);
+					box-shadow: var(--wpbnbd-overlay, 0 0 #0000);
+				}
 
-					@media ( prefers-reduced-motion: reduce ) {
+				&:active {
+					transform: scale(motion.$press-scale);
+
+					@include motion.reduced-motion {
 						transform: none;
 					}
 				}
 
-				&:focus {
+				&:focus:where(:not(.wp-element-button)) {
 					outline: none;
 				}
 
-				&:focus-visible {
+				&:focus-visible:where(:not(.wp-element-button)) {
 					border-color: currentcolor !important;
 
-					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color );
+					@include mixins.focus-edge( currentcolor, $halo: mixins.$focus-color, $inner: var(--wpbnbd-overlay, 0 0 #0000) );
 				}
 			}
 
 			&__options:has(> .wpbnbd__tiers__tier--recommended) > .wpbnbd__tiers__tier:not(.wpbnbd__tiers__tier--recommended) {
 				button[type="submit"],
 				.submit-button {
-					@media ( hover: hover ) and ( pointer: fine ) {
-						&:hover {
-							background: var(--newspack-ui-color-surface-subtle, np-colors.$neutral-050) !important;
-							opacity: 1;
+					@include motion.hover {
+						&:where(:not(.wp-element-button)):hover {
+							--wpbnbd-overlay: 0 0 #0000;
+							background: color-mix(in oklab, currentcolor 7%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 						}
+					}
+
+					&:where(:not(.wp-element-button)):active {
+						--wpbnbd-overlay: 0 0 #0000;
+						background: color-mix(in oklab, currentcolor 13%, var(--newspack-ui-color-surface, #{np-colors.$neutral-000})) !important;
 					}
 				}
 			}
+		}
+	}
+}
+
+.wpbnbd.wpbnbd--site-theme:not(.is-style-modern) {
+	.wpbnbd__tiers__tier {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+	}
+
+	.wpbnbd__tiers__recommend-label {
+		border-radius: var(--newspack-ui-radius-badge, 4px);
+	}
+
+	.money-input {
+		border-radius: var(--newspack-ui-radius-control, 8px);
+	}
+
+	&:not(.is-style-minimal) {
+		.wpbnbd__tiers__selection .wpbnbd__button,
+		.tiers .tier-label {
+			border-radius: var(--newspack-ui-radius-control, 8px);
+		}
+	}
+
+	&.is-style-alternate {
+		border-radius: var(--newspack-ui-radius-surface, 12px);
+
+		.wpbnbd__tiers__selection {
+			border-radius: var(--newspack-ui-radius-surface, 12px);
+		}
+
+		.tab-container .freq-label.wpbnbd__button--active::after {
+			border-radius: var(--newspack-ui-radius-control, 8px);
+		}
+
+		.tab-container .freq-label:first-of-type {
+			border-top-left-radius: max(0px, calc(var(--newspack-ui-radius-surface, 12px) - 1px));
+		}
+
+		.tab-container .freq-label:last-of-type {
+			border-top-right-radius: max(0px, calc(var(--newspack-ui-radius-surface, 12px) - 1px));
 		}
 	}
 }

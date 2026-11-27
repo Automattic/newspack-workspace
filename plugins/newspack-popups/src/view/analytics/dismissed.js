@@ -11,7 +11,12 @@ export const manageDismissals = prompts => {
 		const closeButton = prompt.querySelector( '.newspack-lightbox__close' );
 		const forms = [ ...prompt.querySelectorAll( '.newspack-popup-container form' ) ];
 		if ( closeButton ) {
+			let sent = false;
 			const handleEvent = () => {
+				if ( sent ) {
+					return;
+				}
+				sent = true;
 				const payload = getEventPayload( 'dismissed', getRawId( prompt.getAttribute( 'id' ) ) );
 				sendEvent( payload );
 			};

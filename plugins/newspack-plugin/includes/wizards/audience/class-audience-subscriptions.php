@@ -35,6 +35,24 @@ class Audience_Subscriptions extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * Capability required to use this wizard: its page, its own routes, and the
+	 * routes of every tab it hosts.
+	 *
+	 * Store staff, not only administrators: the tabs configure the store (subscriber
+	 * discounts, subscriber-only products), as WooCommerce Memberships lets the same
+	 * staff manage plan discounts. Granting it also shows store staff the Audience
+	 * menu, limited to the screens they can open.
+	 */
+	const CAPABILITY = 'manage_woocommerce';
+
+	/**
+	 * See {@see self::CAPABILITY}.
+	 *
+	 * @var string
+	 */
+	protected $capability = self::CAPABILITY;
+
+	/**
 	 * WooCommerce product types offered as "available to" suggestions.
 	 *
 	 * Only parent products are suggested, to keep the picker to the handful of

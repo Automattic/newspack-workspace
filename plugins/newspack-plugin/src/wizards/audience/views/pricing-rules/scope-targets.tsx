@@ -125,9 +125,9 @@ export default function ScopeTargets( { scopeType, value, onChange }: ScopeTarge
 			// Remount when the scope type changes so saved-info fetch re-runs for the new source.
 			key={ scopeType }
 			tokens={ value }
-			onChange={ onChange }
+			onChange={ values => onChange( values as number[] ) }
 			fetchSuggestions={ fetchSuggestions }
-			fetchSavedInfo={ fetchSavedInfo }
+			fetchSavedInfo={ tokens => fetchSavedInfo( tokens as number[] ) }
 			label={ source.label }
 			placeholder={ source.placeholder }
 			__next40pxDefaultSize

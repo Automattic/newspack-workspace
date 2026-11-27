@@ -55,11 +55,7 @@ const TabsItemEdit = props => {
 				/>
 			</div>
 
-			<InnerBlocks
-				templateInsertUpdatesSelection
-				__experimentalCaptureToolbars
-				allowedBlocks={ applyFilters( 'newspack.tabs.allowedBlocks', true, name ) }
-			/>
+			<InnerBlocks __experimentalCaptureToolbars allowedBlocks={ applyFilters( 'newspack.tabs.allowedBlocks', true, name ) } />
 			<FilterableTabsItemFooter blockProps={ props } />
 		</div>
 	);

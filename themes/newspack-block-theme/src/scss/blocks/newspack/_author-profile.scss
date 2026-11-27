@@ -1,4 +1,5 @@
 @use "../../sass-utils";
+@use "newspack-motion" as motion;
 
 .wp-block-newspack-blocks-author-profile {
 	&[class*="text-size-"] {
@@ -39,11 +40,24 @@
 				&:hover {
 					text-decoration: underline;
 				}
+
+				@include motion.hover {
+					&:hover {
+						color: color-mix(in oklab, var(--wp--preset--color--contrast) var(--wp--custom--state--hover), transparent);
+					}
+				}
 			}
 		}
 
 		a {
 			color: inherit;
+			transition: color motion.$duration-color motion.$ease-color;
+
+			@include motion.hover {
+				&:hover {
+					color: var(--wp--preset--color--contrast);
+				}
+			}
 		}
 
 		p:not([class]) {
@@ -181,6 +195,11 @@
 			color: inherit;
 
 			h3 {
+				color: inherit;
+			}
+
+			a:hover,
+			h3 a:hover {
 				color: inherit;
 			}
 		}

@@ -183,11 +183,9 @@ h1 {
 }
 .newspack-wizard {
 	.newspack-wizard__loader {
-		display: grid;
-		height: 100%;
-		place-items: center;
-		position: absolute;
-		width: 100%;
+		display: flex;
+		justify-content: center;
+		padding: wp-vars.$grid-unit-60 0;
 
 		strong {
 			font-weight: wp-vars.$font-weight-medium;

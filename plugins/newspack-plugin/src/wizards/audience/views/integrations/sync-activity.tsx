@@ -1,0 +1,290 @@
+/**
+ * WordPress dependencies
+ */
+import { __, _n, sprintf } from '@wordpress/i18n';
+import { useState, useEffect, useCallback, useMemo, useRef } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
+import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
+import { Spinner } from '@wordpress/components';
+import { Stack } from '@wordpress/ui';
+
+/**
+ * Internal dependencies
+ */
+import { DataViews, Drawer, StatusBadge } from '../../../../../packages/components/src';
+import type { Field, Action, View } from '../../../../../packages/components/src/dataviews';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { API_BASE, PUSH_LOG_STATUS_MAP, PUSH_LOG_OPERATION_LABELS, formatTimestamp } from './constants';
+import type { PushLogItem, PushLogResponse, PushLogRetry } from './constants';
+import { NEEDS_ATTENTION_VALUE, buildPushLogQuery, getAttemptLabel, getRetryNote, getStatusDisplay, getEmptyMessage } from './push-log-utils';
+import { SyncActivityDetails } from './sync-activity-details';
+import { useRunAction } from './use-run-action';
+import { DetailsLink } from './details-link';
+
+const FIT_COLUMNS = [ 'status' ];
+
+const DEFAULT_VIEW: View = {
+	type: 'table',
+	page: 1,
+	perPage: 25,
+	sort: { field: 'updated_at', direction: 'desc' },
+	search: '',
+	fields: [ 'email', 'status', 'operation', 'context', 'updated_at' ],
+	filters: [],
+	layout: {},
+};
+
+const PER_PAGE_CONFIG = { perPageSizes: [ 10, 25, 50, 100 ] };
+
+// The retry's action finishing does not say the push worked, so the notice
+// sends the reader to the entry rather than calling it a success.
+const RETRY_RAN_NOTICE = { message: __( 'The retry ran. Its entry shows the result.', 'newspack-plugin' ), type: 'info' };
+
+const STATUS_FILTER_ELEMENTS = [
+	{ value: NEEDS_ATTENTION_VALUE, label: __( 'Needs attention', 'newspack-plugin' ) },
+	...Object.entries( PUSH_LOG_STATUS_MAP ).map( ( [ value, { label } ] ) => ( { value, label } ) ),
+];
+
+const toElements = ( labels: Record< string, string > ) => Object.entries( labels ).map( ( [ value, label ] ) => ( { value, label } ) );
+
+/**
+ * The integration's push log: what was sent for each reader, and whether it
+ * arrived. One row is one sync, its retries included.
+ *
+ * @param props               Props.
+ * @param props.integrationId The integration to list.
+ */
+export const SyncActivity = ( { integrationId }: { integrationId: string } ) => {
+	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	const [ data, setData ] = useState< PushLogItem[] >( [] );
+	const [ total, setTotal ] = useState( 0 );
+	const [ retentionDays, setRetentionDays ] = useState< { success?: number; failed?: number } | null >( null );
+	const [ hasFailed, setHasFailed ] = useState( false );
+	const [ isLoading, setIsLoading ] = useState( true );
+	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
+	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+
+	// The request only depends on these parts of the view; hiding a column
+	// must not refetch.
+	const queryKey = JSON.stringify( buildPushLogQuery( view ) );
+
+	// Requests answer in whatever order the server gets to them, so each one
+	// takes a number and only the newest may speak for the table.
+	const latestRequest = useRef( 0 );
+
+	const fetchEntries = useCallback( () => {
+		const request = ++latestRequest.current;
+		const isCurrent = () => request === latestRequest.current;
+		setIsLoading( true );
+		return apiFetch< PushLogResponse >( { path: addQueryArgs( `${ API_BASE }/${ integrationId }/push-log`, JSON.parse( queryKey ) ) } )
+			.then( response => {
+				if ( ! isCurrent() ) {
+					return;
+				}
+				setData( response.items );
+				setTotal( response.total );
+				setRetentionDays( response.retention_days ?? null );
+				setHasFailed( false );
+			} )
+			.catch( () => {
+				if ( ! isCurrent() ) {
+					return;
+				}
+				// The rows on screen answered an earlier request, and under a new
+				// search or filter they would read as its results. An empty table
+				// says the load failed rather than reporting a log with nothing
+				// in it.
+				setData( [] );
+				setTotal( 0 );
+				setHasFailed( true );
+				addNotice( {
+					message: __( 'Failed to load the sync activity. Please try again.', 'newspack-plugin' ),
+					type: 'error',
+					id: 'integration-push-log-fetch-error',
+				} );
+			} )
+			.finally( () => {
+				if ( ! isCurrent() ) {
+					return;
+				}
+				setIsLoading( false );
+				setHasLoadedOnce( true );
+			} );
+	}, [ integrationId, queryKey, addNotice ] );
+
+	useEffect( () => {
+		fetchEntries();
+	}, [ fetchEntries ] );
+
+	const { runAction, runningActionIds } = useRunAction( integrationId, { onSettled: fetchEntries, completeNotice: RETRY_RAN_NOTICE } );
+
+	const [ detailsId, setDetailsId ] = useState< string | null >( null );
+	const [ isDetailsOpen, setIsDetailsOpen ] = useState( false );
+	// The id outlives a close, so the drawer keeps its content while it slides out.
+	const openDetails = useCallback( ( item: PushLogItem ) => {
+		setDetailsId( item.id );
+		setIsDetailsOpen( true );
+	}, [] );
+
+	const fields = useMemo< Field< PushLogItem >[] >(
+		() => [
+			{
+				id: 'updated_at',
+				label: __( 'Last activity', 'newspack-plugin' ),
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) }>
+						<span className="newspack-dataviews__date">{ formatTimestamp( item.updated_at ) }</span>
+					</DetailsLink>
+				),
+				enableSorting: true,
+				enableHiding: false,
+			},
+			{
+				id: 'email',
+				label: __( 'Reader', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.email,
+				render: ( { item } ) => (
+					<DetailsLink onClick={ () => openDetails( item ) } title={ item.email }>
+						{ item.email }
+					</DetailsLink>
+				),
+				enableSorting: false,
+			},
+			{
+				id: 'operation',
+				label: __( 'Operation', 'newspack-plugin' ),
+				render: ( { item } ) => PUSH_LOG_OPERATION_LABELS[ item.operation ] || item.operation,
+				enableSorting: false,
+				elements: toElements( PUSH_LOG_OPERATION_LABELS ),
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
+			},
+			{
+				id: 'status',
+				label: __( 'Status', 'newspack-plugin' ),
+				render: ( { item } ) => {
+					const mapped = getStatusDisplay( item );
+					const notes = [ getAttemptLabel( item ), getRetryNote( item ) ].filter( Boolean );
+					// The cell DataViews renders this into lays its children
+					// out in a row and does not wrap, so the notes need a
+					// column of their own to sit under the status.
+					return (
+						<Stack direction="column" align="flex-start" gap="xs">
+							<StatusBadge status={ mapped.status }>{ mapped.label }</StatusBadge>
+							{ notes.map( note => (
+								<span key={ note } className="newspack-integration-logs__status-note">
+									{ note }
+								</span>
+							) ) }
+						</Stack>
+					);
+				},
+				enableSorting: false,
+				elements: STATUS_FILTER_ELEMENTS,
+				filterBy: { isPrimary: true, operators: [ 'is' ] },
+			},
+			{
+				id: 'context',
+				label: __( 'Trigger', 'newspack-plugin' ),
+				render: ( { item } ) =>
+					item.context ? (
+						<span className="newspack-integration-logs__trigger" title={ item.context }>
+							{ item.context }
+						</span>
+					) : (
+						'—'
+					),
+				enableSorting: false,
+			},
+			{
+				id: 'created_at',
+				label: __( 'First attempt', 'newspack-plugin' ),
+				render: ( { item } ) => <span className="newspack-dataviews__date">{ formatTimestamp( item.created_at ) }</span>,
+				enableSorting: false,
+			},
+			{
+				id: 'repeat_count',
+				label: __( 'Repeats', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.repeat_count,
+				enableSorting: false,
+			},
+		],
+		[ openDetails ]
+	);
+
+	const actions = useMemo< Action< PushLogItem >[] >(
+		() => [
+			{
+				id: 'view-details',
+				label: __( 'View details', 'newspack-plugin' ),
+				callback: items => openDetails( items[ 0 ] ),
+			},
+			{
+				id: 'run-retry',
+				label: __( 'Run retry now', 'newspack-plugin' ),
+				isEligible: item =>
+					item.status === 'retrying' &&
+					Boolean( item.retry?.is_pending ) &&
+					! runningActionIds.has( ( item.retry as PushLogRetry ).action_id ),
+				callback: items => runAction( ( items[ 0 ].retry as PushLogRetry ).action_id ),
+			},
+		],
+		[ openDetails, runAction, runningActionIds ]
+	);
+
+	const paginationInfo = useMemo(
+		() => ( {
+			totalItems: total,
+			totalPages: Math.ceil( total / ( view.perPage || 25 ) ),
+		} ),
+		[ total, view.perPage ]
+	);
+
+	if ( ! hasLoadedOnce ) {
+		return (
+			<Stack justify="center" align="center">
+				<Spinner />
+			</Stack>
+		);
+	}
+
+	return (
+		<>
+			<DataViews
+				fitColumns={ FIT_COLUMNS }
+				countLabel={ ( count, formatted ) =>
+					sprintf(
+						/* translators: %s: number of sync activity entries. */
+						_n( '%s entry', '%s entries', count, 'newspack-plugin' ),
+						formatted
+					)
+				}
+				className="newspack-integration-logs"
+				data={ data }
+				fields={ fields }
+				actions={ actions }
+				view={ view }
+				onChangeView={ setView }
+				paginationInfo={ paginationInfo }
+				defaultLayouts={ { table: {} } }
+				isLoading={ isLoading }
+				getItemId={ item => item.id }
+				empty={ <p>{ hasFailed ? __( 'The sync activity did not load.', 'newspack-plugin' ) : getEmptyMessage( view, retentionDays ) }</p> }
+				search
+				searchLabel={ __( 'Search by reader email', 'newspack-plugin' ) }
+				config={ PER_PAGE_CONFIG }
+				inlineFilters
+			/>
+			<Drawer.Root isOpen={ isDetailsOpen } size="x-large" onRequestClose={ () => setIsDetailsOpen( false ) }>
+				<Drawer.Header>
+					<Drawer.Title>{ __( 'Sync Details', 'newspack-plugin' ) }</Drawer.Title>
+					<Drawer.CloseIcon />
+				</Drawer.Header>
+				<Drawer.Content>
+					{ null !== detailsId ? <SyncActivityDetails integrationId={ integrationId } entryId={ detailsId } /> : null }
+				</Drawer.Content>
+			</Drawer.Root>
+		</>
+	);
+};

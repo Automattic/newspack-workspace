@@ -110,4 +110,14 @@ abstract class Woo_Item_Changed extends Abstract_Incoming_Event {
 	public function get_date_created() {
 		return $this->data->date_created ?? null;
 	}
+
+	/**
+	 * Whether the node marked the item as complimentary access. A node running an older
+	 * version doesn't send the marker, which reads as not complimentary.
+	 *
+	 * @return bool
+	 */
+	public function is_complimentary(): bool {
+		return ! empty( $this->data->is_complimentary );
+	}
 }

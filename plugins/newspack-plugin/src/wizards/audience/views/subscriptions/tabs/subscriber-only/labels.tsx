@@ -1,9 +1,7 @@
 /**
- * Row labels for the subscriber-only products list.
- *
- * Rows lead with the products themselves, because that is what a publisher
- * scans the list for. Category and all-products rules have no product names to
- * show, so they show their scope instead.
+ * Labels for the subscriber-only products tab: what the list's search matches
+ * for a category or all-products restriction, and the names of the
+ * restriction types.
  */
 
 /**
@@ -14,22 +12,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies.
  */
-import { MAX_NAMED_ITEMS } from '../../constants';
-import type { Restriction } from './types';
-
-/**
- * The names a row leads with, and how many are left over.
- *
- * @param restriction The restriction.
- * @param nameOf      Resolves a product ID to its name.
- */
-export function leadingProductNames( restriction: Restriction, nameOf: ( id: number ) => string | undefined ) {
-	const names = ( restriction.product_ids || [] ).map( nameOf ).filter( Boolean ) as string[];
-	return {
-		shown: names.slice( 0, MAX_NAMED_ITEMS ),
-		remaining: Math.max( 0, names.length - MAX_NAMED_ITEMS ),
-	};
-}
+import type { Restriction, RestrictionType } from './types';
 
 /**
  * The scope label for a category or all-products restriction.
@@ -53,31 +36,10 @@ export function scopeLabel( restriction: Restriction, nameOf: ( id: number ) => 
 }
 
 /**
- * The "N excluded" suffix, or an empty string when nothing is excluded.
+ * The label for a restriction type, as the editor's "Restrict" choice names it.
  *
- * @param restriction The restriction.
+ * @param type The restriction type.
  */
-export function excludedLabel( restriction: Restriction ) {
-	const count = ( restriction.excluded_product_ids || [] ).length;
-	if ( ! count ) {
-		return '';
-	}
-	return sprintf(
-		/* translators: %d: number of excluded products. */
-		_n( '%d excluded', '%d excluded', count, 'newspack-plugin' ),
-		count
-	);
-}
-
-/**
- * The "+N more" line under a product-targeted row.
- *
- * @param remaining How many product names are not shown.
- */
-export function moreProductsLabel( remaining: number ) {
-	return sprintf(
-		/* translators: %d: number of further products. */
-		_n( '+%d more product', '+%d more products', remaining, 'newspack-plugin' ),
-		remaining
-	);
+export function restrictionTypeLabel( type: RestrictionType ) {
+	return 'view' === type ? __( 'Purchase and visibility', 'newspack-plugin' ) : __( 'Purchase', 'newspack-plugin' );
 }

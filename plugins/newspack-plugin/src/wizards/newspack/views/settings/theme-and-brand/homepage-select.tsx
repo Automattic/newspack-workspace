@@ -22,16 +22,18 @@ export function HomepageSelect( {
 	updateHomepagePattern,
 	homepagePatterns,
 	isFetching,
+	columns = 6,
 }: {
 	homepagePatternIndex: number;
 	updateHomepagePattern: ( a: number ) => void;
 	homepagePatterns: HomepagePattern[];
 	isFetching: boolean;
+	columns?: number;
 } ) {
 	const items = isFetching && homepagePatterns.length === 0 ? LOADING_CARDS : homepagePatterns;
 
 	return (
-		<Grid columns={ 6 } gutter={ 16 }>
+		<Grid columns={ columns } gutter={ 16 } noMargin>
 			{ items.map( ( pattern, i ) => (
 				<StyleCard
 					key={ i }

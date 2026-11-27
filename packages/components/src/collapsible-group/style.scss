@@ -41,6 +41,15 @@
 		}
 	}
 
+	&--title-xl > &__item > &__heading > &__trigger {
+		@include wp-mixins.heading-x-large();
+	}
+
+	&__description {
+		@include mixins.text-muted;
+		margin: wp-vars.$grid-unit-10 0 0;
+	}
+
 	&__panel-inner {
 		padding-top: wp-vars.$grid-unit-30;
 	}

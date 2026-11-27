@@ -35,6 +35,10 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 		parent::set_up();
 		delete_option( Subscriber_Only_Products::OPTION_NAME );
 		delete_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION );
+		delete_option( Subscriber_Only_Products::SETTINGS_OPTION_NAME );
+		delete_option( Product_Restrictions_Migration::RESTRICTION_MODE_OPTION );
+		delete_option( Product_Restrictions_Migration::REDIRECT_PAGE_ID_OPTION );
+		delete_option( Product_Restrictions_Migration::HIDE_RESTRICTED_PRODUCTS_OPTION );
 		\WP_CLI::reset();
 	}
 
@@ -272,11 +276,11 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Two things Memberships can do that Access Control cannot: hide a
-	 * "view"-restricted product from non-members, and make members wait before
-	 * they can buy. Both rules still migrate, and each gap is reported.
+	 * A "view" rule becomes a "Purchase and visibility" restriction, kept apart
+	 * from the same plan's "purchase" rules. A waiting period before members can
+	 * buy has no equivalent, so it is reported.
 	 */
-	public function test_hidden_and_delayed_restrictions_are_reported() {
+	public function test_view_rules_keep_their_type_and_delays_are_reported() {
 		$mapped = Product_Restrictions_Migration::map_rules(
 			[
 				$this->memberships_rule( [ 'access_type' => 'view' ] ),
@@ -291,67 +295,149 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 			$this->plan_products_getter()
 		);
 
-		$this->assertSame( [ 101, 102, 103 ], $mapped['rules'][0]['product_ids'], 'The purchase restriction migrates either way.' );
-		$this->assertSame( [ 101, 102 ], wp_list_pluck( $mapped['hidden'], 'object_id' ), 'Only the view-restricted products are reported as hidden.' );
+		$rules_by_type = array_column( $mapped['rules'], null, 'restriction_type' );
+		$this->assertSame( [ 101, 102 ], $rules_by_type[ Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ]['product_ids'] );
+		$this->assertSame( [ 103 ], $rules_by_type[ Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE ]['product_ids'] );
+		$this->assertSame(
+			Product_Restrictions_Migration::migrated_rule_id( 500, Product_Targeting::TARGETING_PRODUCTS ),
+			$rules_by_type[ Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE ]['id'],
+			'A "Purchase" restriction keeps the id earlier runs gave it, so a re-run updates it in place.'
+		);
+		$this->assertNotSame( $rules_by_type[ Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE ]['id'], $rules_by_type[ Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ]['id'] );
 		$this->assertSame( [ 'rule_2' ], wp_list_pluck( $mapped['delayed'], 'source' ), 'Only the rule with a waiting period is reported as delayed.' );
 	}
 
 	/**
-	 * Where one plan may buy a product and another may only see it, Memberships
-	 * keeps the second plan from buying. Migrated rules each grant purchase on
-	 * their own, so the product is reported.
+	 * The store-wide restriction mode becomes the product-page setting, and the
+	 * "hide restricted products" option becomes list hiding.
 	 */
-	public function test_a_view_only_plan_gaining_purchase_rights_is_reported() {
-		$mapped = Product_Restrictions_Migration::map_rules(
-			[
-				$this->memberships_rule(),
-				$this->memberships_rule(
-					[
-						'id'                 => 'rule_2',
-						'membership_plan_id' => 600,
-						'object_ids'         => [ 102, 104 ],
-						'access_type'        => 'view',
-					]
-				),
-			],
-			$this->plan_products_getter()
-		);
-
+	public function test_store_wide_settings_map_to_the_product_page_setting() {
 		$this->assertSame(
 			[
-				[
-					'product_id' => 102,
-					'plans'      => [ 600 ],
-				],
+				'hide_from_product_lists' => false,
+				'product_page'            => Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT,
+				'redirect_page_id'        => 0,
 			],
-			$mapped['view_only_buyers'],
-			'Product 104 has no purchase rule, so plan 600 could buy it already.'
+			Product_Restrictions_Migration::map_settings( '', 'no', 0 ),
+			'An unset mode is the default, "hide content".'
+		);
+		$this->assertTrue( Product_Restrictions_Migration::map_settings( 'hide_content', 'yes', 0 )['hide_from_product_lists'] );
+		$this->assertSame(
+			[
+				'hide_from_product_lists' => false,
+				'product_page'            => Subscriber_Only_Products::PRODUCT_PAGE_HIDE,
+				'redirect_page_id'        => 0,
+			],
+			Product_Restrictions_Migration::map_settings( 'hide', 'no', 42 ),
+			'The page ID only matters for a redirect.'
+		);
+		$this->assertSame(
+			[
+				'hide_from_product_lists' => false,
+				'product_page'            => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT,
+				'redirect_page_id'        => 42,
+			],
+			Product_Restrictions_Migration::map_settings( 'redirect', 'no', 42 )
 		);
 	}
 
 	/**
-	 * A view rule over a category can't be checked product by product, so
-	 * an overlap with another plan's purchase rule is named for a human.
+	 * A site migrated before the type existed holds a "view" rule's restriction
+	 * under the "Purchase" id. When that rule can no longer be mapped, the
+	 * restriction stays until someone decides, as any skipped rule's does.
 	 */
-	public function test_a_category_view_rule_beside_another_plans_purchase_rule_is_named() {
+	public function test_a_skipped_view_rule_keeps_its_earlier_restriction() {
 		$mapped = Product_Restrictions_Migration::map_rules(
+			[ $this->memberships_rule( [ 'access_type' => 'view' ] ) ],
+			function () {
+				return [];
+			}
+		);
+
+		$this->assertContains( Product_Restrictions_Migration::migrated_rule_id( 500, Product_Targeting::TARGETING_PRODUCTS ), $mapped['still_enforced_rule_ids'] );
+		$this->assertContains( Product_Restrictions_Migration::migrated_rule_id( 500, Product_Targeting::TARGETING_PRODUCTS, Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ), $mapped['still_enforced_rule_ids'] );
+	}
+
+	/**
+	 * A pause on a "view" rule's restriction, held under the "Purchase" id on a
+	 * site migrated before the type existed, carries over to its new id.
+	 */
+	public function test_a_pause_on_an_earlier_view_restriction_carries_over() {
+		$this->store_memberships_rules(
 			[
-				$this->memberships_rule(),
 				$this->memberships_rule(
 					[
-						'id'                 => 'rule_2',
-						'membership_plan_id' => 600,
-						'content_type'       => 'taxonomy',
-						'content_type_name'  => 'product_cat',
-						'object_ids'         => [ 7 ],
+						'membership_plan_id' => 'monthly',
 						'access_type'        => 'view',
 					]
 				),
-			],
-			$this->plan_products_getter()
+			]
+		);
+		$plan_id = get_option( Product_Restrictions_Migration::MEMBERSHIPS_RULES_OPTION )[0]['membership_plan_id'];
+		Subscriber_Only_Products::save_rule(
+			[
+				'id'                       => Product_Restrictions_Migration::migrated_rule_id( $plan_id, Product_Targeting::TARGETING_PRODUCTS ),
+				'subscription_product_ids' => [ 11 ],
+				'product_ids'              => [ 101, 102 ],
+				'active'                   => false,
+			]
 		);
 
-		$this->assertSame( [ 'rule_2' ], wp_list_pluck( $mapped['unchecked_view_overlaps'], 'source' ) );
+		( new Product_Restrictions_Migration() )->migrate_product_restrictions( [], [ 'live' => true ] );
+
+		$rules = Subscriber_Only_Products::get_rules();
+		$this->assertCount( 1, $rules, 'The earlier restriction is replaced, not kept beside the new one.' );
+		$this->assertSame( Subscriber_Only_Products::RESTRICTION_TYPE_VIEW, $rules[0]['restriction_type'] );
+		$this->assertFalse( $rules[0]['active'] );
+	}
+
+	/**
+	 * The restriction settings only shape "Purchase and visibility" products, so
+	 * a site with "purchase" rules alone keeps its own.
+	 */
+	public function test_settings_are_left_alone_without_a_view_rule() {
+		$this->store_memberships_rules( [ $this->memberships_rule( [ 'membership_plan_id' => 'monthly' ] ) ] );
+		update_option( Product_Restrictions_Migration::RESTRICTION_MODE_OPTION, 'redirect' );
+
+		( new Product_Restrictions_Migration() )->migrate_product_restrictions( [], [ 'live' => true ] );
+
+		$this->assertSame( Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT, Subscriber_Only_Products::get_settings()['product_page'] );
+		$this->assertSame( [], \WP_CLI::$warnings, 'No redirect warning for a site that hides nothing.' );
+	}
+
+	/**
+	 * A redirect to Memberships' own page would print its shortcode once the
+	 * plugin is off, so the operator hears about it.
+	 */
+	public function test_a_redirect_to_the_memberships_page_is_reported() {
+		$this->store_memberships_rules(
+			[
+				$this->memberships_rule(
+					[
+						'membership_plan_id' => 'monthly',
+						'access_type'        => 'view',
+					]
+				),
+			]
+		);
+		$page_id = $this->factory->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '[wcm_content_restricted]',
+			]
+		);
+		update_option( Product_Restrictions_Migration::RESTRICTION_MODE_OPTION, 'redirect' );
+		update_option( Product_Restrictions_Migration::REDIRECT_PAGE_ID_OPTION, $page_id );
+
+		( new Product_Restrictions_Migration() )->migrate_product_restrictions( [], [] );
+
+		$shortcode_warnings = array_filter(
+			\WP_CLI::$warnings,
+			function ( $warning ) {
+				return false !== strpos( $warning, '[wcm_content_restricted]' );
+			}
+		);
+		$this->assertCount( 1, $shortcode_warnings );
 	}
 
 	/**
@@ -374,16 +460,16 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 			]
 		);
 
+		update_option( Product_Restrictions_Migration::RESTRICTION_MODE_OPTION, 'redirect' );
+		$subscribe_page_id = $this->factory->post->create( [ 'post_type' => 'page' ] );
+		update_option( Product_Restrictions_Migration::REDIRECT_PAGE_ID_OPTION, $subscribe_page_id );
+		update_option( Product_Restrictions_Migration::HIDE_RESTRICTED_PRODUCTS_OPTION, 'yes' );
+
 		$command = new Product_Restrictions_Migration();
 		$command->migrate_product_restrictions( [], [] );
 		$this->assertSame( [], Subscriber_Only_Products::get_rules(), 'A dry run writes nothing.' );
-		$hidden_warnings = array_filter(
-			\WP_CLI::$warnings,
-			function ( $warning ) {
-				return false !== strpos( $warning, 'Product 103' );
-			}
-		);
-		$this->assertCount( 1, $hidden_warnings, 'The hidden product gets its own warning.' );
+		$this->assertSame( Subscriber_Only_Products::PRODUCT_PAGE_HIDE_CONTENT, Subscriber_Only_Products::get_settings()['product_page'], 'A dry run leaves the settings alone.' );
+		$this->assertSame( [], \WP_CLI::$warnings, 'A "view" rule migrates with its type, so nothing needs a warning.' );
 
 		$command->migrate_product_restrictions( [], [ 'live' => true ] );
 		$command->migrate_product_restrictions( [], [ 'live' => true ] );
@@ -391,6 +477,15 @@ class Test_Product_Restrictions_Migration extends \WP_UnitTestCase {
 		$rules = Subscriber_Only_Products::get_rules();
 		$this->assertCount( 2, $rules, 'Two live runs leave one rule per plan.' );
 		$this->assertEqualsCanonicalizing( [ [ 11 ], [ 22 ] ], wp_list_pluck( $rules, 'subscription_product_ids' ) );
+		$this->assertEqualsCanonicalizing( [ Subscriber_Only_Products::RESTRICTION_TYPE_PURCHASE, Subscriber_Only_Products::RESTRICTION_TYPE_VIEW ], wp_list_pluck( $rules, 'restriction_type' ) );
+		$this->assertSame(
+			[
+				'hide_from_product_lists' => true,
+				'product_page'            => Subscriber_Only_Products::PRODUCT_PAGE_REDIRECT,
+				'redirect_page_id'        => $subscribe_page_id,
+			],
+			Subscriber_Only_Products::get_settings()
+		);
 	}
 
 	/**

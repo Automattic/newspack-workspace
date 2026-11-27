@@ -16,7 +16,7 @@
 /**
  * External dependencies
  */
-import { render, act, screen, fireEvent } from '@testing-library/react';
+import { render, act, screen, fireEvent, cleanup } from '@testing-library/react';
 
 /**
  * WordPress dependencies
@@ -37,8 +37,8 @@ jest.mock( '../../../../packages/components/src/wizard/store', () => ( { WIZARD_
 
 // Button is real enough to take a ref and to name the card's "more" toggle. Card
 // and Grid pass their content through so the real SubscriptionCard, with its real
-// "more" menu, renders inside the profile. SectionHeader renders its title as a
-// heading, so the sections the profile lays out can be found.
+// "more" menu, renders inside the profile. SplitSection.Header renders its title as
+// a heading, so the sections the profile lays out can be found.
 jest.mock( '../../../../packages/components/src', () => ( {
 	Button: require( 'react' ).forwardRef( ( { children, label, ...props }, ref ) => {
 		// Component-only props that a DOM button would warn about.
@@ -58,7 +58,13 @@ jest.mock( '../../../../packages/components/src', () => ( {
 	// The money flows open in a modal; this one renders inline so its copy is queryable.
 	Modal: ( { title, children } ) => require( 'react' ).createElement( 'div', { role: 'dialog', 'aria-label': title }, children ),
 	Notice: ( { noticeText } ) => require( 'react' ).createElement( 'div', { role: 'alert' }, noticeText ),
-	SectionHeader: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+	SplitSection: {
+		Root: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+		Header: ( { title } ) => require( 'react' ).createElement( 'h2', null, title ),
+		Content: ( { children } ) => require( 'react' ).createElement( 'div', null, children ),
+	},
+	StatusBadge: ( { children } ) => require( 'react' ).createElement( 'span', null, children ),
+	TableCard: ( { children, after } ) => require( 'react' ).createElement( 'div', null, children, after || null ),
 	Waiting: () => null,
 	Router: { useParams: () => ( { id: '1' } ), useLocation: () => ( { search: '', pathname: '/subscribers/1' } ) },
 } ) );
@@ -93,16 +99,16 @@ describe( 'the person profile failure states', () => {
 		apiFetch.mockRejectedValue( new Error( 'nope' ) );
 		await renderProfile();
 
-		expect( screen.getByText( /Could not load this subscriber: nope/ ) ).toBeInTheDocument();
-		expect( speak ).toHaveBeenCalledWith( 'Could not load this subscriber: nope', 'assertive' );
+		expect( screen.getByText( /Could not load this reader: nope/ ) ).toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( 'Could not load this reader: nope', 'assertive' );
 	} );
 
 	it( 'gives a read that came back empty its own sentence', async () => {
 		apiFetch.mockResolvedValue( null );
 		await renderProfile();
 
-		expect( screen.getByText( /This subscriber could not be loaded\./ ) ).toBeInTheDocument();
-		expect( speak ).toHaveBeenCalledWith( 'This subscriber could not be loaded.', 'assertive' );
+		expect( screen.getByText( /This reader could not be loaded\./ ) ).toBeInTheDocument();
+		expect( speak ).toHaveBeenCalledWith( 'This reader could not be loaded.', 'assertive' );
 	} );
 
 	it( 'tells a missing person apart from a failed read, and offers a way back', async () => {
@@ -463,6 +469,27 @@ const reader = overrides => ( {
 	...overrides,
 } );
 
+/**
+ * A profile opens from the list of every reader, so its header cannot assume a
+ * subscription: the date on it is when the account was created.
+ */
+describe( 'the profile of a reader with no subscription', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+		setHeaderData.mockClear();
+	} );
+
+	it( 'sits under Readers and calls them a member since their account was created', async () => {
+		await renderCards( reader( { status: '', memberSince: '2026-01-05T00:00:00Z' } ) );
+
+		const { sectionName, sectionDescription, badges } = setHeaderData.mock.calls.at( -1 )[ 0 ];
+		expect( sectionName[ 0 ].label ).toBe( 'Readers' );
+		expect( sectionDescription ).toMatch( /Member since/ );
+		expect( sectionDescription ).not.toMatch( /Subscriber/ );
+		expect( badges ).toEqual( [] );
+	} );
+} );
+
 describe( 'a subscription managed on another network site', () => {
 	beforeEach( () => {
 		apiFetch.mockReset();
@@ -643,5 +670,95 @@ describe( 'a subscription on this site', () => {
 		await renderCards( reader( { subscriptions: [ localSubscription ] } ) );
 
 		expect( screen.getByRole( 'heading', { name: 'Payment methods' } ) ).toBeInTheDocument();
+	} );
+} );
+
+describe( 'the numbers on a card', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	/** The value of the card row with this label. */
+	const rowValue = label => screen.getByText( label ).nextElementSibling;
+
+	it( 'shows the subscription number and links its latest order', async () => {
+		await renderCards(
+			profile( {
+				subscriptions: [
+					subscription( { number: '1001', lastOrder: { number: '2002', editUrl: '/wp-admin/post.php?post=2002&action=edit' } } ),
+				],
+			} )
+		);
+
+		expect( screen.getByRole( 'link', { name: '#1001' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=31&action=edit' );
+		expect( screen.getByRole( 'link', { name: '#2002' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=2002&action=edit' );
+	} );
+
+	it( 'shows a group card its numbers, and leaves out the latest order the server sends no member', async () => {
+		const group = {
+			id: 5,
+			number: '5',
+			plan: 'Team plan',
+			status: 'active',
+			members: 2,
+			seatLimit: 5,
+			createdAt: '2026-01-01',
+			lastOrder: { number: '6', editUrl: '/wp-admin/post.php?post=6&action=edit' },
+		};
+		await renderCards( profile( { groups: [ { ...group, role: 'owner' } ], subscriptions: [] } ) );
+		expect( rowValue( 'Subscription number' ) ).toHaveTextContent( '#5' );
+		expect( screen.getByRole( 'link', { name: '#6' } ) ).toBeInTheDocument();
+
+		cleanup();
+		await renderCards(
+			profile( { groups: [ { ...group, role: 'member', lastOrder: null, owner: { name: 'Olive Owner' } } ], subscriptions: [] } )
+		);
+		expect( rowValue( 'Subscription number' ) ).toHaveTextContent( '#5' );
+		expect( screen.queryByText( 'Latest order' ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'the Donations section', () => {
+	beforeEach( () => {
+		apiFetch.mockReset();
+	} );
+
+	const donation = overrides => ( {
+		id: 40,
+		number: '40',
+		editUrl: '/wp-admin/post.php?post=40&action=edit',
+		date: '2026-03-01',
+		amount: 25,
+		currency: 'USD',
+		status: 'completed',
+		...overrides,
+	} );
+
+	it( 'lists one-time donations beside the subscriptions, each linked to its order', async () => {
+		await renderCards(
+			profile( {
+				donations: [ donation( { refunded: 10 } ), donation( { id: 41, number: '41', status: 'refunded', refunded: 25 } ) ],
+				donationsMore: false,
+			} )
+		);
+
+		expect( screen.getByRole( 'heading', { name: 'Donations' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: '#40' } ) ).toHaveAttribute( 'href', '/wp-admin/post.php?post=40&action=edit' );
+		expect( screen.getByText( 'Refunded' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( '$25.00' ) ).toHaveLength( 2 );
+		expect( screen.getAllByText( '$10.00 refunded' ) ).toHaveLength( 1 );
+		expect( screen.queryByText( /most recent/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'says it lists the most recent only when the reader has older ones', async () => {
+		await renderCards( profile( { donations: [ donation(), donation( { id: 41, number: '41' } ) ], donationsMore: true } ) );
+
+		expect( screen.getByText( 'Showing the 2 most recent one-time donations.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'is left out for a reader who never donated once', async () => {
+		await renderCards( profile( { donations: [], donationsMore: false } ) );
+
+		expect( screen.queryByRole( 'heading', { name: 'Donations' } ) ).not.toBeInTheDocument();
 	} );
 } );

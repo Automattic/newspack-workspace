@@ -204,6 +204,27 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Last Active is WooCommerce's last-active record for the customer, in the
+	 * site's timezone and the export's date format, and empty for a customer
+	 * with no record.
+	 */
+	public function test_row_data_last_active() {
+		update_option( 'timezone_string', 'Pacific/Auckland' );
+		$customer_id  = $this->create_reader( 'visitor' );
+		$subscription = $this->create_full_subscription( [ 'customer_id' => $customer_id ] );
+		$exporter     = new Subscriptions_CSV_Exporter();
+
+		$this->assertSame( '', $exporter->get_row_data( $subscription )['last_active'] );
+
+		// The evening of the 14th in UTC is the morning of the 15th in Auckland.
+		update_user_meta( $customer_id, 'wc_last_active', (string) strtotime( '2026-07-14 21:30:00 UTC' ) );
+		$this->assertSame( '2026-07-15 09:30:00', $exporter->get_row_data( $subscription )['last_active'] );
+
+		$exporter->set_export_config( [ 'date_format' => 'd/m/Y' ] );
+		$this->assertSame( '15/07/2026', $exporter->get_row_data( $subscription )['last_active'] );
+	}
+
+	/**
 	 * With no list params, the query defaults to all subscription statuses
 	 * (matching the admin list default), shop_subscription type, and a fixed
 	 * insert-stable ID ASC order.
@@ -757,8 +778,9 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Per-member mode puts the reader columns first and keeps every
-	 * subscription column after them, unchanged and in order.
+	 * Per-member mode puts the reader columns first, Last Active among them,
+	 * and keeps every other subscription column after them, unchanged and in
+	 * order.
 	 */
 	public function test_per_member_columns_lead_with_the_reader() {
 		$default_columns = array_keys( ( new Subscriptions_CSV_Exporter() )->get_column_names() );
@@ -768,8 +790,8 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 
 		$this->assertSame(
 			array_merge(
-				[ 'member_id', 'member_username', 'member_email', 'member_first_name', 'member_last_name', 'access_through', 'group_name' ],
-				$default_columns
+				[ 'member_id', 'member_username', 'member_email', 'member_first_name', 'member_last_name', 'last_active', 'access_through', 'group_name' ],
+				array_values( array_diff( $default_columns, [ 'last_active' ] ) )
 			),
 			array_keys( $exporter->get_column_names() )
 		);
@@ -831,6 +853,39 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 		// The subscription's own columns still describe the subscription and its owner.
 		$this->assertSame( 'owner@example.test', $rows[2]['customer_email'] );
 		$this->assertNotContains( 'invitee@example.test', array_column( $rows, 'member_email' ) );
+	}
+
+	/**
+	 * Each per-member row carries its own reader's Last Active. A member with
+	 * no record gets an empty cell, not the owner's date.
+	 */
+	public function test_per_member_last_active_is_the_rows_reader() {
+		$owner = $this->create_reader( 'owner' );
+		$group = $this->create_full_subscription(
+			[
+				'id'          => 1,
+				'customer_id' => $owner,
+			]
+		);
+		$group->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$visited = $this->create_reader( 'amy' );
+		$unseen  = $this->create_reader( 'ben' );
+		foreach ( [ $visited, $unseen ] as $member_id ) {
+			add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $group->get_id() );
+		}
+		update_user_meta( $owner, 'wc_last_active', (string) strtotime( '2026-07-01 08:00:00 UTC' ) );
+		update_user_meta( $visited, 'wc_last_active', (string) strtotime( '2026-07-02 08:00:00 UTC' ) );
+
+		$rows = $this->export_per_member_page()->get_prepared_row_data();
+
+		$this->assertSame(
+			[
+				$owner   => '2026-07-01 08:00:00',
+				$visited => '2026-07-02 08:00:00',
+				$unseen  => '',
+			],
+			array_column( $rows, 'last_active', 'member_id' )
+		);
 	}
 
 	/**

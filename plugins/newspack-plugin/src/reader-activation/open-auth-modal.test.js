@@ -9,14 +9,14 @@
  * reader-activation suite.
  */
 
-jest.mock( '../reader-activation-auth/auth-modal.js', () => ( {
+jest.mock( '../reader-activation-auth/auth-modal', () => ( {
 	openAuthModal: jest.fn(),
 	getModalContainer: jest.fn(),
 	SIGN_IN_MODAL_HASHES: [],
 } ) );
 
 import { openAuthModal } from './index';
-import { openAuthModal as openModal } from '../reader-activation-auth/auth-modal.js';
+import { openAuthModal as openModal } from '../reader-activation-auth/auth-modal';
 
 describe( 'openAuthModal() for a logged-in reader', () => {
 	beforeEach( () => {

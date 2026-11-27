@@ -11,7 +11,7 @@ import type { ComponentProps, ReactNode } from 'react';
 /**
  * Internal dependencies.
  */
-import type { StatusName } from './statuses';
+import type { StatusName, StatusTone } from './statuses';
 
 // @wordpress/components does not export the Icon prop type, so the union is
 // derived from the component to track the library instead of a copy kept here.
@@ -24,5 +24,18 @@ interface StatusIndicatorBaseProps extends Omit< ComponentProps< 'div' >, 'child
 	children: ReactNode;
 }
 
-/** `icon` is the escape hatch for fields that classify rather than track a lifecycle. */
-export type StatusIndicatorProps = StatusIndicatorBaseProps & ( { status: StatusName; icon?: never } | { status?: never; icon: StatusIcon } );
+interface NamedStatusProps {
+	status: StatusName;
+	/** Overrides the status's own tone, for a screen where the state means less than its glyph suggests. */
+	tone?: StatusTone;
+	icon?: never;
+}
+
+/** `icon` is the escape hatch for fields that classify rather than track a lifecycle; a status drawn this way is never tinted. */
+interface GlyphProps {
+	status?: never;
+	tone?: never;
+	icon: StatusIcon;
+}
+
+export type StatusIndicatorProps = StatusIndicatorBaseProps & ( NamedStatusProps | GlyphProps );

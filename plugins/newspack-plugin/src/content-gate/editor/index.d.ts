@@ -1,5 +1,8 @@
 declare module '@wordpress/block-editor';
 
+// @wordpress/edit-post ships no types of its own; everything imported from it is `any`.
+declare module '@wordpress/edit-post';
+
 /**
  * Types.
  */
@@ -60,10 +63,54 @@ type BlockEditProps = {
 	[ key: string ]: unknown;
 };
 
+// A gate as localized to the post editor's Access Control panel (post-settings).
+type PostEditorContentGate = {
+	id: number;
+	title: string;
+	edit_url?: string;
+	content_rules: import( './gate-matching' ).ContentRule[];
+	content_rules_match: 'all' | 'any';
+};
+
+// A membership plan as localized to the Memberships gate editor panel.
+type MembershipPlan = {
+	id: number;
+	name: string;
+	gate_id: number | false;
+	gate_status: string | false;
+	plan_url?: string | null;
+};
+
+// Localized by the Memberships gate editor as `newspack_memberships_gate`.
+type MembershipsGateConfig = {
+	edit_gate_url: string;
+	plans: MembershipPlan[];
+	gate_plans: Record< string, string >;
+	edit_plan_gate_url: string;
+};
+
+// Localized by the gate-layout editor bundle (editor.tsx and preview.tsx).
+declare const newspack_content_gate: {
+	has_campaigns: boolean;
+	preview?: {
+		preview_post: string;
+		query_param: string;
+		preview_query_keys: Record< string, string >;
+	} | null;
+};
+
 interface Window {
 	newspackBlockVisibility: {
 		target_blocks: string[];
 		available_access_rules: Record< string, AccessRuleConfig >;
 		available_gates: GateOption[];
 	};
+	// Localized by the gate editor for the per-post Access Control Settings panel.
+	newspackContentGates?: {
+		gates: PostEditorContentGate[];
+		taxonomyMap: Record< string, string >;
+		canEditGates: boolean;
+	};
+	// Localized by the Memberships gate editor panel.
+	newspack_memberships_gate?: MembershipsGateConfig;
 }

@@ -420,6 +420,10 @@ class Newspack_UI {
 	 * See: https://developer.wordpress.org/reference/functions/wp_get_global_styles/
 	 */
 	public static function colors_css_wrap() {
+		if ( Newspack_UI_Theme_Style::is_active() && Newspack_UI_Theme_Style::has_color_properties() ) {
+			return;
+		}
+
 		$global_styles = wp_get_global_styles();
 
 		$custom_css = 'body {';
@@ -748,7 +752,7 @@ class Newspack_UI {
 
 			<section id="buttons" class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-5">
 				<h2>Buttons</h2>
-				<p>Six variants: primary, secondary, outline, ghost, destructive (<code>--destructive --outline</code>) and destructive confirm (<code>--destructive</code>), the solid red only for the final step of a confirm dialog. <code>--accent</code> takes the publisher's primary color. Hover, press and keyboard focus are live.</p>
+				<p>Six variants: primary, secondary, outline, ghost, destructive (<code>--destructive --outline</code>) and destructive confirm (<code>--destructive</code>), the solid red only for the final step of a confirm dialog. Hover, press and keyboard focus are live.</p>
 
 				<h3>Variants</h3>
 				<div class="newspack-ui__stack newspack-ui__stack--horizontal newspack-ui__stack--wrap newspack-ui__stack--gap-2 newspack-ui__stack--align-start">
@@ -758,7 +762,6 @@ class Newspack_UI {
 					<button type="button" class="newspack-ui__button newspack-ui__button--ghost">Ghost</button>
 					<button type="button" class="newspack-ui__button newspack-ui__button--destructive newspack-ui__button--outline">Destructive</button>
 					<button type="button" class="newspack-ui__button newspack-ui__button--destructive">Destructive, confirm</button>
-					<button type="button" class="newspack-ui__button newspack-ui__button--accent">Accent</button>
 				</div>
 
 				<h3>States</h3>

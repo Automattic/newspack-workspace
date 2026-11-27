@@ -32,6 +32,13 @@ class Audience_Content_Gates extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
+	 * Capability required to use this wizard. See Capabilities::MANAGE_ACCESS_CONTROL.
+	 *
+	 * @var string
+	 */
+	protected $capability = Capabilities::MANAGE_ACCESS_CONTROL;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -129,11 +136,13 @@ class Audience_Content_Gates extends Wizard {
 					'can_use_gifting' => Content_Gifting::can_use_gifting(),
 					'has_metering'    => Content_Gate::is_metering_enabled(),
 				],
+				'content_banner'           => Content_Banner_Style::get_wizard_data(),
 			]
 		);
 
 		// Enqueue content banner CSS for previews.
 		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
+		Content_Banner_Style::enqueue_wizard_fonts();
 	}
 
 	/**
@@ -219,6 +228,7 @@ class Audience_Content_Gates extends Wizard {
 								// An empty string clears the link, so 'uri' format is too strict.
 								'maxLength' => 2000,
 							],
+							'comment_require_full_name'   => [ 'type' => 'boolean' ],
 						],
 						// Validate the whole object against the schema so the nested
 						// feed_restriction_mode enum is actually enforced (a bad value
@@ -270,6 +280,26 @@ class Audience_Content_Gates extends Wizard {
 					],
 					'style'                => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
+					],
+					'bg_color'             => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_color'         => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'text_color'           => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_text_color'    => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'shadow'               => [
+						'type' => 'boolean',
 					],
 				],
 			]
@@ -307,26 +337,46 @@ class Audience_Content_Gates extends Wizard {
 				'callback'            => [ $this, 'update_countdown_banner' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 				'args'                => [
-					'button_label'   => [
+					'button_label'      => [
 						'type' => 'string',
 					],
-					'cta_label'      => [
+					'cta_label'         => [
 						'type' => 'string',
 					],
-					'cta_product_id' => [
+					'cta_product_id'    => [
 						'type' => 'integer',
 					],
-					'cta_type'       => [
+					'cta_type'          => [
 						'type' => 'string',
 					],
-					'cta_url'        => [
+					'cta_url'           => [
 						'type' => 'string',
 					],
-					'enabled'        => [
+					'enabled'           => [
 						'type' => 'boolean',
 					],
-					'style'          => [
+					'style'             => [
 						'type' => 'string',
+						'enum' => Content_Banner_Style::STYLES,
+					],
+					'bg_color'          => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_color'      => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'text_color'        => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'button_text_color' => [
+						'type'    => 'string',
+						'pattern' => '^(#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?)?$',
+					],
+					'shadow'            => [
+						'type' => 'boolean',
 					],
 				],
 			]
@@ -512,6 +562,7 @@ class Audience_Content_Gates extends Wizard {
 			'comment_restriction_gate_id'      => (int) ( $advanced['comment_restriction_gate_id'] ?? 0 ),
 			'comment_restriction_message'      => (string) ( $advanced['comment_restriction_message'] ?? '' ),
 			'comment_restriction_purchase_url' => (string) ( $advanced['comment_restriction_purchase_url'] ?? '' ),
+			'comment_require_full_name'        => (bool) ( $advanced['comment_require_full_name'] ?? false ),
 		];
 	}
 
@@ -557,6 +608,21 @@ class Audience_Content_Gates extends Wizard {
 		}
 		if ( isset( $args['style'] ) ) {
 			Content_Gifting_CTA::set_style( sanitize_text_field( $args['style'] ) );
+		}
+		if ( isset( $args['bg_color'] ) ) {
+			Content_Gifting_CTA::set_bg_color( $args['bg_color'] );
+		}
+		if ( isset( $args['button_color'] ) ) {
+			Content_Gifting_CTA::set_button_color( $args['button_color'] );
+		}
+		if ( isset( $args['text_color'] ) ) {
+			Content_Gifting_CTA::set_text_color( $args['text_color'] );
+		}
+		if ( isset( $args['button_text_color'] ) ) {
+			Content_Gifting_CTA::set_button_text_color( $args['button_text_color'] );
+		}
+		if ( isset( $args['shadow'] ) ) {
+			Content_Gifting_CTA::set_shadow( $args['shadow'] );
 		}
 		return rest_ensure_response( Content_Gifting::get_settings() );
 	}

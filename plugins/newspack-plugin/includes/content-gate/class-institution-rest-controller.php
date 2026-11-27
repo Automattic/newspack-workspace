@@ -20,13 +20,16 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * Capability required to read institutions through REST.
 	 *
-	 * Mirrors the capability gating the block editor panel that consumes this
-	 * route, so the gate grants exactly what the only non-administrator consumer
-	 * needs and nothing wider.
+	 * Defined as the block editor visibility panel's own capability: the panel is
+	 * this route's only non-administrator consumer, and a panel shown to a role
+	 * this gate refuses renders an empty institution picker with nothing failing.
+	 * Admits the institution posts without their stored rules, which stay behind
+	 * RULES_CAPABILITY below; every other field, excerpt included, is returned.
+	 * The panel requests only id and title.
 	 *
 	 * @var string
 	 */
-	const READ_CAPABILITY = 'edit_others_posts';
+	const READ_CAPABILITY = Block_Visibility::CONFIGURE_CAPABILITY;
 
 	/**
 	 * Capability that admits the stored access-rule fields. It decides two things:
@@ -41,7 +44,7 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	 *
 	 * @var string
 	 */
-	const RULES_CAPABILITY = 'manage_options';
+	const RULES_CAPABILITY = Capabilities::MANAGE_ACCESS_CONTROL;
 
 	/**
 	 * True while get_items() is running.
@@ -104,12 +107,12 @@ class Institution_REST_Controller extends \WP_REST_Posts_Controller {
 	/**
 	 * The shared read gate.
 	 *
-	 * Accepts either capability: a role holding only RULES_CAPABILITY (an ops
-	 * or billing role scoped to manage_options without content capabilities,
-	 * for example) still owns this route — it is the tier the Audience wizard
-	 * grants access to, and it already sees every field once past this check,
-	 * per prepare_item_for_response() below. Without this, such a role could
-	 * open the wizard but never load the institutions list inside it.
+	 * Accepts either capability: a role holding only RULES_CAPABILITY (store
+	 * staff without content capabilities, for example) still owns this route.
+	 * It is the tier the Access Control wizard admits, and it already sees every
+	 * field once past this check, per prepare_item_for_response() below. Without
+	 * this, such a role could open the wizard but never load the institutions
+	 * list inside it.
 	 *
 	 * @return true|\WP_Error
 	 */

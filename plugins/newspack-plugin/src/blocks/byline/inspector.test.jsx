@@ -6,7 +6,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import { BylineInspectorControls } from './inspector.jsx';
+import { BylineInspectorControls } from './inspector';
 
 // Mock InspectorControls to render children directly.
 jest.mock( '@wordpress/block-editor', () => ( {

@@ -13,6 +13,15 @@ declare global {
 			has_memberships: boolean;
 			new_subscription_lists_url: string;
 			reader_activation_url: string;
+			// Setup screen (views/setup). `is_newspack_feature_enabled` gates the
+			// Advanced Settings tab (Group labels); the rest feed the Setup form.
+			is_newspack_feature_enabled?: boolean;
+			can_use_salesforce?: boolean;
+			// Salesforce OAuth redirect URL, used by the Salesforce settings component.
+			salesforce_redirect_url?: string;
+			available_newsletter_lists?:
+				| import( '../../../packages/components/src/sortable-newsletter-list-control' ).NewsletterList[]
+				| { errors: Record< string, string > };
 			preview_query_keys: {
 				[K in PromptOptionsBaseKey]: string;
 			};
@@ -28,6 +37,18 @@ declare global {
 				};
 			};
 			institutional_access_url?: string;
+			content_banner?: {
+				supports_theme_style: boolean;
+				uses_site_theme: boolean;
+				theme_button_bg: string;
+				theme_button_ink: string;
+				theme_font_heading: string;
+				theme_font_body: string;
+				site_bg: string;
+				site_text: string;
+				site_button_bg: string;
+				site_button_ink: string;
+			};
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.
@@ -58,14 +79,10 @@ declare global {
 				[K in PromptOptionsBaseKey]: string;
 			};
 			experimental: boolean;
-			criteria: Array<{
-				category: string;
-				description: string;
-				id: string;
-				matching_attribute: string;
-				matching_function: string;
-				name: string;
-			}>;
+			// Feature flags: present only when the campaign manager localizes them.
+			contextual_prompts_enabled?: boolean;
+			ab_testing_enabled?: boolean;
+			criteria: CampaignsCriteriaConfig[];
 		};
 		newspackAudienceDonations: {
 			can_use_name_your_price: boolean;
@@ -116,7 +133,32 @@ declare global {
 			audience_management_enabled?: string;
 			audience_management_url?: string;
 		};
+		// Localized by Subscribers_Wizard::enqueue_scripts_and_styles(). Absent
+		// unless the Subscribers wizard page is being rendered, and the tests set
+		// it partially, so every field is optional and the readers guard with
+		// `||`/`?.`.
+		newspackSubscribers?: {
+			// The publisher's group-label overrides, blank when unset.
+			groupLabel?: string;
+			groupLabelPlural?: string;
+			// The translated default nouns, used when no override is set.
+			groupLabelDefault?: string;
+			groupLabelDefaultPlural?: string;
+			// Sentence templates that wrap the group noun, translated server-side.
+			groupPhrases?: Record< string, string >;
+			showAvatars?: boolean;
+			// The /avatars endpoint's batch cap, so the client batches to it.
+			avatarBatchCap?: number;
+		};
+		newspack_aux_data?: {
+			has_completed_setup?: boolean | string;
+			is_e2e?: boolean;
+		};
 	}
+
+	// Setup/Complete screens read the localized Audience payload as a bare global
+	// (`/* global newspackAudience */`), the same object as `window.newspackAudience`.
+	const newspackAudience: Window[ 'newspackAudience' ];
 }
 
 export { };

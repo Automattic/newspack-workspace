@@ -189,6 +189,37 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Template slugs and the `template` targeting value each one sends.
+	 */
+	public function template_targeting_cases() {
+		return [
+			'classic theme template'          => [ 'single-feature.php', 'single-feature' ],
+			'block theme template'            => [ 'single/large-image', 'large-image' ],
+			'its no featured image twin'      => [ 'single/large-image--no-featured-image', 'large-image' ],
+			'twin of the default template'    => [ 'single/no-featured-image', null ],
+			'twin of the newsletter template' => [ 'single/newsletter--no-featured-image', null ],
+		];
+	}
+
+	/**
+	 * A "no featured image" template sends the same targeting value as the
+	 * template it copies.
+	 *
+	 * @dataProvider template_targeting_cases
+	 *
+	 * @param string      $template The post's template slug.
+	 * @param string|null $expected The `template` value sent, or null for none.
+	 */
+	public function test_no_featured_image_template_targets_as_its_parent( $template, $expected ) {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, '_wp_page_template', $template );
+		self::go_to( get_permalink( $post_id ) );
+
+		$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+		self::assertSame( $expected, $targeting['template'] ?? null );
+	}
+
+	/**
 	 * Reader status targeting respects JSON-encoded boolean values.
 	 */
 	public function test_reader_status_targets_only_flags_stored_as_true() {

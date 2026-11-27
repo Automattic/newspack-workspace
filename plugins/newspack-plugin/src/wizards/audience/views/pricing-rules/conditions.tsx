@@ -163,9 +163,9 @@ function SegmentCondition( {
 	return (
 		<AutocompleteTokenField
 			tokens={ value }
-			onChange={ onChange }
+			onChange={ values => onChange( values as number[] ) }
 			fetchSuggestions={ fetchSuggestions }
-			fetchSavedInfo={ fetchSavedInfo }
+			fetchSavedInfo={ tokens => fetchSavedInfo( tokens as number[] ) }
 			label={ matcher.label }
 			help={ matcher.help }
 			placeholder={ __( 'Search segments…', 'newspack-plugin' ) }

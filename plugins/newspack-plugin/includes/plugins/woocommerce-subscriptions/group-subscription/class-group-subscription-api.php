@@ -291,6 +291,30 @@ class Group_Subscription_API {
 				],
 			]
 		);
+		// Hand the group to another reader. Admin-only; see admin_permission_callback().
+		\register_rest_route(
+			self::NAMESPACE,
+			'/owner',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ __CLASS__, 'api_change_owner' ],
+				'permission_callback' => [ __CLASS__, 'admin_permission_callback' ],
+				'args'                => [
+					'subscription_id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'user_id'         => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -341,11 +365,11 @@ class Group_Subscription_API {
 	/**
 	 * Permission callback for the admin-only group routes.
 	 *
-	 * Two kinds of route use it. The member search answers about the site's user
-	 * records rather than about the subscription named in the request, and managing a
-	 * group authorizes the caller for that subscription, which is not the same object.
-	 * The seat limit is a publisher decision about what the group was sold, not
-	 * maintenance of who is in it, so neither the owner nor a manager may reach it.
+	 * Owners and managers are refused on all three routes that use it:
+	 * - `/search-users` answers about the site's user records, while managing a
+	 *   group only authorizes the caller for that group's subscription.
+	 * - `/seat-limit` is a publisher decision about what the group was sold.
+	 * - `/owner` moves billing, which belongs to the publisher to reassign.
 	 *
 	 * @param \WP_REST_Request $request The request object.
 	 * @return bool Whether the caller is a store admin acting on a real group.
@@ -520,6 +544,33 @@ class Group_Subscription_API {
 	}
 
 	/**
+	 * Change a group's owner.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The response object.
+	 */
+	public static function api_change_owner( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$subscription_id = $request->get_param( 'subscription_id' );
+		if ( ! Group_Subscription_MyAccount::is_subscription_manageable( $subscription_id ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_not_manageable',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active, so its owner can\'t be changed.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				),
+				[ 'status' => 409 ]
+			);
+		}
+		$result = Group_Subscription::change_owner( $subscription_id, (int) $request->get_param( 'user_id' ) );
+		if ( \is_wp_error( $result ) ) {
+			return $result;
+		}
+		return \rest_ensure_response( [ 'ownerId' => (int) $request->get_param( 'user_id' ) ] );
+	}
+
+	/**
 	 * The number of seats a group has already committed: everyone holding one plus
 	 * every outstanding invitation.
 	 *
@@ -594,7 +645,7 @@ class Group_Subscription_API {
 				'newspack_group_subscription_user_query_args',
 				[
 					'number'         => self::SEARCH_USERS_LIMIT,
-					'fields'         => [ 'ID', 'user_email' ],
+					'fields'         => [ 'ID', 'user_email', 'display_name' ],
 					'exclude'        => $exclude,
 					'search'         => "*$search*",
 					'search_columns' => [ 'ID', 'user_login', 'user_url', 'user_email', 'user_nicename', 'display_name' ],
@@ -614,7 +665,7 @@ class Group_Subscription_API {
 				'newspack_group_subscription_user_query_args',
 				[
 					'number'     => self::SEARCH_USERS_LIMIT,
-					'fields'     => [ 'ID', 'user_email' ],
+					'fields'     => [ 'ID', 'user_email', 'display_name' ],
 					'exclude'    => $exclude,
 					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						'relation' => 'OR',
@@ -645,6 +696,9 @@ class Group_Subscription_API {
 				return [
 					'id'   => $user->ID,
 					'text' => $user->user_email . ' (#' . $user->ID . ')',
+					// A picker that filters its options by label needs the name too, or a
+					// reader found by name is hidden again on the client.
+					'name' => $user->display_name,
 				];
 			},
 			array_filter(
@@ -776,7 +830,7 @@ class Group_Subscription_API {
 			);
 		}
 		$email  = $request->get_param( 'email' );
-		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email );
+		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email, true, Group_Subscription_Invite::SOURCE_API );
 		return \rest_ensure_response( $invite );
 	}
 

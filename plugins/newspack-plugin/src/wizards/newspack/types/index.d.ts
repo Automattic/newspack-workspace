@@ -79,6 +79,7 @@ declare global {
 						}[];
 						menuLocations: Record< string, string >;
 						menus: { label: string; value: number }[];
+						blockTheme?: BlockThemeData | null;
 					};
 				};
 			};
@@ -91,9 +92,6 @@ declare global {
 					tools: Tool[];
 				};
 			};
-		};
-		newspack_urls: {
-			site: string;
 		};
 	}
 }

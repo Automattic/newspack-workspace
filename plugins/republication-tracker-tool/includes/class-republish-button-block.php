@@ -71,10 +71,6 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 
 	/**
 	 * Register the block.
-	 *
-	 * On block themes the block is fully available. On classic themes it is
-	 * still registered (so existing content does not become an "unknown block")
-	 * but hidden from the inserter.
 	 */
 	public static function register_block(): void {
 		// register_block_type_from_metadata() is only available on WP 5.5+.
@@ -90,21 +86,6 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		$args      = [
 			'render_callback' => [ __CLASS__, 'render_block' ],
 		];
-
-		if ( function_exists( 'wp_is_block_theme' ) && ! wp_is_block_theme() ) {
-			// Deep-merge into the declared supports rather than replacing them.
-			// register_block_type_from_metadata() shallow-merges $args over the
-			// block.json metadata, so a bare supports override would drop the
-			// block's color/typography/spacing/border support and strip saved
-			// styles from existing instances rendered on a classic theme.
-			$metadata = wp_json_file_decode( $block_dir . '/block.json', [ 'associative' => true ] );
-			$supports = ( is_array( $metadata ) && isset( $metadata['supports'] ) && is_array( $metadata['supports'] ) )
-				? $metadata['supports']
-				: [];
-
-			$supports['inserter'] = false;
-			$args['supports']     = $supports;
-		}
 
 		register_block_type_from_metadata( $block_dir, $args );
 	}
@@ -123,23 +104,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 			return '';
 		}
 
-		if ( ! Republication_Tracker_Tool::is_post_republishable( $post ) ) {
-			return '';
-		}
-
-		// Guard: check allowed post types.
-		$allowed_post_types = (array) apply_filters( 'republication_tracker_tool_post_types', [ 'post' ] );
-		if ( ! in_array( get_post_type( $post ), $allowed_post_types, true ) ) {
-			return '';
-		}
-
-		// Guard: check if widget is hidden for this post (same filter as the widget).
-		$hide = apply_filters(
-			'hide_republication_widget',
-			get_post_meta( $post->ID, 'republication-tracker-tool-hide-widget', true ),
-			$post
-		);
-		if ( true == $hide ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseEqual
+		if ( ! Republication_Tracker_Tool::can_offer_republish( $post ) ) {
 			return '';
 		}
 
@@ -183,7 +148,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 		if ( ! Republication_Tracker_Tool::$modal_rendered ) {
 			Republication_Tracker_Tool::$modal_rendered = true;
 
-			$is_amp = false; // Used by shareable-content.php; block themes do not support AMP.
+			$is_amp = false; // Used by shareable-content.php; the block does not support AMP.
 
 			ob_start();
 			include REPUBLICATION_TRACKER_TOOL_PATH . 'includes/shareable-content.php';
@@ -220,7 +185,7 @@ final class Republication_Tracker_Tool_Republish_Button_Block {
 	/**
 	 * Enqueue modal-specific assets.
 	 */
-	private static function enqueue_modal_assets(): void {
+	public static function enqueue_modal_assets(): void {
 		Republication_Tracker_Tool::enqueue_modal_style();
 
 		// Clipboard utilities (shared with widget).

@@ -293,6 +293,7 @@ class Content_Gate {
 		include __DIR__ . '/class-block-patterns.php';
 		include __DIR__ . '/class-site-meter.php';
 		include __DIR__ . '/class-metering.php';
+		include __DIR__ . '/class-content-banner-style.php';
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
@@ -1925,6 +1926,8 @@ class Content_Gate {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
 		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
+		wp_enqueue_style( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.css', [], $asset['version'] );
+		wp_style_add_data( 'newspack-content-gate-post-settings', 'rtl', 'replace' );
 
 		// Localize active gates data for reactive matching in the editor.
 		$gates      = self::get_gates( self::GATE_CPT, 'publish' );
@@ -1961,7 +1964,7 @@ class Content_Gate {
 			[
 				'gates'        => $gates_data,
 				'taxonomyMap'  => $taxonomy_map,
-				'canEditGates' => current_user_can( 'manage_options' ),
+				'canEditGates' => current_user_can( Capabilities::MANAGE_ACCESS_CONTROL ),
 			]
 		);
 	}
@@ -2697,10 +2700,17 @@ class Content_Gate {
 		if ( ! isset( $_GET['action'] ) || 'newspack_edit_gate_layout' !== $_GET['action'] ) {
 			return;
 		}
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Capabilities::MANAGE_ACCESS_CONTROL ) ) {
 			return;
 		}
 		check_admin_referer( 'newspack_edit_gate_layout' );
+
+		// Access Control admits roles that can't edit posts, such as a custom store
+		// role. Refuse them before a layout is created that they couldn't open.
+		$layout_post_type = get_post_type_object( self::GATE_LAYOUT_CPT );
+		if ( ! $layout_post_type || ! current_user_can( $layout_post_type->cap->edit_others_posts ) ) {
+			\wp_die( esc_html__( 'You are not allowed to edit gate layouts.', 'newspack-plugin' ), '', [ 'response' => 403 ] );
+		}
 
 		$gate_id = isset( $_GET['gate_id'] ) ? \absint( $_GET['gate_id'] ) : false;
 		if ( ! $gate_id ) {
