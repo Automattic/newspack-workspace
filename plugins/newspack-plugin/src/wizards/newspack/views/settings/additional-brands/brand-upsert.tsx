@@ -47,7 +47,7 @@ export default function Brand( {
 	errorMessage?: string | null;
 	isFetching?: boolean;
 } ) {
-	const { brandId = '0' } = useParams();
+	const { brandId = '0' } = useParams< { brandId?: string } >();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
 
 	const {
@@ -198,7 +198,7 @@ export default function Brand( {
 		} );
 	}, [ isFetching, isBrandValid, setHeaderData ] );
 
-	const baseUrl = `${ window.newspack_urls.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
+	const baseUrl = `${ window.newspack_urls?.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
 
 	function findSelectedMenu( location: string ) {
 		return brand.meta._menus.find( menu => menu.location === location )?.menu || 0;
@@ -236,9 +236,9 @@ export default function Brand( {
 						label={ __( 'Logo', 'newspack-plugin' ) }
 						image={ isFetchingLogo() ? undefined : brand.meta._logo }
 						withMargin={ false }
-						onChange={ ( logoId: number ) =>
+						onChange={ attachment =>
 							updateBrand( {
-								meta: { ...brand.meta, _logo: logoId },
+								meta: { ...brand.meta, _logo: attachment },
 							} )
 						}
 					/>

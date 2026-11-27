@@ -94,7 +94,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 				imageStyle={ headerImageStyle }
 				label={ __( 'Header Logo', 'newspack-plugin' ) }
 				image={ themeMods.custom_logo }
-				onChange={ ( custom_logo: string ) =>
+				onChange={ custom_logo =>
 					updateThemeMods( {
 						custom_logo,
 						header_text: ! custom_logo,
@@ -129,7 +129,7 @@ export default function Logos( { themeMods, onUpdate }: { themeMods: ThemeMods; 
 						} }
 						imageStyle={ footerImageStyle }
 						image={ themeMods.newspack_footer_logo }
-						onChange={ ( newspack_footer_logo: string ) => updateThemeMods( { newspack_footer_logo } ) }
+						onChange={ newspack_footer_logo => updateThemeMods( { newspack_footer_logo } ) }
 					/>
 					{ themeMods.newspack_footer_logo && (
 						<ToggleGroupControl

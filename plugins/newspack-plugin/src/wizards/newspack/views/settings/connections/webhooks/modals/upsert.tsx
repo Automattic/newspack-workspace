@@ -49,7 +49,7 @@ const Upsert = ( {
 		message?: string;
 	} >( {} );
 
-	const modalRef = useRef( null as HTMLElement | null );
+	const modalRef = useRef( null as HTMLDivElement | null );
 
 	const onSuccess = ( endpointId: string | number, response: Endpoint[] ) => {
 		setEndpoints( response );
