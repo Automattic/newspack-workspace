@@ -927,10 +927,10 @@ final class GAM_Model {
 	/**
 	 * Get the template slug a post is targeted by.
 	 *
-	 * A block theme "no featured image" template targets as the template it
-	 * copies, so hiding a post's image does not change which line items match.
-	 * The twins of single.html and the newsletter template send none, as their
-	 * parents do.
+	 * A block theme "no featured image" template sends the same targeting value
+	 * as the template it copies, so hiding a post's image does not change which
+	 * line items match. The twins of single.html and the newsletter template
+	 * send none, as their parents do.
 	 *
 	 * @param string $template_slug The post's template slug.
 	 * @return string The slug to target by, or an empty string for none.
