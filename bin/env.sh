@@ -644,10 +644,38 @@ MIGRATE
         ensure_envs_network || exit 1
         # Ensure db is running and create the environment database.
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db
+        # `up -d` returns before MariaDB accepts connections, which after a reboot
+        # takes a few seconds. A CREATE DATABASE sent before then fails and
+        # leaves a new env with no database to install into. The ping goes over
+        # TCP because the image's first-run setup server listens only on the
+        # socket and is not yet the server the env will talk to.
+        db_ready=false
+        for _ in $(seq 1 30); do
+            if docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+                mariadb-admin -h 127.0.0.1 --silent ping >/dev/null 2>&1; then
+                db_ready=true
+                break
+            fi
+            sleep 1
+        done
+        # Warn rather than stop: an installed env's database already exists, and
+        # the WordPress wait below gives a slow server more time to come up.
+        if [[ "$db_ready" != true ]]; then
+            echo "Warning: MariaDB did not answer within 30 seconds; creating $db_name may fail."
+        fi
         echo "Creating database $db_name..."
-        docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+        if ! docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
             mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null
+            -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null; then
+            # The client stops at the first failed statement, so this covers the GRANT
+            # too. A server that answered and still refused points at the credentials;
+            # one that never answered is already explained by the warning above.
+            if [[ "$db_ready" == true ]]; then
+                echo "Warning: could not create database $db_name or grant ${MYSQL_USER:-an empty MYSQL_USER} access to it. Check that MYSQL_ROOT_PASSWORD and MYSQL_USER in .env match the ones the db was set up with."
+            else
+                echo "Warning: could not create database $db_name or grant ${MYSQL_USER:-an empty MYSQL_USER} access to it."
+            fi
+        fi
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
             echo "Error: failed to start container"
@@ -717,6 +745,14 @@ MIGRATE
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do
             if docker exec "$container_name" test -f /var/www/html/wp-config.php 2>/dev/null; then
+                # Wait until the database answers before asking whether WordPress is
+                # installed: a database that isn't accepting connections fails the
+                # table check below the same way missing tables do, and would send
+                # an installed site down the fresh-install path.
+                if ! docker exec "$container_name" wp --allow-root db query "SELECT 1" 2>/dev/null | grep -q 1; then
+                    sleep 3
+                    continue
+                fi
                 # Check if core tables exist (wp core is-installed returns true even without them).
                 if docker exec "$container_name" wp --allow-root db query "SELECT 1 FROM wp_options LIMIT 1" 2>/dev/null | grep -q 1; then
                     echo "WordPress already installed."
@@ -731,20 +767,26 @@ MIGRATE
                 fi
                 echo "Installing WordPress..."
                 docker exec "$container_name" wp --allow-root cache flush 2>/dev/null
-                docker exec "$container_name" wp --allow-root core install \
+                install_out=$(docker exec "$container_name" wp --allow-root core install \
                     --url="https://${domain}" \
                     --title="${WP_TITLE:-Newspack}" \
                     --admin_user="${WP_ADMIN_USER:-admin}" \
                     --admin_password="${WP_ADMIN_PASSWORD:-password}" \
                     --admin_email="${WP_ADMIN_EMAIL:-wordpress@example.com}" \
-                    --skip-email
+                    --skip-email 2>&1)
+                printf '%s\n' "$install_out"
                 # Activate newspack-theme so a fresh env starts on the Newspack
                 # theme rather than WordPress's default. link-repos.sh symlinks
                 # the theme into wp-content/themes at container startup, so it's
                 # available by now. `n setup` does this too, but envs brought up
                 # with just `n env up` skip that, so it has to happen here.
-                docker exec "$container_name" wp --allow-root theme activate newspack-theme 2>/dev/null \
-                    || echo "Warning: could not activate newspack-theme (is it built/symlinked?)."
+                # Only after an install that actually happened: `core install` on a
+                # site that is already installed does nothing and still exits 0, and
+                # switching that site's theme would throw away its chosen design.
+                if grep -q "installed successfully" <<<"$install_out"; then
+                    docker exec "$container_name" wp --allow-root theme activate newspack-theme 2>/dev/null \
+                        || echo "Warning: could not activate newspack-theme (is it built/symlinked?)."
+                fi
                 break
             fi
             sleep 3
