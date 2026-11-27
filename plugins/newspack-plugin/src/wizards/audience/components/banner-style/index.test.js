@@ -80,6 +80,16 @@ describe( 'getBannerPreviewProps', () => {
 			'--newspack-content-banner-button-ink': 'white',
 		} );
 	} );
+
+	it( 'drops the shadow only where the front end does: a Theme banner with the shadow turned off', () => {
+		setThemeData( { supports_theme_style: true } );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: 0 } ).bannerClassName ).toBe( 'is-style-theme has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: true } ).bannerClassName ).toBe( 'is-style-theme' );
+		expect( getBannerPreviewProps( { style: 'theme' } ).bannerClassName ).toBe( 'is-style-theme' );
+		expect( getBannerPreviewProps( { style: 'light', shadow: false } ).bannerClassName ).toBe( 'is-style-light' );
+		expect( getBannerPreviewProps( { style: 'dark', shadow: false } ).bannerClassName ).toBe( 'is-style-dark' );
+	} );
 } );
 
 it( 'expands three-digit hex colors before they reach the color picker', () => expect( toLongHex( '#fff' ) ).toBe( '#ffffff' ) );
@@ -129,6 +139,12 @@ describe( 'on a site that uses the site Theme', () => {
 			'--newspack-content-banner-ink': '#102030',
 			'--newspack-content-banner-button-ink': '#ffeb3b',
 		} );
+	} );
+
+	it( 'drops the shadow on the site style only when the stored style is Theme', () => {
+		setThemeData( { supports_theme_style: true, uses_site_theme: true } );
+		expect( getBannerPreviewProps( { style: 'theme', shadow: false } ).bannerClassName ).toBe( 'is-style-site has-no-shadow' );
+		expect( getBannerPreviewProps( { style: 'light', shadow: false } ).bannerClassName ).toBe( 'is-style-site' );
 	} );
 
 	it( 'BannerStyleControl renders no style option on a site Theme, but the four colors and the shadow', () => {
