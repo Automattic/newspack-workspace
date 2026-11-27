@@ -28,8 +28,26 @@ if ( ! class_exists( 'CoAuthors_Guest_Authors' ) ) {
 
 		public function delete_guest_author_cache( $guest_author ) {}
 
-		// Stands in for the one effect these tests need: the guest author post and its meta are gone.
+		/*
+		 * Copies what Co-Authors Plus 4.2.2 does to author terms: when the linked user has a
+		 * separate term, the guest author's term is deleted and its posts move to the user's.
+		 */
 		public function delete( $id, $reassign_to = false ) {
+			global $coauthors_plus;
+			if ( $reassign_to ) {
+				$guest_term = $coauthors_plus->get_author_term( $this->get_guest_author_by( 'ID', $id ) );
+				$user_term  = $coauthors_plus->get_author_term( get_user_by( 'login', $reassign_to ) );
+				if ( $guest_term && $user_term && $guest_term->term_id !== $user_term->term_id ) {
+					wp_delete_term(
+						$guest_term->term_id,
+						'author',
+						[
+							'default'       => $user_term->term_id,
+							'force_default' => true,
+						]
+					);
+				}
+			}
 			wp_delete_post( $id, true );
 			return true;
 		}
@@ -82,6 +100,7 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 	}
 
 	public function tear_down() {
+		wp_defer_term_counting( false );
 		$GLOBALS['coauthors_plus'] = $this->previous_coauthors_plus;
 		unregister_taxonomy( 'author' );
 		unregister_post_type( 'guest-author' );
@@ -198,6 +217,39 @@ class Newspack_Test_Co_Authors_Plus_Migration extends WP_UnitTestCase {
 		$logs = implode( "\n", WP_CLI::$logs );
 		$this->assertStringContainsString( 'Would update display_name to Guest jane-doe.', $logs );
 		$this->assertStringContainsString( 'Would update user_nicename to jane-doe.', $logs );
+	}
+
+	/**
+	 * With Newspack Manager active, Co-Authors Plus 4.2.2 looks each term up right after
+	 * WordPress counts it, and crashes if the term has been deleted.
+	 */
+	public function test_live_run_never_counts_a_deleted_author_term() {
+		global $wpdb;
+
+		self::factory()->user->create( [ 'user_login' => 'linked123' ] );
+		$user_term_id  = wp_insert_term( 'linked123', 'author', [ 'slug' => 'cap-linked123' ] )['term_id'];
+		$guest_term_id = wp_insert_term( 'jane-doe', 'author', [ 'slug' => 'cap-jane-doe' ] )['term_id'];
+		wp_set_object_terms( self::factory()->post->create(), [ $user_term_id ], 'author' );
+		wp_set_object_terms( self::factory()->post->create(), [ $guest_term_id ], 'author' );
+		$this->create_guest_author( 'jane-doe', [ 'linked_account' => 'linked123' ] );
+
+		$counted_after_deletion = [];
+		add_action(
+			'edited_term_taxonomy',
+			function ( $tt_id, $taxonomy ) use ( $wpdb, &$counted_after_deletion ) {
+				if ( 'author' === $taxonomy && ! $wpdb->get_var( $wpdb->prepare( "SELECT term_id FROM $wpdb->term_taxonomy WHERE term_taxonomy_id = %d", $tt_id ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$counted_after_deletion[] = $tt_id;
+				}
+			},
+			10,
+			2
+		);
+
+		$this->migrate( [ 'live' => true ] );
+
+		$this->assertNull( get_term( $guest_term_id, 'author' ), 'The guest author term should have been merged away.' );
+		$this->assertSame( [], $counted_after_deletion );
+		$this->assertSame( 2, get_term( $user_term_id, 'author' )->count );
 	}
 
 	public function unusable_slugs() {

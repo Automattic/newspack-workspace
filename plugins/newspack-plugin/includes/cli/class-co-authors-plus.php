@@ -57,7 +57,6 @@ class Co_Authors_Plus {
 
 		if ( self::$live ) {
 			WP_CLI::log( 'Live mode - data will be changed.' );
-			wp_defer_term_counting( true );
 		} else {
 			WP_CLI::log( 'Dry run. Use --live flag to run in live mode.' );
 		}
@@ -74,6 +73,12 @@ class Co_Authors_Plus {
 			WP_CLI::log( 'Skipping linked Guest Authors, since guest_author_ids argument was provided.' );
 		}
 		WP_CLI::log( '' );
+
+		// Deferring any earlier would hold counts for author terms that migrating a linked guest author deletes, which can crash Co-Authors Plus when they run.
+		if ( self::$live ) {
+			wp_defer_term_counting( true );
+		}
+
 		if ( self::$user_logins === false ) {
 			self::migrate_unlinked_guest_authors();
 		} else {
