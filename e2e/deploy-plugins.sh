@@ -28,6 +28,9 @@
 #                       Default: htdocs.
 #   E2E_BUILD_ROOT      Monorepo root holding plugins/ and themes/. Default: the
 #                       directory above this script.
+#   E2E_BUNDLE_DIR      Release-gate mode: a directory of `<slug>.zip` release
+#                       archives (ci.yml's newspack-branch-zips). When set, deploy
+#                       those (the PR's changed plugins) instead of a source build.
 #
 # The caller must build each plugin deploy-ready first: the asset build (dist/)
 # AND production Composer deps (vendor/, via `composer install --no-dev`) for
@@ -70,6 +73,32 @@ if [ -n "${E2E_DEPLOY_SET:-}" ]; then
   while IFS= read -r _row; do
     [ -n "$_row" ] && DEPLOY_SET+=("$_row")
   done <<< "$E2E_DEPLOY_SET"
+fi
+
+# Release-gate (bundle) mode: deploy from a directory of release zips — the
+# `newspack-branch-zips` artifact ci.yml builds for the PR. Each `<slug>.zip` is a
+# deploy-ready archive (assets + vendor) whose top-level dir is `<slug>`. Only the
+# plugins the PR changed are in the bundle; the gate site carries the rest at its
+# baseline. Unzip each into a staging tree and deploy it like a built source dir
+# (empty marker: the archive is already built, so skip the asset/vendor guards).
+if [ -n "${E2E_BUNDLE_DIR:-}" ]; then
+  command -v unzip >/dev/null || { echo "ERROR: unzip is required for E2E_BUNDLE_DIR mode." >&2; exit 1; }
+  _stage="$(mktemp -d)"
+  DEPLOY_SET=()
+  shopt -s nullglob
+  for _zip in "$E2E_BUNDLE_DIR"/*.zip; do
+    _slug="$(basename "$_zip" .zip)"
+    case "$_slug" in
+      newspack-theme|newspack-block-theme) _dest=themes ;;
+      *) _dest=plugins ;;
+    esac
+    mkdir -p "$_stage/$_dest"
+    unzip -q -o "$_zip" -d "$_stage/$_dest"
+    [ -d "$_stage/$_dest/$_slug" ] || { echo "ERROR: $_zip has no top-level '$_slug/' dir." >&2; exit 1; }
+    DEPLOY_SET+=("$_slug|$_dest/$_slug|$_dest|")
+  done
+  [ "${#DEPLOY_SET[@]}" -gt 0 ] || { echo "ERROR: no *.zip files in E2E_BUNDLE_DIR=$E2E_BUNDLE_DIR." >&2; exit 1; }
+  BUILD_ROOT="$_stage"
 fi
 
 # Run a command on the target, piping this function's stdin to it. Mirrors
