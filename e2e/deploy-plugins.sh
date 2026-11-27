@@ -20,6 +20,8 @@
 #   E2E_SSH_HOST        Required unless E2E_SSH_CMD is set. SSH host.
 #   E2E_SSH_USER        Required unless E2E_SSH_CMD is set. SSH user.
 #   E2E_SSH_USER_PASS   Password for sshpass auth (as the nightly uses).
+#   E2E_SSH_KEY_FILE    Optional. Path to a private key; when set, SSH uses it
+#                       (-i) and skips sshpass. The release gate uses this.
 #   E2E_SSH_CMD         Optional. Full ssh invocation to use instead of sshpass;
 #                       receives the remote command as its last argument.
 #   E2E_REMOTE_WP_PATH  WordPress root on the target, relative to the SSH home.
@@ -82,8 +84,11 @@ remote_exec() {
   fi
   : "${E2E_SSH_HOST:?set E2E_SSH_HOST or E2E_SSH_CMD}"
   : "${E2E_SSH_USER:?set E2E_SSH_USER or E2E_SSH_CMD}"
-  local ssh_opts=(-o StrictHostKeyChecking=no "${E2E_SSH_USER}@${E2E_SSH_HOST}" "$remote_cmd")
-  if [ -n "${E2E_SSH_USER_PASS:-}" ]; then
+  local ssh_opts=(-o StrictHostKeyChecking=no)
+  # Prefer the gate's scoped key (E2E_SSH_KEY_FILE) over password auth.
+  [ -n "${E2E_SSH_KEY_FILE:-}" ] && ssh_opts=(-i "$E2E_SSH_KEY_FILE" "${ssh_opts[@]}")
+  ssh_opts+=("${E2E_SSH_USER}@${E2E_SSH_HOST}" "$remote_cmd")
+  if [ -n "${E2E_SSH_USER_PASS:-}" ] && [ -z "${E2E_SSH_KEY_FILE:-}" ]; then
     sshpass -p "$E2E_SSH_USER_PASS" ssh "${ssh_opts[@]}"
   else
     ssh "${ssh_opts[@]}"

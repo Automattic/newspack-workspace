@@ -123,16 +123,26 @@ export const setupSite = ({ woo }: SetupOptions): void => {
     );
   }
 
-  // Run one SSH command, piping `input` to it. Uses sshpass for password auth.
+  // Run one SSH command, piping `input` to it. Prefers a scoped key
+  // (E2E_SSH_KEY_FILE, written from the gate's E2E_SSH_KEY secret); otherwise
+  // sshpass for password auth (the nightly), else a plain ssh on the agent's key.
+  const keyFile = process.env.E2E_SSH_KEY_FILE;
   const runSsh = (remoteCommand: string, input: Buffer): void => {
-    const sshArgs = ["-o", "StrictHostKeyChecking=no", `${user}@${host}`, remoteCommand];
-    const [cmd, cmdArgs] = pass ? ["sshpass", ["-p", pass, "ssh", ...sshArgs]] : ["ssh", sshArgs];
+    const sshArgs = [
+      ...(keyFile ? ["-i", keyFile] : []),
+      "-o", "StrictHostKeyChecking=no",
+      `${user}@${host}`,
+      remoteCommand,
+    ];
+    const [cmd, cmdArgs] = (pass && !keyFile)
+      ? ["sshpass", ["-p", pass, "ssh", ...sshArgs]]
+      : ["ssh", sshArgs];
     try {
       execFileSync(cmd, cmdArgs, { input, stdio: ["pipe", "inherit", "inherit"] });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT" && cmd === "sshpass") {
         throw new Error(
-          "sshpass is required for E2E_SSH_USER_PASS auth but was not found on PATH. Install sshpass, or use key-based SSH (unset E2E_SSH_USER_PASS)."
+          "sshpass is required for E2E_SSH_USER_PASS auth but was not found on PATH. Install sshpass, or use key-based SSH (set E2E_SSH_KEY_FILE / unset E2E_SSH_USER_PASS)."
         );
       }
       throw err;
