@@ -54,9 +54,14 @@ type MediaFrame = {
 
 declare global {
 	// The classic-editor media library global, loaded via the 'media' script dependency.
-	const wp: {
+	// Declared as an interface + var (not an inline const) so it merges with other units'
+	// `wp` globals (e.g. newspack-plugin's shared admin-globals declaration) rather than
+	// colliding when both are pulled into one program.
+	interface NewspackWpGlobal {
 		media: ( options: { title: string; button: { text: string }; library: { type: string }; multiple: boolean } ) => MediaFrame;
-	};
+	}
+	// eslint-disable-next-line no-var
+	var wp: NewspackWpGlobal;
 }
 
 type ImageUploadProps = {

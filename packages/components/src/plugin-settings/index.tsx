@@ -33,8 +33,8 @@ type PluginSettingsProps = {
 	afterUpdate?: ( settings: PluginSettingsData ) => void;
 	/** Title displayed above the settings. */
 	title?: string;
-	/** Description displayed under the title. */
-	description?: string;
+	/** Description displayed under the title. Forwarded to SectionHeader, which also accepts a render function. */
+	description?: React.ReactNode | ( () => React.ReactNode );
 	/** Whether section headers have a grey background. */
 	hasGreyHeader?: boolean;
 	/** HTML heading level of the title. */

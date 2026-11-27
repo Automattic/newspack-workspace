@@ -2,11 +2,18 @@
 	"extends": "newspack-scripts/config/tsconfig.json",
 	"compilerOptions": {
 		"esModuleInterop": true,
-		"rootDir": ".",
 		"jsx": "react-jsx",
 		"paths": {
-			"react": [ "./node_modules/@types/react" ]
-		}
+			"react": [
+				"./node_modules/@types/react"
+			]
+		},
+		"allowJs": false
 	},
-	"include": [ "src", "src/**/*.json", "packages" ]
+	"include": [
+		"src",
+		"src/**/*.json",
+		"packages",
+		"node_modules/newspack-scripts/types"
+	]
 }

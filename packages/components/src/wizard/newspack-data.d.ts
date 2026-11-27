@@ -44,6 +44,8 @@ declare const newspack_aux_data: {
 	/** Site-wide gating notice shown across the wizards when access enforcement is inert. */
 	inert_gating?: {
 		show?: boolean;
+		// Whether the site has any access-control surface (a gate or block rule) to lose.
+		has_surfaces?: boolean;
 		message: string;
 		urls: {
 			accessControl: string;
