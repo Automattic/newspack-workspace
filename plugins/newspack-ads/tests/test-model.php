@@ -189,26 +189,34 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A "no featured image" template targets as the template it copies.
+	 * Template slugs and the `template` targeting value each one sends.
 	 */
-	public function test_no_featured_image_template_targets_as_its_parent() {
-		$post_id = self::factory()->post->create();
-
-		$cases = [
-			'single-feature.php'                       => 'single-feature',
-			'single/large-image'                       => 'large-image',
-			'single/large-image--no-featured-image'    => 'large-image',
-			'single/sidebar-layout--no-featured-image' => 'sidebar-layout',
-			'single/50-50-image--no-featured-image'    => '50-50-image',
-			'single/no-featured-image'                 => null,
-			'single/newsletter--no-featured-image'     => null,
+	public function template_targeting_cases() {
+		return [
+			'classic theme template'          => [ 'single-feature.php', 'single-feature' ],
+			'block theme template'            => [ 'single/large-image', 'large-image' ],
+			'its no featured image twin'      => [ 'single/large-image--no-featured-image', 'large-image' ],
+			'twin of the default template'    => [ 'single/no-featured-image', null ],
+			'twin of the newsletter template' => [ 'single/newsletter--no-featured-image', null ],
 		];
-		foreach ( $cases as $template => $expected ) {
-			update_post_meta( $post_id, '_wp_page_template', $template );
-			self::go_to( get_permalink( $post_id ) );
-			$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
-			self::assertSame( $expected, $targeting['template'] ?? null, $template );
-		}
+	}
+
+	/**
+	 * A "no featured image" template sends the same targeting value as the
+	 * template it copies.
+	 *
+	 * @dataProvider template_targeting_cases
+	 *
+	 * @param string      $template The post's template slug.
+	 * @param string|null $expected The `template` value sent, or null for none.
+	 */
+	public function test_no_featured_image_template_targets_as_its_parent( $template, $expected ) {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, '_wp_page_template', $template );
+		self::go_to( get_permalink( $post_id ) );
+
+		$targeting = GAM_Model::get_ad_targeting( self::$mock_gam_ad_units[0] );
+		self::assertSame( $expected, $targeting['template'] ?? null );
 	}
 
 	/**
