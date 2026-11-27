@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Release-gate build helper — SOURCE this (don't execute) before the deploy +
 # provision + test step, passing the PR's target branch:
 #
