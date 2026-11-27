@@ -736,7 +736,7 @@ class Premium_Newsletters {
 		// The Premium Newsletters wizard's capability and page slug. The link goes
 		// to the wizard's edit route rather than the gate's post editor, which
 		// edits the layout readers see and not the gate's rules.
-		$can_edit = current_user_can( 'manage_options' );
+		$can_edit = current_user_can( Capabilities::MANAGE_ACCESS_CONTROL );
 		foreach ( \Newspack\Newsletters\Subscription_Lists::get_all() as $list ) {
 			// The marker must mean the same thing as the sign-up check, which honors
 			// a list marked exempt. get_post_gates() alone would mark it as gated
