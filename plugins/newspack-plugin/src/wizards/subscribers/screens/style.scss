@@ -453,3 +453,42 @@
 .newspack-subscribers__card-value {
 	margin: 0;
 }
+
+// One-time donations on the person profile. The table runs to the TableCard's
+// edges, so its outer columns take the card's own padding; the column headers
+// share the card rows' label style; every row keeps one height whether or not
+// it carries a status badge.
+.newspack-subscribers__donations {
+	border-collapse: collapse;
+	width: 100%;
+
+	th,
+	td {
+		padding: var(--wpds-dimension-padding-sm, #{wp-vars.$grid-unit-10}) var(--wpds-dimension-padding-md, #{wp-vars.$grid-unit-15});
+		text-align: start;
+
+		&:first-child {
+			padding-inline-start: var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30});
+		}
+
+		&:last-child {
+			padding-inline-end: var(--wpds-dimension-padding-2xl, #{wp-vars.$grid-unit-30});
+		}
+	}
+
+	th {
+		color: wp-colors.$gray-900;
+		font-size: wp-vars.$font-size-x-small;
+		font-weight: wp-vars.$font-weight-medium;
+		text-transform: uppercase;
+	}
+
+	td {
+		border-top: var(--wpds-border-width-xs, #{wp-vars.$border-width}) solid var(--wpds-color-stroke-surface-neutral-weak, #{wp-colors.$gray-200});
+		height: wp-vars.$grid-unit-60;
+	}
+
+	td:first-child {
+		white-space: nowrap;
+	}
+}

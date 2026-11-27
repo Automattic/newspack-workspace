@@ -19,8 +19,13 @@ import { SectionHeader } from '../../../../../../packages/components/src';
 
 const DATA_STORE_KEY = 'newspack-settings/emails';
 
+interface EmailsSettingsData {
+	enable_woocommerce_email_editor?: boolean;
+	admin_url?: string;
+}
+
 const Settings = () => {
-	const { enable_woocommerce_email_editor: isEnabled, admin_url: url } = useWizardData( DATA_STORE_KEY );
+	const { enable_woocommerce_email_editor: isEnabled, admin_url: url } = useWizardData< EmailsSettingsData >( DATA_STORE_KEY );
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	if ( typeof isEnabled !== 'boolean' || ! url ) {

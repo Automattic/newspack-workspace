@@ -31,6 +31,18 @@ updates:
     labels:
       - "dependencies"
 
+  # The dev stack's proxy image, which docker-compose.yml pins by digest. A pin
+  # nobody bumps turns into an unpatched image, so this keeps it moving. Only
+  # the proxy: the other images in that file are not pinned this way.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    allow:
+      - dependency-name: "traefik"
+
   # Per-plugin production composer deps (only plugins that have them).
   - package-ecosystem: "composer"
     directory: "plugins/newspack-plugin"

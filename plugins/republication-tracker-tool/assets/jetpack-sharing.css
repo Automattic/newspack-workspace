@@ -1,11 +1,4 @@
 .sd-content ul li.share-republish a.sd-button svg,
-.sd-content ul li.share-republish a.sd-button svg path,
-li.service.share-republish .options-left svg,
-li.service.share-republish .options-left svg path {
-	fill: currentColor;
-}
-
-.sd-content ul li.share-republish a.sd-button svg,
 li.service.share-republish .options-left svg {
 	--rtt-share-icon--box: 18px;
 	--rtt-share-icon--scale: 0.8125;
@@ -40,14 +33,6 @@ li.service.share-republish .options-left svg {
 .sd-content ul li.share-republish.no-icon a svg,
 .sd-content a.share-republish.no-icon svg {
 	display: none;
-}
-
-.jetpack-sharing-button__button.share-republish svg {
-	fill: currentColor;
-}
-
-.jetpack-sharing-button__button.share-republish svg path {
-	fill: currentColor;
 }
 
 .jetpack-sharing-button__button.style-icon.share-republish {

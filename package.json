@@ -12,7 +12,7 @@
 		"node": "^20.19.0 || >=22.13.0"
 	},
 	"scripts": {
-		"build:packages": "pnpm --filter './packages/*' run --if-present build",
+		"build:packages": "pnpm --filter './packages/*' --filter '!newspack-ui-shadcn' run --if-present build",
 		"build": "pnpm run build:packages && pnpm --filter './plugins/*' --filter './themes/*' run build",
 		"build:changed": "pnpm run build:packages && pnpm --filter '...[origin/main]' run build",
 		"watch": "node ./bin/watch-all.mjs",
@@ -27,6 +27,7 @@
 	"devDependencies": {
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^19.8.1",
+		"@types/react": "^18.3.27",
 		"@wordpress/a11y": "^4.48.0",
 		"@wordpress/api-fetch": "^7.48.0",
 		"@wordpress/autop": "^4.48.0",
@@ -49,14 +50,14 @@
 		"@wordpress/hooks": "^4.48.0",
 		"@wordpress/html-entities": "^4.48.0",
 		"@wordpress/i18n": "^6.21.0",
-		"@wordpress/icons": "^20.0.0",
+		"@wordpress/icons": "^21.0.0",
 		"@wordpress/interactivity-router": "^2.48.0",
 		"@wordpress/interface": "^9.33.0",
 		"@wordpress/keycodes": "^4.48.0",
 		"@wordpress/latex-to-mathml": "^1.16.0",
 		"@wordpress/patterns": "^2.48.0",
 		"@wordpress/plugins": "^7.48.0",
-		"@wordpress/primitives": "^3.0.0",
+		"@wordpress/primitives": "^5.0.0",
 		"@wordpress/server-side-render": "^6.24.0",
 		"@wordpress/shortcode": "^4.48.0",
 		"@wordpress/sync": "^1.48.0",

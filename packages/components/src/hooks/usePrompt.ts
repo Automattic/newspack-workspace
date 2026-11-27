@@ -14,7 +14,7 @@ const { useHistory } = Router;
 
 export default ( when: boolean, message: string ): ( () => void ) => {
 	const history = useHistory();
-	const self = useRef( null );
+	const self = useRef< ( () => void ) | null >( null );
 
 	const onWindowOrTabClose = ( event: Event | undefined ) => {
 		if ( ! when ) {

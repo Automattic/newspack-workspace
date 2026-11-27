@@ -12,5 +12,8 @@ declare module 'react' {
 	interface HTMLAttributes< T > {
 		start?: number;
 		end?: number;
+		// The banner previews mark their container `inert` to freeze it; @types/react
+		// 18 has no `inert` attribute, and the markup writes the string form.
+		inert?: string | boolean;
 	}
 }

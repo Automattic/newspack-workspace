@@ -74,7 +74,14 @@ if ( ! function_exists( 'WC' ) ) {
 				public $session = null;
 
 				/**
-				 * Countries double exposing a US-only states list.
+				 * Customer double, set by tests.
+				 *
+				 * @var object|null
+				 */
+				public $customer = null;
+
+				/**
+				 * Countries double exposing a US-only states list and an AU:NSW store base.
 				 *
 				 * @var object
 				 */
@@ -94,6 +101,36 @@ if ( ! function_exists( 'WC' ) ) {
 						 */
 						public function get_states( $country ) {
 							return 'US' === $country ? [ 'CA' => 'California' ] : [];
+						}
+
+						/**
+						 * Get the store base country.
+						 *
+						 * @return string
+						 */
+						public function get_base_country() {
+							return 'AU';
+						}
+
+						/**
+						 * Get the store base state.
+						 *
+						 * @return string
+						 */
+						public function get_base_state() {
+							return 'NSW';
+						}
+
+						/**
+						 * Get the countries the store sells to.
+						 *
+						 * @return array
+						 */
+						public function get_allowed_countries() {
+							return [
+								'AU' => 'Australia',
+								'US' => 'United States',
+							];
 						}
 					};
 				}
@@ -1299,6 +1336,105 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 		$this->set_mock_checkout_cart( true );
 		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Shipping carts should not be relaxed.' );
+	}
+
+	/**
+	 * WooCommerce refuses a checkout that has no billing country. When the
+	 * modal's configured billing fields leave the country out, the reader has
+	 * nowhere to enter one, so the store base becomes the default customer
+	 * location and the session customer carries a country.
+	 */
+	public function test_base_default_customer_address_when_country_field_is_off() {
+		$this->set_modal_checkout_request();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+		$this->assertSame( 'base', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'Without a country field, "No location by default" should resolve to the store base.' );
+
+		// The country field is shown, so the reader supplies the country.
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email', 'billing_country' ] );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'A shown country field should leave the option alone.' );
+
+		// The default (empty) configuration shows every WooCommerce field, country included.
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+		$this->assertSame( '', \Newspack_Blocks\Modal_Checkout::ensure_base_default_customer_address( '' ), 'The default configuration should leave the option alone.' );
+	}
+
+	/**
+	 * Set WC()->customer to a session customer double.
+	 *
+	 * @param string $billing_country The billing country the customer starts with.
+	 *
+	 * @return object The customer double.
+	 */
+	private function set_mock_session_customer( $billing_country ) {
+		$session_customer = new class() {
+			/**
+			 * Billing country.
+			 *
+			 * @var string
+			 */
+			public $billing_country = '';
+
+			/**
+			 * Billing state.
+			 *
+			 * @var string
+			 */
+			public $billing_state = '';
+
+			/**
+			 * Get the billing country.
+			 *
+			 * @return string
+			 */
+			public function get_billing_country() {
+				return $this->billing_country;
+			}
+
+			/**
+			 * Set the billing country.
+			 *
+			 * @param string $country Country code.
+			 */
+			public function set_billing_country( $country ) {
+				$this->billing_country = $country;
+			}
+
+			/**
+			 * Set the billing state.
+			 *
+			 * @param string $state State code.
+			 */
+			public function set_billing_state( $state ) {
+				$this->billing_state = $state;
+			}
+		};
+		$session_customer->billing_country = $billing_country;
+		WC()->customer                     = $session_customer;
+		return $session_customer;
+	}
+
+	/**
+	 * Any code can remove the country field from the checkout form, not only
+	 * the configured billing fields. A submission that posts no country, from
+	 * a customer who has none, takes the store base so WooCommerce accepts it.
+	 */
+	public function test_submission_without_country_field_takes_store_base() {
+		$this->set_modal_checkout_request();
+		$posted_data_without_country = [ 'billing_email' => 'reader@example.test' ];
+
+		$customer_without_country = $this->set_mock_session_customer( '' );
+		$this->assertSame( $posted_data_without_country, \Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( $posted_data_without_country ), 'The posted data should pass through unchanged.' );
+		$this->assertSame( [ 'AU', 'NSW' ], [ $customer_without_country->billing_country, $customer_without_country->billing_state ], 'A customer with no country should take the store base.' );
+
+		$customer_with_country = $this->set_mock_session_customer( 'US' );
+		\Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( $posted_data_without_country );
+		$this->assertSame( 'US', $customer_with_country->billing_country, 'A country the customer already has should be kept.' );
+
+		// The form has a country field, so an empty value is the reader's to fix.
+		$customer_with_country_field = $this->set_mock_session_customer( '' );
+		\Newspack_Blocks\Modal_Checkout::ensure_customer_billing_country( [ 'billing_country' => '' ] );
+		$this->assertSame( '', $customer_with_country_field->billing_country, 'A form with a country field should leave the customer alone.' );
 	}
 
 	/**

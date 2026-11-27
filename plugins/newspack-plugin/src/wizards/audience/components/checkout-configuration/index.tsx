@@ -15,8 +15,15 @@ import WizardsSection from '../../../wizards-section';
 
 const DATA_STORE_KEY = 'newspack-audience/checkout-configuration';
 
+interface CheckoutConfigurationData {
+	woocommerce_registration_required?: boolean;
+	woocommerce_post_checkout_success_text: string;
+	woocommerce_post_checkout_registration_success_text: string;
+	woocommerce_checkout_privacy_policy_text: string;
+}
+
 function CheckoutConfiguration() {
-	const config = useWizardData( DATA_STORE_KEY );
+	const config = useWizardData< CheckoutConfigurationData >( DATA_STORE_KEY );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const isQuietLoading = useSelect( ( select: any ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
 

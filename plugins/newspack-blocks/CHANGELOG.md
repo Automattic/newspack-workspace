@@ -1,3 +1,30 @@
+## @automattic/newspack-blocks [4.36.12](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.11...newspack-blocks@4.36.12) (2026-11-23)
+
+
+### Bug Fixes
+
+* **blocks:** apply post type rules to every Homepage Posts query ([#1288](https://github.com/Automattic/newspack-workspace/issues/1288)) ([06825b8](https://github.com/Automattic/newspack-workspace/commit/06825b80ecb282a025fe5db3f3489f2339aff705))
+* **iframe:** only embed http(s) sources ([#1135](https://github.com/Automattic/newspack-workspace/issues/1135)) ([38cdea4](https://github.com/Automattic/newspack-workspace/commit/38cdea433d7ec8a7d1e5ea69521011ad796cc0a4))
+* merge conflict ([5f868c7](https://github.com/Automattic/newspack-workspace/commit/5f868c7a97a66f8cc406fe369c2c487325e34631))
+* **modal-checkout:** open checkout as a newspack-ui dialog (DSGNEWS-249) ([#1336](https://github.com/Automattic/newspack-workspace/issues/1336)) ([d16ad60](https://github.com/Automattic/newspack-workspace/commit/d16ad6056cb5d0491a96828ddedef5bf2db6d881))
+* **newspack-ui:** announce loading on submit buttons (DSGNEWS-244) ([#1332](https://github.com/Automattic/newspack-workspace/issues/1332)) ([e8e0dd1](https://github.com/Automattic/newspack-workspace/commit/e8e0dd173128d0530b9c73c3685ceadebf8a908d))
+* **newspack-ui:** make form control states readable (DSGNEWS-242) ([#1329](https://github.com/Automattic/newspack-workspace/issues/1329)) ([ea3e321](https://github.com/Automattic/newspack-workspace/commit/ea3e321bebfa4a0bb3431d39e801169d597aee0b))
+* **newspack-ui:** make modals real dialogs (DSGNEWS-246, DSGNEWS-247) ([#1335](https://github.com/Automattic/newspack-workspace/issues/1335)) ([003e96a](https://github.com/Automattic/newspack-workspace/commit/003e96a37323829ac9f277973f4fc5b694996828))
+* version plugin scripts and styles by file content (NPPM-3618) ([#1305](https://github.com/Automattic/newspack-workspace/issues/1305)) ([12ec555](https://github.com/Automattic/newspack-workspace/commit/12ec555ceaf06596045911a44eb36620cf21c3d8))
+
+
+### Dependencies
+
+* **newspack-icons:** upgraded to 1.4.0
+* **newspack-components:** upgraded to 4.13.0
+
+## @automattic/newspack-blocks [4.36.11](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.10...newspack-blocks@4.36.11) (2026-11-23)
+
+
+### Bug Fixes
+
+* **modal-checkout:** accept checkouts with no billing country field ([#1629](https://github.com/Automattic/newspack-workspace/issues/1629)) ([0d7d45a](https://github.com/Automattic/newspack-workspace/commit/0d7d45af010e31481d27ea4bea29cffbbe825090))
+
 ## @automattic/newspack-blocks [4.36.10](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.36.9...newspack-blocks@4.36.10) (2026-11-19)
 
 

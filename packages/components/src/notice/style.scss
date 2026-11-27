@@ -17,7 +17,6 @@
 
 	> svg {
 		display: block;
-		fill: wp-colors.$gray-900;
 		flex: 0 0 24px;
 		margin-right: 4px;
 	}
@@ -27,7 +26,6 @@
 
 		> svg {
 			color: wp-colors.$alert-red;
-			fill: wp-colors.$alert-red;
 			transform: rotate(180deg);
 		}
 	}
@@ -49,7 +47,6 @@
 
 		> svg {
 			color: var(--wp-admin-theme-color);
-			fill: var(--wp-admin-theme-color);
 		}
 	}
 
@@ -58,7 +55,6 @@
 
 		> svg {
 			color: wp-colors.$alert-green;
-			fill: wp-colors.$alert-green;
 		}
 	}
 
@@ -67,7 +63,6 @@
 
 		> svg {
 			color: wp-colors.$alert-yellow;
-			fill: wp-colors.$alert-yellow;
 			transform: rotate(180deg);
 		}
 	}

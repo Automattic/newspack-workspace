@@ -53,7 +53,7 @@
 	width: 24px;
 
 	svg {
-		fill: wp-colors.$gray-700;
+		color: wp-colors.$gray-700;
 	}
 
 	&--checked {
@@ -62,7 +62,6 @@
 
 		svg {
 			color: white;
-			fill: white;
 		}
 	}
 	&--pending {

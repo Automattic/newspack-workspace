@@ -45,16 +45,20 @@ jobs:
           done <<< "$PR_BODY"
           echo "has_major=$HAS_MAJOR" >> "$GITHUB_OUTPUT"
 
+      # The dev stack's proxy image (traefik) is left out at every bump level.
+      # It is third-party code that runs on each developer's machine and no CI
+      # job exercises it, so its updates wait for a person to merge them.
       # GH_TOKEN is a PAT: the approval must come from an identity other than
       # the GITHUB_TOKEN/dependabot bot, and enabling auto-merge needs the same
       # elevated scope.
       - name: Approve the PR
         if: >-
-          ((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          !contains(steps.metadata.outputs.dependency-names, 'traefik') &&
+          (((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
           contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
           !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')) ||
           (steps.metadata.outputs.update-type == '' &&
-          steps.check-major.outputs.has_major != 'true')
+          steps.check-major.outputs.has_major != 'true'))
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -62,11 +66,12 @@ jobs:
 
       - name: Enable auto-merge for minor and patch updates
         if: >-
-          ((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          !contains(steps.metadata.outputs.dependency-names, 'traefik') &&
+          (((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
           contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
           !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')) ||
           (steps.metadata.outputs.update-type == '' &&
-          steps.check-major.outputs.has_major != 'true')
+          steps.check-major.outputs.has_major != 'true'))
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

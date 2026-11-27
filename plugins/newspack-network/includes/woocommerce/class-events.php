@@ -40,6 +40,77 @@ class Events {
 		Data_Events::register_listener( 'woocommerce_subscription_status_changed', 'newspack_node_subscription_changed', [ __CLASS__, 'subscription_changed' ] );
 		Data_Events::register_listener( 'woocommerce_order_status_changed', 'newspack_node_one_time_purchase_changed', [ __CLASS__, 'one_time_purchase_changed' ] );
 		Data_Events::register_listener( 'newspack_network_save_product', 'newspack_network_product_updated', [ __CLASS__, 'product_updated' ] );
+
+		if ( class_exists( 'Newspack\Complimentary_Access' ) ) {
+			// Runs once Complimentary_Access has restamped the batch, so the payload carries the new stamp.
+			// Only queued restamps fire this action; WooCommerce always ships Action Scheduler.
+			add_action( \Newspack\Complimentary_Access::SYNC_ACTION, [ __CLASS__, 'push_restamped' ], 20 );
+		}
+	}
+
+	/**
+	 * Whether a subscription or order carries the complimentary access stamp.
+	 *
+	 * @param object $item The Subscription or Order object.
+	 * @return bool
+	 */
+	private static function is_complimentary( $item ): bool {
+		return class_exists( 'Newspack\Complimentary_Access' ) && \Newspack\Complimentary_Access::is_complimentary_order( $item );
+	}
+
+	/**
+	 * The events that resend restamped subscriptions and their orders.
+	 *
+	 * Flagging or unflagging a product restamps its subscriptions and their orders without
+	 * changing a status, and the hub otherwise only hears of them on a status change. Each
+	 * event reports the current status as both before and after.
+	 *
+	 * @param int[] $subscription_ids Restamped subscription IDs.
+	 * @return array[] Each with the action name and the event data.
+	 */
+	public static function get_restamp_events( array $subscription_ids ): array {
+		$events = [];
+		foreach ( $subscription_ids as $subscription_id ) {
+			$subscription = wcs_get_subscription( $subscription_id );
+			if ( ! $subscription ) {
+				continue;
+			}
+			$status   = $subscription->get_status();
+			$events[] = [
+				'action' => 'newspack_node_subscription_changed',
+				'data'   => self::subscription_changed( $subscription->get_id(), $status, $status, $subscription ),
+			];
+			foreach ( $subscription->get_related_orders( 'ids', 'any' ) as $order_id ) {
+				$order = wc_get_order( $order_id );
+				if ( ! $order ) {
+					continue;
+				}
+				$status   = $order->get_status();
+				$events[] = [
+					'action' => 'newspack_node_order_changed',
+					'data'   => self::item_changed( $order->get_id(), $status, $status, $order ),
+				];
+			}
+		}
+		return $events;
+	}
+
+	/**
+	 * Sends restamped subscriptions and their orders to the network.
+	 *
+	 * @param int[] $subscription_ids Restamped subscription IDs.
+	 * @return void
+	 */
+	public static function push_restamped( $subscription_ids ): void {
+		if ( ! function_exists( 'wcs_get_subscription' ) ) {
+			return;
+		}
+		foreach ( self::get_restamp_events( (array) $subscription_ids ) as $event ) {
+			Data_Events::dispatch( $event['action'], $event['data'] );
+		}
+		// One queue run can process many batches before shutdown; send each batch on its
+		// own so a large restamp doesn't become one oversized scheduled action.
+		Data_Events::execute_queued_dispatches();
 	}
 
 	/**
@@ -107,6 +178,7 @@ class Events {
 			'total'                     => wc_format_decimal( $item->get_total(), 2 ),
 			'payment_method_title'      => $item->get_payment_method_title(),
 			'date_created'              => wc_rest_prepare_date_response( $item->get_date_created() ),
+			'is_complimentary'          => self::is_complimentary( $item ),
 		];
 		$user   = $item->get_user();
 		if ( $user ) {

@@ -87,6 +87,8 @@ class Complimentary_Access {
 		add_filter( 'woocommerce_variation_is_visible', [ __CLASS__, 'filter_variation_is_visible' ], 10, 4 );
 		add_filter( 'woocommerce_get_children', [ __CLASS__, 'filter_visible_children' ], 10, 3 );
 		add_filter( 'woocommerce_can_subscription_be_updated_to_cancelled', [ __CLASS__, 'filter_reader_can_cancel' ], 10, 2 );
+		add_filter( 'wp_sitemaps_posts_query_args', [ __CLASS__, 'filter_sitemap_query_args' ], 10, 2 );
+		add_filter( 'wpseo_exclude_from_sitemap_by_post_ids', [ __CLASS__, 'filter_yoast_sitemap_post_ids' ] );
 
 		add_action( 'woocommerce_before_subscription_object_save', [ __CLASS__, 'stamp' ] );
 		add_action( 'woocommerce_before_order_object_save', [ __CLASS__, 'stamp' ] );
@@ -274,6 +276,87 @@ class Complimentary_Access {
 			return $children;
 		}
 		return array_values( array_filter( $children, fn( $child_id ) => ! self::is_complimentary_product( $child_id ) ) );
+	}
+
+	/**
+	 * Products whose page sells nothing but complimentary access, to leave out of sitemaps.
+	 *
+	 * A flagged product qualifies, and so does a variable product once every variation is
+	 * flagged. One paid variation keeps the page listed. Search engines would otherwise
+	 * send readers to a page offering a product they can't buy.
+	 *
+	 * Cached until the next post or post meta change, since each sitemap page asks again.
+	 *
+	 * @return int[]
+	 */
+	public static function get_sitemap_excluded_product_ids(): array {
+		$cache_key    = 'sitemap_excluded_product_ids:' . wp_cache_get_last_changed( 'posts' );
+		$excluded_ids = wp_cache_get( $cache_key, 'newspack' );
+		if ( is_array( $excluded_ids ) ) {
+			return $excluded_ids;
+		}
+
+		global $wpdb;
+		$flagged_ids = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Cached above.
+			$wpdb->prepare(
+				"SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+				WHERE pm.meta_key = %s AND pm.meta_value IN ( 'yes', 'true', '1' ) AND p.post_type IN ( 'product', 'product_variation' )",
+				self::META_KEY
+			)
+		);
+
+		$excluded_ids                   = [];
+		$flagged_variation_ids_by_parent = [];
+		foreach ( $flagged_ids as $flagged_id ) {
+			$product = wc_get_product( (int) $flagged_id );
+			if ( ! $product || ! self::is_complimentary_product( $product ) ) {
+				continue;
+			}
+			if ( $product->get_parent_id() ) {
+				$flagged_variation_ids_by_parent[ $product->get_parent_id() ][] = $product->get_id();
+			} else {
+				$excluded_ids[] = $product->get_id();
+			}
+		}
+		foreach ( $flagged_variation_ids_by_parent as $parent_id => $flagged_variation_ids ) {
+			$parent = wc_get_product( $parent_id );
+			if ( $parent && ! array_diff( $parent->get_children(), $flagged_variation_ids ) ) {
+				$excluded_ids[] = $parent_id;
+			}
+		}
+
+		wp_cache_set( $cache_key, $excluded_ids, 'newspack' );
+		return $excluded_ids;
+	}
+
+	/**
+	 * Leave comp-only products out of the WordPress core product sitemap.
+	 *
+	 * @param array  $args      WP_Query arguments.
+	 * @param string $post_type Post type of the sitemap.
+	 *
+	 * @return array
+	 */
+	public static function filter_sitemap_query_args( $args, $post_type ) {
+		if ( 'product' !== $post_type ) {
+			return $args;
+		}
+		$excluded_ids = self::get_sitemap_excluded_product_ids();
+		if ( $excluded_ids ) {
+			$args['post__not_in'] = array_merge( $args['post__not_in'] ?? [], $excluded_ids ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in -- A handful of IDs.
+		}
+		return $args;
+	}
+
+	/**
+	 * Leave comp-only products out of the Yoast SEO sitemap.
+	 *
+	 * @param int[] $excluded_ids Post IDs already excluded.
+	 *
+	 * @return int[]
+	 */
+	public static function filter_yoast_sitemap_post_ids( $excluded_ids ) {
+		return array_merge( is_array( $excluded_ids ) ? $excluded_ids : [], self::get_sitemap_excluded_product_ids() );
 	}
 
 	/**

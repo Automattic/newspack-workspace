@@ -13,7 +13,6 @@ type NewspackThemes = `newspack-${ ThemeNames }`;
  */
 interface Etc {
 	post_count: string;
-	has_pwa_plugin?: boolean;
 }
 
 /**
@@ -33,6 +32,13 @@ type HomepagePattern = {
 	content: string;
 	image: string;
 };
+
+/**
+ * A logo theme mod: an empty string when unset, an attachment object once a
+ * logo is selected (via ImageUpload) or loaded from the server, or null when
+ * the upload is cleared.
+ */
+type ThemeModLogo = string | { id?: number; url?: string; width?: number; height?: number; [ key: string ]: unknown } | null;
 
 /**
  * Theme and Brand.
@@ -58,7 +64,7 @@ interface ThemeAndBrand {
 	header_simplified: boolean;
 	header_solid_background: boolean;
 	header_color_hex: string;
-	custom_logo: string;
+	custom_logo: ThemeModLogo;
 	logo_size: number;
 	header_text: boolean;
 	header_display_tagline: boolean;
@@ -67,7 +73,7 @@ interface ThemeAndBrand {
 	footer_copyright: string;
 	footer_color: string;
 	footer_color_hex: string;
-	newspack_footer_logo: string;
+	newspack_footer_logo: ThemeModLogo;
 	footer_logo_size: string;
 
 	// Homepage pattern.
@@ -132,7 +138,7 @@ interface AdvancedSettings {
 	post_updated_date: boolean;
 	post_updated_date_threshold: number;
 
-	// PWA Display Mode.
+	// Web app display mode.
 	pwa_display_mode: string;
 
 	// Post content fallback image.

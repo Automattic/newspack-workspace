@@ -10,12 +10,12 @@ import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { ExternalLink, SelectControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components';
+import { ExternalLink, SelectControl, __experimentalHStack as HStack } from '@wordpress/components';
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Grid, Notice, SectionHeader } from '../../../../../../../packages/components/src';
+import { Button, Card, Notice, SplitSection } from '../../../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../../../wizards-tab';
 import WizardSection from '../../../../../wizards-section';
@@ -61,16 +61,15 @@ function AdvancedSettings() {
 	return (
 		<WizardsTab>
 			<WizardSection>
-				<Grid columns={ 2 } gutter={ 32 }>
-					<SectionHeader
-						heading={ 2 }
+				<SplitSection.Root>
+					<SplitSection.Header
 						title={ __( 'Subscription Upgrade Link', 'newspack-plugin' ) }
 						description={ __(
 							'Select a grouped or variable subscription product to allow readers to change their active subscriptions amongst all of its linked products and variations.',
 							'newspack-plugin'
 						) }
 					/>
-					<VStack spacing={ 4 } justify="flex-start">
+					<SplitSection.Content>
 						<SelectControl
 							label={ __( 'Primary Subscription Product', 'newspack-plugin' ) }
 							hideLabelFromVision
@@ -91,7 +90,7 @@ function AdvancedSettings() {
 							__nextHasNoMarginBottom
 						/>
 						{ saved && (
-							<Notice isDismissible={ false }>
+							<Notice>
 								{ __( 'Share the following URL to trigger the subscription upgrade:', 'newspack-plugin' ) }{ ' ' }
 								<a href={ window.newspackAudienceSubscriptions.upgrade_subscription_url } target="_blank" rel="noreferrer noopener">
 									{ window.newspackAudienceSubscriptions.upgrade_subscription_url }
@@ -118,8 +117,8 @@ function AdvancedSettings() {
 								</p>
 							</HStack>
 						) : null }
-					</VStack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 				{ /* Only meaningful while Memberships is still installed; a migrated site has no such screen. */ }
 				{ window.newspackAudienceSubscriptions.memberships_active && (
 					<Card>

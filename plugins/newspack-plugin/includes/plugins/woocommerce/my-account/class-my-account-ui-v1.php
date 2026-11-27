@@ -59,6 +59,7 @@ class My_Account_UI_V1 {
 		\add_action( 'woocommerce_my_account_my_orders_column_order-status', [ __CLASS__, 'render_order_status_column' ] );
 		\add_action( 'woocommerce_my_account_my_orders_column_order-number', [ __CLASS__, 'render_order_number_column' ] );
 		\add_filter( 'woocommerce_account_orders_columns', [ __CLASS__, 'orders_columns' ] );
+		\add_action( 'woocommerce_account_content', [ __CLASS__, 'cancel_order_modal' ], 20 );
 	}
 
 	/**
@@ -432,6 +433,31 @@ class My_Account_UI_V1 {
 	}
 
 	/**
+	 * Whether the reader is the customer on a subscription that is active or set to
+	 * cancel at the end of its term.
+	 *
+	 * A gift stays its buyer's subscription, so a buyer counts here. A group member
+	 * or a gift's recipient does not, because neither is billed for it.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return bool
+	 */
+	private static function pays_for_subscription( int $user_id ): bool {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return false;
+		}
+		$subscriptions = \wcs_get_subscriptions(
+			[
+				'customer_id'            => $user_id,
+				'subscription_status'    => WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES,
+				'subscriptions_per_page' => 1,
+			]
+		);
+		return ! empty( $subscriptions );
+	}
+
+	/**
 	 * Display a series of modals to request account deletion.
 	 */
 	public static function delete_account_modal() {
@@ -448,17 +474,19 @@ class My_Account_UI_V1 {
 			return self::delete_account_confirmation_modal();
 		}
 
-		$active_subscriptions = Reader_Data::get_data( $user->ID, 'active_subscriptions' );
-		if ( is_string( $active_subscriptions ) ) {
-			$active_subscriptions = json_decode( $active_subscriptions );
-		}
+		// Warn about what the reader pays for, not the `active_subscriptions` item, which
+		// lists what they hold. A gift's buyer pays for it but holds nothing, so their
+		// item is empty. Deleting their account still changes the gift, because
+		// WooCommerce Subscriptions removes its recipient. A group member holds a
+		// product but pays for none.
+		$pays_for_subscription    = self::pays_for_subscription( $user->ID );
 		$active_donations         = Reader_Data::get_bool( $user->ID, 'is_donor' );
 		$newsletter_subscriptions = Reader_Data::get_data( $user->ID, 'newsletter_subscribed_lists' );
 		if ( is_string( $newsletter_subscriptions ) ) {
 			$newsletter_subscriptions = json_decode( $newsletter_subscriptions );
 		}
 
-		$has_alternatives = ! empty( $active_subscriptions ) || ! empty( $newsletter_subscriptions ) || $active_donations;
+		$has_alternatives = $pays_for_subscription || ! empty( $newsletter_subscriptions ) || $active_donations;
 
 		ob_start();
 		?>
@@ -475,7 +503,7 @@ class My_Account_UI_V1 {
 		</p>
 		<?php
 		$alternative_rows = [];
-		if ( ! empty( $active_subscriptions ) || $active_donations ) {
+		if ( $pays_for_subscription || $active_donations ) {
 			$alternative_rows[] = [
 				'title'       => __( 'Subscriptions', 'newspack-plugin' ),
 				'description' => __( 'Review and cancel active subscriptions.', 'newspack-plugin' ),
@@ -1346,7 +1374,7 @@ class My_Account_UI_V1 {
 			false,
 			[
 				'order'   => $order,
-				'actions' => array_diff_key( \wc_get_account_orders_actions( $order ), [ 'view' => true ] ),
+				'actions' => self::get_order_actions( $order ),
 			]
 		);
 		return true;
@@ -1600,6 +1628,53 @@ class My_Account_UI_V1 {
 			<?php Newspack_UI_Icons::print_svg( 'chevronRight' ); ?>
 		</a>
 		<?php
+	}
+
+	/**
+	 * An order's actions for the order page header, as plugins have filtered them, without
+	 * View, which would link to the page itself. Cancel reads "Cancel order" and comes last.
+	 *
+	 * @param \WC_Order $order The order.
+	 * @return array[] Actions keyed by slug, each with a `url` and a `name`.
+	 */
+	public static function get_order_actions( $order ): array {
+		$actions = array_diff_key( \wc_get_account_orders_actions( $order ), [ 'view' => true ] );
+		if ( ! empty( $actions['cancel'] ) ) {
+			$cancel_action         = $actions['cancel'];
+			$cancel_action['name'] = __( 'Cancel order', 'newspack-plugin' );
+			unset( $actions['cancel'] );
+			$actions['cancel'] = $cancel_action;
+		}
+		return $actions;
+	}
+
+	/**
+	 * Render the modal that confirms cancelling an order on the order page. Its confirm
+	 * button gets the "Cancel order" link's URL from the my-account script.
+	 */
+	public static function cancel_order_modal(): void {
+		if ( ! \is_user_logged_in() || 'view-order' !== \WC()->query->get_current_endpoint() ) {
+			return;
+		}
+		Newspack_UI::generate_modal(
+			[
+				'id'      => 'confirm-order-cancellation',
+				'title'   => __( 'Cancel order', 'newspack-plugin' ),
+				'content' => '<p>' . \esc_html__( 'The order will be cancelled and can no longer be paid. This cannot be undone.', 'newspack-plugin' ) . '</p>',
+				'actions' => [
+					'confirm' => [
+						'label' => __( 'Cancel order', 'newspack-plugin' ),
+						'type'  => 'destructive',
+						'url'   => '#',
+					],
+					'cancel'  => [
+						'label'  => __( 'Keep order', 'newspack-plugin' ),
+						'type'   => 'outline',
+						'action' => 'close',
+					],
+				],
+			]
+		);
 	}
 
 	/**

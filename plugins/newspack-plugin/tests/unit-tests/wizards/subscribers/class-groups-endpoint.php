@@ -131,6 +131,24 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Blank a user's display name in the users table, the way an imported
+	 * customer arrives. wp_insert_user() would fill a blank one from the login.
+	 *
+	 * @param int         $user_id      The user ID.
+	 * @param string      $display_name The stored display name: empty or whitespace.
+	 * @param string|null $email        The stored email, when it changes too.
+	 */
+	private function set_stored_identity( int $user_id, string $display_name, ?string $email = null ): void {
+		global $wpdb;
+		$fields = [ 'display_name' => $display_name ];
+		if ( null !== $email ) {
+			$fields['user_email'] = $email;
+		}
+		$wpdb->update( $wpdb->users, $fields, [ 'ID' => $user_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users
+		clean_user_cache( $user_id );
+	}
+
+	/**
 	 * Dispatch the groups endpoint as the current user.
 	 *
 	 * @param array $params Query parameters.
@@ -411,6 +429,41 @@ class Test_Subscribers_Wizard_Groups_Endpoint extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( [ $alpha->get_id(), $bravo->get_id(), $charlie->get_id() ], $this->group_ids( $response ) );
+	}
+
+	/**
+	 * An owner with a blank display name goes by their email, else their username,
+	 * and sorts and searches by that same name, so the list never shows an empty owner.
+	 */
+	public function test_owner_without_display_name_goes_by_email_then_username() {
+		wp_set_current_user( $this->create_reader_user( 'administrator' ) );
+
+		$named_owner = $this->create_reader_user();
+		$this->set_stored_identity( $named_owner, 'Mike Named' );
+		$spaced_owner = $this->create_reader_user();
+		// Sorts last by its email; as a raw display name, ' ' would sort first.
+		$this->set_stored_identity( $spaced_owner, ' ', 'zoe@example.test' );
+		$bare_owner = $this->create_reader_user();
+		$this->set_stored_identity( $bare_owner, '', '' );
+
+		$named  = $this->create_group_subscription( $named_owner, 3 );
+		$spaced = $this->create_group_subscription( $spaced_owner, 3 );
+		$bare   = $this->create_group_subscription( $bare_owner, 3 );
+
+		$items = $this->dispatch(
+			[
+				'orderby' => 'owner',
+				'order'   => 'asc',
+			]
+		)->get_data()['items'];
+
+		// The bare owner goes by their `reader-…` login, between the two.
+		$this->assertSame( [ $named->get_id(), $bare->get_id(), $spaced->get_id() ], array_column( $items, 'id' ) );
+		$this->assertSame(
+			[ 'Mike Named', get_userdata( $bare_owner )->user_login, 'zoe@example.test' ],
+			array_column( array_column( $items, 'owner' ), 'name' )
+		);
+		$this->assertSame( [ $bare->get_id() ], $this->group_ids( $this->dispatch( [ 'search' => get_userdata( $bare_owner )->user_login ] ) ) );
 	}
 
 	/**

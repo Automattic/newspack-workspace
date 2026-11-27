@@ -15,17 +15,7 @@ import { Stack } from '@wordpress/ui';
 /**
  * Internal dependencies.
  */
-import {
-	Router,
-	Divider,
-	Grid,
-	Button,
-	SectionHeader,
-	TextControl,
-	ImageUpload,
-	ColorPicker,
-	hooks,
-} from '../../../../../../packages/components/src';
+import { Router, Divider, SplitSection, Button, TextControl, ImageUpload, ColorPicker, hooks } from '../../../../../../packages/components/src';
 
 import { useErrorNoticeFocus } from '../../../../hooks/use-error-notice-focus';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/src/wizard/store';
@@ -57,7 +47,7 @@ export default function Brand( {
 	errorMessage?: string | null;
 	isFetching?: boolean;
 } ) {
-	const { brandId = '0' } = useParams();
+	const { brandId = '0' } = useParams< { brandId?: string } >();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
 
 	const {
@@ -208,7 +198,7 @@ export default function Brand( {
 		} );
 	}, [ isFetching, isBrandValid, setHeaderData ] );
 
-	const baseUrl = `${ window.newspack_urls.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
+	const baseUrl = `${ window.newspack_urls?.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
 
 	function findSelectedMenu( location: string ) {
 		return brand.meta._menus.find( menu => menu.location === location )?.menu || 0;
@@ -227,14 +217,9 @@ export default function Brand( {
 					</Notice>
 				</div>
 			) }
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
-					noMargin
-					title={ __( 'Brand', 'newspack-plugin' ) }
-					description={ __( 'Set your brand identity', 'newspack-plugin' ) }
-				/>
-				<Stack direction="column" gap="lg">
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'Brand', 'newspack-plugin' ) } description={ __( 'Set your brand identity', 'newspack-plugin' ) } />
+				<SplitSection.Content>
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ brand.name || '' }
@@ -251,23 +236,21 @@ export default function Brand( {
 						label={ __( 'Logo', 'newspack-plugin' ) }
 						image={ isFetchingLogo() ? undefined : brand.meta._logo }
 						withMargin={ false }
-						onChange={ ( logoId: number ) =>
+						onChange={ attachment =>
 							updateBrand( {
-								meta: { ...brand.meta, _logo: logoId },
+								meta: { ...brand.meta, _logo: attachment },
 							} )
 						}
 					/>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			{ /* Theme Colors Section */ }
 			{ registeredThemeColors && (
 				<Fragment>
 					<Divider alignment="full-width" variant="tertiary" />
-					<Grid columns={ 2 } gutter={ 32 } noMargin>
-						<SectionHeader
-							heading={ 2 }
-							noMargin
+					<SplitSection.Root>
+						<SplitSection.Header
 							title={ __( 'Colors', 'newspack-plugin' ) }
 							description={
 								isBlockTheme
@@ -275,44 +258,44 @@ export default function Brand( {
 									: __( 'Change any of the theme’s colors for this brand.', 'newspack-plugin' )
 							}
 						/>
-						{ isBlockTheme ? (
-							<BlockThemeColors brand={ brand } themeColors={ registeredThemeColors } updateMeta={ updateMeta } />
-						) : (
-							<Stack direction="column" gap="lg">
-								{ registeredThemeColors.map( color => (
-									<ColorPicker
-										key={ color.theme_mod_name }
-										className="newspack-brand__theme-mod-color-picker"
-										label={
-											<Fragment>
-												<span>{ color.label }</span>
-												{ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color && (
-													<Button variant="link" onClick={ () => updateThemeColor( color.theme_mod_name, '' ) }>
-														{ __( 'Reset default color', 'newspack-plugin' ) }
-													</Button>
-												) }
-											</Fragment>
-										}
-										color={ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color ?? color.default }
-										onChange={ ( newColor: string ) => updateThemeColor( color.theme_mod_name, newColor ) }
-									/>
-								) ) }
-							</Stack>
-						) }
-					</Grid>
+						<SplitSection.Content>
+							{ isBlockTheme ? (
+								<BlockThemeColors brand={ brand } themeColors={ registeredThemeColors } updateMeta={ updateMeta } />
+							) : (
+								<>
+									{ registeredThemeColors.map( color => (
+										<ColorPicker
+											key={ color.theme_mod_name }
+											className="newspack-brand__theme-mod-color-picker"
+											label={
+												<Fragment>
+													<span>{ color.label }</span>
+													{ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color && (
+														<Button variant="link" onClick={ () => updateThemeColor( color.theme_mod_name, '' ) }>
+															{ __( 'Reset default color', 'newspack-plugin' ) }
+														</Button>
+													) }
+												</Fragment>
+											}
+											color={ brandThemeColors.find( c => c.name === color.theme_mod_name )?.color ?? color.default }
+											onChange={ ( newColor: string ) => updateThemeColor( color.theme_mod_name, newColor ) }
+										/>
+									) ) }
+								</>
+							) }
+						</SplitSection.Content>
+					</SplitSection.Root>
 				</Fragment>
 			) }
 
 			{ /* URL and front page settings */ }
 			<Divider alignment="full-width" variant="tertiary" />
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
-					heading={ 2 }
-					noMargin
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Settings', 'newspack-plugin' ) }
 					description={ __( 'Where the brand lives on the site, and what its URL shows.', 'newspack-plugin' ) }
 				/>
-				<Stack direction="column" gap="xl">
+				<SplitSection.Content>
 					<Stack direction="column" gap="md">
 						<RadioControl
 							label={ __( 'URL Base', 'newspack-plugin' ) }
@@ -401,8 +384,8 @@ export default function Brand( {
 							/>
 						) }
 					</Stack>
-				</Stack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			{ /* Menu Settings */ }
 			<Divider alignment="full-width" variant="tertiary" />
@@ -413,14 +396,12 @@ export default function Brand( {
 					<BlockThemeParts brand={ brand } brands={ brands } updateMeta={ updateMeta } wizardApiFetch={ wizardApiFetch } />
 				</Fragment>
 			) : (
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader
-						heading={ 2 }
-						noMargin
+				<SplitSection.Root>
+					<SplitSection.Header
 						title={ __( 'Menus', 'newspack-plugin' ) }
 						description={ __( 'Customize the menus for this brand', 'newspack-plugin' ) }
 					/>
-					<Stack direction="column" gap="lg">
+					<SplitSection.Content>
 						{ menuLocations &&
 							Object.keys( menuLocations ).map( location => (
 								<SelectControl
@@ -442,8 +423,8 @@ export default function Brand( {
 									onChange={ ( menuId: string ) => updateMenus( location, Number( menuId ) ) }
 								/>
 							) ) }
-					</Stack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 			) }
 		</Fragment>
 	);

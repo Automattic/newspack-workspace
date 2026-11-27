@@ -438,6 +438,20 @@
 		}
 	}
 
+	.newspack-ui__segmented-control {
+		container: wpbnbd-segmented-control / inline-size;
+	}
+
+	@container wpbnbd-segmented-control ( width <= 480px ) {
+		.newspack-ui__segmented-control__tabs {
+			align-self: stretch;
+
+			.newspack-ui__button {
+				flex: 1 1 0;
+			}
+		}
+	}
+
 	.frequencies {
 		font-family: inherit;
 		font-size: var(--newspack-ui-font-size-body, 16px);

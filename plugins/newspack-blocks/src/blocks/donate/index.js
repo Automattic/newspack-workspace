@@ -2,7 +2,6 @@
  * Newspack dependencies
  */
 import colors from 'newspack-colors';
-import { gift as icon } from 'newspack-icons';
 
 /**
  * WordPress dependencies
@@ -10,6 +9,7 @@ import { gift as icon } from 'newspack-icons';
 import { ExternalLink } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { registerBlockStyle } from '@wordpress/blocks';
+import { gift as icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies

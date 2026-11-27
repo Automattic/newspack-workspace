@@ -300,3 +300,43 @@ describe( 'the group list query', () => {
 		expect( lastQuery().status ).toBeUndefined();
 	} );
 } );
+
+describe( 'the group list name column', () => {
+	beforeEach( () => {
+		headerCalls = [];
+		apiFetch.mockReset();
+	} );
+
+	const lastQuery = () => getQueryArgs( apiFetch.mock.calls[ apiFetch.mock.calls.length - 1 ][ 0 ].path );
+
+	it( 'shows the group name in its own column, apart from the owner', async () => {
+		apiFetch.mockResolvedValue( page( [ { ...group( 1 ), plan: 'Harbor Desk' } ] ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		const fieldById = id => dataViewsProps.fields.find( field => field.id === id );
+		const item = dataViewsProps.data[ 0 ];
+		expect( fieldById( 'name' ).label ).toBe( 'Group' );
+		expect( dataViewsProps.view.fields ).toContain( 'name' );
+
+		const { container: nameCell } = render( fieldById( 'name' ).render( { item } ) );
+		expect( nameCell.textContent ).toBe( 'Harbor Desk' );
+		const { container: ownerCell } = render( fieldById( 'owner' ).render( { item } ) );
+		expect( ownerCell.textContent ).toBe( 'Owner 1' );
+	} );
+
+	it( 'sorts by group name on the server', async () => {
+		apiFetch.mockResolvedValue( page( [ group( 1 ) ] ) );
+		await act( async () => {
+			render( <GroupList /> );
+		} );
+
+		expect( dataViewsProps.fields.find( field => field.id === 'name' ).enableSorting ).toBe( true );
+		await act( async () => {
+			dataViewsProps.onChangeView( { ...dataViewsProps.view, sort: { field: 'name', direction: 'asc' } } );
+		} );
+		expect( lastQuery().orderby ).toBe( 'name' );
+		expect( lastQuery().order ).toBe( 'asc' );
+	} );
+} );

@@ -445,7 +445,7 @@ class User_Gate_Access {
 	 * @param \WP_User $user The user being viewed.
 	 */
 	public static function render_user_gate_access( $user ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( Capabilities::MANAGE_ACCESS_CONTROL ) ) {
 			return;
 		}
 

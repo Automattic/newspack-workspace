@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Listings plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Listings 3.7.12\n"
+"Project-Id-Version: Newspack Listings 3.7.14\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-listings\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-28T17:15:41+00:00\n"
+"POT-Creation-Date: 2026-11-23T14:31:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-listings\n"
@@ -112,252 +112,252 @@ msgstr ""
 msgid "United States (US) dollar"
 msgstr ""
 
-#: includes/class-core.php:116
+#: includes/class-core.php:174
 #: includes/class-settings.php:335
 msgid "Newspack Listings: Site-Wide Settings"
 msgstr ""
 
-#: includes/class-core.php:117
+#: includes/class-core.php:175
 msgid "Settings"
 msgstr ""
 
-#: includes/class-core.php:163
+#: includes/class-core.php:221
 msgctxt "post type general name"
 msgid "Events"
 msgstr ""
 
-#: includes/class-core.php:164
+#: includes/class-core.php:222
 msgctxt "post type singular name"
 msgid "Event"
 msgstr ""
 
-#: includes/class-core.php:165
+#: includes/class-core.php:223
 msgctxt "admin menu"
 msgid "Events"
 msgstr ""
 
-#: includes/class-core.php:166
+#: includes/class-core.php:224
 msgctxt "add new on admin bar"
 msgid "Event"
 msgstr ""
 
-#: includes/class-core.php:167
-#: includes/class-core.php:188
-#: includes/class-core.php:207
-#: includes/class-core.php:226
+#: includes/class-core.php:225
+#: includes/class-core.php:246
+#: includes/class-core.php:265
+#: includes/class-core.php:284
 msgctxt "popup"
 msgid "Add New"
 msgstr ""
 
-#: includes/class-core.php:168
+#: includes/class-core.php:226
 msgid "Add New Event"
 msgstr ""
 
-#: includes/class-core.php:169
+#: includes/class-core.php:227
 msgid "New Event"
 msgstr ""
 
-#: includes/class-core.php:170
+#: includes/class-core.php:228
 msgid "Edit Event"
 msgstr ""
 
-#: includes/class-core.php:171
+#: includes/class-core.php:229
 msgid "View Event"
 msgstr ""
 
-#: includes/class-core.php:172
+#: includes/class-core.php:230
 msgid "Events"
 msgstr ""
 
-#: includes/class-core.php:173
+#: includes/class-core.php:231
 msgid "Search Events"
 msgstr ""
 
-#: includes/class-core.php:174
+#: includes/class-core.php:232
 msgid "Parent Event:"
 msgstr ""
 
-#: includes/class-core.php:175
+#: includes/class-core.php:233
 msgid "No events found."
 msgstr ""
 
-#: includes/class-core.php:176
+#: includes/class-core.php:234
 msgid "No events found in Trash."
 msgstr ""
 
-#: includes/class-core.php:184
+#: includes/class-core.php:242
 msgctxt "post type general name"
 msgid "Marketplace"
 msgstr ""
 
-#: includes/class-core.php:185
+#: includes/class-core.php:243
 msgctxt "post type singular name"
 msgid "Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:186
+#: includes/class-core.php:244
 msgctxt "admin menu"
 msgid "Marketplace Listings"
 msgstr ""
 
-#: includes/class-core.php:187
+#: includes/class-core.php:245
 msgctxt "add new on admin bar"
 msgid "Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:189
+#: includes/class-core.php:247
 msgid "Add New Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:190
+#: includes/class-core.php:248
 msgid "New Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:191
+#: includes/class-core.php:249
 msgid "Edit Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:192
+#: includes/class-core.php:250
 msgid "View Marketplace Listing"
 msgstr ""
 
-#: includes/class-core.php:193
+#: includes/class-core.php:251
 msgid "Marketplace Listings"
 msgstr ""
 
-#: includes/class-core.php:194
+#: includes/class-core.php:252
 msgid "Search Marketplace Listings"
 msgstr ""
 
-#: includes/class-core.php:195
+#: includes/class-core.php:253
 msgid "Parent Marketplace Listing:"
 msgstr ""
 
-#: includes/class-core.php:196
+#: includes/class-core.php:254
 msgid "No Marketplace listings found."
 msgstr ""
 
-#: includes/class-core.php:197
+#: includes/class-core.php:255
 msgid "No Marketplace listings found in Trash."
 msgstr ""
 
-#: includes/class-core.php:203
+#: includes/class-core.php:261
 msgctxt "post type general name"
 msgid "Generic Listings"
 msgstr ""
 
-#: includes/class-core.php:204
+#: includes/class-core.php:262
 msgctxt "post type singular name"
 msgid "Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:205
+#: includes/class-core.php:263
 msgctxt "admin menu"
 msgid "Generic Listings"
 msgstr ""
 
-#: includes/class-core.php:206
+#: includes/class-core.php:264
 msgctxt "add new on admin bar"
 msgid "Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:208
+#: includes/class-core.php:266
 msgid "Add New Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:209
+#: includes/class-core.php:267
 msgid "New Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:210
+#: includes/class-core.php:268
 msgid "Edit Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:211
+#: includes/class-core.php:269
 msgid "View Generic Listing"
 msgstr ""
 
-#: includes/class-core.php:212
+#: includes/class-core.php:270
 msgid "Generic Listings"
 msgstr ""
 
-#: includes/class-core.php:213
+#: includes/class-core.php:271
 msgid "Search Generic Listings"
 msgstr ""
 
-#: includes/class-core.php:214
+#: includes/class-core.php:272
 msgid "Parent Generic Listing:"
 msgstr ""
 
-#: includes/class-core.php:215
+#: includes/class-core.php:273
 msgid "No generic listings found."
 msgstr ""
 
-#: includes/class-core.php:216
+#: includes/class-core.php:274
 msgid "No generic listings found in Trash."
 msgstr ""
 
-#: includes/class-core.php:222
+#: includes/class-core.php:280
 msgctxt "post type general name"
 msgid "Places"
 msgstr ""
 
-#: includes/class-core.php:223
+#: includes/class-core.php:281
 msgctxt "post type singular name"
 msgid "Place"
 msgstr ""
 
-#: includes/class-core.php:224
+#: includes/class-core.php:282
 msgctxt "admin menu"
 msgid "Places"
 msgstr ""
 
-#: includes/class-core.php:225
+#: includes/class-core.php:283
 msgctxt "add new on admin bar"
 msgid "Place"
 msgstr ""
 
-#: includes/class-core.php:227
+#: includes/class-core.php:285
 msgid "Add New Place"
 msgstr ""
 
-#: includes/class-core.php:228
+#: includes/class-core.php:286
 msgid "New Place"
 msgstr ""
 
-#: includes/class-core.php:229
+#: includes/class-core.php:287
 msgid "Edit Place"
 msgstr ""
 
-#: includes/class-core.php:230
+#: includes/class-core.php:288
 msgid "View Place"
 msgstr ""
 
-#: includes/class-core.php:231
+#: includes/class-core.php:289
 msgid "Places"
 msgstr ""
 
-#: includes/class-core.php:232
+#: includes/class-core.php:290
 msgid "Search Places"
 msgstr ""
 
-#: includes/class-core.php:233
+#: includes/class-core.php:291
 msgid "Parent Place:"
 msgstr ""
 
-#: includes/class-core.php:234
+#: includes/class-core.php:292
 msgid "No places found."
 msgstr ""
 
-#: includes/class-core.php:235
+#: includes/class-core.php:293
 msgid "No places found in Trash."
 msgstr ""
 
-#: includes/class-core.php:283
+#: includes/class-core.php:341
 msgid "Template"
 msgstr ""
 
-#: includes/class-core.php:301
+#: includes/class-core.php:359
 #: dist/editor.js:10
 #: dist/editor.js:36
 #: src/editor/featured-listings/index.js:126
@@ -365,108 +365,108 @@ msgstr ""
 msgid "Expiration Date"
 msgstr ""
 
-#: includes/class-core.php:319
+#: includes/class-core.php:377
 msgid "Contact email address"
 msgstr ""
 
-#: includes/class-core.php:327
+#: includes/class-core.php:385
 msgid "Email address to contact for this listing."
 msgstr ""
 
-#: includes/class-core.php:342
+#: includes/class-core.php:400
 msgid "Contact phone number"
 msgstr ""
 
-#: includes/class-core.php:350
+#: includes/class-core.php:408
 msgid "Phone number to contact for this listing."
 msgstr ""
 
-#: includes/class-core.php:372
+#: includes/class-core.php:430
 msgid "Contact Address"
 msgstr ""
 
-#: includes/class-core.php:377
+#: includes/class-core.php:435
 msgid "Contact address for this listing."
 msgstr ""
 
-#: includes/class-core.php:390
+#: includes/class-core.php:448
 msgid "Hours of Operation"
 msgstr ""
 
-#: includes/class-core.php:398
+#: includes/class-core.php:456
 msgid "Hours of operation for this listing."
 msgstr ""
 
-#: includes/class-core.php:412
+#: includes/class-core.php:470
 msgid "Locations"
 msgstr ""
 
-#: includes/class-core.php:420
+#: includes/class-core.php:478
 msgid "Geolocation data for this listing."
 msgstr ""
 
-#: includes/class-core.php:432
+#: includes/class-core.php:490
 msgid "Event dates"
 msgstr ""
 
-#: includes/class-core.php:441
+#: includes/class-core.php:499
 msgid "Start date for this event."
 msgstr ""
 
-#: includes/class-core.php:453
+#: includes/class-core.php:511
 #: dist/editor.js:45
 #: src/blocks/price/edit.js:71
 #: src/blocks/price/index.js:18
 msgid "Price"
 msgstr ""
 
-#: includes/class-core.php:462
+#: includes/class-core.php:520
 msgid "Price for this listing."
 msgstr ""
 
-#: includes/class-core.php:477
+#: includes/class-core.php:535
 #: dist/editor.js:4
 #: src/editor/sidebar/index.js:56
 msgid "Hide listing author"
 msgstr ""
 
-#: includes/class-core.php:481
+#: includes/class-core.php:539
 msgid "Hide author byline and bio for this listing"
 msgstr ""
 
-#: includes/class-core.php:496
-#: includes/class-core.php:500
+#: includes/class-core.php:554
+#: includes/class-core.php:558
 msgid "Images associated with this listing."
 msgstr ""
 
-#: includes/class-core.php:515
+#: includes/class-core.php:573
 #: dist/editor.js:7
 #: src/editor/sidebar/index.js:69
 msgid "Hide publish date"
 msgstr ""
 
-#: includes/class-core.php:519
+#: includes/class-core.php:577
 msgid "Hide publish and updated dates for this listing"
 msgstr ""
 
-#: includes/class-core.php:536
+#: includes/class-core.php:594
 msgid "Hide parent listings"
 msgstr ""
 
-#: includes/class-core.php:540
+#: includes/class-core.php:598
 msgid "Hide parent listings assigned to this post"
 msgstr ""
 
-#: includes/class-core.php:557
+#: includes/class-core.php:615
 msgid "Hide child listings"
 msgstr ""
 
-#: includes/class-core.php:561
+#: includes/class-core.php:619
 msgid "Hide child listings assigned to this post"
 msgstr ""
 
 #. Translators: error message logged when we're unable to expire a listing via cron job.
-#: includes/class-core.php:975
+#: includes/class-core.php:1033
 #: includes/products/class-products-cron.php:132
 #, php-format
 msgid "Newspack Listings: Error expiring listing with ID %d."
@@ -976,15 +976,15 @@ msgstr ""
 msgid "$callback must be callable."
 msgstr ""
 
-#: src/blocks/curated-list/view.php:202
+#: src/blocks/curated-list/view.php:215
 msgid "Load more listings"
 msgstr ""
 
-#: src/blocks/curated-list/view.php:207
+#: src/blocks/curated-list/view.php:220
 msgid "Loading..."
 msgstr ""
 
-#: src/blocks/curated-list/view.php:210
+#: src/blocks/curated-list/view.php:223
 msgid "Something went wrong. Please refresh the page and/or try again."
 msgstr ""
 

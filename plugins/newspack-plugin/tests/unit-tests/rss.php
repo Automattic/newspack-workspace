@@ -1214,4 +1214,116 @@ class Newspack_Test_RSS extends WP_UnitTestCase {
 		$this->assertSame( 1, $after_action->get_call_count(), 'Expected after extra tags action to fire once.' );
 		$this->assertStringContainsString( 'url="' . esc_url( $media_url ) . '"', $output, 'Expected media URL to be in output.' );
 	}
+
+	/**
+	 * Request a URL carrying the partner-feed arg. go_to() runs WP::main(),
+	 * which applies `wp_headers` where core would exit with a 304.
+	 *
+	 * @param string $feed_slug Feed slug.
+	 * @param bool   $is_feed   Whether to request the feed, or a regular page.
+	 * @param int    $user_id   Requesting user, signed out by default.
+	 */
+	private function fetch_feed( $feed_slug, $is_feed = true, $user_id = 0 ) {
+		wp_set_current_user( $user_id );
+		// The module was inactive when the plugin loaded; WP_UnitTestCase restores hooks after each test.
+		RSS::init();
+		RSS::register_feed_cpt();
+		$_GET['partner-feed'] = $feed_slug;
+		$query_args           = [ 'partner-feed' => $feed_slug ];
+		if ( $is_feed ) {
+			$query_args['feed'] = 'rss2';
+		}
+		$this->go_to( add_query_arg( $query_args, home_url( '/' ) ) );
+		unset( $_GET['partner-feed'] );
+	}
+
+	/**
+	 * Store a feed's last recorded fetch as a number of hours ago.
+	 *
+	 * @param int $hours_ago Hours ago.
+	 */
+	private function set_last_fetched_hours_ago( $hours_ago ) {
+		update_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, time() - $hours_ago * HOUR_IN_SECONDS );
+	}
+
+	/**
+	 * A fetch writes to the database at most once a day per feed.
+	 */
+	public function test_feed_fetch_is_recorded_at_most_once_a_day() {
+		$this->assertSame( RSS::FEED_USAGE_UNKNOWN, RSS::get_feed_usage( $this->feed_post_id )['status'] );
+
+		$this->fetch_feed( 'test-rss-feed' );
+		$first_fetch = (int) get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true );
+		$this->assertEqualsWithDelta( time(), $first_fetch, 5, 'The first fetch is recorded.' );
+
+		$this->set_last_fetched_hours_ago( 23 );
+		$stamp_23_hours_ago = (int) get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true );
+		$this->fetch_feed( 'test-rss-feed' );
+		$this->assertSame( $stamp_23_hours_ago, (int) get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true ), 'A fetch within a day of the last record writes nothing.' );
+
+		$this->set_last_fetched_hours_ago( 25 );
+		$this->fetch_feed( 'test-rss-feed' );
+		$this->assertEqualsWithDelta( time(), (int) get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true ), 5, 'A fetch over a day after the last record refreshes it.' );
+	}
+
+	/**
+	 * Only a real request for a published partner feed counts.
+	 */
+	public function test_feed_fetch_ignores_drafts_and_non_feed_requests() {
+		wp_update_post(
+			[
+				'ID'          => $this->feed_post_id,
+				'post_status' => 'draft',
+			]
+		);
+		$this->fetch_feed( 'test-rss-feed' );
+		$this->assertSame( '', get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true ), 'A draft feed is not recorded.' );
+
+		wp_update_post(
+			[
+				'ID'          => $this->feed_post_id,
+				'post_status' => 'publish',
+			]
+		);
+		$this->fetch_feed( 'test-rss-feed', false );
+		$this->assertSame( '', get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true ), 'A page request carrying the query arg is not a feed fetch.' );
+
+		$this->fetch_feed( 'test-rss-feed', true, $this->factory->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertSame( '', get_post_meta( $this->feed_post_id, RSS::FEED_LAST_FETCHED_META, true ), 'A publisher opening the feed is not a fetch.' );
+	}
+
+	/**
+	 * A feed is in use when its last recorded fetch is under 48 hours old. The
+	 * record refreshes once a day, so a feed fetched daily always qualifies.
+	 */
+	public function test_feed_usage_status() {
+		$this->set_last_fetched_hours_ago( 47 );
+		$this->assertSame( RSS::FEED_USAGE_IN_USE, RSS::get_feed_usage( $this->feed_post_id )['status'] );
+
+		$this->set_last_fetched_hours_ago( 49 );
+		$usage = RSS::get_feed_usage( $this->feed_post_id );
+		$this->assertSame( RSS::FEED_USAGE_NOT_RECENTLY_USED, $usage['status'] );
+		$this->assertEqualsWithDelta( time() - 49 * HOUR_IN_SECONDS, $usage['last_fetched'], 5 );
+	}
+
+	/**
+	 * A feed nobody fetches is unknown until tracking has watched it for the
+	 * whole window, then not in use. Tracking can't predate the feed itself.
+	 */
+	public function test_never_fetched_feed_becomes_not_in_use_after_a_full_window() {
+		update_option( RSS::USAGE_TRACKING_START_OPTION, time() - HOUR_IN_SECONDS );
+		$this->assertSame( RSS::FEED_USAGE_UNKNOWN, RSS::get_feed_usage( $this->feed_post_id )['status'], 'Tracking started an hour ago.' );
+
+		update_option( RSS::USAGE_TRACKING_START_OPTION, time() - 49 * HOUR_IN_SECONDS );
+		$this->assertSame( RSS::FEED_USAGE_UNKNOWN, RSS::get_feed_usage( $this->feed_post_id )['status'], 'The feed was published just now.' );
+
+		wp_update_post(
+			[
+				'ID'            => $this->feed_post_id,
+				'post_date_gmt' => gmdate( 'Y-m-d H:i:s', time() - 49 * HOUR_IN_SECONDS ),
+				'post_date'     => wp_date( 'Y-m-d H:i:s', time() - 49 * HOUR_IN_SECONDS ),
+			]
+		);
+		$this->assertSame( RSS::FEED_USAGE_NOT_IN_USE, RSS::get_feed_usage( $this->feed_post_id )['status'], 'Tracked and published for over 48 hours.' );
+	}
 }

@@ -24,7 +24,7 @@ import {
 /**
  * Internal dependencies
  */
-import { Grid, Router, SectionHeader, Divider, useConfirmDialog } from '../../../../../packages/components/src';
+import { Grid, Router, SectionHeader, SplitSection, Divider, useConfirmDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions, { type ConditionsMap } from './conditions';
@@ -566,9 +566,9 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader title={ __( 'Rule Details', 'newspack-plugin' ) } noMargin />
-				<VStack spacing={ 6 } className="newspack-pricing-rules__details">
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'Rule Details', 'newspack-plugin' ) } />
+				<SplitSection.Content className="newspack-pricing-rules__details">
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Goal note', 'newspack-plugin' ) }
@@ -621,21 +621,20 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							<CopyDealId dealKey={ rule.deal_key } />
 						</ReadonlyField>
 					) }
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader
+			<SplitSection.Root>
+				<SplitSection.Header
 					title={ __( 'Eligibility', 'newspack-plugin' ) }
 					description={ __(
 						'A reader must meet every condition you set. With none set, the rule applies to everyone.',
 						'newspack-plugin'
 					) }
-					noMargin
 				/>
-				<VStack spacing={ 6 }>
+				<SplitSection.Content>
 					<Conditions
 						vocab={ vocab.conditions }
 						value={ conditions }
@@ -645,14 +644,14 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 						onDateModeChange={ ( id, mode ) => setDateModes( prev => ( { ...prev, [ id ]: mode } ) ) }
 						path={ path }
 					/>
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 } noMargin>
-				<SectionHeader title={ __( 'Schedule', 'newspack-plugin' ) } noMargin />
-				<VStack spacing={ 6 }>
+			<SplitSection.Root>
+				<SplitSection.Header title={ __( 'Schedule', 'newspack-plugin' ) } />
+				<SplitSection.Content>
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Priority', 'newspack-plugin' ) }
@@ -702,15 +701,15 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 							{ __( 'Times are in your local timezone.', 'newspack-plugin' ) }
 						</p>
 					</VStack>
-				</VStack>
-			</Grid>
+				</SplitSection.Content>
+			</SplitSection.Root>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
 			<VStack spacing={ 6 }>
-				<Grid columns={ 2 } gutter={ 32 } noMargin>
-					<SectionHeader title={ __( 'Pricing', 'newspack-plugin' ) } noMargin />
-					<VStack spacing={ 6 }>
+				<SplitSection.Root>
+					<SplitSection.Header title={ __( 'Pricing', 'newspack-plugin' ) } />
+					<SplitSection.Content>
 						{ hasModelChoice && (
 							<ToggleGroupControl
 								label={ __( 'Pricing model', 'newspack-plugin' ) }
@@ -828,8 +827,8 @@ export default function RuleForm( { isNew, initialPath = null, rule, vocab, onDo
 								__next40pxDefaultSize
 							/>
 						) }
-					</VStack>
-				</Grid>
+					</SplitSection.Content>
+				</SplitSection.Root>
 				{ isSchedule && (
 					<SchedulePrices
 						steps={ steps }

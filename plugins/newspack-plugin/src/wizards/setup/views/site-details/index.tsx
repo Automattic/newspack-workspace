@@ -179,7 +179,7 @@ export default function SiteDetails( { installState, goTo }: SetupViewProps ) {
 							replace: __( 'Replace Site Icon', 'newspack-plugin' ),
 							remove: __( 'Remove Site Icon', 'newspack-plugin' ),
 						} }
-						image={ profile.site_icon || null }
+						image={ profile.site_icon ? { url: profile.site_icon.url } : null }
 						onChange={ ( image: Profile[ 'site_icon' ] ) => update( { site_icon: image } ) }
 						isCovering
 						withMargin={ false }

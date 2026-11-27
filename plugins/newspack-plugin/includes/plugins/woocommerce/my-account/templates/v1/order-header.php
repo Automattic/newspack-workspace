@@ -25,13 +25,6 @@ if ( $pay_action ) {
 	);
 }
 
-if ( ! empty( $actions['cancel'] ) ) {
-	$cancel_action         = $actions['cancel'];
-	$cancel_action['name'] = __( 'Cancel order', 'newspack-plugin' );
-	unset( $actions['cancel'] );
-	$actions['cancel'] = $cancel_action;
-}
-
 ob_start();
 \woocommerce_order_again_button( $order );
 $order_again = trim( ob_get_clean() );

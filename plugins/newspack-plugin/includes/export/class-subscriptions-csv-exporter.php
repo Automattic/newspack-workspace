@@ -22,7 +22,9 @@ require_once __DIR__ . '/class-csv-batch-exporter.php';
  * - `newspack_subscriptions_export_row` filters each row (keyed by column id).
  *   In per-member mode it runs once per subscription, before the reader
  *   columns are added; `newspack_subscriptions_export_member_row` then runs
- *   on each reader's row.
+ *   on each reader's row. `last_active` is in both column sets, and the
+ *   reader's value replaces the subscription's, so per-member changes to it
+ *   belong in the member row filter.
  * - `newspack_subscriptions_export_query_args` filters the query args built
  *   from the captured list params and the chosen export options.
  *
@@ -60,6 +62,8 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @return array
 	 */
 	public function get_default_column_names() {
+		// Last Active is keyed the same in both modes: leading with it here moves
+		// the column from the customer's details to the reader's.
 		$member_columns = $this->is_per_member()
 			? [
 				'member_id'         => __( 'User ID', 'newspack-plugin' ),
@@ -67,6 +71,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 				'member_email'      => __( 'Email', 'newspack-plugin' ),
 				'member_first_name' => __( 'First Name', 'newspack-plugin' ),
 				'member_last_name'  => __( 'Last Name', 'newspack-plugin' ),
+				'last_active'       => __( 'Last Active', 'newspack-plugin' ),
 				'access_through'    => __( 'Access Through', 'newspack-plugin' ),
 				'group_name'        => __( 'Group Name', 'newspack-plugin' ),
 			]
@@ -104,6 +109,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 					'customer_email'      => __( 'Customer Email', 'newspack-plugin' ),
 					'customer_first_name' => __( 'Customer First Name', 'newspack-plugin' ),
 					'customer_last_name'  => __( 'Customer Last Name', 'newspack-plugin' ),
+					'last_active'         => __( 'Last Active', 'newspack-plugin' ),
 					'parent_order_id'     => __( 'Parent Order ID', 'newspack-plugin' ),
 				],
 				self::get_address_column_labels()
@@ -428,6 +434,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * Build the per-member rows for one subscription: the owner's row, then
 	 * one row per group member. Every row carries the subscription's own
 	 * columns unchanged, so each one can be matched back to its subscription.
+	 * Only Last Active differs: it describes the row's reader.
 	 *
 	 * An owner whose account was deleted has no access and gets no row; the
 	 * subscription still appears through its members, if it has any.
@@ -467,7 +474,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			 */
 			$rows[] = apply_filters(
 				'newspack_subscriptions_export_member_row',
-				array_merge( $subscription_row, self::get_member_columns( $user_id, $access_through, $group_name ) ),
+				array_merge( $subscription_row, $this->get_member_columns( $user_id, $access_through, $group_name ) ),
 				$subscription,
 				$user_id
 			);
@@ -483,7 +490,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @param string $group_name     The group's name, or '' when not a group.
 	 * @return array Values keyed by column id.
 	 */
-	private static function get_member_columns( int $user_id, string $access_through, string $group_name ): array {
+	private function get_member_columns( int $user_id, string $access_through, string $group_name ): array {
 		$user = $user_id ? \get_user_by( 'id', $user_id ) : false;
 		return [
 			'member_id'         => $user ? $user_id : '',
@@ -491,6 +498,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			'member_email'      => $user ? $user->user_email : '',
 			'member_first_name' => $user ? $user->first_name : '',
 			'member_last_name'  => $user ? $user->last_name : '',
+			'last_active'       => $user ? $this->get_last_active( $user_id ) : '',
 			'access_through'    => $access_through,
 			'group_name'        => $group_name,
 		];
@@ -545,6 +553,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 			'customer_email'      => $user ? $user->user_email : '',
 			'customer_first_name' => $user ? $user->first_name : '',
 			'customer_last_name'  => $user ? $user->last_name : '',
+			'last_active'         => $user ? $this->get_last_active( $customer_id ) : '',
 			'parent_order_id'     => $subscription->get_parent_id(),
 			'billing_first_name'  => $subscription->get_billing_first_name(),
 			'billing_last_name'   => $subscription->get_billing_last_name(),
@@ -577,6 +586,34 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		 * @param \WC_Subscription $subscription The subscription being exported.
 		 */
 		return apply_filters( 'newspack_subscriptions_export_row', $row, $subscription );
+	}
+
+	/**
+	 * When WooCommerce last recorded a reader as active.
+	 *
+	 * Not always a visit. Besides logins and logged-in visits, WooCommerce
+	 * records the customer of an order when that customer changes and, where it
+	 * writes orders to the posts table (posts storage, or HPOS with
+	 * compatibility sync), when the order is first written there: automatic
+	 * renewals and sync backfills included.
+	 *
+	 * In the site's timezone, like Date Created but unlike the schedule dates,
+	 * which are in UTC: the WooCommerce Memberships export used it, and
+	 * publishers reconcile against their earlier exports. WooCommerce before
+	 * 10.4 stored the UTC day as midnight UTC, so on sites west of UTC a date
+	 * from that time is the evening before.
+	 *
+	 * The Subscribers screen's Last seen and the synced Last Active contact
+	 * field report Newspack reader activity instead.
+	 *
+	 * @param int $user_id The reader's user ID.
+	 * @return string Formatted date, or '' when WooCommerce has no record.
+	 */
+	private function get_last_active( int $user_id ): string {
+		$timestamp = (int) \get_user_meta( $user_id, 'wc_last_active', true );
+		return $timestamp > 0
+			? $this->format_export_date( (string) \wp_date( CSV_Exports::DEFAULT_DATE_FORMAT, $timestamp ) )
+			: '';
 	}
 
 	/**

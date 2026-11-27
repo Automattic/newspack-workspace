@@ -277,7 +277,8 @@ class Newspack_Test_My_Account_Status extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Orders table has no actions column.
+	 * The Orders table has no actions column: the order number links to the order,
+	 * whose page lists the actions.
 	 */
 	public function test_orders_columns_drop_actions() {
 		$columns = My_Account_UI_V1::orders_columns(
@@ -289,6 +290,36 @@ class Newspack_Test_My_Account_Status extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( [ 'order-number', 'order-status' ], array_keys( $columns ) );
+	}
+
+	/**
+	 * The order page lists the order's actions, such as an invoice download a plugin
+	 * adds, without View, and with Cancel renamed "Cancel order" and last.
+	 */
+	public function test_order_page_actions() {
+		$order       = new WC_Order( [ 'status' => 'pending' ] );
+		$add_actions = function ( $actions ) {
+			return $actions + [
+				'view'    => [
+					'url'  => 'https://example.test/view-order/',
+					'name' => 'View',
+				],
+				'cancel'  => [
+					'url'  => 'https://example.test/cancel-order/',
+					'name' => 'Cancel',
+				],
+				'invoice' => [
+					'url'  => 'https://example.test/invoice/',
+					'name' => 'Invoice',
+				],
+			];
+		};
+		add_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
+		$actions = My_Account_UI_V1::get_order_actions( $order );
+		remove_filter( 'woocommerce_my_account_my_orders_actions', $add_actions );
+
+		$this->assertSame( [ 'invoice', 'cancel' ], array_keys( $actions ) );
+		$this->assertSame( 'Cancel order', $actions['cancel']['name'] );
 	}
 
 	/**

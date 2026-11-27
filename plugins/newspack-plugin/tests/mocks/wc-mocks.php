@@ -1203,7 +1203,9 @@ class WC_Order {
 		return 'https://example.test/checkout/order-pay/' . $this->get_id() . '/?pay_for_order=true&key=wc_order_' . $this->get_id();
 	}
 	public function get_order_number() {
-		return (string) $this->get_id();
+		// Real WC filters the number (woocommerce_order_number), which sequential
+		// numbering plugins use to make it differ from the ID.
+		return (string) ( $this->data['order_number'] ?? $this->get_id() );
 	}
 	/**
 	 * Accepts a gateway object or id string, like the real setter.
@@ -1539,6 +1541,23 @@ class WC_Subscription {
 		// newest related renewal order, paid or not, staged via
 		// `related_orders`. Mixed-type calls (e.g. parent + renewal) keep the
 		// legacy `orders`-array behavior below.
+		if ( 'any' === $types && isset( $this->data['related_orders'] ) ) {
+			// Faithful to real WCS for fixtures staged via `related_orders`: 'any'
+			// expands to parent, renewal and switch orders, and the one with the
+			// highest ID wins. Fixtures staged via `orders` keep the legacy path below.
+			$newest = false;
+			foreach ( [ 'parent', 'renewal', 'switch' ] as $type ) {
+				foreach ( $this->data['related_orders'][ $type ] ?? [] as $order ) {
+					if ( ! is_object( $order ) || ( ! empty( $exclude_statuses ) && $order->has_status( $exclude_statuses ) ) ) {
+						continue;
+					}
+					if ( ! $newest || $order->get_id() > $newest->get_id() ) {
+						$newest = $order;
+					}
+				}
+			}
+			return $newest;
+		}
 		if ( [ 'renewal' ] === (array) $types ) {
 			$renewals = $this->data['related_orders']['renewal'] ?? [];
 			$newest   = false;
@@ -1686,6 +1705,9 @@ class WC_Subscription {
 	}
 	public function get_parent_id() {
 		return $this->data['parent_id'] ?? 0;
+	}
+	public function get_order_number() {
+		return (string) ( $this->data['order_number'] ?? $this->get_id() );
 	}
 	public function is_manual() {
 		// Real WC_Subscription keys this 'requires_manual_renewal'; fixtures also stage the shorter 'is_manual'.
@@ -2608,6 +2630,14 @@ function wc_get_orders( $args ) {
 		// query args) that hands back the same rows for every page.
 		$page   = ( empty( $wc_mocks_orders_ignore_page ) && isset( $args['page'] ) ) ? max( 1, (int) $args['page'] ) : 1;
 		$orders = array_slice( $orders, ( $page - 1 ) * (int) $args['limit'], (int) $args['limit'] );
+	}
+	if ( 'ids' === ( $args['return'] ?? '' ) ) {
+		return array_map(
+			function( $order ) {
+				return $order->get_id();
+			},
+			array_values( $orders )
+		);
 	}
 	return $orders;
 }

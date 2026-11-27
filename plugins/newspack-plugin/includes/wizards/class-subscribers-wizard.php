@@ -4,7 +4,8 @@
  *
  * The admin-side, people-first view of the site's subscribers and group
  * subscriptions. Ported from the signed-off i2 design prototype; it lives under
- * the Audience menu and is visible to any admin who can `manage_options`.
+ * the Audience menu and is visible to anyone who can manage Access Control
+ * (Capabilities::MANAGE_ACCESS_CONTROL).
  *
  * @package Newspack
  */
@@ -32,7 +33,7 @@ class Subscribers_Wizard extends Wizard {
 	 *
 	 * @var string
 	 */
-	protected $capability = 'manage_options';
+	protected $capability = Capabilities::MANAGE_ACCESS_CONTROL;
 
 	/**
 	 * The parent menu slug this wizard hangs under.
@@ -55,10 +56,23 @@ class Subscribers_Wizard extends Wizard {
 	const MANAGED_ON_THIS_SITE = 'this-site';
 
 	/**
+	 * Subscription statuses the screen treats as no subscription at all. A failed
+	 * checkout trashes its pending subscription, and wcs_get_users_subscriptions()
+	 * still returns it. Subscribers_Index builds its SQL filters from this list too,
+	 * so the rows, the profile and the filters agree.
+	 */
+	const UNLISTED_STATUSES = [ 'trash', 'draft', 'auto-draft' ];
+
+	/**
 	 * Upper bound on the number of avatars one /avatars request resolves. A single
 	 * list page needs at most `per_page` (≤100); the client batches larger sets.
 	 */
 	const AVATAR_BATCH_CAP = 200;
+
+	/**
+	 * The most one-time donations the profile lists, newest first.
+	 */
+	const PROFILE_DONATIONS_LIMIT = 20;
 
 	/**
 	 * Per-request memo of holder IDs keyed by the sorted status set they were
@@ -142,11 +156,11 @@ class Subscribers_Wizard extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html__( 'Audience Management / Subscribers', 'newspack-plugin' );
+		return esc_html__( 'Audience Management / Readers', 'newspack-plugin' );
 	}
 
 	/**
-	 * Add the Subscribers subpage under the Audience menu.
+	 * Add the Readers subpage under the Audience menu.
 	 */
 	public function add_page() {
 		if ( ! $this->is_feature_enabled() ) {
@@ -155,7 +169,7 @@ class Subscribers_Wizard extends Wizard {
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
-			esc_html__( 'Subscribers', 'newspack-plugin' ),
+			esc_html__( 'Readers', 'newspack-plugin' ),
 			$this->capability,
 			$this->slug,
 			[ $this, 'render_wizard' ]
@@ -491,6 +505,17 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * Whether the screen shows a subscription at all. See UNLISTED_STATUSES.
+	 *
+	 * @param mixed $subscription A subscription, or anything a filter on the reader's subscription list returned.
+	 *
+	 * @return bool
+	 */
+	private static function is_listed( $subscription ): bool {
+		return $subscription instanceof \WC_Subscription && ! in_array( $subscription->get_status(), self::UNLISTED_STATUSES, true );
+	}
+
+	/**
 	 * GET one page of the site's group subscriptions, hydrated for the admin group list.
 	 *
 	 * The list is server-paginated: Subscribers_Index filters, searches,
@@ -667,7 +692,7 @@ class Subscribers_Wizard extends Wizard {
 			}
 			// One product load per variation. The bound is the site's whole
 			// subscription catalogue — every variation of every variable
-			// subscription — resolved on each render of the Subscribers tab. That is
+			// subscription — resolved on each render of the Readers tab. That is
 			// a handful of loads on a real Newspack catalogue; a site with hundreds
 			// of variations would want these batched, but capping instead would
 			// silently drop plans from the dropdown, which is the failure this
@@ -724,6 +749,25 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
+	 * The name the wizard shows for a person: the display name, else the email,
+	 * else the username, so nobody is shown blank. Subscribers_Index::PERSON_NAME_SQL
+	 * sorts and searches the lists by the same name.
+	 *
+	 * @param \WP_User $user The person.
+	 *
+	 * @return string
+	 */
+	private static function person_name( \WP_User $user ): string {
+		// Spaces only, as MySQL's TRIM() strips, so the shown name and the SQL sort agree.
+		foreach ( [ trim( $user->display_name, ' ' ), $user->user_email ] as $name ) {
+			if ( '' !== $name ) {
+				return $name;
+			}
+		}
+		return $user->user_login;
+	}
+
+	/**
 	 * Shape a group subscription for the admin group list.
 	 *
 	 * @param \WC_Subscription $subscription The group subscription.
@@ -742,7 +786,7 @@ class Subscribers_Wizard extends Wizard {
 			'ownerId'     => $owner_id,
 			'owner'       => $owner ? [
 				'id'      => $owner_id,
-				'name'    => $owner->display_name,
+				'name'    => self::person_name( $owner ),
 				'email'   => $owner->user_email,
 				// The owner's name links to the person, not to the subscription —
 				// see the group list's `editUrl` for the subscription itself.
@@ -810,9 +854,10 @@ class Subscribers_Wizard extends Wizard {
 		$settings     = $subscription && class_exists( '\Newspack\Group_Subscription_Settings' )
 			? Group_Subscription_Settings::get_subscription_settings( $subscription )
 			: [];
-		// A subscription that isn't group-enabled is not a group. 404 rather than a
-		// half-populated payload the detail screen would render as an empty group.
-		if ( ! $subscription || empty( $settings['enabled'] ) ) {
+		// A subscription that isn't group-enabled is not a group, and a trashed one is
+		// off the Teams tab. 404 rather than a half-populated payload the detail
+		// screen would render as an empty group.
+		if ( ! $subscription || empty( $settings['enabled'] ) || ! self::is_listed( $subscription ) ) {
 			return new \WP_Error(
 				'newspack_subscribers_group_not_found',
 				sprintf(
@@ -837,14 +882,14 @@ class Subscribers_Wizard extends Wizard {
 					'seatsReserved'      => Group_Subscription_API::reserved_seats( $subscription ),
 					'billing'            => $this->subscription_billing( $subscription ),
 					// Whether this caller may use the screen's write buttons. Reading the
-					// screen needs `manage_options` ($capability); every write on it goes
-					// to the group-subscription API, which admits an admin on
-					// `manage_woocommerce` alone -- permission_callback(),
+					// screen needs `manage_options` or `manage_woocommerce` ($capability);
+					// every write on it goes to the group-subscription API, which admits
+					// an admin on `manage_woocommerce` alone -- permission_callback(),
 					// role_permission_callback() and admin_permission_callback() all
 					// reduce to that capability for someone who is not a manager of the
-					// group. The two are independent, so a role holding one and not the
-					// other is possible, and without this the buttons would render live
-					// and fail with a 403 on click.
+					// group. An administrator who lacks it, as on a site where
+					// WooCommerce's roles were never installed, can read the screen and
+					// without this would see buttons that fail with a 403 on click.
 					'canManage'          => current_user_can( 'manage_woocommerce' ),
 					// The owner holds billing, so a group renewing from their payment
 					// method can't change hands here (Group_Subscription::change_owner()).
@@ -889,7 +934,7 @@ class Subscribers_Wizard extends Wizard {
 			$joined_at = Group_Subscription::get_member_joined_at( $user_id, $subscription );
 			$entries[] = [
 				'id'       => $user_id,
-				'name'     => $user->display_name,
+				'name'     => self::person_name( $user ),
 				'email'    => $user->user_email,
 				'role'     => $role,
 				// The owner holds no membership record, so they have no join date.
@@ -1005,11 +1050,13 @@ class Subscribers_Wizard extends Wizard {
 		$page     = (int) $request->get_param( 'page' );
 		$search   = trim( (string) $request->get_param( 'search' ) );
 
+		$sort_by_name = 'name' === $request->get_param( 'orderby' );
+
 		$query_args = [
 			'role__in'    => Reader_Activation::get_reader_roles(),
 			'number'      => $per_page,
 			'paged'       => $page,
-			'orderby'     => 'name' === $request->get_param( 'orderby' ) ? 'display_name' : 'registered',
+			'orderby'     => $sort_by_name ? 'display_name' : 'registered',
 			'order'       => 'asc' === $request->get_param( 'order' ) ? 'ASC' : 'DESC',
 			'count_total' => true,
 			'fields'      => 'all',
@@ -1037,7 +1084,24 @@ class Subscribers_Wizard extends Wizard {
 			$query_args['include'] = $include;
 		}
 
+		// WP_User_Query sorts on a column only, so the name sort is swapped for the
+		// name each row shows (person_name()), with the ID keeping ties stable across
+		// pages. The query var limits the swap to this query, not to any user query
+		// another plugin runs while it is being built.
+		$order_by_shown_name = static function ( \WP_User_Query $query ): void {
+			if ( empty( $query->query_vars['newspack_order_by_shown_name'] ) ) {
+				return;
+			}
+			global $wpdb;
+			$order                = 'ASC' === $query->query_vars['order'] ? 'ASC' : 'DESC';
+			$query->query_orderby = 'ORDER BY ' . Subscribers_Index::PERSON_NAME_SQL . " {$order}, {$wpdb->users}.ID {$order}"; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.user_meta__wpdb__users -- Names the table WP_User_Query already reads.
+		};
+		if ( $sort_by_name ) {
+			$query_args['newspack_order_by_shown_name'] = true;
+			add_action( 'pre_user_query', $order_by_shown_name );
+		}
 		$user_query = new \WP_User_Query( $query_args );
+		remove_action( 'pre_user_query', $order_by_shown_name );
 		$total      = (int) $user_query->get_total();
 		$users      = $user_query->get_results();
 
@@ -1578,7 +1642,10 @@ class Subscribers_Wizard extends Wizard {
 		$user_id = (int) $user->ID;
 		// Resolve the user's own subscriptions once and reuse them, so hydration
 		// doesn't fetch the same list twice per row.
-		$owned_subscriptions = function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [];
+		$owned_subscriptions = array_filter(
+			function_exists( 'wcs_get_users_subscriptions' ) ? \wcs_get_users_subscriptions( $user_id ) : [],
+			[ __CLASS__, 'is_listed' ]
+		);
 		// Subscriptions managed on other network sites follow the local ones, so the
 		// status badge, the Subscription column and the profile cards all see them
 		// through the one array.
@@ -1595,7 +1662,7 @@ class Subscribers_Wizard extends Wizard {
 
 		$subscriber = [
 			'id'             => $user_id,
-			'name'           => $user->display_name,
+			'name'           => self::person_name( $user ),
 			'email'          => $user->user_email,
 			// The native user-edit screen (self edits resolve to profile.php). The
 			// in-wizard profile does not yet cover editing the WordPress user, so the
@@ -1615,6 +1682,12 @@ class Subscribers_Wizard extends Wizard {
 		];
 
 		if ( $detailed ) {
+			// Profile-only, like the payment methods: the list never shows donations,
+			// and scanning a reader's orders on every row would cost a query per row.
+			$donations                    = $this->one_time_donations( $user_id, $owned_subscriptions );
+			$subscriber['donations']     = $donations['items'];
+			$subscriber['donationsMore'] = $donations['more'];
+
 			/**
 			 * The Newspack Network site a reader first signed up on, when it isn't
 			 * this one. Only the profile shows it, so it is asked for on detailed reads
@@ -1688,6 +1761,9 @@ class Subscribers_Wizard extends Wizard {
 						// Who bought this subscription for the reader, when they
 						// were given it rather than paying for it themselves.
 						'giftedBy'      => $this->gifted_by( $subscription, $user_id ),
+						// A gift's orders are the purchaser's, so only the reader who
+						// pays for the subscription gets its latest order.
+						'lastOrder'     => (int) $subscription->get_customer_id() === $user_id ? $this->latest_order( $subscription ) : null,
 						// Where the payment link goes. For a gift this is the
 						// purchaser's billing email, not the reader's, so the
 						// reactivate confirmation can name who gets the email.
@@ -1837,7 +1913,8 @@ class Subscribers_Wizard extends Wizard {
 	 * lets a plan label on a row filter back to the reader who holds it.
 	 *
 	 * A record needs a positive numeric `id`, a `site_name` with something in it once
-	 * trimmed, and a non-empty string `status`. A missing `plan` reads as empty.
+	 * trimmed, and a non-empty string `status` outside UNLISTED_STATUSES. A missing
+	 * `plan` reads as empty.
 	 *
 	 * @param mixed $record One record from the network filters.
 	 *
@@ -1857,7 +1934,9 @@ class Subscribers_Wizard extends Wizard {
 			return null;
 		}
 		$status = $record['status'] ?? null;
-		if ( ! is_string( $status ) || '' === $status ) {
+		// A failed checkout on the other site trashes its subscription, and the record
+		// carries that status. It counts no more than a trashed subscription here.
+		if ( ! is_string( $status ) || '' === $status || in_array( $status, self::UNLISTED_STATUSES, true ) ) {
 			return null;
 		}
 		$plan      = isset( $record['plan'] ) && is_string( $record['plan'] ) ? $record['plan'] : '';
@@ -1894,7 +1973,7 @@ class Subscribers_Wizard extends Wizard {
 		}
 		return [
 			'id'      => $purchaser_id,
-			'name'    => $purchaser->display_name,
+			'name'    => self::person_name( $purchaser ),
 			'editUrl' => (string) \get_edit_user_link( $purchaser_id ),
 		];
 	}
@@ -1953,8 +2032,8 @@ class Subscribers_Wizard extends Wizard {
 	}
 
 	/**
-	 * The billing shape a subscription card renders: what it costs, how often, and
-	 * the four dates the card's label/value rows show.
+	 * The billing shape a subscription card renders: what it costs, how often, its
+	 * number, and the four dates the card's label/value rows show.
 	 *
 	 * Shared by individual subscriptions and groups so one card component renders
 	 * both, and so the person profile and the group-detail billing drawer cannot
@@ -1989,9 +2068,137 @@ class Subscribers_Wizard extends Wizard {
 			// is ending even while its status still maps to active (still entitled).
 			'endDate'         => $this->subscription_date( $subscription, 'end' ) ?? $this->subscription_date( $subscription, 'cancelled' ),
 			'lastPayment'     => $this->subscription_date( $subscription, 'last_order_date_paid' ),
+			// The number WooCommerce, its emails and the payment processor show for
+			// the subscription, which a numbering plugin can make differ from the ID.
+			// Admins follow a case across those by number.
+			'number'          => (string) $subscription->get_order_number(),
 			// A complimentary subscription is billed nothing, so the card shows
 			// "Complimentary" in place of its price and payment dates.
 			'isComplimentary' => Complimentary_Access::is_complimentary_order( $subscription ),
+		];
+	}
+
+	/**
+	 * An order as the profile links to it: its number and its edit screen.
+	 *
+	 * @param \WC_Order|false|null $order The order, or a falsy value when there is none.
+	 *
+	 * @return array|null { number, editUrl }, or null when there is no order.
+	 */
+	private function order_reference( $order ): ?array {
+		if ( ! $order instanceof \WC_Order ) {
+			return null;
+		}
+		return [
+			'number'  => (string) $order->get_order_number(),
+			'editUrl' => (string) $order->get_edit_order_url(),
+		];
+	}
+
+	/**
+	 * A subscription's latest parent, renewal or switch order, for the card of the
+	 * reader who pays for it.
+	 *
+	 * WooCommerce Subscriptions picks the order with the highest ID, which is the
+	 * newest one unless orders were imported out of sequence. Unpaid renewals
+	 * count, so a failed charge is the order the admin lands on.
+	 *
+	 * @param \WC_Subscription $subscription The subscription.
+	 *
+	 * @return array|null { number, editUrl }, or null when it has no orders.
+	 */
+	private function latest_order( $subscription ): ?array {
+		return $this->order_reference( $subscription->get_last_order( 'all', 'any' ) );
+	}
+
+	/**
+	 * A reader's one-time donations, newest first, for the person profile.
+	 *
+	 * A one-time donation is a paid or refunded order on a donation product that
+	 * none of the reader's subscriptions owns. A recurring donation is a
+	 * subscription, and its parent and renewal orders show on its subscription
+	 * card, so they are left out here. Unpaid attempts (pending, failed,
+	 * cancelled) are not donations and are left out too.
+	 *
+	 * The test is per order: a cart that mixes a donation with other products
+	 * lists its whole total, and an order whose subscription was deleted or moved
+	 * to another customer reads as a one-time donation.
+	 *
+	 * Lists at most PROFILE_DONATIONS_LIMIT orders, and `more` says whether older
+	 * ones exist. The query returns IDs, the reader's subscription orders are
+	 * skipped before loading, and the scan stops at the first donation past the
+	 * limit, so the orders loaded are the reader's latest other purchases.
+	 *
+	 * @param int                $user_id             The reader user ID.
+	 * @param \WC_Subscription[] $owned_subscriptions The reader's subscriptions, already fetched by the caller.
+	 *
+	 * @return array { items: array[], more: bool }
+	 */
+	private function one_time_donations( int $user_id, array $owned_subscriptions ): array {
+		$none = [
+			'items' => [],
+			'more'  => false,
+		];
+		if ( ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_is_paid_statuses' ) ) {
+			return $none;
+		}
+
+		$subscription_order_ids = [];
+		foreach ( $owned_subscriptions as $subscription ) {
+			if ( $subscription instanceof \WC_Subscription ) {
+				foreach ( $subscription->get_related_orders( 'ids', 'any' ) as $order_id ) {
+					$subscription_order_ids[ (int) $order_id ] = true;
+				}
+			}
+		}
+
+		$order_ids = \wc_get_orders(
+			[
+				'customer_id' => $user_id,
+				'type'        => 'shop_order',
+				'status'      => array_merge( \wc_get_is_paid_statuses(), [ 'refunded' ] ),
+				'limit'       => -1,
+				'return'      => 'ids',
+				// The ID breaks ties between orders placed in the same second, so the
+				// limit always cuts the list at the same order.
+				'orderby'     => [
+					'date' => 'DESC',
+					'ID'   => 'DESC',
+				],
+			]
+		);
+
+		$items = [];
+		$more  = false;
+		foreach ( $order_ids as $order_id ) {
+			if ( isset( $subscription_order_ids[ (int) $order_id ] ) ) {
+				continue;
+			}
+			$order = \wc_get_order( $order_id );
+			if ( ! $order instanceof \WC_Order || ! Donations::is_donation_order( $order ) ) {
+				continue;
+			}
+			if ( count( $items ) >= self::PROFILE_DONATIONS_LIMIT ) {
+				$more = true;
+				break;
+			}
+			$created = $order->get_date_created();
+			$items[] = [
+				'id'       => (int) $order->get_id(),
+				'number'   => (string) $order->get_order_number(),
+				'editUrl'  => (string) $order->get_edit_order_url(),
+				'date'     => $this->local_date( $created ? $created->getTimestamp() : null ),
+				'amount'   => is_numeric( $order->get_total() ) ? (float) $order->get_total() : null,
+				// A partial refund leaves the order completed; the row shows what was returned.
+				'refunded' => (float) $order->get_total_refunded(),
+				'currency' => (string) $order->get_currency(),
+				'status'   => (string) $order->get_status(),
+			];
+		}
+
+		return [
+			'items' => $items,
+			'more'  => $more,
 		];
 	}
 
@@ -2110,15 +2317,17 @@ class Subscribers_Wizard extends Wizard {
 				foreach ( array_map( 'absint', (array) get_user_meta( $user_id, $meta_key, false ) ) as $subscription_id ) {
 					if ( $subscription_id && ! isset( $subscriptions[ $subscription_id ] ) ) {
 						$subscription = \wcs_get_subscription( $subscription_id );
-						// Member and manager meta outlives a trashed group; the Teams tab
-						// and the filters leave those statuses out, so the row does too.
-						if ( $subscription && ! in_array( $subscription->get_status(), [ 'trash', 'draft', 'auto-draft' ], true ) ) {
+						if ( $subscription ) {
 							$subscriptions[ $subscription_id ] = $subscription;
 						}
 					}
 				}
 			}
 		}
+		// Member and manager meta outlives a trashed group, and the profile's
+		// lookups return it. The Teams tab and the filters leave it out, so the
+		// row and the profile do too.
+		$subscriptions = array_filter( $subscriptions, [ __CLASS__, 'is_listed' ] );
 
 		$out = [];
 		foreach ( $subscriptions as $subscription ) {
@@ -2150,10 +2359,12 @@ class Subscribers_Wizard extends Wizard {
 				$this->prepare_group( $subscription, $settings ),
 				$this->subscription_billing( $subscription ),
 				[
-					'role'     => $role,
+					'role'      => $role,
 					// Null for a member who predates the joined-at meta, rather than a
 					// misleading Unix epoch.
-					'joinedAt' => $this->local_date( $joined_at ),
+					'joinedAt'  => $this->local_date( $joined_at ),
+					// The owner pays for the group, so only their card carries its latest order.
+					'lastOrder' => 'owner' === $role ? $this->latest_order( $subscription ) : null,
 				]
 			);
 		}
@@ -2164,7 +2375,7 @@ class Subscribers_Wizard extends Wizard {
 	 * Reduce a reader's many subscription statuses to a single subscriber-level
 	 * status, mirroring the list's badge logic: active-first, with cancelled
 	 * dropped whenever any live status remains. Empty when they have no
-	 * subscription at all (a free reader shows no status badge).
+	 * subscription at all (a free reader shows as "No subscription" in the list).
 	 *
 	 * SOURCE OF TRUTH for the status-reduction rule. The rule is:
 	 *

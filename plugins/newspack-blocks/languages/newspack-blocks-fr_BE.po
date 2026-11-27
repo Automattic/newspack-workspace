@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.25\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-11-11T01:11:38+00:00\n"
+"POT-Creation-Date: 2026-11-23T14:30:58+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -35,131 +35,131 @@ msgstr "Une collection de blocs pour les éditeurs d’informations."
 msgid "Automattic"
 msgstr "Automattic"
 
-#: includes/class-modal-checkout.php:412 includes/class-modal-checkout.php:899
+#: includes/class-modal-checkout.php:413 includes/class-modal-checkout.php:900
 msgid "Invalid nonce."
 msgstr ""
 
-#: includes/class-modal-checkout.php:844
+#: includes/class-modal-checkout.php:845
 msgid "Complete your purchase"
 msgstr ""
 
-#: includes/class-modal-checkout.php:909
+#: includes/class-modal-checkout.php:910
 msgid "Cart has been emptied."
 msgstr ""
 
 #. Translators: %s is the maximum price.
-#: includes/class-modal-checkout.php:1026
+#: includes/class-modal-checkout.php:1027
 #, php-format
 msgid "Adjusted price must be less than the maximum of %s."
 msgstr ""
 
 #. Translators: %s is the name-your-price custom price.
-#: includes/class-modal-checkout.php:1055
+#: includes/class-modal-checkout.php:1056
 #, php-format
 msgid "Adjusted price must be greater than base price of %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1082
-#: includes/class-modal-checkout.php:1186
+#: includes/class-modal-checkout.php:1083
+#: includes/class-modal-checkout.php:1187
 msgid "This product could not be added to the cart."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1145
+#: includes/class-modal-checkout.php:1146
 msgid ""
 "Go back and choose the number you want before changing your subscription."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1162
+#: includes/class-modal-checkout.php:1163
 msgid "This product is not in the cart."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1248
+#: includes/class-modal-checkout.php:1249
 msgid "Updated."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1303
-#: includes/class-modal-checkout.php:1386
+#: includes/class-modal-checkout.php:1304
+#: includes/class-modal-checkout.php:1384
 msgid "Close"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1329
+#: includes/class-modal-checkout.php:1326
 msgid "per"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1440
+#: includes/class-modal-checkout.php:1438
 #, fuzzy
 msgid "Something went wrong. Please try again."
 msgstr ""
 "Un problème est survenu. Veuillez actualiser la page et / ou réessayer."
 
-#: includes/class-modal-checkout.php:1444
+#: includes/class-modal-checkout.php:1442
 msgid "Or"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1678
-#: includes/class-modal-checkout.php:1682
+#: includes/class-modal-checkout.php:1676
+#: includes/class-modal-checkout.php:1680
 msgid "Processing payment..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1686
+#: includes/class-modal-checkout.php:1684
 msgid "Verifying details..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1690
+#: includes/class-modal-checkout.php:1688
 msgid "Finalizing transaction..."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1746
+#: includes/class-modal-checkout.php:1744
 msgid ""
 "We're sorry, there was an unexpected error. Please try again in a few "
 "minutes."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1758
+#: includes/class-modal-checkout.php:1756
 msgid "Go back"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2201
+#: includes/class-modal-checkout.php:2199
 msgid "Password mismatch"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2202
+#: includes/class-modal-checkout.php:2200
 msgid "Password strength: Very weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2203
+#: includes/class-modal-checkout.php:2201
 msgid "Password strength: Weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2204
+#: includes/class-modal-checkout.php:2202
 msgid "Password strength: Medium"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2205
+#: includes/class-modal-checkout.php:2203
 msgid "Password strength: Strong"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2585
+#: includes/class-modal-checkout.php:2583
 msgid "Please enter someone else' email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2586
+#: includes/class-modal-checkout.php:2584
 msgid "Please enter a valid email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2717
+#: includes/class-modal-checkout.php:2715
 msgid "Close window"
 msgstr ""
 
 #. translators: %s: Site name.
-#: includes/class-modal-checkout.php:2817
+#: includes/class-modal-checkout.php:2815
 #, php-format
 msgid ""
 "You're already a subscriber! You can only have one active subscription at a "
 "time. Thank you for supporting %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2828
+#: includes/class-modal-checkout.php:2826
 msgid ""
 "You're already a subscriber! You can only have one subscription at a time. "
 "If you wish to renew an expired subscription, please sign in and visit the "
@@ -168,104 +168,104 @@ msgstr ""
 
 #. translators: 1: Checkout button confirmation text. 2: Order total.
 #. translators: 1 is the name of the item. 2 is the price of the item.
-#: includes/class-modal-checkout.php:2982
+#: includes/class-modal-checkout.php:2980
 #: includes/modal-checkout/class-checkout-data.php:72
 #, php-format
 msgid "%1$s: %2$s"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3165 dist/editor.js:67
+#: includes/class-modal-checkout.php:3163 dist/editor.js:67
 #: src/blocks/iframe/iframe-placeholder.js:153
 msgid "Update"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3443
+#: includes/class-modal-checkout.php:3480
 msgid "Billing details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3444
+#: includes/class-modal-checkout.php:3481
 msgid "Shipping details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3445
+#: includes/class-modal-checkout.php:3482
 msgid "Gift recipient"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3446
-#: includes/class-modal-checkout.php:3447
-#: includes/class-modal-checkout.php:3448
+#: includes/class-modal-checkout.php:3483
+#: includes/class-modal-checkout.php:3484
+#: includes/class-modal-checkout.php:3485
 msgid "Complete your transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3449
+#: includes/class-modal-checkout.php:3486
 msgctxt "Login modal title when logged out user attempts to checkout."
 msgid "Sign in to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3454
+#: includes/class-modal-checkout.php:3491
 msgctxt "Login modal title when unregistered user attempts to checkout"
 msgid "Register to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3459
+#: includes/class-modal-checkout.php:3496
 msgid "Continue browsing"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3460
+#: includes/class-modal-checkout.php:3497
 msgid "This donation is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3465
+#: includes/class-modal-checkout.php:3502
 msgid "This purchase is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3467
+#: includes/class-modal-checkout.php:3504
 msgid "Complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3468
+#: includes/class-modal-checkout.php:3505
 msgid "Purchase"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3469
+#: includes/class-modal-checkout.php:3506
 msgid "Edit billing information"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3470 dist/editor.js:40 dist/editor.js:43
+#: includes/class-modal-checkout.php:3507 dist/editor.js:40 dist/editor.js:43
 #: src/blocks/checkout-button/coupon-control.js:145
 #: src/blocks/checkout-button/edit.js:198
 msgid "Cancel"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3471
+#: includes/class-modal-checkout.php:3508
 msgid "Transaction successful"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3472
+#: includes/class-modal-checkout.php:3509
 msgid ""
 "Your contribution directly funds our work. If you're moved to do so, you can "
 "opt to pay more than the standard rate."
 msgstr ""
 
-#: includes/class-modal-checkout.php:3473
+#: includes/class-modal-checkout.php:3510
 msgid "Thank you for your generosity! We couldn't do this without you!"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3474
+#: includes/class-modal-checkout.php:3511
 msgid "Increase your support"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3475
+#: includes/class-modal-checkout.php:3512
 #: src/modal-checkout/templates/form-coupon.php:29
 msgid "Apply"
 msgstr ""
 
-#: includes/class-modal-checkout.php:3476
+#: includes/class-modal-checkout.php:3513
 msgid "We ran into a problem processing this request. Please try again."
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/class-modal-checkout.php:3614
+#: includes/class-modal-checkout.php:3651
 #, php-format
 msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
@@ -307,45 +307,45 @@ msgstr ""
 msgid "Newspack Subscribe"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1182
+#: includes/class-newspack-blocks.php:1302
 msgid "Common"
 msgstr ""
 
 #. translators: separates last two sponsor names; needs a space on either side.
-#: includes/class-newspack-blocks.php:1283
+#: includes/class-newspack-blocks.php:1403
 msgid " and "
 msgstr " et "
 
 #. translators: separates all but the last two sponsor names; needs a space at the end.
-#: includes/class-newspack-blocks.php:1286
+#: includes/class-newspack-blocks.php:1406
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1634
+#: includes/class-newspack-blocks.php:1754
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1682 dist/editor.js:26 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1802 dist/editor.js:26 dist/editor.js:30
 #: src/components/query-controls.js:32 src/shared/js/utils.js:49
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1683 dist/editor.js:26 dist/editor.js:30
+#: includes/class-newspack-blocks.php:1803 dist/editor.js:26 dist/editor.js:30
 #: src/components/query-controls.js:33 src/shared/js/utils.js:49
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1924 dist/editor.js:52
+#: includes/class-newspack-blocks.php:2044 dist/editor.js:52
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1955
+#: includes/class-newspack-blocks.php:2075
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1958
+#: includes/class-newspack-blocks.php:2078
 msgid " per "
 msgstr ""
 
@@ -1597,7 +1597,7 @@ msgid "Type to search for a coupon…"
 msgstr ""
 
 #: dist/editor.js:40 dist/editor.js:67 src/blocks/checkout-button/edit.js:75
-#: src/blocks/iframe/edit.js:178
+#: src/blocks/iframe/edit.js:181
 msgid "Width"
 msgstr ""
 
@@ -2058,44 +2058,44 @@ msgstr ""
 msgid "Embed an iframe."
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:152
+#: dist/editor.js:67 src/blocks/iframe/edit.js:155
 msgid "Hide iframe preview"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:152
+#: dist/editor.js:67 src/blocks/iframe/edit.js:155
 msgid "Show iframe preview"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:165
+#: dist/editor.js:67 src/blocks/iframe/edit.js:168
 msgid "Iframe Settings"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:168
+#: dist/editor.js:67 src/blocks/iframe/edit.js:171
 msgid "Fullscreen"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:169
+#: dist/editor.js:67 src/blocks/iframe/edit.js:172
 msgid ""
 "If enabled, the iframe will be full screen and hide all the post content."
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:184
+#: dist/editor.js:67 src/blocks/iframe/edit.js:187
 msgid "Height"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:197
+#: dist/editor.js:67 src/blocks/iframe/edit.js:200
 msgid "This block will take over the page content."
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:203
+#: dist/editor.js:67 src/blocks/iframe/edit.js:206
 msgid "Newspack embedded iframe"
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:68 src/blocks/iframe/edit.js:101
+#: dist/editor.js:67 src/blocks/iframe/edit.js:69 src/blocks/iframe/edit.js:102
 msgid "An error occured when uploading the iframe archive."
 msgstr ""
 
-#: dist/editor.js:67 src/blocks/iframe/edit.js:132
+#: dist/editor.js:67 src/blocks/iframe/edit.js:133
 msgid "An error occured when setting the iframe from the archive media."
 msgstr ""
 
