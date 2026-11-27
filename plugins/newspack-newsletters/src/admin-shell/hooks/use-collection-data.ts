@@ -1,0 +1,282 @@
+import { speak } from '@wordpress/a11y';
+import apiFetch from '@wordpress/api-fetch';
+import { useCallback, useEffect, useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { addQueryArgs } from '@wordpress/url';
+
+import { notifyError, notifyInfo } from '../notices';
+import { FETCH_ALL_CHUNK_SIZE, FETCH_ALL_MAX_ITEMS } from '../utils/per-page';
+
+import type { PostItem } from '../types';
+
+interface PaginationInfo {
+	totalItems: number;
+	totalPages: number;
+}
+
+interface UseCollectionDataOptions {
+	/** Pre-computed REST path. Falsy ⇒ defer. */
+	path: string;
+	/** When set, sub-fetch for the trash banner. */
+	trashCountPath?: string | null;
+	/** Bump externally to refetch (alongside internal refresh). */
+	mutationKey?: number;
+	/** notifyError message on fetch failure. */
+	errorMessage?: string;
+	/** notifyError dedupe id. */
+	errorNoticeId?: string;
+	/** Walk every page of the collection. */
+	fetchAll?: boolean;
+}
+
+export interface CollectionData< Item = PostItem > {
+	data: Item[];
+	paginationInfo: PaginationInfo;
+	isLoading: boolean;
+	hasResolved: boolean;
+	hasLoadedOnce: boolean;
+	trashCount: number | null;
+	refresh: () => void;
+}
+
+// Modest parallelism for fetch-all walks — enough to hide latency
+// without hammering the server.
+const FETCH_ALL_CONCURRENCY = 3;
+
+function parseHeaderInt( value: string | null ): number {
+	const parsed = parseInt( value ?? '', 10 );
+	return Number.isNaN( parsed ) ? 0 : parsed;
+}
+
+function readPaginationInfo( response: Response ): PaginationInfo {
+	return {
+		totalItems: parseHeaderInt( response.headers.get( 'X-WP-Total' ) ),
+		totalPages: parseHeaderInt( response.headers.get( 'X-WP-TotalPages' ) ),
+	};
+}
+
+// Read back off the path rather than taken as a second argument: the page
+// ceiling has to agree with the `per_page` the caller actually asked for, and
+// two independent sources could drift apart silently.
+function chunkSizeFromPath( path: string ): number {
+	const query = path.split( '?' )[ 1 ];
+	const perPage = query ? parseInt( new URLSearchParams( query ).get( 'per_page' ) as string, 10 ) : NaN;
+	return Number.isInteger( perPage ) && perPage > 0 ? perPage : FETCH_ALL_CHUNK_SIZE;
+}
+
+// The collection got shorter mid-walk — retrying won't help.
+const OUT_OF_RANGE_PAGE_CODES = [ 'rest_post_invalid_page_number', 'rest_term_invalid_page_number' ];
+
+function isOutOfRangePageError( error: unknown ): boolean {
+	return OUT_OF_RANGE_PAGE_CODES.includes( ( error as { code?: string } )?.code as string );
+}
+
+/**
+ * Server-side paginated fetch hook for DataView list screens.
+ *
+ * A falsy `path` defers the main fetch (used by layouts during the
+ * parent's `view === null` latch). A falsy `trashCountPath` skips the
+ * trash sub-fetch — `hasResolved` flips solely on the main resolution.
+ *
+ * When `fetchAll` is set, the first response's `X-WP-TotalPages` drives
+ * a walk over the remaining pages, capped at `FETCH_ALL_MAX_ITEMS` rows
+ * using the `per_page` read off `path`.
+ * `data` commits once the walk finishes (or aborts), and `totalPages` is
+ * clamped to 1 so the footer doesn't offer pagination. DataViews shows
+ * the walk via its own loading state; there is no separate indicator.
+ *
+ * Options are documented on `UseCollectionDataOptions` above.
+ *
+ * @return Hook state.
+ */
+export default function useCollectionData< Item = PostItem >( {
+	path,
+	trashCountPath = null,
+	mutationKey = 0,
+	errorMessage,
+	errorNoticeId,
+	fetchAll = false,
+}: UseCollectionDataOptions ): CollectionData< Item > {
+	const [ data, setData ] = useState< Item[] >( [] );
+	const [ paginationInfo, setPaginationInfo ] = useState< PaginationInfo >( { totalItems: 0, totalPages: 0 } );
+	const [ isLoading, setIsLoading ] = useState( true );
+	const [ refreshKey, setRefreshKey ] = useState( 0 );
+	const [ mainResolved, setMainResolved ] = useState( false );
+	const [ trashResolved, setTrashResolved ] = useState( ! trashCountPath );
+	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
+	// `null` ⇒ unknown; failed trash fetch stays `null` so `=== 0` stays false and the banner stays hidden.
+	const [ trashCount, setTrashCount ] = useState< number | null >( null );
+
+	const refresh = useCallback( () => setRefreshKey( key => key + 1 ), [] );
+
+	useEffect( () => {
+		if ( ! path ) {
+			setData( [] );
+			setPaginationInfo( { totalItems: 0, totalPages: 0 } );
+			setIsLoading( false );
+			return undefined;
+		}
+		let cancelled = false;
+		setIsLoading( true );
+
+		apiFetch( { path, parse: false } )
+			.then( async response => {
+				const items = await response.json();
+				if ( cancelled ) {
+					return;
+				}
+				const pagination = readPaginationInfo( response );
+				const firstPage = Array.isArray( items ) ? items : [];
+
+				if ( ! fetchAll ) {
+					setData( firstPage );
+					setPaginationInfo( pagination );
+					setHasLoadedOnce( true );
+					return;
+				}
+
+				const all = [ ...firstPage ];
+				setPaginationInfo( { totalItems: pagination.totalItems, totalPages: 1 } );
+				setHasLoadedOnce( true );
+
+				if ( pagination.totalPages <= 1 ) {
+					setData( all );
+					return;
+				}
+
+				// DataViews' loading treatment is visual only, so a multi-page
+				// walk is otherwise silent to a screen reader.
+				speak( __( 'Loading all items. This may take a moment.', 'newspack-newsletters' ), 'polite' );
+
+				const maxPage = Math.min( pagination.totalPages, Math.ceil( FETCH_ALL_MAX_ITEMS / chunkSizeFromPath( path ) ) );
+
+				let endedEarly = false;
+				let cappedByMax = false;
+				// Settled, so one bad page doesn't discard its siblings.
+				const fetchPages = ( from: number, to: number ) => {
+					const batch = [];
+					for ( let p = from; p <= to; p++ ) {
+						// Parsed — an unparsed rejection is a bare `Response`, no error code.
+						batch.push( apiFetch< unknown >( { path: addQueryArgs( path, { page: p } ) } ) );
+					}
+					return Promise.allSettled( batch );
+				};
+				const keepFulfilledPrefix = ( results: PromiseSettledResult< unknown >[] ): number => {
+					for ( const result of results ) {
+						if ( result.status !== 'fulfilled' ) {
+							break;
+						}
+						if ( Array.isArray( result.value ) ) {
+							all.push( ...result.value );
+						}
+					}
+					return results.findIndex( result => result.status === 'rejected' );
+				};
+
+				for ( let page = 2; page <= maxPage && ! cancelled; page += FETCH_ALL_CONCURRENCY ) {
+					const lastPage = Math.min( page + FETCH_ALL_CONCURRENCY - 1, maxPage );
+
+					let results = await fetchPages( page, lastPage );
+					if ( cancelled ) {
+						return;
+					}
+					let failedAt = keepFulfilledPrefix( results );
+
+					if ( failedAt !== -1 && ! isOutOfRangePageError( ( results[ failedAt ] as PromiseRejectedResult ).reason ) ) {
+						results = await fetchPages( page + failedAt, lastPage );
+						if ( cancelled ) {
+							return;
+						}
+						failedAt = keepFulfilledPrefix( results );
+						if ( failedAt !== -1 && ! isOutOfRangePageError( ( results[ failedAt ] as PromiseRejectedResult ).reason ) ) {
+							notifyError(
+								__( 'Only some items could be loaded. Reload the page to try again.', 'newspack-newsletters' ),
+								errorNoticeId ? { id: errorNoticeId } : undefined
+							);
+						}
+					}
+
+					if ( failedAt !== -1 ) {
+						endedEarly = true;
+						break;
+					}
+				}
+
+				if ( cancelled ) {
+					return;
+				}
+
+				if ( ! endedEarly && maxPage < pagination.totalPages ) {
+					endedEarly = true;
+					cappedByMax = true;
+				}
+
+				setData( all );
+				speak(
+					endedEarly
+						? __( 'Stopped loading items before the end of the list.', 'newspack-newsletters' )
+						: __( 'Finished loading items.', 'newspack-newsletters' ),
+					'polite'
+				);
+
+				if ( endedEarly ) {
+					setPaginationInfo( { totalItems: all.length, totalPages: 1 } );
+				}
+
+				if ( cappedByMax ) {
+					notifyInfo(
+						sprintf(
+							/* translators: %s: number of items shown */
+							__( 'Showing the first %s items. Use search or filters to narrow the list.', 'newspack-newsletters' ),
+							all.length.toLocaleString()
+						)
+					);
+				}
+			} )
+			.catch( () => {
+				if ( cancelled || ! errorMessage ) {
+					return;
+				}
+				// Keep last-good data so a refetch error doesn't trip the strict-empty banner.
+				notifyError( errorMessage, errorNoticeId ? { id: errorNoticeId } : undefined );
+			} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setIsLoading( false );
+					setMainResolved( true );
+				}
+			} );
+
+		return () => {
+			cancelled = true;
+		};
+	}, [ path, mutationKey, refreshKey, errorMessage, errorNoticeId, fetchAll ] );
+
+	useEffect( () => {
+		if ( ! trashCountPath ) {
+			return undefined;
+		}
+		let cancelled = false;
+		// Back to "unknown" while the new count is in flight, or a freshly-trashed last item flashes EmptyState.
+		setTrashCount( null );
+		apiFetch( { path: trashCountPath, parse: false } )
+			.then( response => {
+				if ( ! cancelled ) {
+					setTrashCount( parseHeaderInt( response.headers.get( 'X-WP-Total' ) ) );
+				}
+			} )
+			.catch( () => {} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setTrashResolved( true );
+				}
+			} );
+		return () => {
+			cancelled = true;
+		};
+	}, [ trashCountPath, mutationKey, refreshKey ] );
+
+	const hasResolved = mainResolved && trashResolved;
+
+	return { data, paginationInfo, isLoading, hasResolved, hasLoadedOnce, trashCount, refresh };
+}

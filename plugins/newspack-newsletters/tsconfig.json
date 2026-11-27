@@ -4,5 +4,8 @@
 		"src",
 		"webpack-shims",
 		"node_modules/newspack-scripts/types"
-	]
+	],
+	"compilerOptions": {
+		"allowJs": false
+	}
 }

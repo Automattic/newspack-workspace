@@ -1,0 +1,143 @@
+import { FETCH_ALL_CHUNK_SIZE, isFetchAllPerPage } from './per-page';
+
+import type { QueryView } from '../types';
+
+interface BuildQueryOptions {
+	fieldToQueryParam?: Record< string, string >;
+	sortFieldToOrderby?: Record< string, string > | null;
+	defaultPerPage?: number;
+	fetchAllChunkSize?: number;
+	defaultStatuses?: string | null;
+	statusFilterParam?: string | null;
+	defaultStatusParam?: string;
+	extraParams?: Record< string, unknown >;
+	supportsOffset?: boolean;
+	arrayParams?: Array< { viewKey: string; param: string } >;
+}
+
+function asArray( value: unknown ): unknown[] {
+	if ( Array.isArray( value ) ) {
+		return value;
+	}
+	if ( value === undefined || value === null || value === '' ) {
+		return [];
+	}
+	return [ value ];
+}
+
+/**
+ * Translate a DataViews `view` into a flat REST params object.
+ *
+ * @param {Object}                                    view                         DataViews view state.
+ * @param {Object}                                    options                      Screen-specific bindings.
+ * @param {Object}                                    [options.fieldToQueryParam]  Map of non-status filter fields → REST query params.
+ * @param {Object}                                    [options.sortFieldToOrderby] Map of view.sort.field → REST `orderby`. When omitted, sort is pass-through.
+ * @param {number}                                    [options.defaultPerPage]     Default `per_page` when `view.perPage` is missing. Defaults to 20.
+ * @param {number}                                    [options.fetchAllChunkSize]  Rows one request of an "All" walk asks for. Defaults to `FETCH_ALL_CHUNK_SIZE`.
+ * @param {string}                                    [options.defaultStatuses]    Comma-joined statuses to use when no status filter is active.
+ * @param {string}                                    [options.statusFilterParam]  REST param to receive status-filter values. When omitted, `status` is used.
+ * @param {string}                                    [options.defaultStatusParam] REST param to receive `defaultStatuses`. Defaults to `'status'`.
+ * @param {Object}                                    [options.extraParams]        Fixed params merged into the result (e.g. `{ _fields: 'id,title' }`).
+ * @param {boolean}                                   [options.supportsOffset]     When `true`, `view.offset` overrides `page` so callers can address mid-collection windows.
+ * @param {Array<{ viewKey: string, param: string }>} [options.arrayParams]        Pass-through bindings for array-valued view fields (e.g. `view.author`).
+ * @return {Object} Flat REST query params.
+ */
+export function buildQueryParams( view: QueryView = {}, options: BuildQueryOptions = {} ): Record< string, unknown > {
+	const {
+		fieldToQueryParam = {},
+		sortFieldToOrderby = null,
+		defaultPerPage = 20,
+		fetchAllChunkSize = FETCH_ALL_CHUNK_SIZE,
+		defaultStatuses = null,
+		statusFilterParam = null,
+		defaultStatusParam = 'status',
+		extraParams = {},
+		supportsOffset = false,
+		arrayParams = [],
+	} = options;
+
+	// "All" walks the collection in chunks starting at page 1;
+	// `use-collection-data` follows `X-WP-TotalPages` for the rest.
+	const fetchAll = isFetchAllPerPage( view.perPage );
+
+	const params: Record< string, unknown > = {
+		per_page: fetchAll ? fetchAllChunkSize : view.perPage || defaultPerPage,
+		context: 'edit',
+		...extraParams,
+	};
+
+	if ( fetchAll ) {
+		params.page = 1;
+	} else if ( supportsOffset && typeof view.offset === 'number' ) {
+		params.offset = view.offset;
+	} else {
+		params.page = view.page || 1;
+	}
+
+	if ( view.search ) {
+		params.search = view.search;
+	}
+
+	if ( view.sort?.field ) {
+		const orderby = sortFieldToOrderby ? sortFieldToOrderby[ view.sort.field ] : view.sort.field;
+		if ( orderby ) {
+			params.orderby = orderby;
+			params.order = view.sort.direction === 'asc' ? 'asc' : 'desc';
+		}
+	}
+
+	const filters = Array.isArray( view.filters ) ? view.filters : [];
+	const statusFilter = filters.find( filter => filter.field === 'status' );
+
+	if ( statusFilter ) {
+		const values = asArray( statusFilter.value );
+		if ( values.length > 0 ) {
+			params[ statusFilterParam || 'status' ] = values.join( ',' );
+		} else if ( defaultStatuses ) {
+			params[ defaultStatusParam ] = defaultStatuses;
+		}
+	} else if ( defaultStatuses ) {
+		params[ defaultStatusParam ] = defaultStatuses;
+	}
+
+	for ( const filter of filters ) {
+		if ( filter.field === 'status' ) {
+			continue;
+		}
+		const param = fieldToQueryParam[ filter.field ];
+		if ( ! param ) {
+			continue;
+		}
+		const values = asArray( filter.value );
+		if ( values.length === 0 ) {
+			continue;
+		}
+		params[ param ] = values.join( ',' );
+	}
+
+	for ( const { viewKey, param } of arrayParams ) {
+		const value = view[ viewKey ];
+		if ( Array.isArray( value ) && value.length > 0 ) {
+			params[ param ] = value.join( ',' );
+		}
+	}
+
+	return params;
+}
+
+/**
+ * Serialise a params object into a query string suitable for apiFetch's `path`.
+ *
+ * @param {Object} params Flat key/value params.
+ * @return {string} Query string starting with `?`.
+ */
+export function toQueryString( params: Record< string, unknown > ): string {
+	const search = new URLSearchParams();
+	Object.entries( params ).forEach( ( [ key, value ] ) => {
+		if ( value === undefined || value === null || value === '' ) {
+			return;
+		}
+		search.append( key, String( value ) );
+	} );
+	return `?${ search.toString() }`;
+}
