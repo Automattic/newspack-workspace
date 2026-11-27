@@ -40,7 +40,7 @@ class Subscribers_Payments {
 	 *
 	 * Called from Subscribers_Wizard::register_api_endpoints(), so these routes
 	 * exist exactly when the wizard's own routes do (feature flag on) and share
-	 * its `manage_options` permission check.
+	 * its permission check (Capabilities::MANAGE_ACCESS_CONTROL).
 	 *
 	 * @param callable $permission_callback The wizard's api_permissions_check.
 	 */

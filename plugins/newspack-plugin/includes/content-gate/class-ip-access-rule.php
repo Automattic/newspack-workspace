@@ -258,7 +258,7 @@ class IP_Access_Rule {
 	 * @return bool
 	 */
 	public static function api_permissions_check() {
-		return current_user_can( 'manage_options' );
+		return current_user_can( \Newspack\Capabilities::MANAGE_ACCESS_CONTROL );
 	}
 
 	/**

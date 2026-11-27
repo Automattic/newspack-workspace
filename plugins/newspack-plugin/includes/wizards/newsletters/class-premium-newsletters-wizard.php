@@ -32,6 +32,13 @@ class Premium_Newsletters_Wizard extends Wizard {
 	protected $parent_slug = 'newspack-newsletters';
 
 	/**
+	 * Capability required to use this wizard. See Capabilities::MANAGE_ACCESS_CONTROL.
+	 *
+	 * @var string
+	 */
+	protected $capability = Capabilities::MANAGE_ACCESS_CONTROL;
+
+	/**
 	 * The parent menu item name.
 	 *
 	 * @var string
