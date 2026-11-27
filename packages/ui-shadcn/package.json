@@ -22,7 +22,7 @@
 	},
 	"devDependencies": {
 		"culori": "^4.0.2",
-		"postcss": "^8.5.15",
-		"sass": "^1.100.0"
+		"postcss": "^8.5.33",
+		"sass": "^1.108.2"
 	}
 }
