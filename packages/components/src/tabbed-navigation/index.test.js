@@ -1,6 +1,7 @@
 /**
  * External dependencies.
  */
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Redirect, useHistory } from 'react-router-dom';
 
@@ -32,6 +33,31 @@ const renderTabs = ( { initialEntries = [ '/stories' ], ...props } = {} ) => {
 };
 
 const getTab = name => screen.getByRole( 'tab', { name } );
+
+/**
+ * Render a single-tab nav whose content counts its own mounts, so a test can
+ * tell a re-render (the content keeps its state) from a remount (it loses it).
+ *
+ * @param {Object} item The sole tab item, starting on its own path `/stories`.
+ * @return {{history: Object, mounts: {current: number}}} Router history and the mount counter.
+ */
+const renderMountCountingTabs = item => {
+	const historyRef = { current: null };
+	const mounts = { current: 0 };
+	const Content = () => {
+		useEffect( () => {
+			mounts.current++;
+		}, [] );
+		return <div>Routed content</div>;
+	};
+	render(
+		<MemoryRouter initialEntries={ [ '/stories' ] }>
+			<HistoryGrabber historyRef={ historyRef } />
+			<TabbedNavigation items={ [ item ] } content={ <Content /> } />
+		</MemoryRouter>
+	);
+	return { history: historyRef.current, mounts };
+};
 
 describe( 'isItemActive', () => {
 	it( 'treats an explicitly selected item as active regardless of pathname', () => {
@@ -207,6 +233,36 @@ describe( 'TabbedNavigation with routed items', () => {
 		act( () => history.push( '/budgets' ) );
 		expect( getTab( 'Budgets' ) ).toHaveAttribute( 'aria-selected', 'true' );
 		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ).id ).toBe( getTab( 'Budgets' ).getAttribute( 'aria-controls' ) );
+	} );
+
+	it( 'remounts the content when a route stops being owned by a tab', () => {
+		// Leaving a tab's ownership moves the content out of its panel, so React
+		// remounts the subtree — losing its state and re-firing its effects. That
+		// cost is why a tab whose sub-views have their own paths should claim them
+		// via `activeTabPaths` rather than lean on the unowned-content fallback.
+		const { history, mounts } = renderMountCountingTabs( { label: 'Stories', path: '/stories', exact: true } );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).not.toBeNull();
+		expect( mounts.current ).toBe( 1 );
+
+		act( () => history.push( '/stories/42' ) );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).toBeNull();
+		expect( mounts.current ).toBe( 2 );
+	} );
+
+	it( 'keeps the content in the tab panel across subpaths it claims', () => {
+		// The complement of the test above, and the shape the wizard tabs in this
+		// change adopt: with the subpath claimed the content never leaves the panel,
+		// so no remount happens.
+		const { history, mounts } = renderMountCountingTabs( { label: 'Stories', path: '/stories', exact: true, activeTabPaths: [ '/stories/*' ] } );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).not.toBeNull();
+		expect( mounts.current ).toBe( 1 );
+
+		act( () => history.push( '/stories/42' ) );
+		expect( getTab( 'Stories' ) ).toHaveAttribute( 'aria-selected', 'true' );
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ) ).not.toBeNull();
+		// Unchanged from before the push: the content stayed put rather than
+		// unmounting and remounting into the same place.
+		expect( mounts.current ).toBe( 1 );
 	} );
 } );
 
