@@ -39,15 +39,15 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
-		"@wordpress/ui": "^0.26.0",
+		"@wordpress/ui": "^0.27.0",
 		"canvas-confetti": "^1.9.4",
 		"classnames": "^2.5.1",
-		"colord": "^2.9.3",
+		"colord": "^2.14.0",
 		"deep-map-keys": "^2.0.1",
 		"js-cookie": "^3.0.8",
 		"moment": "^2.30.1",
 		"moment-range": "^3.1.1",
-		"qs": "^6.15.2",
+		"qs": "^6.17.1",
 		"react-router-dom": "^5.3.4",
 		"recursive-copy": "^2.0.14"
 	},
@@ -62,7 +62,7 @@
 		"newspack-scripts": "workspace:*",
 		"prop-types": "^15.8.0",
 		"react": "^18.0.0",
-		"sass": "^1.100.0"
+		"sass": "^1.108.2"
 	},
 	"repository": {
 		"type": "git",

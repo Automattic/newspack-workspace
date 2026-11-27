@@ -45,19 +45,19 @@
 		"extends @wordpress/browserslist-config"
 	],
 	"dependencies": {
-		"@wordpress/ui": "^0.26.0",
+		"@wordpress/ui": "^0.27.0",
 		"classnames": "^2.5.1",
 		"lodash": "^4.17.21",
 		"newspack-colors": "workspace:*",
 		"newspack-icons": "workspace:*",
 		"newspack-motion": "workspace:*",
 		"redux": "^5.0.0",
-		"redux-saga": "^1.5.0",
+		"redux-saga": "^1.6.0",
 		"regenerator-runtime": "^0.14.1",
 		"swiper": "12.2.0"
 	},
 	"devDependencies": {
-		"@types/lodash": "^4.17.23",
+		"@types/lodash": "^4.17.27",
 		"newspack-components": "workspace:*",
 		"newspack-scripts": "workspace:*"
 	},
