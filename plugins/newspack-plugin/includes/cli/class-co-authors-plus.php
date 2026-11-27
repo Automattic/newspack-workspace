@@ -57,7 +57,6 @@ class Co_Authors_Plus {
 
 		if ( self::$live ) {
 			WP_CLI::log( 'Live mode - data will be changed.' );
-			wp_defer_term_counting( true );
 		} else {
 			WP_CLI::log( 'Dry run. Use --live flag to run in live mode.' );
 		}
@@ -74,6 +73,12 @@ class Co_Authors_Plus {
 			WP_CLI::log( 'Skipping linked Guest Authors, since guest_author_ids argument was provided.' );
 		}
 		WP_CLI::log( '' );
+
+		// Deferring any earlier would hold counts for author terms that migrating a linked guest author deletes, which can crash Co-Authors Plus when they run.
+		if ( self::$live ) {
+			wp_defer_term_counting( true );
+		}
+
 		if ( self::$user_logins === false ) {
 			self::migrate_unlinked_guest_authors();
 		} else {
@@ -225,7 +230,10 @@ class Co_Authors_Plus {
 			 */
 			global $wpdb;
 			$existing_user = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $wpdb->users WHERE user_nicename = %s", $guest_author_login ) ); //phpcs:ignore
-			$updating = false;
+			$updating              = false;
+			$migration_data        = [];
+			$needs_nicename_change = false;
+			$old_nicename          = '';
 
 			if ( $existing_user ) {
 				$updated_users_count++;
@@ -235,23 +243,14 @@ class Co_Authors_Plus {
 
 				if ( self::$verbose ) {
 					WP_CLI::log( sprintf( 'User with nicename %s already exists, it will be updated.', $guest_author_login ) );
-					if ( $post_meta['cap-display_name'] !== $existing_user->display_name ) {
-						WP_CLI::log( sprintf( 'Display name will be updated from %s to %s', $existing_user->display_name, $post_meta['cap-display_name'] ) );
+					if ( '' !== $user_data['display_name'] && $user_data['display_name'] !== $existing_user->display_name ) {
+						WP_CLI::log( sprintf( 'Display name will be updated from %s to %s', $existing_user->display_name, $user_data['display_name'] ) );
 					}
-					WP_CLI::log( 'Values before the migration stored in _np_cap_guest_author_migration_data user meta.' );
+					WP_CLI::log( sprintf( 'Values before the migration %s in _np_cap_guest_author_migration_data user meta.', self::$live ? 'are stored' : 'would be stored' ) );
 				}
-				$migration_data = [
-					'info'         => 'User data before Guest Authors migration executed on ' . gmdate( 'Y-m-d H:i:s' ),
-					'display_name' => $existing_user->display_name,
-					'first_name'   => get_user_meta( $existing_user->ID, 'first_name', true ),
-					'last_name'    => get_user_meta( $existing_user->ID, 'last_name', true ),
-					'description'  => get_user_meta( $existing_user->ID, 'description', true ),
-				];
-				add_user_meta( $existing_user->ID, '_np_cap_guest_author_migration_data', $migration_data );
+				$migration_data = self::get_user_backup( get_userdata( $existing_user->ID ) );
 			} else {
 				$created_users_count++;
-				$needs_nicename_change = false;
-				$old_nicename = '';
 
 				// For new users, we need to remove the cap- prefix from the login, otherwise CAP won't find them when getting the authors of a post
 				// See https://github.com/Automattic/Co-Authors-Plus/blob/30602dbd59c6cd73bd4aa3ff8a3e6eda0c1bccea/template-tags.php#L20.
@@ -302,11 +301,22 @@ class Co_Authors_Plus {
 				}
 			}
 
+			if ( $updating ) {
+				// An empty guest author field would otherwise erase what the existing user already has.
+				foreach ( [ 'user_url', 'display_name' ] as $field ) {
+					if ( '' === $user_data[ $field ] ) {
+						unset( $user_data[ $field ] );
+					}
+				}
+				$user_data['meta_input'] = array_filter( $user_data['meta_input'], fn( $value ) => '' !== $value );
+			}
+
 			if ( self::$live ) {
 				if ( $updating ) {
-					$user_id = wp_update_user( $user_data );
+					self::store_user_backup( $existing_user->ID, $migration_data );
+					$user_id = wp_update_user( wp_slash( $user_data ) );
 				} else {
-					$user_id = wp_insert_user( $user_data );
+					$user_id = wp_insert_user( wp_slash( $user_data ) );
 				}
 
 				if ( is_wp_error( $user_id ) ) {
@@ -395,12 +405,10 @@ class Co_Authors_Plus {
 
 			$guest_author_data = get_post_meta( $guest_author->ID );
 
-			// Avatar is assigned first, since the original will be removed when the guest author is deleted.
-			self::assign_user_avatar( $guest_author, $user_id );
-
 			global $coauthors_plus;
 
-			$guest_term = $coauthors_plus->get_author_term( (object) [ 'user_nicename' => $guest_author->post_name ] );
+			// Co-Authors Plus checks the object's user_login against the term, so it needs the real guest author object.
+			$guest_term = $coauthors_plus->get_author_term( $coauthors_plus->guest_authors->get_guest_author_by( 'ID', $guest_author->ID ) );
 			$wp_user_term = $coauthors_plus->get_author_term( $linked_user );
 			if ( ! $guest_term ) {
 				WP_CLI::warning( sprintf( 'No term found for guest author %d. This will make post reassignement impossible. Skipping!', $guest_author->ID ) );
@@ -414,7 +422,28 @@ class Co_Authors_Plus {
 
 			$author_slug = preg_replace( '/^cap-/', '', $guest_term->slug );
 
+			// If the linked user can't take this exact nicename, the guest author's posts end up under someone else's byline, or under none.
+			// wp_insert_user() cleans a nicename with these two calls before saving it.
+			if ( sanitize_title( sanitize_user( $author_slug, true ) ) !== $author_slug ) {
+				WP_CLI::warning( sprintf( 'Skipping guest author %d: WordPress would change its slug %s when saving it as a nicename.', $guest_author->ID, $author_slug ) );
+				continue;
+			}
+			if ( mb_strlen( $author_slug ) > 50 ) {
+				WP_CLI::warning( sprintf( 'Skipping guest author %d: its slug %s is longer than the 50 characters a user nicename allows.', $guest_author->ID, $author_slug ) );
+				continue;
+			}
+			$slug_owner = get_user_by( 'slug', $author_slug );
+			if ( $slug_owner && $slug_owner->ID !== $user_id ) {
+				WP_CLI::warning( sprintf( 'Skipping guest author %d: user #%d already has the nicename %s.', $guest_author->ID, $slug_owner->ID, $author_slug ) );
+				continue;
+			}
+
+			// Avatar is assigned before any deletion, since the original is removed along with the guest author.
+			self::assign_user_avatar( $guest_author, $user_id );
+
 			if ( self::$live ) {
+				self::store_user_backup( $user_id, self::get_user_backup( $linked_user ) );
+
 				if ( $wp_user_term ) {
 					// If the WP User term exists, delete the Guest Author term and reassign the posts.
 					WP_CLI::log( 'Deleting Guest Author #' . $guest_author->ID . ' for user ' . $linked_user->data->user_login );
@@ -448,11 +477,43 @@ class Co_Authors_Plus {
 			}
 
 			self::assign_user_props( $guest_author_data, $user_id, $author_slug );
-			self::assign_user_meta( $guest_author, $user_id );
+			self::assign_user_meta( $guest_author_data, $user_id );
 
-			// Add the Non-Editing Contributor role.
-			$linked_user->add_role( \Newspack\Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME );
+			if ( self::$live ) {
+				$linked_user->add_role( \Newspack\Guest_Contributor_Role::CONTRIBUTOR_NO_EDIT_ROLE_NAME );
+			} else {
+				WP_CLI::log( sprintf( 'Would add the Non-Editing Contributor role to user #%d.', $user_id ) );
+			}
 		}
+	}
+
+	/**
+	 * Collect the profile values the migration can replace.
+	 *
+	 * @param WP_User $user The user about to be updated.
+	 * @return array Backup data, keyed by field name.
+	 */
+	private static function get_user_backup( $user ) {
+		$backup = [
+			'info'          => 'User data before Guest Authors migration executed on ' . gmdate( 'Y-m-d H:i:s' ),
+			'display_name'  => $user->display_name,
+			'user_nicename' => $user->user_nicename,
+			'user_url'      => $user->user_url,
+		];
+		foreach ( array_merge( [ 'first_name', 'last_name', 'description' ], array_values( \Newspack\Authors_Custom_Fields::USER_META_NAMES ) ) as $meta_key ) {
+			$backup[ $meta_key ] = get_user_meta( $user->ID, $meta_key, true );
+		}
+		return $backup;
+	}
+
+	/**
+	 * Save a backup of a user's profile values. Each run adds a row, so earlier backups are kept.
+	 *
+	 * @param int   $user_id The user ID.
+	 * @param array $backup  Data from get_user_backup().
+	 */
+	private static function store_user_backup( $user_id, $backup ) {
+		add_user_meta( $user_id, '_np_cap_guest_author_migration_data', wp_slash( $backup ) );
 	}
 
 	/**
@@ -479,23 +540,40 @@ class Co_Authors_Plus {
 	 * @param array  $guest_author_data The guest author post's data.
 	 * @param int    $user_id The user ID to update the avatar for.
 	 * @param string $author_slug Intended author slug. Must match the of the Guest Author slug (w/o "cap-" prefix).
-	 * @return bool True if the user meta was updated, false otherwise.
+	 * @return bool False if the user could not be updated, true otherwise.
 	 */
 	private static function assign_user_props( $guest_author_data, $user_id, $author_slug ) {
-		$display_name = $guest_author_data['cap-display_name'][0];
-		$user_login = $guest_author_data['cap-user_login'][0];
+		$display_name = trim( $guest_author_data['cap-display_name'][0] ?? '' );
+		$user_data    = [
+			'ID'            => $user_id,
+			'user_nicename' => $author_slug,
+		];
+		// WordPress replaces an empty display name with the user's login, so leave the current one alone.
+		if ( '' !== $display_name ) {
+			$user_data['display_name'] = $display_name;
+		}
 
 		if ( self::$verbose ) {
-			WP_CLI::log( sprintf( 'Update display_name to %s and user_nicename to %s.', $display_name, $user_login ) );
+			$verb = self::$live ? 'Update' : 'Would update';
+			if ( '' !== $display_name ) {
+				WP_CLI::log( sprintf( '%s display_name to %s.', $verb, $display_name ) );
+			}
+			WP_CLI::log( sprintf( '%s user_nicename to %s.', $verb, $author_slug ) );
 		}
 		if ( self::$live ) {
-			wp_update_user(
-				[
-					'ID'            => $user_id,
-					'display_name'  => $display_name,
-					'user_nicename' => $author_slug,
-				]
-			);
+			$result = wp_update_user( wp_slash( $user_data ) );
+			if ( is_wp_error( $result ) ) {
+				WP_CLI::warning(
+					sprintf(
+						'Could not update user #%d: %s Not saved: nicename %s, display name %s.',
+						$user_id,
+						$result->get_error_message(),
+						$author_slug,
+						'' !== $display_name ? $display_name : '(unchanged)'
+					)
+				);
+				return false;
+			}
 		}
 		return true;
 	}
@@ -503,12 +581,11 @@ class Co_Authors_Plus {
 	/**
 	 * Assign user meta from guest author post's meta.
 	 *
-	 * @param WP_Post $guest_author The guest author post.
-	 * @param int     $user_id The user ID to update the avatar for.
+	 * @param array $guest_author_data The guest author post's meta, read before the post is deleted.
+	 * @param int   $user_id The user ID to update the avatar for.
 	 * @return bool True if the user meta was updated, false otherwise.
 	 */
-	private static function assign_user_meta( $guest_author, $user_id ) {
-		$guest_author_data = get_post_meta( $guest_author->ID );
+	private static function assign_user_meta( $guest_author_data, $user_id ) {
 		$assignable_meta = array_merge(
 			[
 				'display_name',
@@ -528,7 +605,7 @@ class Co_Authors_Plus {
 				continue;
 			}
 			$user_meta_value = $meta_value[0];
-			if ( empty( $user_meta_value ) ) {
+			if ( empty( trim( $user_meta_value ) ) ) {
 				continue;
 			}
 			if ( self::$verbose ) {
@@ -540,9 +617,9 @@ class Co_Authors_Plus {
 			}
 			if ( self::$live ) {
 				if ( $existing_meta_value ) {
-					update_user_meta( $user_id, '_np_original_' . $user_meta_key, $existing_meta_value );
+					update_user_meta( $user_id, '_np_original_' . $user_meta_key, wp_slash( $existing_meta_value ) );
 				}
-				update_user_meta( $user_id, $user_meta_key, $user_meta_value );
+				update_user_meta( $user_id, $user_meta_key, wp_slash( $user_meta_value ) );
 			}
 		}
 		return true;
