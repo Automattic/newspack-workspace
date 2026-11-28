@@ -66,12 +66,13 @@ const INNER_BLOCKS_TEMPLATE = [
 const ALLOWED_BLOCKS = [ 'core/comments' ];
 
 /**
- * Fills an empty panel with the comments template, once per mount.
+ * Fills the panel with the comments template if it is empty when it mounts.
  *
  * This stands in for the InnerBlocks template prop, which WP 7.2 deprecates.
- * A template in the block settings would also fill the panels after the first
- * when they are inserted, and those never render, so this mounts only beside
- * the first panel's InnerBlocks, as the prop's template did.
+ * Only the first panel on a page renders, so this mounts beside its
+ * InnerBlocks alone; a template in the block settings would fill every
+ * inserted panel. The check runs once, so a panel an editor empties stays
+ * empty, as it did with the prop.
  *
  * @param {Object} props          Component props.
  * @param {string} props.clientId Content block client ID.
@@ -79,14 +80,17 @@ const ALLOWED_BLOCKS = [ 'core/comments' ];
  * @return {null} Renders nothing.
  */
 function FillEmptyPanel( { clientId } ) {
-	const hasFilled = useRef( false );
+	const hasChecked = useRef( false );
 	const isEmpty = useSelect( select => ! select( 'core/block-editor' ).getBlockCount( clientId ), [ clientId ] );
 	const { replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent } = useDispatch( 'core/block-editor' );
 	useLayoutEffect( () => {
-		if ( hasFilled.current || ! isEmpty ) {
+		if ( hasChecked.current ) {
 			return;
 		}
-		hasFilled.current = true;
+		hasChecked.current = true;
+		if ( ! isEmpty ) {
+			return;
+		}
 		__unstableMarkNextChangeAsNotPersistent();
 		replaceInnerBlocks( clientId, synchronizeBlocksWithTemplate( [], INNER_BLOCKS_TEMPLATE ), false );
 	}, [ clientId, isEmpty, replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent ] );
