@@ -4,6 +4,7 @@
 import { useEffect, useState } from '@wordpress/element';
 import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
 import { useSelect } from '@wordpress/data';
+import { getBlockType } from '@wordpress/blocks';
 
 /**
  * Internal dependencies
@@ -11,11 +12,20 @@ import { useSelect } from '@wordpress/data';
 import PanelPreviewToggle from './panel-preview-toggle';
 import { panelToggles, subscribeToPanel } from './preview-refs';
 
-const CHILD_LOCK = { move: true, remove: true };
-const BLOCKS_TEMPLATE = [
-	[ 'newspack/comments-panel-trigger', { lock: CHILD_LOCK } ],
-	[ 'newspack/comments-panel-content', { lock: CHILD_LOCK } ],
-];
+/**
+ * Before WP 7.2, InnerBlocks only reads the template from props.
+ * Core List has a settings template from 7.2 on, so it marks support.
+ * TODO: Remove once WP 7.2 is released, and the plugin's minimum WordPress version is updated to 7.2.
+ *
+ * @param {string} name Block name.
+ * @return {Object} InnerBlocks template props, empty on WP 7.2+.
+ */
+const getLegacyTemplateProps = name => {
+	if ( getBlockType( 'core/list' )?.template ) {
+		return {};
+	}
+	return { template: getBlockType( name ).template };
+};
 
 /**
  * Edit component for the Comments Panel block.
@@ -24,10 +34,11 @@ const BLOCKS_TEMPLATE = [
  *
  * @param {Object} props          Block props.
  * @param {string} props.clientId Block client ID.
+ * @param {string} props.name     Block name.
  *
  * @return {JSX.Element} The block editor UI.
  */
-export default function CommentsPanelEdit( { clientId } ) {
+export default function CommentsPanelEdit( { clientId, name } ) {
 	// Mirror the panel's open state so the toolbar button label and isPressed stay correct.
 	const [ isPreviewOpen, setIsPreviewOpen ] = useState( false );
 	useEffect( () => {
@@ -53,7 +64,7 @@ export default function CommentsPanelEdit( { clientId } ) {
 			{ isFirstInstance && <PanelPreviewToggle isOpen={ isPreviewOpen } onToggle={ togglePreview } /> }
 			<div { ...blockProps }>
 				<InnerBlocks
-					template={ BLOCKS_TEMPLATE }
+					{ ...getLegacyTemplateProps( name ) }
 					templateLock="all"
 					allowedBlocks={ [ 'newspack/comments-panel-trigger', 'newspack/comments-panel-content' ] }
 				/>

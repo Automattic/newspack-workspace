@@ -4,7 +4,8 @@
 import { __ } from '@wordpress/i18n';
 import { close as closeIcon } from '@wordpress/icons';
 import { useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { useSelect } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { synchronizeBlocksWithTemplate } from '@wordpress/blocks';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalColorGradientSettingsDropdown as ColorGradientSettingsDropdown,
@@ -63,6 +64,34 @@ const INNER_BLOCKS_TEMPLATE = [
 ];
 
 const ALLOWED_BLOCKS = [ 'core/comments' ];
+
+/**
+ * Fills an empty panel with the comments template, once per mount.
+ *
+ * This stands in for the InnerBlocks template prop, which WP 7.2 deprecates.
+ * A template in the block settings would also fill the panels after the first
+ * when they are inserted, and those never render, so this mounts only beside
+ * the first panel's InnerBlocks, as the prop's template did.
+ *
+ * @param {Object} props          Component props.
+ * @param {string} props.clientId Content block client ID.
+ *
+ * @return {null} Renders nothing.
+ */
+function FillEmptyPanel( { clientId } ) {
+	const hasFilled = useRef( false );
+	const isEmpty = useSelect( select => ! select( 'core/block-editor' ).getBlockCount( clientId ), [ clientId ] );
+	const { replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent } = useDispatch( 'core/block-editor' );
+	useLayoutEffect( () => {
+		if ( hasFilled.current || ! isEmpty ) {
+			return;
+		}
+		hasFilled.current = true;
+		__unstableMarkNextChangeAsNotPersistent();
+		replaceInnerBlocks( clientId, synchronizeBlocksWithTemplate( [], INNER_BLOCKS_TEMPLATE ), false );
+	}, [ clientId, isEmpty, replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent ] );
+	return null;
+}
 
 /**
  * Edit component for the Comments Panel Content block.
@@ -186,7 +215,8 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 							</button>
 						</div>
 						<div className="comments-panel__content">
-							<InnerBlocks template={ INNER_BLOCKS_TEMPLATE } templateLock={ false } allowedBlocks={ ALLOWED_BLOCKS } />
+							<FillEmptyPanel clientId={ clientId } />
+							<InnerBlocks templateLock={ false } allowedBlocks={ ALLOWED_BLOCKS } />
 						</div>
 					</>
 				) }
