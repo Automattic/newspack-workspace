@@ -14,6 +14,8 @@ import './style.scss';
 
 const { name } = metadata;
 
+const CHILD_LOCK = { move: true, remove: true };
+
 export { metadata, name };
 
 export const settings = {
@@ -23,6 +25,10 @@ export const settings = {
 		foreground: colors[ 'primary-400' ],
 	},
 	description: metadata.description,
+	template: [
+		[ 'newspack/comments-panel-trigger', { lock: CHILD_LOCK } ],
+		[ 'newspack/comments-panel-content', { lock: CHILD_LOCK } ],
+	],
 	edit: Edit,
 	save: () => <InnerBlocks.Content />,
 };

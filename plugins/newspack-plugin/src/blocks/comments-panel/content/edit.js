@@ -4,7 +4,8 @@
 import { __ } from '@wordpress/i18n';
 import { close as closeIcon } from '@wordpress/icons';
 import { useLayoutEffect, useRef, useState } from '@wordpress/element';
-import { useSelect } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { synchronizeBlocksWithTemplate } from '@wordpress/blocks';
 import {
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalColorGradientSettingsDropdown as ColorGradientSettingsDropdown,
@@ -63,6 +64,38 @@ const INNER_BLOCKS_TEMPLATE = [
 ];
 
 const ALLOWED_BLOCKS = [ 'core/comments' ];
+
+/**
+ * Fills the panel with the comments template if it is empty when it mounts.
+ *
+ * This stands in for the InnerBlocks template prop, which WP 7.2 deprecates.
+ * Only the first panel on a page renders, so this mounts beside its
+ * InnerBlocks alone; a template in the block settings would fill every
+ * inserted panel. The check runs once, so a panel an editor empties stays
+ * empty, as it did with the prop.
+ *
+ * @param {Object} props          Component props.
+ * @param {string} props.clientId Content block client ID.
+ *
+ * @return {null} Renders nothing.
+ */
+function FillEmptyPanel( { clientId } ) {
+	const hasChecked = useRef( false );
+	const isEmpty = useSelect( select => ! select( 'core/block-editor' ).getBlockCount( clientId ), [ clientId ] );
+	const { replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent } = useDispatch( 'core/block-editor' );
+	useLayoutEffect( () => {
+		if ( hasChecked.current ) {
+			return;
+		}
+		hasChecked.current = true;
+		if ( ! isEmpty ) {
+			return;
+		}
+		__unstableMarkNextChangeAsNotPersistent();
+		replaceInnerBlocks( clientId, synchronizeBlocksWithTemplate( [], INNER_BLOCKS_TEMPLATE ), false );
+	}, [ clientId, isEmpty, replaceInnerBlocks, __unstableMarkNextChangeAsNotPersistent ] );
+	return null;
+}
 
 /**
  * Edit component for the Comments Panel Content block.
@@ -186,7 +219,8 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 							</button>
 						</div>
 						<div className="comments-panel__content">
-							<InnerBlocks template={ INNER_BLOCKS_TEMPLATE } templateLock={ false } allowedBlocks={ ALLOWED_BLOCKS } />
+							<FillEmptyPanel clientId={ clientId } />
+							<InnerBlocks templateLock={ false } allowedBlocks={ ALLOWED_BLOCKS } />
 						</div>
 					</>
 				) }
